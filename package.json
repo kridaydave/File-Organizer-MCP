@@ -1,0 +1,28 @@
+{
+  "name": "file-organizer-mcp",
+  "version": "2.0.0",
+  "description": "MCP server for file organization with auto-categorization and duplicate detection",
+  "type": "module",
+  "main": "server.js",
+  "bin": {
+    "file-organizer": "./server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "mcp",
+    "file-organizer",
+    "file-management",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
