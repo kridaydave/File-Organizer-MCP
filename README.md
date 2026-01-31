@@ -184,6 +184,8 @@ Auto-organize files into categorized folders.
 
 - **Dry run mode**: Always test before organizing
 - **Duplicate handling**: Never overwrites files
+- **Sandboxing**: Restricts operations to the current working directory for security
+- **Hidden File Protection**: Ignores hidden files (starting with `.`) during scanning and organization
 - **Error reporting**: Clear error messages
 - **Empty folder cleanup**: Removes unused category folders
 

@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env_test
+.hidden_test/
+verify_sandbox.js
+verify_allowed.js
+verify_hidden.js
+.DS_Store
+Thumbs.db
