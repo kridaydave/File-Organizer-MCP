@@ -200,6 +200,7 @@ class FileOrganizerServer {
   }
 
   async listFiles(directory) {
+    await this.validatePath(directory);
     const files = await fs.readdir(directory, { withFileTypes: true });
     const fileList = files
       .filter((f) => f.isFile())
@@ -227,6 +228,7 @@ class FileOrganizerServer {
   }
 
   async scanDirectory(directory, includeSubdirs = false, maxDepth = -1) {
+    await this.validatePath(directory);
     const results = [];
 
     const scanDir = async (dir, currentDepth = 0) => {
@@ -235,6 +237,8 @@ class FileOrganizerServer {
       const items = await fs.readdir(dir, { withFileTypes: true });
 
       for (const item of items) {
+        if (item.name.startsWith(".")) continue;
+
         const fullPath = path.join(dir, item.name);
 
         if (item.isFile()) {
@@ -278,6 +282,7 @@ class FileOrganizerServer {
   }
 
   async categorizeByType(directory, includeSubdirs = false) {
+    await this.validatePath(directory);
     const files = await this.getAllFiles(directory, includeSubdirs);
     const categorized = {};
 
@@ -327,6 +332,7 @@ class FileOrganizerServer {
   }
 
   async findLargestFiles(directory, includeSubdirs = false, topN = 10) {
+    await this.validatePath(directory);
     const files = await this.getAllFiles(directory, includeSubdirs);
     const sorted = files.sort((a, b) => b.size - a.size).slice(0, topN);
 
@@ -353,6 +359,7 @@ class FileOrganizerServer {
   }
 
   async findDuplicateFiles(directory) {
+    await this.validatePath(directory);
     const files = await this.getAllFiles(directory, false);
     const hashMap = {};
 
@@ -397,6 +404,7 @@ class FileOrganizerServer {
   }
 
   async organizeFiles(directory, dryRun = false) {
+    await this.validatePath(directory);
     const files = await this.getAllFiles(directory, false);
     const stats = {};
     const actions = [];
@@ -486,6 +494,25 @@ class FileOrganizerServer {
   }
 
   // Helper methods
+  async validatePath(requestedPath) {
+    const cwd = process.cwd();
+    const absolutePath = path.resolve(cwd, requestedPath);
+
+    if (!absolutePath.startsWith(cwd)) {
+      throw new Error(`Access denied: Path '${requestedPath}' is outside the allowed directory '${cwd}'.`);
+    }
+
+    // Check if path exists
+    try {
+      await fs.access(absolutePath);
+    } catch {
+      // Allow if it doesn't exist yet but parent does (common for output)
+      // For tools like list_files it should exist though.
+      // Let's stick strictly to strict path prefix checking.
+      // The tool logic will handle ENOENT if we pass validation.
+    }
+  }
+
   async getAllFiles(directory, includeSubdirs = false) {
     const results = [];
 
@@ -493,6 +520,8 @@ class FileOrganizerServer {
       const items = await fs.readdir(dir, { withFileTypes: true });
 
       for (const item of items) {
+        if (item.name.startsWith(".")) continue;
+
         const fullPath = path.join(dir, item.name);
 
         if (item.isFile()) {
