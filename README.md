@@ -1,24 +1,15 @@
 # File Organizer MCP Server 🗂️
 
-<div align="center">
-
-
 [![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer)
 [![npm version](https://img.shields.io/npm/v/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://camo.githubusercontent.com/fbb3f4eb8a6c77732c0b8351a49ba12b16e7cb86188b1eb7d10aff72a830f56a/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f76657273696f6e2d322e312e302d626c75652e737667)
-[![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://camo.githubusercontent.com/37e0b05c5bb71244caa0702a73b949cf3ea59f1fd16accb96f241f540a3996e1/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f73656375726974792d68617264656e65642d677265656e2e737667)
-[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://camo.githubusercontent.com/092e0007be85a7ff2897fc519179f0288db62202dfda73be27b46cb89cdaa3d6/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6e6f64652d25334525334431382e302e302d627269676874677265656e2e737667)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://camo.githubusercontent.com/7013272bd27ece47364536a221edb554cd69683b68a46fc0ee96881174c4214c/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6c6963656e73652d4d49542d626c75652e737667)
-[![Tests](https://img.shields.io/badge/tests-6%2F6%20passing-success.svg)](https://camo.githubusercontent.com/dde9cac4361e59da4f914d6eaf113233fbb297bb81b69eb41d8aecc77bed1203/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f74657374732d362532463625323070617373696e672d737563636573732e737667)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/kridaydave/File-Organizer-MCP)
+[![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
+[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-6%2F6%20passing-success.svg)](test_security.js)
 
 **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization**
-
-
-
-[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Security](#-security) • [API](#-api-reference)
-
-</div>
 
 🎯 [Install from MCP Registry](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer) • 📦 [View on NPM](https://www.npmjs.com/package/file-organizer-mcp) • 🐛 [Report Issues](https://github.com/kridaydave/File-Organizer-MCP/issues)
 
@@ -27,115 +18,81 @@
 ## 🎯 Features
 
 ### Core Functionality
-- **🤖 Auto-categorization** - Intelligently organizes files into 12+ categories
-- **🔍 Duplicate Detection** - Finds duplicate files using content-based hashing
-- **🛡️ Smart File Management** - Handles filename conflicts automatically
-- **👁️ Dry Run Mode** - Preview changes before executing
-- **📊 Comprehensive Scanning** - Detailed directory analysis with statistics
-- **📈 Largest Files Finder** - Quickly identify space-consuming files
+
+* **🤖 Auto-categorization** - Intelligently organizes files into 12+ categories
+* **🔍 Duplicate Detection** - Finds duplicate files using SHA-256 content hashing
+* **🛡️ Smart File Management** - Handles filename conflicts automatically
+* **👁️ Dry Run Mode** - Preview changes before executing
+* **📊 Comprehensive Scanning** - Detailed directory analysis with statistics
+* **📈 Largest Files Finder** - Quickly identify space-consuming files
 
 ### Security Features ✨ NEW in v2.1.0
-- **🔒 Path Traversal Protection** - Multi-layer validation with symlink resolution
-- **💾 Memory-Safe Operations** - Streaming file processing (no memory exhaustion)
-- **⚡ Resource Limits** - Configurable limits for files, depth, and size
-- **🛡️ Sandboxed Operations** - Restricted to working directory
-- **🔐 Error Sanitization** - No internal path disclosure
-- **✅ Comprehensive Testing** - 100% security test coverage
+
+* **🔒 Path Traversal Protection** - Multi-layer validation with symlink resolution
+* **💾 Memory-Safe Operations** - Streaming file processing (no memory exhaustion)
+* **⚡ Resource Limits** - Configurable limits for files, depth, and size
+* **🛡️ Sandboxed Operations** - Restricted to working directory
+* **🔐 Error Sanitization** - No internal path disclosure
+* **✅ Comprehensive Testing** - 100% security test coverage
 
 ---
 
 ## 📦 Installation
 
-### Prerequisites
-- **Node.js** v18.0.0 or higher
-- **npm** or **yarn**
-- **Claude Desktop** (for MCP integration)
-
-### Quick Start
-
-```bash
-# 1. Clone or download the repository
-git clone https://github.com/yourusername/file-organizer-mcp.git
-cd file-organizer-mcp
-
-# 2. Install dependencies
-npm install
-
-# 3. Run security tests (optional but recommended)
-npm test
-
-# 4. Start the server
-npm start
-```
-### Install from MCP Registry (Recommended)
+### Option 1: Install from MCP Registry (Recommended)
 
 The easiest way to install is through the official MCP Registry:
 
+**Via Claude Desktop:**
 1. Open Claude Desktop
 2. Go to Settings → Developer → MCP Servers
 3. Click "Add Server"
 4. Search for "file-organizer"
 5. Click Install
 
-Or install via command line:
+**Via Command Line:**
 ```bash
 npx @modelcontextprotocol/create-server io.github.kridaydave/file-organizer
 ```
+
+### Option 2: Manual Installation
+
+#### Prerequisites
+
+* **Node.js** v18.0.0 or higher
+* **npm** or **yarn**
+* **Claude Desktop** (for MCP integration)
+
+#### Quick Start
+```bash
+# 1. Install from NPM
+npm install -g file-organizer-mcp
+
+# 2. Run security tests (optional but recommended)
+npm test
+
+# 3. Configure in Claude Desktop
+# Add to your claude_desktop_config.json:
 ```
-
-### 3. Add `.npmignore` File
-
-Create `.npmignore` in your project root:
-```
-# Test files
-test_security.js
-*.test.js
-
-# Development files
-.vscode/
-.git/
-*.log
-.gitignore
-
-# Windows specific
-start.bat
-
-# Documentation (already in npm package)
-docs/
-
-# Keep these:
-# - server.js
-# - package.json
-# - README.md
-# - LICENSE
-# - server.json
-
-
-
-### MCP Configuration
-
-Add this to your Claude Desktop configuration file:
 
 **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`  
 **Mac/Linux:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-
 ```json
 {
   "mcpServers": {
     "file-organizer": {
       "command": "node",
       "args": [
-        "/absolute/path/to/file-organizer-mcp/server.js"
+        "/path/to/node_modules/file-organizer-mcp/server.js"
       ]
     }
   }
 }
 ```
 
-> ⚠️ **Important:** Replace `/absolute/path/to/` with your actual installation path
+> ⚠️ **Important:** Replace `/path/to/` with your actual installation path
 
 ### Verify Installation
-
 ```bash
 # Run security tests
 npm test
@@ -157,19 +114,19 @@ npm test
 ### Basic Operations
 
 #### 1. Scan Directory
+
 Get detailed information about files in a directory:
 ```
 Hey Claude, scan my Downloads folder: C:/Users/Admin/Downloads
 ```
 
 **Output includes:**
-- Total file count
-- Total size (human-readable)
-- Individual file details (name, size, dates, extensions)
-
----
+* Total file count
+* Total size (human-readable)
+* Individual file details (name, size, dates, extensions)
 
 #### 2. Categorize Files
+
 See breakdown of files by category:
 ```
 Hey Claude, categorize files in C:/Users/Admin/Downloads
@@ -184,44 +141,40 @@ Documents      - 89 files (234 MB)
 Images         - 156 files (892 MB)
 ```
 
----
-
 #### 3. Find Duplicates
+
 Identify duplicate files and wasted space:
 ```
 Hey Claude, find duplicate files in C:/Users/Admin/Downloads
 ```
 
 **Shows:**
-- Number of duplicate groups
-- Total duplicate files
-- Wasted space
-- List of duplicate file locations
-
----
+* Number of duplicate groups
+* Total duplicate files
+* Wasted space
+* List of duplicate file locations
 
 #### 4. Find Largest Files
+
 Identify the biggest space consumers:
 ```
 Hey Claude, show me the 20 largest files in C:/Users/Admin/Downloads
 ```
 
----
-
 #### 5. Organize Files (Preview)
+
 See what would happen before organizing:
 ```
 Hey Claude, organize files in C:/Users/Admin/Downloads with dry run
 ```
 
 **Dry run shows:**
-- Which files would move where
-- Category breakdown
-- Potential naming conflicts
-
----
+* Which files would move where
+* Category breakdown
+* Potential naming conflicts
 
 #### 6. Organize Files (Execute)
+
 Actually organize the files:
 ```
 Hey Claude, organize files in C:/Users/Admin/Downloads
@@ -242,7 +195,7 @@ Hey Claude, organize files in C:/Users/Admin/Downloads
 Files are automatically sorted into these categories:
 
 | Category | Extensions |
-|----------|-----------|
+| --- | --- |
 | **Executables** | `.exe`, `.msi`, `.bat`, `.cmd`, `.sh` |
 | **Videos** | `.mp4`, `.avi`, `.mkv`, `.mov`, `.wmv`, `.flv`, `.webm`, `.m4v` |
 | **Documents** | `.pdf`, `.doc`, `.docx`, `.txt`, `.rtf`, `.odt` |
@@ -263,12 +216,12 @@ Files are automatically sorted into these categories:
 
 ### Security Score: 9.5/10 🌟
 
-File Organizer MCP v2.1.0 has been **professionally security-audited** and hardened against common attacks.
+File Organizer MCP v2.1.0 has been security-audited and hardened against common attacks.
 
 ### Protected Against
 
 | Attack Type | Protection Mechanism | Status |
-|-------------|---------------------|---------|
+| --- | --- | --- |
 | **Path Traversal** | Input sanitization + symlink resolution | ✅ Protected |
 | **Symlink Attacks** | Real path validation | ✅ Protected |
 | **DoS - Memory** | File size limits + streaming | ✅ Protected |
@@ -277,8 +230,7 @@ File Organizer MCP v2.1.0 has been **professionally security-audited** and harde
 | **Info Disclosure** | Error message sanitization | ✅ Protected |
 
 ### Security Limits
-
-```javascript
+```
 MAX_FILE_SIZE: 100 MB     // Files larger than this are skipped during hashing
 MAX_FILES: 10,000         // Maximum files processed per operation
 MAX_DEPTH: 10             // Maximum directory depth for recursive scans
@@ -287,55 +239,40 @@ MAX_DEPTH: 10             // Maximum directory depth for recursive scans
 ### Security Features
 
 #### 1. Path Validation (Multi-Layer)
-- ✅ Path normalization
-- ✅ Traversal sequence removal (`../` stripped)
-- ✅ Symlink resolution
-- ✅ Strict containment checking
-- ✅ Works with non-existent files
+
+* ✅ Path normalization
+* ✅ Traversal sequence removal (`../` stripped)
+* ✅ Symlink resolution
+* ✅ Strict containment checking
+* ✅ Works with non-existent files
 
 #### 2. Resource Protection
-- ✅ Streaming file operations (64KB chunks)
-- ✅ Pre-validation before processing
-- ✅ Graceful degradation (skips problematic files)
-- ✅ Memory-safe duplicate detection
+
+* ✅ Streaming file operations (64KB chunks)
+* ✅ Pre-validation before processing
+* ✅ Graceful degradation (skips problematic files)
+* ✅ Memory-safe duplicate detection
 
 #### 3. Error Handling
-- ✅ All operations wrapped in try-catch
-- ✅ Path sanitization in error messages
-- ✅ Informative but safe error reporting
+
+* ✅ All operations wrapped in try-catch
+* ✅ Path sanitization in error messages
+* ✅ Informative but safe error reporting
 
 ### Security Testing
 
 Run the comprehensive security test suite:
-
 ```bash
 npm test
 ```
 
 **Tests include:**
-- Path traversal attack prevention
-- Symlink attack prevention
-- Large file handling
-- Depth limit enforcement
-- File count limit enforcement
-- Graceful error handling
-
----
-
-## 🛡️ Safety Features
-
-### File Protection
-- **Dry Run Mode** - Preview all changes before execution
-- **Duplicate Handling** - Never overwrites existing files
-- **Hidden File Protection** - Ignores hidden files (starting with `.`)
-- **Sandboxing** - All operations restricted to working directory
-- **Atomic Operations** - Files moved safely with conflict resolution
-
-### User Safety
-- **Clear Error Messages** - Helpful feedback without exposing sensitive paths
-- **Progress Logging** - Track what's happening during operations
-- **Empty Folder Cleanup** - Removes unused category folders automatically
-- **Rollback Support** - Dry run lets you verify before committing
+* Path traversal attack prevention
+* Symlink attack prevention
+* Large file handling
+* Depth limit enforcement
+* File count limit enforcement
+* Graceful error handling
 
 ---
 
@@ -362,7 +299,6 @@ npm test
 5. "Claude, organize files"
    → ✅ Organized 1,247 files
    → ✅ Created 8 category folders
-   → ✅ Freed up 2.3 GB (after manual duplicate removal)
 ```
 
 ### Workflow 2: Find Space Hogs
@@ -378,20 +314,6 @@ npm test
 3. Delete duplicates manually, then organize
 ```
 
-### Workflow 3: Project Organization
-```
-1. "Claude, scan ~/Projects/MyApp"
-   → 456 files scattered everywhere
-
-2. "Claude, categorize by type"
-   → Code: 234 files
-   → Images: 123 files
-   → Documents: 99 files
-
-3. "Claude, organize files"
-   → Clean project structure ready for version control
-```
-
 ---
 
 ## 🛠️ API Reference
@@ -399,55 +321,60 @@ npm test
 ### Available Tools
 
 #### `list_files`
+
 List all files in a directory with basic information.
 
 **Parameters:**
-- `directory` (string, required) - Full path to directory
+* `directory` (string, required) - Full path to directory
 
 **Returns:** List of files with names and paths
 
 ---
 
 #### `scan_directory`
+
 Detailed directory scan with file information.
 
 **Parameters:**
-- `directory` (string, required) - Full path to directory
-- `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
-- `max_depth` (number, optional) - Maximum depth to scan (default: -1, max: 10)
+* `directory` (string, required) - Full path to directory
+* `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
+* `max_depth` (number, optional) - Maximum depth to scan (default: -1, max: 10)
 
 **Returns:** File list with sizes, dates, extensions, and statistics
 
 ---
 
 #### `categorize_by_type`
+
 Group files by category with statistics.
 
 **Parameters:**
-- `directory` (string, required) - Full path to directory
-- `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
+* `directory` (string, required) - Full path to directory
+* `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
 
 **Returns:** Category breakdown with file counts and sizes
 
 ---
 
 #### `find_largest_files`
+
 Find the largest files in a directory.
 
 **Parameters:**
-- `directory` (string, required) - Full path to directory
-- `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
-- `top_n` (number, optional) - Number of files to return (default: 10)
+* `directory` (string, required) - Full path to directory
+* `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
+* `top_n` (number, optional) - Number of files to return (default: 10)
 
 **Returns:** List of largest files sorted by size
 
 ---
 
 #### `find_duplicate_files`
-Identify duplicate files using content-based hashing.
+
+Identify duplicate files using SHA-256 content hashing.
 
 **Parameters:**
-- `directory` (string, required) - Full path to directory
+* `directory` (string, required) - Full path to directory
 
 **Returns:** Duplicate groups with wasted space calculation
 
@@ -456,11 +383,12 @@ Identify duplicate files using content-based hashing.
 ---
 
 #### `organize_files`
+
 Automatically organize files into categorized folders.
 
 **Parameters:**
-- `directory` (string, required) - Full path to directory
-- `dry_run` (boolean, optional) - Preview without moving files (default: false)
+* `directory` (string, required) - Full path to directory
+* `dry_run` (boolean, optional) - Preview without moving files (default: false)
 
 **Returns:** Organization summary with actions taken and any errors
 
@@ -470,137 +398,66 @@ Automatically organize files into categorized folders.
 
 ### MCP Server Not Showing Up
 
-**Symptoms:** Claude doesn't recognize the file organizer commands
-
-**Solutions:**
 1. ✅ Check config file path is correct
 2. ✅ Verify Node.js v18+ is installed: `node --version`
 3. ✅ Restart Claude Desktop completely
 4. ✅ Check server path in `claude_desktop_config.json` is absolute
-5. ✅ Look for errors in Claude Desktop logs
-
----
 
 ### Permission Errors
 
-**Symptoms:** "Access denied" or "Permission denied" errors
-
-**Solutions:**
 1. ✅ **Windows:** Run Claude Desktop as Administrator
 2. ✅ **Mac/Linux:** Check folder permissions: `ls -la`
 3. ✅ Ensure you have write permissions in target directory
-4. ✅ Check if files are in use by other programs
-
----
 
 ### Files Not Moving
 
-**Symptoms:** Organize operation completes but files haven't moved
-
-**Solutions:**
 1. ✅ Verify dry_run mode is NOT enabled
 2. ✅ Check files aren't locked by other programs
 3. ✅ Ensure sufficient disk space
 4. ✅ Review error messages in operation summary
-5. ✅ Check file permissions
-
----
-
-### Large File Warnings
-
-**Symptoms:** "Skipping large file" messages during duplicate detection
-
-**Solutions:**
-- ℹ️ This is **expected behavior** for security
-- ℹ️ Files over 100MB are skipped during hashing to prevent memory issues
-- ℹ️ These files are still organized normally
-- ℹ️ If needed, organize first, then check duplicates manually
-
----
-
-### Security Test Failures
-
-**Symptoms:** `npm test` shows failures
-
-**Solutions:**
-1. ✅ Ensure you're running from the project root directory
-2. ✅ Clear test artifacts: `rm -rf *_test* *.bin`
-3. ✅ Reinstall dependencies: `npm install`
-4. ✅ Check Node.js version: `node --version` (must be v18+)
-5. ✅ **Windows:** May need admin rights for symlink tests
 
 ---
 
 ## 📝 Important Notes
 
-### Behavior Details
-- ⚠️ Organizes files in **root directory only**, not subdirectories
-- ⚠️ Existing category folders won't be reorganized (prevents loops)
-- ✅ File extensions are case-insensitive
-- ✅ Original modification dates are preserved
-- ✅ Hidden files (starting with `.`) are automatically skipped
-- ✅ Maximum 10,000 files processed per operation (security limit)
-- ✅ Maximum 10 directory levels scanned (security limit)
-
-### Before/After Example
-
-**Before organizing:**
-```
-Downloads/
-├── setup.exe
-├── vacation_video.mp4
-├── presentation_draft.pptx
-├── report_final.pdf
-├── screenshot.png
-├── music.mp3
-└── 247 other files scattered everywhere...
-```
-
-**After organizing:**
-```
-Downloads/
-├── Executables/
-│   └── setup.exe
-├── Videos/
-│   └── vacation_video.mp4
-├── Presentations/
-│   └── presentation_draft.pptx
-├── Documents/
-│   └── report_final.pdf
-├── Images/
-│   └── screenshot.png
-└── Audio/
-    └── music.mp3
-```
+* ⚠️ Organizes files in **root directory only**, not subdirectories
+* ⚠️ Existing category folders won't be reorganized (prevents loops)
+* ✅ File extensions are case-insensitive
+* ✅ Original modification dates are preserved
+* ✅ Hidden files (starting with `.`) are automatically skipped
+* ✅ Maximum 10,000 files processed per operation (security limit)
+* ✅ Maximum 10 directory levels scanned (security limit)
 
 ---
 
 ## 🔄 Version History
 
 ### v2.1.0 (Current) - Security Hardening Release
+
 **Released:** February 1, 2026
 
 **Security Improvements:**
-- ✅ Path traversal protection with input sanitization
-- ✅ Symlink resolution and validation
-- ✅ Memory-safe streaming file operations
-- ✅ Resource limits (file size, count, depth)
-- ✅ Error message sanitization
-- ✅ Comprehensive security test suite
+* ✅ Path traversal protection with input sanitization
+* ✅ Symlink resolution and validation
+* ✅ Memory-safe streaming file operations
+* ✅ Resource limits (file size, count, depth)
+* ✅ Error message sanitization
+* ✅ Comprehensive security test suite
 
 **Changes:**
-- Updated `@modelcontextprotocol/sdk` to v1.25.3
-- Added security constants (MAX_FILE_SIZE, MAX_FILES, MAX_DEPTH)
-- Implemented graceful large file handling
-- Added `test_security.js` test suite
+* Updated `@modelcontextprotocol/sdk` to v1.25.3
+* Added security constants (MAX_FILE_SIZE, MAX_FILES, MAX_DEPTH)
+* Implemented graceful large file handling
+* Added `test_security.js` test suite
 
 **Security Score:** 9.5/10 (improved from 6.5/10)
 
 ### v2.0.0 - Initial Release
-- Basic file organization functionality
-- Duplicate detection
-- Category-based sorting
-- Dry run mode
+
+* Basic file organization functionality
+* Duplicate detection
+* Category-based sorting
+* Dry run mode
 
 ---
 
@@ -617,7 +474,7 @@ Contributions are welcome! Please follow these guidelines:
 
 🚨 **Please do NOT open public issues for security vulnerabilities**
 
-Instead, email security concerns to: [technocratix902@gmail.com]
+Instead, email security concerns to: technocratix902@gmail.com
 
 ---
 
@@ -629,28 +486,23 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ## 🙏 Acknowledgments
 
-- **Anthropic** - For the Model Context Protocol specification
-- **Security Audit** - Comprehensive testing and hardening
-- **Community** - For feedback and contributions
+* **Anthropic** - For the Model Context Protocol specification
+* **NetworkChuck** - For the MCP tutorial that inspired this project
+* **The MCP Community** - For feedback and support
 
 ---
 
 ## 📞 Support
 
-- **Documentation:** This README
-- **Issues:** [GitHub Issues](https://github.com/yourusername/file-organizer-mcp/issues)
-- **Security:** [Security Policy](#-contributing)
-- **MCP Spec:** [Model Context Protocol](https://modelcontextprotocol.io)
+* **MCP Registry:** [View Listing](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer)
+* **NPM Package:** [View on NPM](https://www.npmjs.com/package/file-organizer-mcp)
+* **Issues:** [GitHub Issues](https://github.com/kridaydave/File-Organizer-MCP/issues)
+* **MCP Spec:** [Model Context Protocol](https://modelcontextprotocol.io)
 
 ---
 
-<div align="center">
-
 **Happy Organizing! 🎯**
 
-Made with ❤️ for the Claude.ai community
+*Built by a 9th grader who chose to spend 5 days automating a 2-hour task. No regrets.*
 
 [⬆ Back to Top](#file-organizer-mcp-server-)
-
-
-</div>
