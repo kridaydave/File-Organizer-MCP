@@ -7,6 +7,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import fs from "fs/promises";
+import { createReadStream } from "fs";
 import path from "path";
 import crypto from "crypto";
 
@@ -15,7 +16,7 @@ class FileOrganizerServer {
     this.server = new Server(
       {
         name: "file-organizer",
-        version: "2.0.0",
+        version: "2.1.0",
       },
       {
         capabilities: {
@@ -23,6 +24,11 @@ class FileOrganizerServer {
         },
       }
     );
+
+    // Security constants
+    this.MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+    this.MAX_FILES = 10000;
+    this.MAX_DEPTH = 10;
 
     // File type categories
     this.categories = {
@@ -191,7 +197,7 @@ class FileOrganizerServer {
           content: [
             {
               type: "text",
-              text: `Error: ${error.message}`,
+              text: `Error: ${this.sanitizeError(error)}`,
             },
           ],
         };
@@ -232,7 +238,12 @@ class FileOrganizerServer {
     const results = [];
 
     const scanDir = async (dir, currentDepth = 0) => {
+      // Enforce limits
       if (maxDepth !== -1 && currentDepth > maxDepth) return;
+      if (currentDepth > this.MAX_DEPTH) {
+        console.error(`Warning: Max depth ${this.MAX_DEPTH} reached at ${dir}`);
+        return;
+      }
 
       const items = await fs.readdir(dir, { withFileTypes: true });
 
@@ -242,6 +253,11 @@ class FileOrganizerServer {
         const fullPath = path.join(dir, item.name);
 
         if (item.isFile()) {
+          // Enforce max files
+          if (results.length >= this.MAX_FILES) {
+            throw new Error(`Maximum file limit (${this.MAX_FILES}) reached`);
+          }
+
           const stats = await fs.stat(fullPath);
           results.push({
             name: item.name,
@@ -365,11 +381,21 @@ class FileOrganizerServer {
 
     // Calculate hash for each file
     for (const file of files) {
-      const hash = await this.calculateFileHash(file.path);
-      if (!hashMap[hash]) {
-        hashMap[hash] = [];
+      try {
+        // Skip files that are too large
+        if (file.size > this.MAX_FILE_SIZE) {
+          console.error(`Skipping large file: ${file.name} (${this.formatBytes(file.size)})`);
+          continue;
+        }
+
+        const hash = await this.calculateFileHash(file.path);
+        if (!hashMap[hash]) {
+          hashMap[hash] = [];
+        }
+        hashMap[hash].push(file);
+      } catch (error) {
+        console.error(`Error hashing ${file.name}: ${error.message}`);
       }
-      hashMap[hash].push(file);
     }
 
     // Filter only duplicates
@@ -496,27 +522,53 @@ class FileOrganizerServer {
   // Helper methods
   async validatePath(requestedPath) {
     const cwd = process.cwd();
-    const absolutePath = path.resolve(cwd, requestedPath);
 
-    if (!absolutePath.startsWith(cwd)) {
-      throw new Error(`Access denied: Path '${requestedPath}' is outside the allowed directory '${cwd}'.`);
-    }
+    // Step 1: Normalize and sanitize input
+    const normalized = path.normalize(requestedPath).replace(/^(\.\.(\/|\\|$))+/, '');
 
-    // Check if path exists
+    // Step 2: Resolve to absolute path
+    const absolutePath = path.resolve(cwd, normalized);
+
+    // Step 3: Resolve symlinks (use try-catch since file might not exist yet)
+    let realPath;
     try {
-      await fs.access(absolutePath);
-    } catch {
-      // Allow if it doesn't exist yet but parent does (common for output)
-      // For tools like list_files it should exist though.
-      // Let's stick strictly to strict path prefix checking.
-      // The tool logic will handle ENOENT if we pass validation.
+      realPath = await fs.realpath(absolutePath);
+    } catch (error) {
+      // If file doesn't exist, validate parent directory instead
+      const parentDir = path.dirname(absolutePath);
+      try {
+        const realParent = await fs.realpath(parentDir);
+        if (!realParent.startsWith(cwd + path.sep) && realParent !== cwd) {
+          throw new Error(`Access denied: Parent directory is outside allowed directory`);
+        }
+        realPath = path.join(realParent, path.basename(absolutePath));
+      } catch {
+        // If parent doesn't exist either, check grand-parent or just simple check
+        // For simplicity in this fix, we fall back to absolute path check if realpath fails widely
+        // preventing deeper traversal if parent is also missing
+        if (!absolutePath.startsWith(cwd + path.sep) && absolutePath !== cwd) {
+          throw new Error(`Access denied: Path is outside allowed directory`);
+        }
+        return absolutePath;
+      }
     }
+
+    // Step 4: Strict containment check
+    if (!realPath.startsWith(cwd + path.sep) && realPath !== cwd) {
+      throw new Error(`Access denied: Path '${requestedPath}' is outside the allowed directory.`);
+    }
+
+    return realPath;
   }
 
   async getAllFiles(directory, includeSubdirs = false) {
     const results = [];
 
-    const scanDir = async (dir) => {
+    const scanDir = async (dir, depth = 0) => {
+      if (includeSubdirs && depth > this.MAX_DEPTH) {
+        return;
+      }
+
       const items = await fs.readdir(dir, { withFileTypes: true });
 
       for (const item of items) {
@@ -525,6 +577,11 @@ class FileOrganizerServer {
         const fullPath = path.join(dir, item.name);
 
         if (item.isFile()) {
+          // Enforce max files
+          if (results.length >= this.MAX_FILES) {
+            throw new Error(`Maximum file limit (${this.MAX_FILES}) reached`);
+          }
+
           const stats = await fs.stat(fullPath);
           results.push({
             name: item.name,
@@ -532,7 +589,7 @@ class FileOrganizerServer {
             size: stats.size,
           });
         } else if (item.isDirectory() && includeSubdirs) {
-          await scanDir(fullPath);
+          await scanDir(fullPath, depth + 1);
         }
       }
     };
@@ -551,8 +608,22 @@ class FileOrganizerServer {
   }
 
   async calculateFileHash(filePath) {
-    const fileBuffer = await fs.readFile(filePath);
-    return crypto.createHash("sha256").update(fileBuffer).digest("hex");
+    // Check file size first
+    const stats = await fs.stat(filePath);
+    if (stats.size > this.MAX_FILE_SIZE) {
+      throw new Error(`File exceeds maximum size for hashing (${this.formatBytes(this.MAX_FILE_SIZE)})`);
+    }
+
+    return new Promise((resolve, reject) => {
+      const hash = crypto.createHash("sha256");
+      const stream = createReadStream(filePath, {
+        highWaterMark: 64 * 1024 // 64KB chunks
+      });
+
+      stream.on("data", (chunk) => hash.update(chunk));
+      stream.on("end", () => resolve(hash.digest("hex")));
+      stream.on("error", reject);
+    });
   }
 
   async fileExists(filePath) {
@@ -572,6 +643,12 @@ class FileOrganizerServer {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i];
   }
 
+  sanitizeError(error) {
+    return error.message
+      .replace(/\/[^\s]+/g, '[PATH]')
+      .replace(/[A-Z]:\\[^\s]+/g, '[PATH]');
+  }
+
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
@@ -580,5 +657,12 @@ class FileOrganizerServer {
 }
 
 // Start the server
-const server = new FileOrganizerServer();
-server.run().catch(console.error);
+// Export the class for testing
+export { FileOrganizerServer };
+
+// Start the server if running directly
+import { fileURLToPath } from 'url';
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const server = new FileOrganizerServer();
+  server.run().catch(console.error);
+}
