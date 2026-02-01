@@ -2,17 +2,25 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)
-![Security](https://img.shields.io/badge/security-hardened-green.svg)
-![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Tests](https://img.shields.io/badge/tests-6%2F6%20passing-success.svg)
+
+[![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer)
+[![npm version](https://img.shields.io/npm/v/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://camo.githubusercontent.com/fbb3f4eb8a6c77732c0b8351a49ba12b16e7cb86188b1eb7d10aff72a830f56a/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f76657273696f6e2d322e312e302d626c75652e737667)
+[![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://camo.githubusercontent.com/37e0b05c5bb71244caa0702a73b949cf3ea59f1fd16accb96f241f540a3996e1/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f73656375726974792d68617264656e65642d677265656e2e737667)
+[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://camo.githubusercontent.com/092e0007be85a7ff2897fc519179f0288db62202dfda73be27b46cb89cdaa3d6/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6e6f64652d25334525334431382e302e302d627269676874677265656e2e737667)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://camo.githubusercontent.com/7013272bd27ece47364536a221edb554cd69683b68a46fc0ee96881174c4214c/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6c6963656e73652d4d49542d626c75652e737667)
+[![Tests](https://img.shields.io/badge/tests-6%2F6%20passing-success.svg)](https://camo.githubusercontent.com/dde9cac4361e59da4f914d6eaf113233fbb297bb81b69eb41d8aecc77bed1203/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f74657374732d362532463625323070617373696e672d737563636573732e737667)
 
 **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization**
+
+
 
 [Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Security](#-security) • [API](#-api-reference)
 
 </div>
+
+🎯 [Install from MCP Registry](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer) • 📦 [View on NPM](https://www.npmjs.com/package/file-organizer-mcp) • 🐛 [Report Issues](https://github.com/kridaydave/File-Organizer-MCP/issues)
 
 ---
 
@@ -59,6 +67,50 @@ npm test
 # 4. Start the server
 npm start
 ```
+### Install from MCP Registry (Recommended)
+
+The easiest way to install is through the official MCP Registry:
+
+1. Open Claude Desktop
+2. Go to Settings → Developer → MCP Servers
+3. Click "Add Server"
+4. Search for "file-organizer"
+5. Click Install
+
+Or install via command line:
+```bash
+npx @modelcontextprotocol/create-server io.github.kridaydave/file-organizer
+```
+```
+
+### 3. Add `.npmignore` File
+
+Create `.npmignore` in your project root:
+```
+# Test files
+test_security.js
+*.test.js
+
+# Development files
+.vscode/
+.git/
+*.log
+.gitignore
+
+# Windows specific
+start.bat
+
+# Documentation (already in npm package)
+docs/
+
+# Keep these:
+# - server.js
+# - package.json
+# - README.md
+# - LICENSE
+# - server.json
+
+
 
 ### MCP Configuration
 
@@ -599,5 +651,6 @@ MIT License - see [LICENSE](LICENSE) file for details
 Made with ❤️ for the Claude.ai community
 
 [⬆ Back to Top](#file-organizer-mcp-server-)
+
 
 </div>
