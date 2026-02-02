@@ -1,0 +1,23 @@
+{
+    "$schema": "./config/config.schema.json",
+    "version": "3.0.0",
+    "security": {
+        "mode": "strict",
+        "allowed_directories": [],
+        "enable_symlinks": false,
+        "blacklist_system_paths": true
+    },
+    "limits": {
+        "max_file_size": 104857600,
+        "max_files_per_operation": 10000,
+        "max_directory_depth": 10
+    },
+    "behavior": {
+        "dry_run_default": true,
+        "skip_hidden_files": true
+    },
+    "logging": {
+        "audit_enabled": false,
+        "log_level": "info"
+    }
+}

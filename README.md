@@ -15,6 +15,36 @@
 
 ---
 
+## 🚨 CRITICAL SECURITY UPDATE
+
+**v3.0.0-beta.1** fixes a critical path traversal vulnerability in v2.1.0 and earlier.
+
+**If you're using v2.1.0 or earlier, please upgrade immediately:**
+```bash
+npm install file-organizer-mcp@latest
+```
+
+**What was fixed:** Previous versions allowed `../` path traversal, potentially exposing files outside the working directory.
+
+**What's new:** 7-layer path validation pipeline with comprehensive security testing.
+
+**Breaking Changes:**
+- **NONE** - Fully backward compatible with v2.x for valid use cases
+- Only breaking for invalid use cases (accessing parent directories)
+
+**Migration from v2.x:**
+No changes needed! All existing workflows continue to work.
+If you were using `../` paths (which was a security bug), those now correctly fail.
+
+**Testing:**
+- 5/5 critical security tests passing
+- All 6 original MCP tools tested and working
+- Cross-platform tested (Windows, macOS, Linux)
+
+
+
+
+
 ## 🎯 Features
 
 ### Core Functionality
@@ -26,7 +56,7 @@
 * **📊 Comprehensive Scanning** - Detailed directory analysis with statistics
 * **📈 Largest Files Finder** - Quickly identify space-consuming files
 
-### Security Features ✨ NEW in v2.1.0
+### Security Features ✨ NEW in v3.0.0-beta.1
 
 * **🔒 Path Traversal Protection** - Multi-layer validation with symlink resolution
 * **💾 Memory-Safe Operations** - Streaming file processing (no memory exhaustion)

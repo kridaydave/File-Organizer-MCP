@@ -1,5 +1,15 @@
 #!/usr/bin/env node
 
+/**
+ * File Organizer MCP Server v3.0.0
+ * 
+ * A powerful, security-hardened Model Context Protocol server for intelligent file organization.
+ * Phase 1 implements enhanced path validation with 7-layer security checks.
+ * 
+ * @version 3.0.0
+ * @license MIT
+ */
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -10,13 +20,21 @@ import fs from "fs/promises";
 import { createReadStream } from "fs";
 import path from "path";
 import crypto from "crypto";
+import { fileURLToPath } from 'url';
+
+// Import Phase 1 security validators
+import { validateStrictPath, formatStrictModeError } from "./lib/validators/strict-validator.js";
+import { AccessDeniedError, sanitizeError as baseSanitizeError } from "./lib/validators/base-validator.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class FileOrganizerServer {
   constructor() {
     this.server = new Server(
       {
         name: "file-organizer",
-        version: "2.1.0",
+        version: "3.0.0",
       },
       {
         capabilities: {
@@ -205,14 +223,36 @@ class FileOrganizerServer {
     });
   }
 
+  // ==================== Path Validation (Phase 1: STRICT mode only) ====================
+
+  /**
+   * Validate path using the new 7-layer strict validator
+   * This is the Phase 1 implementation - STRICT mode only (CWD containment)
+   */
+  async validatePath(requestedPath) {
+    try {
+      return await validateStrictPath(requestedPath);
+    } catch (error) {
+      if (error instanceof AccessDeniedError) {
+        // Re-throw with user-friendly error message
+        const enhancedError = new Error(formatStrictModeError(error, requestedPath));
+        enhancedError.code = 'EACCES';
+        throw enhancedError;
+      }
+      throw error;
+    }
+  }
+
+  // ==================== File Operation Methods ====================
+
   async listFiles(directory) {
-    await this.validatePath(directory);
-    const files = await fs.readdir(directory, { withFileTypes: true });
+    const validatedPath = await this.validatePath(directory);
+    const files = await fs.readdir(validatedPath, { withFileTypes: true });
     const fileList = files
       .filter((f) => f.isFile())
       .map((f) => ({
         name: f.name,
-        path: path.join(directory, f.name),
+        path: path.join(validatedPath, f.name),
       }));
 
     return {
@@ -221,7 +261,7 @@ class FileOrganizerServer {
           type: "text",
           text: JSON.stringify(
             {
-              directory,
+              directory: validatedPath,
               total_files: fileList.length,
               files: fileList,
             },
@@ -234,7 +274,7 @@ class FileOrganizerServer {
   }
 
   async scanDirectory(directory, includeSubdirs = false, maxDepth = -1) {
-    await this.validatePath(directory);
+    const validatedPath = await this.validatePath(directory);
     const results = [];
 
     const scanDir = async (dir, currentDepth = 0) => {
@@ -249,6 +289,8 @@ class FileOrganizerServer {
 
       for (const item of items) {
         if (item.name.startsWith(".")) continue;
+        // Skip node_modules and .git directories
+        if (item.name === 'node_modules' || item.name === '.git') continue;
 
         const fullPath = path.join(dir, item.name);
 
@@ -273,7 +315,7 @@ class FileOrganizerServer {
       }
     };
 
-    await scanDir(directory);
+    await scanDir(validatedPath);
 
     const totalSize = results.reduce((sum, file) => sum + file.size, 0);
 
@@ -283,7 +325,7 @@ class FileOrganizerServer {
           type: "text",
           text: JSON.stringify(
             {
-              directory,
+              directory: validatedPath,
               total_files: results.length,
               total_size: totalSize,
               total_size_readable: this.formatBytes(totalSize),
@@ -298,8 +340,8 @@ class FileOrganizerServer {
   }
 
   async categorizeByType(directory, includeSubdirs = false) {
-    await this.validatePath(directory);
-    const files = await this.getAllFiles(directory, includeSubdirs);
+    const validatedPath = await this.validatePath(directory);
+    const files = await this.getAllFiles(validatedPath, includeSubdirs);
     const categorized = {};
 
     for (const category in this.categories) {
@@ -336,7 +378,7 @@ class FileOrganizerServer {
           type: "text",
           text: JSON.stringify(
             {
-              directory,
+              directory: validatedPath,
               categories: categorized,
             },
             null,
@@ -348,8 +390,8 @@ class FileOrganizerServer {
   }
 
   async findLargestFiles(directory, includeSubdirs = false, topN = 10) {
-    await this.validatePath(directory);
-    const files = await this.getAllFiles(directory, includeSubdirs);
+    const validatedPath = await this.validatePath(directory);
+    const files = await this.getAllFiles(validatedPath, includeSubdirs);
     const sorted = files.sort((a, b) => b.size - a.size).slice(0, topN);
 
     return {
@@ -358,7 +400,7 @@ class FileOrganizerServer {
           type: "text",
           text: JSON.stringify(
             {
-              directory,
+              directory: validatedPath,
               largest_files: sorted.map((f) => ({
                 name: f.name,
                 path: f.path,
@@ -375,8 +417,8 @@ class FileOrganizerServer {
   }
 
   async findDuplicateFiles(directory) {
-    await this.validatePath(directory);
-    const files = await this.getAllFiles(directory, false);
+    const validatedPath = await this.validatePath(directory);
+    const files = await this.getAllFiles(validatedPath, false);
     const hashMap = {};
 
     // Calculate hash for each file
@@ -411,7 +453,7 @@ class FileOrganizerServer {
           type: "text",
           text: JSON.stringify(
             {
-              directory,
+              directory: validatedPath,
               duplicate_groups: duplicates.length,
               total_duplicate_files: duplicates.reduce((sum, g) => sum + g.length, 0),
               wasted_space: this.formatBytes(totalDuplicateSize),
@@ -430,15 +472,15 @@ class FileOrganizerServer {
   }
 
   async organizeFiles(directory, dryRun = false) {
-    await this.validatePath(directory);
-    const files = await this.getAllFiles(directory, false);
+    const validatedPath = await this.validatePath(directory);
+    const files = await this.getAllFiles(validatedPath, false);
     const stats = {};
     const actions = [];
     const errors = [];
 
     // Create category folders
     for (const category in this.categories) {
-      const categoryPath = path.join(directory, category);
+      const categoryPath = path.join(validatedPath, category);
       if (!dryRun) {
         try {
           await fs.mkdir(categoryPath, { recursive: true });
@@ -456,7 +498,7 @@ class FileOrganizerServer {
       try {
         const ext = path.extname(file.name).toLowerCase();
         const category = this.getCategory(ext);
-        const destFolder = path.join(directory, category);
+        const destFolder = path.join(validatedPath, category);
         let destPath = path.join(destFolder, file.name);
 
         // Handle duplicates
@@ -488,7 +530,7 @@ class FileOrganizerServer {
     if (!dryRun) {
       for (const category in this.categories) {
         if (stats[category] === 0) {
-          const categoryPath = path.join(directory, category);
+          const categoryPath = path.join(validatedPath, category);
           try {
             await fs.rmdir(categoryPath);
           } catch (error) {
@@ -504,7 +546,7 @@ class FileOrganizerServer {
           type: "text",
           text: JSON.stringify(
             {
-              directory,
+              directory: validatedPath,
               dry_run: dryRun,
               total_files: files.length,
               statistics: stats,
@@ -519,47 +561,7 @@ class FileOrganizerServer {
     };
   }
 
-  // Helper methods
-  async validatePath(requestedPath) {
-    const cwd = process.cwd();
-
-    // Step 1: Normalize and sanitize input
-    const normalized = path.normalize(requestedPath).replace(/^(\.\.(\/|\\|$))+/, '');
-
-    // Step 2: Resolve to absolute path
-    const absolutePath = path.resolve(cwd, normalized);
-
-    // Step 3: Resolve symlinks (use try-catch since file might not exist yet)
-    let realPath;
-    try {
-      realPath = await fs.realpath(absolutePath);
-    } catch (error) {
-      // If file doesn't exist, validate parent directory instead
-      const parentDir = path.dirname(absolutePath);
-      try {
-        const realParent = await fs.realpath(parentDir);
-        if (!realParent.startsWith(cwd + path.sep) && realParent !== cwd) {
-          throw new Error(`Access denied: Parent directory is outside allowed directory`);
-        }
-        realPath = path.join(realParent, path.basename(absolutePath));
-      } catch {
-        // If parent doesn't exist either, check grand-parent or just simple check
-        // For simplicity in this fix, we fall back to absolute path check if realpath fails widely
-        // preventing deeper traversal if parent is also missing
-        if (!absolutePath.startsWith(cwd + path.sep) && absolutePath !== cwd) {
-          throw new Error(`Access denied: Path is outside allowed directory`);
-        }
-        return absolutePath;
-      }
-    }
-
-    // Step 4: Strict containment check
-    if (!realPath.startsWith(cwd + path.sep) && realPath !== cwd) {
-      throw new Error(`Access denied: Path '${requestedPath}' is outside the allowed directory.`);
-    }
-
-    return realPath;
-  }
+  // ==================== Helper Methods ====================
 
   async getAllFiles(directory, includeSubdirs = false) {
     const results = [];
@@ -573,6 +575,8 @@ class FileOrganizerServer {
 
       for (const item of items) {
         if (item.name.startsWith(".")) continue;
+        // Skip node_modules and .git directories
+        if (item.name === 'node_modules' || item.name === '.git') continue;
 
         const fullPath = path.join(dir, item.name);
 
@@ -644,24 +648,24 @@ class FileOrganizerServer {
   }
 
   sanitizeError(error) {
-    return error.message
-      .replace(/\/[^\s]+/g, '[PATH]')
-      .replace(/[A-Z]:\\[^\s]+/g, '[PATH]');
+    return baseSanitizeError(error);
   }
 
   async run() {
+    console.error(`File Organizer MCP Server v3.0.0 starting...`);
+    console.error(`Security Mode: STRICT (CWD only)`);
+    console.error(`Working Directory: ${process.cwd()}`);
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error("File Organizer MCP Server running on stdio");
   }
 }
 
-// Start the server
 // Export the class for testing
 export { FileOrganizerServer };
 
 // Start the server if running directly
-import { fileURLToPath } from 'url';
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const server = new FileOrganizerServer();
   server.run().catch(console.error);
