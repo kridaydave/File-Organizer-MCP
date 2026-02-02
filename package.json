@@ -1,6 +1,6 @@
 {
   "name": "file-organizer-mcp",
-  "version": "3.0.0",
+  "version": "3.0.0-beta.1",
   "description": "MCP server for file organization with tiered security, auto-categorization and duplicate detection",
   "type": "module",
   "main": "server.js",
