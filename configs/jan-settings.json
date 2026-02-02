@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+        "file-organizer": {
+            "command": "node",
+            "args": [
+                "C:/path/to/File-Organizer-MCP/server.js"
+            ],
+            "env": {}
+        }
+    }
+}

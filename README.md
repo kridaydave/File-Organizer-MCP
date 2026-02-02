@@ -109,6 +109,43 @@ npm test
 
 ---
 
+
+---
+
+## 🏠 Local LLM Configuration
+
+You can use this server with local LLM clients like **Jan**, **LM Studio**, and **Ollama**.
+
+### 1. Jan Configuration
+Add this to your `mcp-servers.json` (found in Settings > MCP Servers):
+```json
+{
+  "file-organizer": {
+    "command": "node",
+    "args": ["C:/path/to/file-organizer-mcp/server.js"]
+  }
+}
+```
+
+### 2. LM Studio Configuration
+Add this to `~/.lmstudio/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "file-organizer": {
+      "command": "node",
+      "args": ["C:/path/to/file-organizer-mcp/server.js"]
+    }
+  }
+}
+```
+
+### 3. Ollama Configuration
+Use any MCP-compatible client (like Open WebUI) with the command:
+`node C:/path/to/file-organizer-mcp/server.js`
+
+---
+
 ## 🚀 Usage
 
 ### Basic Operations
