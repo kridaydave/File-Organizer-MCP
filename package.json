@@ -1,29 +1,81 @@
 {
   "name": "file-organizer-mcp",
-  "version": "3.0.0-beta.1",
-  "description": "MCP server for file organization with tiered security, auto-categorization and duplicate detection",
+  "version": "3.0.0",
+  "description": "Intelligent file organization MCP server for Claude with security-hardened operations, auto-categorization, and duplicate detection",
   "type": "module",
-  "main": "server.js",
+  "main": "dist/index.js",
   "bin": {
-    "file-organizer": "./server.js"
+    "file-organizer-mcp": "./dist/index.js",
+    "file-organizer": "./dist/index.js"
   },
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "test": "node test_security.js"
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "dev": "npm run build && npm run start",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "test:security": "node dist/tests/test-security.js",
+    "test:phase1": "node dist/tests/test-phase1.js",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write src/**/*.ts",
+    "docs:generate": "node scripts/generate-docs.js",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm test"
   },
   "keywords": [
     "mcp",
+    "mcp-server",
     "file-organizer",
+    "file-organization",
     "file-management",
-    "automation"
+    "automation",
+    "claude",
+    "ai-tools",
+    "duplicate-detection",
+    "file-categorization",
+    "typescript",
+    "security"
   ],
-  "author": "",
+  "author": "kridaydave",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kridaydave/File-Organizer-MCP.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kridaydave/File-Organizer-MCP/issues"
+  },
+  "homepage": "https://github.com/kridaydave/File-Organizer-MCP#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.3"
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.10.0",
+    "eslint": "^9.39.2",
+    "globals": "^17.3.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.1.0",
+    "rimraf": "^5.0.5",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.2",
+    "typescript-eslint": "^8.54.0"
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "ARCHITECTURE.md",
+    "CONTRIBUTING.md",
+    "MIGRATION.md"
+  ]
 }

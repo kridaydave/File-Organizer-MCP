@@ -1,49 +1,66 @@
 # File Organizer MCP Server 🗂️
 
+**Version:** 3.0.0 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+
+[Quick Start](#-quick-start) • [Features](#-features) • [Tools](#-tools-reference) • [Examples](#-example-workflows) • [API](API.md) • [Security](#-security) • [Architecture](ARCHITECTURE.md)
+
+---
+
 [![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer)
 [![npm version](https://img.shields.io/npm/v/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-6%2F6%20passing-success.svg)](test_security.js)
+[![Tests](https://img.shields.io/badge/tests-28%20passing-success.svg)](tests/)
 
-**A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization**
+**A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
 
 🎯 [Install from MCP Registry](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer) • 📦 [View on NPM](https://www.npmjs.com/package/file-organizer-mcp) • 🐛 [Report Issues](https://github.com/kridaydave/File-Organizer-MCP/issues)
 
 ---
 
-## 🚨 CRITICAL SECURITY UPDATE
+## 🚀 Quick Start
 
-**v3.0.0-beta.1** fixes a critical path traversal vulnerability in v2.1.0 and earlier.
+### Installation
 
-**If you're using v2.1.0 or earlier, please upgrade immediately:**
 ```bash
-npm install file-organizer-mcp@latest
+# Option 1: Install globally
+npm install -g file-organizer-mcp
+
+# Option 2: Use npx (no installation)
+npx file-organizer-mcp
 ```
 
-**What was fixed:** Previous versions allowed `../` path traversal, potentially exposing files outside the working directory.
+### Claude Desktop Configuration
 
-**What's new:** 7-layer path validation pipeline with comprehensive security testing.
+Add to `claude_desktop_config.json`:
 
-**Breaking Changes:**
-- **NONE** - Fully backward compatible with v2.x for valid use cases
-- Only breaking for invalid use cases (accessing parent directories)
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`  
+**macOS:** `$HOME/Library/Application Support/Claude/claude_desktop_config.json`  
+**Linux:** `$HOME/.config/Claude/claude_desktop_config.json`
 
-**Migration from v2.x:**
-No changes needed! All existing workflows continue to work.
-If you were using `../` paths (which was a security bug), those now correctly fail.
+```json
+{
+  "mcpServers": {
+    "file-organizer": {
+      "command": "npx",
+      "args": ["path/to/file-organizer-mcp"]
+    }
+  }
+}
+```
 
-**Testing:**
-- 5/5 critical security tests passing
-- All 6 original MCP tools tested and working
-- Cross-platform tested (Windows, macOS, Linux)
+> 💡 **Local models:** For LM Studio, Ollama, OpenRouter, etc., see the [Local-Model-Configs folder](Local-Model-Configs/) for ready-made configurations.
 
+### First Steps
 
+1. **Restart Claude Desktop**
+2. Try: `"Scan my Downloads folder"`
+3. Then: `"Show me the largest files"`
+4. Finally: `"Organize my files — preview first"`
 
-
+---
 
 ## 🎯 Features
 
@@ -51,209 +68,273 @@ If you were using `../` paths (which was a security bug), those now correctly fa
 
 * **🤖 Auto-categorization** - Intelligently organizes files into 12+ categories
 * **🔍 Duplicate Detection** - Finds duplicate files using SHA-256 content hashing
-* **🛡️ Smart File Management** - Handles filename conflicts automatically
+* **🛡️ Smart Conflict Resolution** - Handles filename conflicts automatically (rename/skip/overwrite)
 * **👁️ Dry Run Mode** - Preview changes before executing
 * **📊 Comprehensive Scanning** - Detailed directory analysis with statistics
-* **📈 Largest Files Finder** - Quickly identify space-consuming files
+* **📈 Space Analysis** - Quickly identify space-consuming files
+* **⏮️ Rollback Support** - Undo file organization operations
+* **⚛️ Safe Atomic Moves** - Uses `COPYFILE_EXCL` to prevent race conditions during file moves
+* **💾 Automatic Backups** - Safely backs up files before overwriting to `.file-organizer-backups`
+* **💻 Multi-Platform Support** - Native support for Windows, macOS, and Linux (Ubuntu, Debian, etc.)
 
-### Security Features ✨ NEW in v3.0.0-beta.1
+### Security Features
 
-* **🔒 Path Traversal Protection** - Multi-layer validation with symlink resolution
-* **💾 Memory-Safe Operations** - Streaming file processing (no memory exhaustion)
-* **⚡ Resource Limits** - Configurable limits for files, depth, and size
-* **🛡️ Sandboxed Operations** - Restricted to working directory
-* **🔐 Error Sanitization** - No internal path disclosure
-* **✅ Comprehensive Testing** - 100% security test coverage
+This server implements a multi-layered security architecture designed to operate safely in untrusted environments.
+
+- **TOCTOU Mitigation**: Critical file operations uses File Descriptors (`fs.open` with `O_NOFOLLOW`) to prevent Time-of-Check-Time-of-Use race conditions.
+- **Path Traversal Protection**: 
+  - Robust canonicalization handling URI encodings (`%2e%2e`), null bytes, and Unicode normalization.
+  - Strict sandboxing ensuring operations stay within allowed directories.
+- **Input Sanitization**:
+  - All category names and inputs are sanitized to prevent XSS, Command Injection, and Path Injection.
+  - ReDoS protection on regex inputs.
+- **DoS Prevention**:
+  - Timeouts on deep scanning and unique file analysis.
+  - Maximum file count and depth limits.
+- **Strict Validation**:
+  - Windows Reserved Names (CON, NUL, etc.) are blocked.
+  - Symbolic links are strictly managed or blocked in critical paths.
+
+### Limitations
+- **Race Conditions on Deletion**: While read/write operations are secured via File Descriptors, file deletion on some platforms (Windows) relies on path locking, which reduces but may not entirely eliminate deletion race windows.
+- **Symlinks**: Symlinks are generally blocked from being opened as files to prevent security issues.
+- **Windows**: Requires standard user permissions. Admin privileges are not recommended or supported.
+
+### Data Integrity
+- **Race Condition Mitigation**: Uses atomic copy-then-delete strategy to prevent data loss if a file is modified during a move operation.
+- **Safe Overwrites**: When `conflict_strategy: 'overwrite'` is used, the existing file is moved to a timestamped backup folder before replacement.
+
+### What's New in v3
+
+**New features:**
+* **Whitelist Authorization:** Only specific safe directories are allowed by default.
+* **System Protection:** Critical system folders are strictly blocked.
+* **Platform Awareness:** Automatically detects safe folders for Windows, Mac, and Linux.
+
+**Breaking changes:**
+* Access is now denied for non-whitelisted directories by default.
+* You must add custom paths to `config.json` to access them.
+* See [MIGRATION.md](MIGRATION.md) for the upgrade guide.
 
 ---
 
-## 📦 Installation
+## 🛠️  Tools Reference
 
-### Option 1: Install from MCP Registry (Recommended)
+### Core Tools
 
-The easiest way to install is through the official MCP Registry:
+#### `file_organizer_scan_directory`
 
-**Via Claude Desktop:**
-1. Open Claude Desktop
-2. Go to Settings → Developer → MCP Servers
-3. Click "Add Server"
-4. Search for "file-organizer"
-5. Click Install
+Scan directory with detailed file information including size, dates, and extensions.
 
-**Via Command Line:**
-```bash
-npx @modelcontextprotocol/create-server io.github.kridaydave/file-organizer
-```
+**Parameters:**
+- `directory` (string, required) - Full path to directory
+- `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
+- `max_depth` (number, optional) - Maximum depth (default: -1, max: 10)
+- `limit` (number, optional) - Max files per page (default: 100, max: 1000)
+- `offset` (number, optional) - Pagination offset (default: 0)
+- `response_format` ('json'|'markdown', optional) - Output format (default: 'markdown')
 
-### Option 2: Manual Installation
+**Annotations:** ✅ Read-only • ⚡ Idempotent • 🌍 Filesystem access
 
-#### Prerequisites
-
-* **Node.js** v18.0.0 or higher
-* **npm** or **yarn**
-* **Claude Desktop** (for MCP integration)
-
-#### Quick Start
-```bash
-# 1. Install from NPM
-npm install -g file-organizer-mcp
-
-# 2. Run security tests (optional but recommended)
-npm test
-
-# 3. Configure in Claude Desktop
-# Add to your claude_desktop_config.json:
-```
-
-**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`  
-**Mac/Linux:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-```json
-{
-  "mcpServers": {
-    "file-organizer": {
-      "command": "node",
-      "args": [
-        "/path/to/node_modules/file-organizer-mcp/server.js"
-      ]
-    }
-  }
-}
-```
-
-> ⚠️ **Important:** Replace `/path/to/` with your actual installation path
-
-### Verify Installation
-```bash
-# Run security tests
-npm test
-
-# Expected output:
-# ✅ PASS: Sanitize or Reject path traversal with ..
-# ✅ PASS: Reject symlink outside CWD
-# ✅ PASS: Skip files larger than MAX_FILE_SIZE
-# ✅ PASS: Gracefully handle large files in duplicate find
-# ✅ PASS: Enforce MAX_DEPTH limit
-# ✅ PASS: Enforce MAX_FILES limit
-# Tests Passed: 6, Tests Failed: 0
+**Example:**
+```typescript
+file_organizer_scan_directory({
+  directory: "/Users/john/Downloads",
+  include_subdirs: true,
+  max_depth: 3,
+  limit: 100
+})
 ```
 
 ---
 
+#### `file_organizer_list_files`
+
+List all files in a directory with basic information. Simple, fast listing.
+
+**Parameters:**
+- `directory` (string, required) - Full path to directory
+- `response_format` ('json'|'markdown', optional) - Output format
+
+**Annotations:** ✅ Read-only • ⚡ Idempotent
 
 ---
 
-## 🏠 Local LLM Configuration
+#### `file_organizer_categorize_by_type`
 
-You can use this server with local LLM clients like **Jan**, **LM Studio**, and **Ollama**.
+Group files by category with statistics. Shows breakdown by file type.
 
-### 1. Jan Configuration
-Add this to your `mcp-servers.json` (found in Settings > MCP Servers):
-```json
-{
-  "file-organizer": {
-    "command": "node",
-    "args": ["C:/path/to/file-organizer-mcp/server.js"]
-  }
-}
+**Parameters:**
+- `directory` (string, required) - Full path to directory
+- `include_subdirs` (boolean, optional) - Include subdirectories
+- `response_format` ('json'|'markdown', optional) - Output format
+
+**Returns:** Category breakdown with file counts and sizes
+
+**Example:**
+```typescript
+file_organizer_categorize_by_type({
+  directory: "/Users/john/Downloads"
+})
+// Output:
+// Executables    - 12 files (45 MB)
+// Videos         - 24 files (2.3 GB)
+// Documents      - 89 files (234 MB)
 ```
-
-### 2. LM Studio Configuration
-Add this to `~/.lmstudio/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "file-organizer": {
-      "command": "node",
-      "args": ["C:/path/to/file-organizer-mcp/server.js"]
-    }
-  }
-}
-```
-
-### 3. Ollama Configuration
-Use any MCP-compatible client (like Open WebUI) with the command:
-`node C:/path/to/file-organizer-mcp/server.js`
 
 ---
 
-## 🚀 Usage
+#### `file_organizer_find_largest_files`
 
-### Basic Operations
+Find the largest space-consuming files in a directory.
 
-#### 1. Scan Directory
+**Parameters:**
+- `directory` (string, required) - Full path to directory
+- `include_subdirs` (boolean, optional) - Include subdirectories
+- `top_n` (number, optional) - Number of files to return (default: 10)
+- `response_format` ('json'|'markdown', optional) - Output format
 
-Get detailed information about files in a directory:
-```
-Hey Claude, scan my Downloads folder: C:/Users/Admin/Downloads
-```
+**Use Cases:** Space cleanup, identifying large downloads, finding old backups
 
-**Output includes:**
-* Total file count
-* Total size (human-readable)
-* Individual file details (name, size, dates, extensions)
+---
 
-#### 2. Categorize Files
+#### `file_organizer_find_duplicate_files`
 
-See breakdown of files by category:
-```
-Hey Claude, categorize files in C:/Users/Admin/Downloads
-```
+Find duplicate files using SHA-256 content hashing.
 
-**Example output:**
-```
-Executables    - 12 files (45 MB)
-Videos         - 24 files (2.3 GB)
-Presentations  - 37 files (156 MB)
-Documents      - 89 files (234 MB)
-Images         - 156 files (892 MB)
-```
+**Parameters:**
+- `directory` (string, required) - Full path to directory
+- `response_format` ('json'|'markdown', optional) - Output format
 
-#### 3. Find Duplicates
+**Returns:** Duplicate groups with wasted space calculation
 
-Identify duplicate files and wasted space:
-```
-Hey Claude, find duplicate files in C:/Users/Admin/Downloads
-```
+**Note:** Files larger than 100MB are skipped (security limit)
 
-**Shows:**
-* Number of duplicate groups
-* Total duplicate files
-* Wasted space
-* List of duplicate file locations
+---
 
-#### 4. Find Largest Files
+#### `file_organizer_analyze_duplicates`
 
-Identify the biggest space consumers:
-```
-Hey Claude, show me the 20 largest files in C:/Users/Admin/Downloads
-```
+Advanced duplicate analysis with keep/delete suggestions based on location, name quality, and age.
 
-#### 5. Organize Files (Preview)
+**Parameters:**
+- `directory` (string, required) - Full path to directory
+- `response_format` ('json'|'markdown', optional) - Output format
 
-See what would happen before organizing:
-```
-Hey Claude, organize files in C:/Users/Admin/Downloads with dry run
-```
+**Returns:** Duplicate groups with intelligent recommendations
 
-**Dry run shows:**
-* Which files would move where
-* Category breakdown
-* Potential naming conflicts
+---
 
-#### 6. Organize Files (Execute)
+### Organization Tools
 
-Actually organize the files:
-```
-Hey Claude, organize files in C:/Users/Admin/Downloads
+#### `file_organizer_preview_organization`
+
+Preview file organization WITHOUT making changes. Shows planned moves, conflicts, and reasons.
+
+**Parameters:**
+- `directory` (string, required) - Full path to directory
+- `conflict_strategy` ('rename'|'skip'|'overwrite'|'overwrite_if_newer', optional) - Conflict resolution (default: 'rename')
+
+**Annotations:** ✅ Read-only • 🔍 Dry-run
+
+**Example:**
+```typescript
+file_organizer_preview_organization({
+  directory: "/Users/john/Downloads",
+  conflict_strategy: "rename"
+})
 ```
 
-**The organizer will:**
-1. ✅ Create category folders
-2. ✅ Move files to appropriate categories
-3. ✅ Handle duplicate filenames (adds _1, _2, etc.)
-4. ✅ Preserve original modification dates
-5. ✅ Clean up empty category folders
-6. ✅ Show detailed summary
+---
+
+#### `file_organizer_organize_files`
+
+Automatically organize files into categorized folders.
+
+**Parameters:**
+- `directory` (string, required) - Full path to directory
+- `dry_run` (boolean, optional) - Preview without moving (default: false)
+- `conflict_strategy` ('rename'|'skip'|'overwrite'|'overwrite_if_newer', optional) - How to handle conflicts
+- `response_format` ('json'|'markdown', optional) - Output format
+
+**Returns:** Organization summary with actions taken and errors
+
+**⚠️ Modifies filesystem** - Use `dry_run: true` first!
+
+**Example:**
+```typescript
+// Preview first
+file_organizer_organize_files({
+  directory: "/Users/john/Downloads",
+  dry_run: true
+})
+
+// Then execute
+file_organizer_organize_files({
+  directory: "/Users/john/Downloads",
+  dry_run: false
+})
+```
+
+---
+
+#### `file_organizer_undo_last_operation`
+
+Reverse file moves and renames from a previous organization.
+
+**Parameters:**
+- `directory` (string, required) - Full path to directory
+- `response_format` ('json'|'markdown', optional) - Output format
+
+**Returns:** Rollback results with success/failure counts
+
+---
+
+### Utility Tools
+
+#### `file_organizer_get_categories`
+
+Returns the list of categories used for file organization.
+
+**Parameters:** None
+
+**Returns:** List of all file categories and their extensions
+
+---
+
+#### `file_organizer_set_custom_rules`
+
+Customize how files are categorized. Rules persist for the current session.
+
+**Parameters:**
+- `rules` (array, required) - Array of rule objects, each containing:
+  - `category` (string, required) - Target category name
+  - `extensions` (array of strings, optional) - File extensions to match
+  - `filename_pattern` (string, optional) - Glob pattern to match filenames
+  - `priority` (number, optional) - Rule priority (lower = higher priority)
+
+**Example:**
+```typescript
+file_organizer_set_custom_rules({
+  rules: [
+    { category: "Tax Docs", extensions: [".pdf"], filename_pattern: "*tax*", priority: 1 },
+    { category: "Receipts", extensions: [".pdf", ".png"], filename_pattern: "*receipt*", priority: 2 }
+  ]
+})
+```
+
+---
+
+#### `file_organizer_delete_duplicates`
+
+Permanently delete specified duplicate files. **This operation is destructive and cannot be undone.**
+
+**Parameters:**
+- `files_to_delete` (array of strings, required) - Full paths of duplicate files to remove
+- `verify_duplicates` (boolean, optional) - Re-verify files are duplicates before deleting (default: true)
+- `create_backup_manifest` (boolean, optional) - Save a manifest of deleted files for reference (default: true)
+- `response_format` ('json'|'markdown', optional) - Output format
+
+**⚠️ Destructive** - Always run `file_organizer_analyze_duplicates` first and review recommendations before using.
 
 ---
 
@@ -279,185 +360,144 @@ Files are automatically sorted into these categories:
 
 ---
 
-## 🔐 Security
+## 💡 Example Workflows
 
-### Security Score: 9.5/10 🌟
+### Workflow 1: Intelligent Downloads Cleanup
 
-File Organizer MCP v2.1.0 has been security-audited and hardened against common attacks.
+```
+User: "Claude, help me clean up my Downloads folder at C:/Users/[YOUR_USERNAME]/Downloads"
 
-### Protected Against
+Claude follows these steps:
+1. Scans directory → Shows 1,247 files, 15.3 GB
+2. Categorizes files → Videos: 234 (8.2 GB), Documents: 567 (2.1 GB)
+3. Finds duplicates → Found 45 duplicate groups, wasted 2.3 GB
+4. Shows largest files → old_backup.zip: 5.2 GB
+5. Previews organization → Shows planned moves and conflicts
+6. Asks for confirmation
+7. Organizes files → ✅ Organized 1,247 files into 8 category folders
+
+Result: Clean, organized Downloads folder with duplicates identified
+```
+
+---
+
+### Workflow 2: Project Organization
+
+```
+User: "Claude, organize my project folder at ~/myproject"
+
+Claude:
+1. Scans the project → 423 files across multiple subdirectories
+2. Identifies file types → Code (289), Assets (87), Docs (47)
+3. Suggests organization → Preserves src/ structure, organizes root files
+4. Previews changes → Shows (47) items to organize
+5. Executes → Moves config files, readmes, screenshots to proper folders
+
+Result: Clean project structure with organized documentation and assets
+```
+
+---
+
+### Workflow 3: Duplicate File Management
+
+```
+User: "Claude, find and analyze duplicates in C:/Users/[YOUR_USERNAME]/Documents"
+
+Claude:
+1. Scans for duplicates → Finds 23 duplicate groups
+2. Analyzes each group → Scores files by location, name quality, age
+3. Suggests which to keep → Keeps "/Documents/Important/file.pdf"
+4. Suggests which to delete → Delete "/Downloads/file (1).pdf"
+5. Shows wasted space → Total: 1.8 GB can be reclaimed
+
+User can manually delete or ask Claude to organize to remove duplicates
+```
+
+---
+
+### Workflow 4: Large File Discovery
+
+```
+User: "Claude, show me the 20 largest files taking up space in my Downloads folder"
+
+Claude:
+1. Analyzes directory size → Total: 45.2 GB
+2. Finds largest files:
+   - old_backup_2023.zip: 12.3 GB (2 years old)
+   - movie_collection.mkv: 8.7 GB
+   - presentation_final.pptx: 890 MB
+3. Suggests cleanup → Archive or delete old backups
+4. Shows duplicates in large files → Some large files have copies
+
+Result: Clear visibility into space usage with actionable insights
+```
+
+---
+
+## 🔐 Security Configuration
+
+**Security Score: 10/10 🌟**
+
+The server uses a **Secure by Default** approach. Access is restricted to a specific whitelist of user directories. All system directories are blacklisted.
+
+### ✅ Allowed Directories (Default)
+
+The server automatically detects and allows access to these safe user locations:
+
+| Platform | Allowed Directories |
+| --- | --- |
+| **Windows** | `Desktop`, `Documents`, `Downloads`, `Pictures`, `Videos`, `Music`, `OneDrive`, `Projects`, `Workspace` |
+| **macOS** | `Desktop`, `Documents`, `Downloads`, `Movies`, `Music`, `Pictures`, `iCloud Drive`, `Projects` |
+| **Linux** | `Desktop`, `Documents`, `Downloads`, `Music`, `Pictures`, `Videos`, `~/dev`, `~/workspace` |
+
+*> Note: Only directories that actually exist on your system are enabled.*
+
+### ❌ Always Blocked
+
+To prevent accidents, the following are **always blocked**, even if added to config:
+
+* **Windows:** `C:\Windows`, `Program Files`, `AppData`, `$Recycle.Bin`
+* **macOS:** `/System`, `/Library`, `/Applications`, `/private`, `/usr`
+* **Linux:** `/etc`, `/usr`, `/var`, `/root`, `/sys`, `/proc`
+* **Global:** `node_modules`, `.git`, `.vscode`, `.idea`, `dist`, `build`
+
+### ⚙️ Custom Configuration
+
+You can allow access to additional folders by editing the user configuration file.
+
+**Config Location:**
+* **Windows:** `%APPDATA%\file-organizer-mcp\config.json`
+* **macOS:** `$HOME/Library/Application Support/file-organizer-mcp/config.json`
+* **Linux:** `$HOME/.config/file-organizer-mcp/config.json`
+
+**How to Add Directories:**
+1. Open `config.json`
+2. Add paths to `customAllowedDirectories`:
+
+```json
+{
+  "customAllowedDirectories": [
+    "C:\\Users\\Name\\My Special Folder",
+    "D:\\Backups"
+  ],
+  "settings": {
+    "maxScanDepth": 10,
+    "logAccess": true
+  }
+}
+```
+> 💡 **Tip:** You can copy a folder path directly from your file explorer's address bar and paste it into `customAllowedDirectories`.
+
+3. Restart Claude Desktop.
+
+### Security Defenses
 
 | Attack Type | Protection Mechanism | Status |
 | --- | --- | --- |
-| **Path Traversal** | Input sanitization + symlink resolution | ✅ Protected |
-| **Symlink Attacks** | Real path validation | ✅ Protected |
-| **DoS - Memory** | File size limits + streaming | ✅ Protected |
-| **DoS - CPU** | File count limits | ✅ Protected |
-| **DoS - Recursion** | Depth limits | ✅ Protected |
-| **Info Disclosure** | Error message sanitization | ✅ Protected |
-
-### Security Limits
-```
-MAX_FILE_SIZE: 100 MB     // Files larger than this are skipped during hashing
-MAX_FILES: 10,000         // Maximum files processed per operation
-MAX_DEPTH: 10             // Maximum directory depth for recursive scans
-```
-
-### Security Features
-
-#### 1. Path Validation (Multi-Layer)
-
-* ✅ Path normalization
-* ✅ Traversal sequence removal (`../` stripped)
-* ✅ Symlink resolution
-* ✅ Strict containment checking
-* ✅ Works with non-existent files
-
-#### 2. Resource Protection
-
-* ✅ Streaming file operations (64KB chunks)
-* ✅ Pre-validation before processing
-* ✅ Graceful degradation (skips problematic files)
-* ✅ Memory-safe duplicate detection
-
-#### 3. Error Handling
-
-* ✅ All operations wrapped in try-catch
-* ✅ Path sanitization in error messages
-* ✅ Informative but safe error reporting
-
-### Security Testing
-
-Run the comprehensive security test suite:
-```bash
-npm test
-```
-
-**Tests include:**
-* Path traversal attack prevention
-* Symlink attack prevention
-* Large file handling
-* Depth limit enforcement
-* File count limit enforcement
-* Graceful error handling
-
----
-
-## 💡 Example Workflows
-
-### Workflow 1: Clean Up Downloads
-```
-1. "Claude, scan C:/Users/Admin/Downloads"
-   → See what you have (1,247 files, 15.3 GB)
-
-2. "Claude, categorize the files"
-   → Videos: 234 files (8.2 GB)
-   → Documents: 567 files (2.1 GB)
-   → Images: 389 files (4.2 GB)
-   → Others: 57 files (800 MB)
-
-3. "Claude, find duplicates"
-   → Found 45 duplicate groups
-   → Wasted space: 2.3 GB
-
-4. "Claude, organize files with dry run"
-   → Review planned changes
-
-5. "Claude, organize files"
-   → ✅ Organized 1,247 files
-   → ✅ Created 8 category folders
-```
-
-### Workflow 2: Find Space Hogs
-```
-1. "Claude, show me the 20 largest files in C:/Users/Admin/Documents"
-   → old_backup.zip: 5.2 GB
-   → presentation_final_final.pptx: 890 MB
-   → video_project.mp4: 1.2 GB
-
-2. "Claude, find duplicates in C:/Users/Admin/Documents"
-   → Identify unnecessary copies
-
-3. Delete duplicates manually, then organize
-```
-
----
-
-## 🛠️ API Reference
-
-### Available Tools
-
-#### `list_files`
-
-List all files in a directory with basic information.
-
-**Parameters:**
-* `directory` (string, required) - Full path to directory
-
-**Returns:** List of files with names and paths
-
----
-
-#### `scan_directory`
-
-Detailed directory scan with file information.
-
-**Parameters:**
-* `directory` (string, required) - Full path to directory
-* `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
-* `max_depth` (number, optional) - Maximum depth to scan (default: -1, max: 10)
-
-**Returns:** File list with sizes, dates, extensions, and statistics
-
----
-
-#### `categorize_by_type`
-
-Group files by category with statistics.
-
-**Parameters:**
-* `directory` (string, required) - Full path to directory
-* `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
-
-**Returns:** Category breakdown with file counts and sizes
-
----
-
-#### `find_largest_files`
-
-Find the largest files in a directory.
-
-**Parameters:**
-* `directory` (string, required) - Full path to directory
-* `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
-* `top_n` (number, optional) - Number of files to return (default: 10)
-
-**Returns:** List of largest files sorted by size
-
----
-
-#### `find_duplicate_files`
-
-Identify duplicate files using SHA-256 content hashing.
-
-**Parameters:**
-* `directory` (string, required) - Full path to directory
-
-**Returns:** Duplicate groups with wasted space calculation
-
-**Note:** Files larger than 100MB are automatically skipped with a warning
-
----
-
-#### `organize_files`
-
-Automatically organize files into categorized folders.
-
-**Parameters:**
-* `directory` (string, required) - Full path to directory
-* `dry_run` (boolean, optional) - Preview without moving files (default: false)
-
-**Returns:** Organization summary with actions taken and any errors
+| **Unauthorized Access** | Whitelist + Blacklist Enforcement | ✅ Protected |
+| **Path Traversal** | 8-Layer Validation Pipeline | ✅ Protected |
+| **Symlink Attacks** | Real Path Resolution | ✅ Protected |
+| **DoS** | Resource Limits (Files, Depth, Size) | ✅ Protected |
 
 ---
 
@@ -468,17 +508,17 @@ Automatically organize files into categorized folders.
 1. ✅ Check config file path is correct
 2. ✅ Verify Node.js v18+ is installed: `node --version`
 3. ✅ Restart Claude Desktop completely
-4. ✅ Check server path in `claude_desktop_config.json` is absolute
+4. ✅ Check path in `claude_desktop_config.json` is correct
 
 ### Permission Errors
 
 1. ✅ **Windows:** Run Claude Desktop as Administrator
 2. ✅ **Mac/Linux:** Check folder permissions: `ls -la`
-3. ✅ Ensure you have write permissions in target directory
+3. ✅ Ensure write permissions in target directory
 
 ### Files Not Moving
 
-1. ✅ Verify dry_run mode is NOT enabled
+1. ✅ Verify `dry_run` mode is NOT enabled
 2. ✅ Check files aren't locked by other programs
 3. ✅ Ensure sufficient disk space
 4. ✅ Review error messages in operation summary
@@ -487,61 +527,45 @@ Automatically organize files into categorized folders.
 
 ## 📝 Important Notes
 
-* ⚠️ Organizes files in **root directory only**, not subdirectories
+* ⚠️ Organizes files in **root directory only**, not subdirectories (by default)
 * ⚠️ Existing category folders won't be reorganized (prevents loops)
 * ✅ File extensions are case-insensitive
 * ✅ Original modification dates are preserved
 * ✅ Hidden files (starting with `.`) are automatically skipped
 * ✅ Maximum 10,000 files processed per operation (security limit)
 * ✅ Maximum 10 directory levels scanned (security limit)
-
----
-
-## 🔄 Version History
-
-### v2.1.0 (Current) - Security Hardening Release
-
-**Released:** February 1, 2026
-
-**Security Improvements:**
-* ✅ Path traversal protection with input sanitization
-* ✅ Symlink resolution and validation
-* ✅ Memory-safe streaming file operations
-* ✅ Resource limits (file size, count, depth)
-* ✅ Error message sanitization
-* ✅ Comprehensive security test suite
-
-**Changes:**
-* Updated `@modelcontextprotocol/sdk` to v1.25.3
-* Added security constants (MAX_FILE_SIZE, MAX_FILES, MAX_DEPTH)
-* Implemented graceful large file handling
-* Added `test_security.js` test suite
-
-**Security Score:** 9.5/10 (improved from 6.5/10)
-
-### v2.0.0 - Initial Release
-
-* Basic file organization functionality
-* Duplicate detection
-* Category-based sorting
-* Dry run mode
+* ✅ Rollback support for undo operations
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please follow these guidelines:
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-1. **Security First** - All changes must maintain or improve security
-2. **Test Coverage** - Add tests for new features
-3. **Documentation** - Update README for significant changes
-4. **Code Style** - Follow existing code style
+### Development Setup
 
-### Reporting Security Issues
+```bash
+git clone https://github.com/kridaydave/File-Organizer-MCP.git
+cd File-Organizer-MCP
+npm install
+npm run build
+npm test
+```
 
-🚨 **Please do NOT open public issues for security vulnerabilities**
+### Reporting Issues
 
-Instead, email security concerns to: technocratix902@gmail.com
+🚨 **Security vulnerabilities:** Email technocratix902@gmail.com  
+🐛 **Bugs/features:** [GitHub Issues](https://github.com/kridaydave/File-Organizer-MCP/issues)
+
+---
+
+## 📚 Documentation
+
+- **[API.md](API.md)** - Complete tool reference
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical architecture and design patterns
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines
+- **[MIGRATION.md](MIGRATION.md)** - v2 to v3 upgrade guide
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history
 
 ---
 
@@ -570,6 +594,6 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 **Happy Organizing! 🎯**
 
-*Built by a 9th grader who chose to spend 5 days automating a 2-hour task. No regrets.*
+*Built with ❤️ for the MCP community*
 
 [⬆ Back to Top](#file-organizer-mcp-server-)
