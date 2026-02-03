@@ -163,12 +163,18 @@ export async function handleTool(args: ToolArgs): Promise<ToolResponse> {
 ```
 
 **Available Tools:**
-- `scan_directory` - Directory analysis
-- `organize_files` - File organization
-- `find_duplicate_files` - Duplicate detection
-- `categorize_by_type` - Category breakdown
-- `find_largest_files` - Space analysis
-- `list_files` - Basic file listing
+1.  **List Files in Directory** (`file_organizer_list_files`)
+2.  **Scan Directory for Detailed Info** (`file_organizer_scan_directory`)
+3.  **Categorize Files by Type** (`file_organizer_categorize_files`)
+4.  **Find Largest Files** (`file_organizer_find_largest_files`)
+5.  **Find Duplicate Files** (`file_organizer_find_duplicate_files`)
+6.  **Preview File Organization Plan** (`file_organizer_preview_organization`)
+7.  **Get Available File Categories** (`file_organizer_get_categories`)
+8.  **Analyze Duplicate Files with Smart Recommendations** (`file_organizer_analyze_duplicates`)
+9.  **Organize Files** (`file_organizer_organize_files`)
+10. **Set Custom Organization Rules** (`file_organizer_set_custom_rules`)
+11. **Delete Duplicate Files** (`file_organizer_delete_duplicates`)
+12. **Undo Last Organization Operation** (`file_organizer_undo_last_operation`)
 
 ### 3. Services Layer (`services/`)
 
@@ -270,7 +276,23 @@ class RollbackService {
 
 **Responsibility:** Shared utility functions
 
-- **logger.ts** - Structured logging (JSON format for stdio)
+#### Logger
+```typescript
+class Logger {
+    // Structured JSON logging to stderr (MCP stdio protocol)
+    debug(message: string, context?: Record<string, any>): void
+    info(message: string, context?: Record<string, any>): void
+    warn(message: string, context?: Record<string, any>): void
+    error(message: string, error?: Error, context?: Record<string, any>): void
+    
+    // Features:
+    // - ISO 8601 timestamps
+    // - Configurable log levels (debug/info/warn/error)
+    // - Error stack traces for error logs
+    // - JSON format for machine parsing
+}
+```
+
 - **error-handler.ts** - Centralized error handling
 - **file-utils.ts** - File system helpers
 - **formatters.ts** - Data formatting (bytes, dates, etc.)
@@ -433,24 +455,53 @@ stream.on('data', (chunk) => hash.update(chunk));
 
 ## 🔧 Configuration
 
-### Environment-Based Configuration
+### Configuration System (`config.ts`)
 
+The server uses a platform-aware configuration system that combines hardcoded defaults with user customization.
+
+**Structure:**
 ```typescript
-// config.ts
-export const config = {
+export const CONFIG = {
+    VERSION: '3.0.0',
+    
     security: {
-        // Defaults (overridden by config.json)
         enablePathValidation: true,
-        maxFileSize: 100 * 1024 * 1024,
-        maxFiles: 10000,
-        maxDepth: 10
+        allowCustomDirectories: true,
+        logAccess: true,
+        maxScanDepth: 10,
+        maxFilesPerOperation: 10000
     },
+    
     paths: {
-        // Loaded from OS defaults + config.json
-        defaultAllowed: [...],
-        customAllowed: [...]
+        defaultAllowed: getDefaultAllowedDirs(),    // Platform-aware safe directories
+        customAllowed: loadCustomAllowedDirs(),     // User-defined from config.json
+        alwaysBlocked: getAlwaysBlockedPatterns()   // System protection patterns
     }
 };
+```
+
+**Default Allowed Directories:**
+- **Windows:** Desktop, Documents, Downloads, Pictures, Videos, Music, OneDrive, Projects
+- **macOS:** Desktop, Documents, Downloads, Movies, Music, Pictures, iCloud Drive, Projects
+- **Linux:** Desktop, Documents, Downloads, Music, Pictures, Videos, ~/dev, ~/workspace
+
+**User Configuration:**
+- **Windows:** `%APPDATA%\file-organizer-mcp\config.json`
+- **macOS:** `~/Library/Application Support/file-organizer-mcp/config.json`
+- **Linux:** `~/.config/file-organizer-mcp/config.json`
+
+**Config File Format:**
+```json
+{
+  "customAllowedDirectories": [
+    "C:\\Users\\Name\\CustomFolder",
+    "D:\\Projects"
+  ],
+  "settings": {
+    "maxScanDepth": 10,
+    "logAccess": true
+  }
+}
 ```
 
 ## 🎯 Design Patterns
@@ -527,5 +578,6 @@ type Args = z.infer<typeof ArgsSchema>;
 
 ---
 
-**Last Updated:** February 2, 2026  
+**Last Updated:** February 3, 2026  
 **Version:** 3.0.0
+

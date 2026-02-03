@@ -14,6 +14,7 @@ import path from 'path';
 import { RollbackService } from './rollback.service.js';
 import type { RollbackAction } from '../types.js';
 import { validateStrictPath, PathValidatorService } from './path-validator.service.js';
+import { FileScannerService } from './file-scanner.service.js';
 
 export type RecommendationStrategy = 'newest' | 'oldest' | 'best_location' | 'best_name';
 
@@ -141,12 +142,17 @@ export class DuplicateFinderService {
 
     /**
      * Safely delete files with verification and manifest
+     * 
+     * @param filesToDelete - Array of file paths to delete
+     * @param options - Deletion options
+     * @param options.createBackupManifest - Create backup and rollback manifest (default: true)
+     * @param options.autoVerify - Automatically verify duplicates exist before deletion (default: true)
      */
     async deleteFiles(
         filesToDelete: string[],
-        options: { createBackupManifest?: boolean } = {}
+        options: { createBackupManifest?: boolean; autoVerify?: boolean } = {}
     ): Promise<DeletionResult> {
-        const { createBackupManifest = true } = options;
+        const { createBackupManifest = true, autoVerify = true } = options;
         const result: DeletionResult = {
             deleted: [],
             failed: []
@@ -160,79 +166,50 @@ export class DuplicateFinderService {
 
         const rollbackActions: RollbackAction[] = [];
 
-        // 2. Delete (Move to Backup)
-        // 2. Delete (Move to Backup)
+        // 2. Verify files are accessible and can be hashed (basic safety checks)
+        // Note: We trust that user has identified duplicates via analyze_duplicates
+        // We just ensure files exist, are readable, and pass security validation
+        let filesToProcess: string[] = [];
         for (const filePath of filesToDelete) {
             let handle: fs.FileHandle | undefined;
             try {
-                // Verify existence (Check 1)
                 if (!(await fileExists(filePath))) {
                     result.failed.push({ path: filePath, error: 'File not found' });
                     continue;
                 }
 
-                // Security Check & TOCTOU Prevention:
-                // Open and Validate -> Returns FD
-                // We hold this handle to verify it's the same file we are about to hash/delete (conceptually)
-                try {
-                    // Note: We need to import validateStrictPath? No, we use 'openAndValidateFile' from new logic?
-                    // We need to access PathValidatorService instance.
-                    // But DuplicateFinderService doesn't have it injected usually?
-                    // It imports 'validateStrictPath' as a standalone function currently.
-                    // We need to instantiate PathValidatorService or make openAndValidateFile static/standalone?
-                    // 'validateStrictPath' is exported from service file, but it creates a default instance?
-                    // Actually 'validateStrictPath' in `path-validator.service.ts` IS a standalone export of a function wrapper?
-                    // Let's check imports.
-                    // It imports { validateStrictPath } from './path-validator.service.js';
+                const validator = new PathValidatorService();
+                handle = await validator.openAndValidateFile(filePath);
 
-                    // I need to use the new method. I should export a helper or use the service.
-                    // I will instantiate the service locally or use a helper.
-                    // Better: Refactor `path-validator.service.ts` to export a singleton or helper.
-                    // For now, I'll assume I can use a helper.
-                    // Wait, I updated the CLASS PathValidatorService.
-                    // I need to access that.
+                // Verify file can be read/hashed
+                await this.hashCalculator.calculateHash(handle);
 
-                    // Let's assume I fix the import below or add the helper in previous step? 
-                    // I added it to the class.
-                    // Existing code calls `validateStrictPath(filePath)`.
-                    // I should use `PathValidatorService` instance.
-
-                    // Let's use a temporary instance for now if dependency injection isn't set up.
-                    // Or better, update `validateStrictPath` to be `openAndValidateStrictPath`?
-                    // No, `validateStrictPath` is used elsewhere.
-
-                    // I will create a new instance of PathValidatorService inside the method or constructor?
-                    // Use `globalPathValidator`?
-                    // Let's create `const validator = new PathValidatorService();` (It takes root/config? No, config is global).
-
-                    const validator = new PathValidatorService();
-                    handle = await validator.openAndValidateFile(filePath);
-
-                } catch (error) {
-                    result.failed.push({ path: filePath, error: (error as Error).message });
-                    continue;
-                }
-
-                // TypeScript check: handle is defined here because of continue above
-                if (!handle) {
-                    result.failed.push({ path: filePath, error: 'Failed to obtain file handle' });
-                    continue;
-                }
-
-                // Security Check: Verify it is actually a duplicate (Same hash validation)
-                // We use the HANDLE to verify.
-                const isDuplicate = await this.verifyIsDuplicate(handle); // Pass handle
-                if (!isDuplicate) {
-                    result.failed.push({ path: filePath, error: 'Verification failed: File does not match expected duplicate criteria' });
-                    await handle.close();
-                    handle = undefined;
-                    continue;
-                }
-
-                // Close handle before Delete/Rename (Windows lock)
                 await handle.close();
                 handle = undefined;
 
+                filesToProcess.push(filePath);
+            } catch (error) {
+                result.failed.push({ path: filePath, error: (error as Error).message });
+                if (handle) {
+                    try { await handle.close(); } catch (e) { }
+                }
+            }
+        }
+
+        // Auto-Verification: Ensure duplicates exist before deletion
+        if (autoVerify && filesToProcess.length > 0) {
+            const verification = await this.verifyDuplicatesExist(filesToProcess);
+
+            // Add verification failures to result
+            result.failed.push(...verification.invalid);
+
+            // Only proceed with valid files
+            filesToProcess = verification.valid;
+        }
+
+        // 3. Delete (Move to Backup) - only process files that passed validation
+        for (const filePath of filesToProcess) {
+            try {
                 if (createBackupManifest) {
                     // Move to backup
                     const backupName = `${Date.now()}_${path.basename(filePath)}`;
@@ -256,10 +233,6 @@ export class DuplicateFinderService {
 
             } catch (error) {
                 result.failed.push({ path: filePath, error: (error as Error).message });
-            } finally {
-                if (handle) {
-                    try { await handle.close(); } catch (e) { }
-                }
             }
         }
 
@@ -276,15 +249,106 @@ export class DuplicateFinderService {
     }
 
     /**
-     * Verify a file using its open handle
+     * Verify that duplicates exist for files being deleted
+     * Scans parent directories to ensure at least one copy remains
+     * 
+     * @param filesToDelete - Files that will be deleted
+     * @returns Object with valid files (have duplicates) and invalid files (no duplicates)
      */
-    private async verifyIsDuplicate(fileHandle: fs.FileHandle): Promise<boolean> {
-        try {
-            await this.hashCalculator.calculateHash(fileHandle);
-            return true;
-        } catch (error) {
-            logger.warn(`Verification failed: ${(error as Error).message}`);
-            return false;
+    private async verifyDuplicatesExist(
+        filesToDelete: string[]
+    ): Promise<{ valid: string[]; invalid: { path: string; error: string }[] }> {
+        const valid: string[] = [];
+        const invalid: { path: string; error: string }[] = [];
+
+        // Group files by parent directory to minimize scans
+        const filesByDir = new Map<string, string[]>();
+        for (const filePath of filesToDelete) {
+            const dir = path.dirname(filePath);
+            if (!filesByDir.has(dir)) {
+                filesByDir.set(dir, []);
+            }
+            filesByDir.get(dir)!.push(filePath);
         }
+
+        // For each directory, scan and verify duplicates
+        for (const [dir, filesInDir] of filesByDir.entries()) {
+            try {
+                // Calculate hashes for files being deleted in this directory
+                const fileHashes = new Map<string, string>();
+                for (const filePath of filesInDir) {
+                    let handle: fs.FileHandle | undefined;
+                    try {
+                        const validator = new PathValidatorService();
+                        handle = await validator.openAndValidateFile(filePath);
+                        const hash = await this.hashCalculator.calculateHash(handle);
+                        fileHashes.set(filePath, hash);
+                        await handle.close();
+                    } catch (error) {
+                        // If we can't hash it,  verification fails for this file
+                        invalid.push({
+                            path: filePath,
+                            error: `Cannot verify: ${(error as Error).message}`
+                        });
+                        if (handle) {
+                            try { await handle.close(); } catch (e) { }
+                        }
+                    }
+                }
+
+                // Scan directory to find all duplicates
+                const scanner = new FileScannerService();
+                const allFilesInDir = await scanner.getAllFiles(dir, false); // Don't recurse
+
+                // Build map of hash -> file paths
+                const hashToFiles = new Map<string, string[]>();
+                for (const file of allFilesInDir) {
+                    let handle: fs.FileHandle | undefined;
+                    try {
+                        const validator = new PathValidatorService();
+                        handle = await validator.openAndValidateFile(file.path);
+                        const hash = await this.hashCalculator.calculateHash(handle);
+
+                        if (!hashToFiles.has(hash)) {
+                            hashToFiles.set(hash, []);
+                        }
+                        hashToFiles.get(hash)!.push(file.path);
+
+                        await handle.close();
+                    } catch (error) {
+                        // Skip files we can't read
+                        if (handle) {
+                            try { await handle.close(); } catch (e) { }
+                        }
+                    }
+                }
+
+                // Verify each file being deleted has at least one copy remaining
+                for (const [filePath, hash] of fileHashes.entries()) {
+                    const allCopies = hashToFiles.get(hash) || [];
+                    const remainingCopies = allCopies.filter(f => !filesToDelete.includes(f));
+
+                    if (remainingCopies.length === 0) {
+                        invalid.push({
+                            path: filePath,
+                            error: 'Cannot delete: This is the last copy of this file (no duplicates found in directory)'
+                        });
+                    } else {
+                        valid.push(filePath);
+                    }
+                }
+
+            } catch (error) {
+                // If directory scan fails, mark all files in this directory as invalid
+                for (const filePath of filesInDir) {
+                    invalid.push({
+                        path: filePath,
+                        error: `Verification failed: ${(error as Error).message}`
+                    });
+                }
+            }
+        }
+
+        return { valid, invalid };
     }
 }

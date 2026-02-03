@@ -44,6 +44,8 @@ describe('Duplicate Management Tools', () => {
     it('should delete duplicate files w/ verification', async () => {
         const fileToDelete = path.join(testDir, 'dupe_to_delete.txt');
         await fs.writeFile(fileToDelete, 'content');
+        // Add a copy so verification passes
+        await fs.writeFile(path.join(testDir, 'original_copy.txt'), 'content');
         // We need another file to be the "original"? 
         // DuplicateFinder usually checks against a set of files or just deletes what passed?
         // handleDeleteDuplicates(files_to_delete) calls DuplicateFinder.deleteFiles.

@@ -75,6 +75,7 @@ export class FileScannerService {
                         // Security: Open with O_NOFOLLOW to avoid symlinks and race conditions
                         // Use usage of file handle for stat
                         let handle: fs.FileHandle | undefined;
+                        let statError: Error | undefined;
                         try {
                             // We use O_RDONLY | O_NOFOLLOW
                             handle = await fs.open(fullPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
@@ -87,14 +88,23 @@ export class FileScannerService {
                                 modified: stats.mtime,
                             });
                         } catch (error) {
-                            // If it's a symlink loop or we can't open (locked), we skip
+                            // BUG-003 FIX: Store error instead of throwing to ensure finally executes
                             const err = error as NodeJS.ErrnoException;
                             if (err.code === 'ELOOP' || err.code === 'EACCES' || err.code === 'EPERM' || err.code === 'EBUSY') {
-                                continue;
+                                // Skip file silently
+                            } else {
+                                statError = err;
                             }
-                            throw error;
                         } finally {
-                            await handle?.close();
+                            // BUG-003 FIX: Always close handle
+                            if (handle) {
+                                await handle.close();
+                            }
+                        }
+
+                        // Now throw the error after cleanup if needed
+                        if (statError) {
+                            throw statError;
                         }
 
                     } else if (item.isDirectory() && includeSubdirs) {
@@ -174,6 +184,7 @@ export class FileScannerService {
 
                     // Security: Open with O_NOFOLLOW to avoid symlinks and race conditions
                     let handle: fs.FileHandle | undefined;
+                    let statError: Error | undefined;
                     try {
                         handle = await fs.open(fullPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
                         const stats = await handle.stat();
@@ -187,14 +198,24 @@ export class FileScannerService {
                             modified: stats.mtime,
                         });
                     } catch (error) {
+                        // BUG-003 FIX: Store error instead of throwing to ensure finally executes
                         const err = error as NodeJS.ErrnoException;
                         // Skip if symlink or access denied
                         if (err.code === 'ELOOP' || err.code === 'EACCES' || err.code === 'EPERM' || err.code === 'EBUSY') {
-                            continue;
+                            // Skip file silently
+                        } else {
+                            statError = err;
                         }
-                        throw error;
                     } finally {
-                        await handle?.close();
+                        // BUG-003 FIX: Always close handle
+                        if (handle) {
+                            await handle.close();
+                        }
+                    }
+
+                    // Now throw the error after cleanup if needed
+                    if (statError) {
+                        throw statError;
                     }
                 } else if (item.isDirectory() && includeSubdirs) {
                     await this.scanDir(fullPath, results, includeSubdirs, maxDepth, currentDepth + 1, visited);

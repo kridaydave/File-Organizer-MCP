@@ -203,11 +203,13 @@ export class OrganizerService {
                     const msg = `Security validation failed for ${sourcePath}: ${(err as Error).message}`;
                     errors.push(msg);
                     logger.error(msg);
-                    if (handle) await handle.close();
                     continue;
+                } finally {
+                    // BUG-003 FIX: Always close handle, even in error paths
+                    if (handle) {
+                        await handle.close();
+                    }
                 }
-                // Close handle immediately to allow move involved (especially on Windows)
-                await handle.close();
 
                 let finalDest = targetPath;
                 let overwrittenBackupPath: string | undefined;
@@ -233,44 +235,53 @@ export class OrganizerService {
 
                     if (move.conflictResolution === 'rename') {
 
-                        // We have a planned 'targetPath'. 
-                        // Try atomic move. If fail, re-calculate.
+                        // BUG-002 FIX: Use consistent naming pattern for rename counters
+                        // Extract the original filename from the source file (not from targetPath)
+                        const sourceExt = path.extname(sourcePath);
+                        const sourceBaseName = path.basename(sourcePath, sourceExt);
+                        const destDir = path.dirname(targetPath);
 
                         let success = false;
                         let retryCount = 0;
                         let effectivePath = targetPath;
 
-                        // If the planned path differs from default, we trust the plan first.
-                        // But if plan was 'file.txt', and now 'file.txt' exists, we loop.
-
-                        const ext = path.extname(effectivePath);
-                        const base = path.basename(effectivePath, ext);
-                        const originalBase = base.includes('_') && !isNaN(Number(base.split('_').pop()))
-                            ? base.split('_').slice(0, -1).join('_')
-                            : base; // Try to extract original base? 
-                        // Actually 'move.destination' from plan might already have _1.
-                        // Let's just use what we have, if it fails, increment.
-
                         while (!success && retryCount < 100) {
                             try {
-                                // Atomic COPY
+                                // Atomic COPY with COPYFILE_EXCL to prevent overwrites
                                 await fs.copyFile(sourcePath, effectivePath, constants.COPYFILE_EXCL);
-                                success = true;
 
-                                // Delete Source (Move completed)
-                                await fs.unlink(sourcePath);
-                                finalDest = effectivePath;
+                                // BUG-005 FIX: Delete Source after successful copy (with robust cleanup)
+                                try {
+                                    await fs.unlink(sourcePath);
+                                    success = true;
+                                    finalDest = effectivePath;
+                                } catch (unlinkErr) {
+                                    // BUG-005 COMPLETE: If unlink fails, remove the copied file to maintain atomicity
+                                    const cleanupMsg = `Failed to unlink source ${sourcePath} after copy. Attempting cleanup.`;
+                                    logger.error(cleanupMsg);
+
+                                    try {
+                                        await fs.unlink(effectivePath);
+                                        logger.info(`Successfully cleaned up copied file ${effectivePath}`);
+                                    } catch (cleanupErr) {
+                                        // Cleanup failed - log critical error with both file paths
+                                        const criticalMsg = `CRITICAL: Failed to cleanup copied file ${effectivePath} after failed source unlink. Manual intervention may be required.`;
+                                        logger.error(criticalMsg);
+                                        errors.push(criticalMsg);
+                                    }
+                                    throw unlinkErr;
+                                }
 
                             } catch (err: any) {
                                 if (err.code === 'EEXIST') {
-                                    // Race condition hit! Rename and try again
+                                    // Race condition hit! Increment counter and try again
                                     retryCount++;
-                                    const pExt = path.extname(effectivePath);
-                                    const pBase = path.basename(targetPath, pExt); // Use initial targetPath base
-                                    // Issue: We want consistent naming. 
-                                    // Simple approach: standard increment
-                                    effectivePath = path.join(path.dirname(targetPath), `${pBase}_${retryCount}${pExt}`);
+                                    // Use consistent naming: originalname_1.ext, originalname_2.ext, etc.
+                                    effectivePath = path.join(destDir, `${sourceBaseName}_${retryCount}${sourceExt}`);
+                                    logger.debug(`Race condition detected for ${sourcePath}, retrying as ${effectivePath}`);
                                 } else {
+                                    // Unexpected error - log and rethrow
+                                    logger.error(`Unexpected error during atomic move of ${sourcePath}: ${err.message}`);
                                     throw err;
                                 }
                             }
@@ -281,15 +292,33 @@ export class OrganizerService {
                         }
 
                     } else {
-                        // Standard move (no conflict expected, or other logic)
-                        // Just use rename, but if it exists?
-                        if (await fileExists(targetPath)) {
-                            // Unexpected conflict (race condition for 'standard' move)
-                            // Fallback to safe logic above or just fail? 
-                            // Let's be safe and fail if we didn't expect conflict.
-                            throw new Error(`Destination ${targetPath} unexpectedly exists (Race Condition). Skipping.`);
+                        // BUG-005 COMPLETE: Make standard move more robust with atomic operations
+                        // Use COPYFILE_EXCL even for "standard" moves to prevent race conditions
+                        try {
+                            // Try atomic copy first
+                            await fs.copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL);
+
+                            // Delete source after successful copy
+                            try {
+                                await fs.unlink(sourcePath);
+                                finalDest = targetPath;
+                            } catch (unlinkErr) {
+                                // Cleanup copied file if unlink fails
+                                logger.error(`Failed to unlink source ${sourcePath}. Cleaning up copy.`);
+                                try {
+                                    await fs.unlink(targetPath);
+                                } catch (cleanupErr) {
+                                    errors.push(`CRITICAL: Failed to cleanup ${targetPath} after failed source unlink`);
+                                }
+                                throw unlinkErr;
+                            }
+                        } catch (err: any) {
+                            if (err.code === 'EEXIST') {
+                                // Unexpected conflict in standard move path
+                                throw new Error(`Destination ${targetPath} unexpectedly exists (Race Condition). This should not happen in standard move path.`);
+                            }
+                            throw err;
                         }
-                        await fs.rename(sourcePath, targetPath);
                     }
                 }
 

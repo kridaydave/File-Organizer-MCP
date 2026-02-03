@@ -7,12 +7,12 @@
 ---
 
 [![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer)
-[![npm version](https://img.shields.io/npm/v/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v3.0.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-28%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-133%20passing-success.svg)](tests/)
 
 **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
 
@@ -75,6 +75,7 @@ Add to `claude_desktop_config.json`:
 * **⏮️ Rollback Support** - Undo file organization operations
 * **⚛️ Safe Atomic Moves** - Uses `COPYFILE_EXCL` to prevent race conditions during file moves
 * **💾 Automatic Backups** - Safely backs up files before overwriting to `.file-organizer-backups`
+* **📝 Structured Logging** - JSON-formatted logs with configurable log levels (debug/info/warn/error)
 * **💻 Multi-Platform Support** - Native support for Windows, macOS, and Linux (Ubuntu, Debian, etc.)
 
 ### Security Features
@@ -106,10 +107,16 @@ This server implements a multi-layered security architecture designed to operate
 
 ### What's New in v3
 
-**New features:**
-* **Whitelist Authorization:** Only specific safe directories are allowed by default.
-* **System Protection:** Critical system folders are strictly blocked.
-* **Platform Awareness:** Automatically detects safe folders for Windows, Mac, and Linux.
+**Architecture:**
+* **TypeScript Migration** - Complete rewrite from JavaScript to TypeScript with strict type safety
+* **Modular Design** - Layered architecture with Services, Tools, Utils, and Schemas layers
+* **Zod Validation** - Runtime input validation with descriptive error messages
+
+**Security:**
+* **Secure by Default** - Whitelist-based authorization for directory access
+* **System Protection** - Critical system folders are strictly blocked
+* **Platform Awareness** - Automatically detects safe folders for Windows, Mac, and Linux
+* **8-Layer Path Validation** - Comprehensive validation pipeline preventing path traversal attacks
 
 **Breaking changes:**
 * Access is now denied for non-whitelisted directories by default.

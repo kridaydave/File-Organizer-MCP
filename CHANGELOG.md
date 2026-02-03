@@ -14,11 +14,12 @@ Complete rewrite from monolithic JavaScript to modular TypeScript architecture.
 - ESLint + Prettier configuration for code quality
 
 **Services Layer** (`src/services/`)
-- `PathValidatorService` - 7-layer path validation with Zod schemas
+- `PathValidatorService` - 8-layer path validation with Zod schemas
 - `FileScannerService` - Recursive file scanning with depth/count limits
 - `HashCalculatorService` - SHA-256 hashing for duplicate detection
 - `CategorizerService` - File type categorization by extension
 - `OrganizerService` - File organization with dry-run support
+- `RollbackService` - Undo file operations with manifest tracking
 
 **Tools Layer** (`src/tools/`)
 - Each tool in its own file with Zod input validation
@@ -29,21 +30,39 @@ Complete rewrite from monolithic JavaScript to modular TypeScript architecture.
 - `formatters.ts` - Byte/date/duration formatting
 - `file-utils.ts` - Path normalization, expansion, validation
 - `error-handler.ts` - Centralized error handling with sanitization
-- `logger.ts` - Structured logging
+- `logger.ts` - Structured JSON logging with configurable log levels (debug/info/warn/error)
+
+**Configuration** (`src/config.ts`)
+- Platform-aware default directory detection (Windows/macOS/Linux)
+- User configuration loading from platform-specific locations
+- Whitelist/blacklist system for directory access control
+- Auto-initialization of user config file
 
 **Schemas** (`src/schemas/`)
 - Zod schemas for all tool inputs
 - Runtime validation with descriptive error messages
 - Type inference from schemas
 
-**Tests** (`src/tests/`)
-- `test-phase1.ts` - Path validation tests (5/5 passing)
-- `test-security.ts` - Security tests (6/6 passing)
+**Testing**
+- Comprehensive unit tests for all services
+- Integration tests for complete workflows
+- Performance benchmarks
+- 100+ tests passing across unit, integration, and performance suites
+- `TESTS.md` - Complete test documentation
 
 ### 🔧 Changed
 - Entry point: `dist/index.js` (compiled from TypeScript)
 - Build: `npm run build` compiles TypeScript
-- Tests: `npm run test:phase1`, `npm run test:security`
+- Tests: `npm test` runs complete test suite
+- Improved error messages with sanitized paths
+- Enhanced security with TOCTOU mitigation using file descriptors
+
+### 🐛 Fixed
+- Path traversal vulnerability (8-layer validation pipeline)
+- Race conditions in file operations (atomic copy with `COPYFILE_EXCL`)
+- Data loss during overwrites (automatic backups to `.file-organizer-backups/`)
+- Windows path case-sensitivity issues
+- Multiple test failures in duplicate management, organization flow, and file inspection
 
 ### 🗑️ Removed
 - `server.js` (672-line monolith) → replaced by `src/` modules
@@ -55,6 +74,8 @@ Complete rewrite from monolithic JavaScript to modular TypeScript architecture.
 - `zod` ^3.22.4
 - `@types/node` ^20.10.0
 - `eslint`, `prettier`, `rimraf`
+- `jest` for testing
+
 
 ---
 
