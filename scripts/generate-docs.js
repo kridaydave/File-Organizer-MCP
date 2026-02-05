@@ -20,10 +20,11 @@ async function generateDocs() {
     const files = await fs.readdir(TOOLS_DIR);
     const toolFiles = files.filter(f => f.endsWith('.ts') && f !== 'index.ts');
 
-    let markdown = '# File Organizer MCP - API Reference\n\n';
+    let markdown = '# <a id="top"></a>File Organizer MCP - API Reference\n\n';
     markdown += '> Auto-generated from tool definitions\n\n';
     markdown += '**Version:** 3.0.0  \n';
     markdown += `**Generated:** ${new Date().toISOString()}\n\n`;
+    markdown += '[⬆ Back to Top](#top)\n\n';
     markdown += '---\n\n';
     markdown += '## Table of Contents\n\n';
 
@@ -39,15 +40,14 @@ async function generateDocs() {
     tools.sort((a, b) => a.name.localeCompare(b.name));
 
     for (const tool of tools) {
-        markdown += `- [${tool.name}](#${tool.name.replace(/_/g, '')})\n`;
+        markdown += `- [${tool.name}](#${tool.name})\n`;
     }
 
     markdown += '\n---\n\n';
 
-    for (const tool of tools) {
-        markdown += generateToolSection(tool);
-        markdown += '\n---\n\n';
-    }
+    const toolSections = tools.map(generateToolSection);
+    markdown += toolSections.join('\n---\n\n');
+
 
     await fs.writeFile(OUTPUT_FILE, markdown);
     console.log(`✅ Documentation generated: ${OUTPUT_FILE}`);
@@ -173,7 +173,8 @@ function parseParameters(propertiesStr) {
 }
 
 function generateToolSection(tool) {
-    let section = `## ${tool.name}\n\n`;
+    let section = `## ${tool.name}\n`;
+    section += '[⬆ Back to Top](#top)\n\n';
     section += `**Description:** ${tool.description}\n\n`;
 
     if (tool.parameters.length > 0) {
@@ -198,7 +199,7 @@ function generateToolSection(tool) {
         section += '  // No parameters needed\n';
     }
     section += '});\n';
-    section += '```\n\n';
+    section += '```\n';
 
     return section;
 }

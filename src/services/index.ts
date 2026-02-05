@@ -9,6 +9,7 @@ export * from './hash-calculator.service.js';
 export * from './categorizer.service.js';
 export * from './organizer.service.js';
 export * from './duplicate-finder.service.js';
+export * from './renaming.service.js';
 
 import { CategorizerService } from './categorizer.service.js';
 import { OrganizerService } from './organizer.service.js';

@@ -38,6 +38,7 @@ Thumbs.db
 # Application-specific data directories
 .file-organizer-backups/
 .file-organizer-rollbacks/
+Cloud-Integration/
 
 # Test artifacts and temporary files
 test-*/

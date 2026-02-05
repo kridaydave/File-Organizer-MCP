@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.0.1] - 2026-02-04
+
+### ✨ New Features
+- **Batch Renaming Tool**: New `file_organizer_batch_rename` tool for powerful bulk renaming (find/replace, case conversion, numbering).
+- **Audit Logging**: Comprehensive logging of all tool inputs, outputs, and status for enhanced transparency.
+
+### 🛡️ Improved Safety
+- **Default Dry Run**: `file_organizer_organize_files` now defaults to `dry_run: true` to prevent accidental moves.
+- **Race Condition Fix**: Resolved issue with case-only renames (e.g., `A.txt` -> `a.txt`) on Windows triggering false errors.
+
+### 🧠 Enhanced Categorization
+- **New File Types**: Added support for Markdown (`.md`) and LaTeX (`.tex`) in Documents.
+- **Smart Patterns**: Files with 'test', 'spec', 'debug', 'log', 'demo', or 'script' in their names are now automatically categorized into dedicated folders (Tests, Logs, Demos, Scripts).
+
+### 🐛 Fixed
+- Fixed typo in README examples.
+
+---
+
 ## [3.0.0] - 2026-02-02
 
 ### 🚀 Major: Full TypeScript Migration

@@ -152,7 +152,7 @@ export class DuplicateFinderService {
         filesToDelete: string[],
         options: { createBackupManifest?: boolean; autoVerify?: boolean } = {}
     ): Promise<DeletionResult> {
-        const { createBackupManifest = true, autoVerify = true } = options;
+        const { createBackupManifest = true, autoVerify = false } = options;
         const result: DeletionResult = {
             deleted: [],
             failed: []

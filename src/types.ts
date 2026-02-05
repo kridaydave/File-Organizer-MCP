@@ -201,7 +201,7 @@ export interface LargestFilesResult {
 // ==================== Rollback Types ====================
 
 export interface RollbackAction {
-    type: 'move' | 'copy' | 'delete';
+    type: 'move' | 'copy' | 'delete' | 'rename';
     originalPath: string;
     currentPath?: string; // For moves/copies
     backupPath?: string; // For deletions (where the file is temporarily stored)

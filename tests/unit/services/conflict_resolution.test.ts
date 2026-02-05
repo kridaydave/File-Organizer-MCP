@@ -22,14 +22,14 @@ describe('Conflict Resolution Strategies', () => {
     });
 
     it('should rename acting file on conflict (default)', async () => {
-        // Setup: test.txt -> Documents/test.txt
-        const src = path.join(testDir, 'test.txt');
+        // Setup: document.txt -> Documents/document.txt
+        const src = path.join(testDir, 'document.txt');
         await fs.writeFile(src, 'content');
 
         // Pre-create conflict
         const destDir = path.join(testDir, 'Documents');
         await fs.mkdir(destDir, { recursive: true });
-        await fs.writeFile(path.join(destDir, 'test.txt'), 'existing content');
+        await fs.writeFile(path.join(destDir, 'document.txt'), 'existing content');
 
         const files = await scanner.getAllFiles(testDir);
         // exclude existing dest file from input files? 
@@ -45,7 +45,7 @@ describe('Conflict Resolution Strategies', () => {
         const result = await organizer.organize(testDir, [srcFile], { conflictStrategy: 'rename' });
 
         expect(result.actions).toHaveLength(1);
-        expect(result.actions[0].to).toMatch(/test_1\.txt$/);
+        expect(result.actions[0].to).toMatch(/document_1\.txt$/);
 
         // Verify file exists
         const movedCtx = await fs.readFile(result.actions[0].to, 'utf8');
@@ -53,12 +53,12 @@ describe('Conflict Resolution Strategies', () => {
     });
 
     it('should skip on conflict', async () => {
-        const src = path.join(testDir, 'test.txt');
+        const src = path.join(testDir, 'document.txt');
         await fs.writeFile(src, 'content');
 
         const destDir = path.join(testDir, 'Documents');
         await fs.mkdir(destDir, { recursive: true });
-        await fs.writeFile(path.join(destDir, 'test.txt'), 'existing');
+        await fs.writeFile(path.join(destDir, 'document.txt'), 'existing');
 
         const files = await scanner.getAllFiles(testDir);
         const srcFile = files.find(f => f.path === src);

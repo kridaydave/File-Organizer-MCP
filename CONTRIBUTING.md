@@ -10,7 +10,7 @@ This project prioritizes security. All contributions must maintain or improve th
 
 **⚠️ DO NOT open public issues for security vulnerabilities**
 
-Instead, email security concerns to: **technocratix902@gmail.com**
+Instead, email security concerns to: **<technocratix902@gmail.com>**
 
 We will respond within 48 hours and work with you to address the issue.
 
@@ -179,6 +179,7 @@ throw new Error(`Invalid path: ${internalPath}`);
 ### 1. Create an Issue
 
 Before starting work, create an issue describing:
+
 - The problem or feature request
 - Proposed solution (if applicable)
 - Any breaking changes
@@ -299,7 +300,7 @@ Before submitting your PR, ensure:
 
 - **Questions**: Open a discussion on GitHub
 - **Issues**: Check existing issues or create new one
-- **Email**: technocratix902@gmail.com
+- **Email**: <technocratix902@gmail.com>
 
 ## 🙏 Recognition
 

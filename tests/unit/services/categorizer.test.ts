@@ -11,8 +11,8 @@ describe('CategorizerService', () => {
 
     describe('getCategory', () => {
         it('should correctly categorize common extensions', () => {
-            expect(categorizer.getCategory('test.jpg')).toBe('Images');
-            expect(categorizer.getCategory('test.png')).toBe('Images');
+            expect(categorizer.getCategory('image.jpg')).toBe('Images');
+            expect(categorizer.getCategory('image.png')).toBe('Images');
             expect(categorizer.getCategory('doc.pdf')).toBe('Documents');
             expect(categorizer.getCategory('data.json')).toBe('Code');
             expect(categorizer.getCategory('main.ts')).toBe('Code');
@@ -21,7 +21,16 @@ describe('CategorizerService', () => {
 
         it('should handle uppercase extensions', () => {
             expect(categorizer.getCategory('PHOTO.JPG')).toBe('Images');
-            expect(categorizer.getCategory('README.MD')).toBe('Others');
+            expect(categorizer.getCategory('README.MD')).toBe('Documents');
+        });
+
+        it('should categorize based on patterns', () => {
+            expect(categorizer.getCategory('my_test.ts')).toBe('Tests');
+            expect(categorizer.getCategory('app.spec.js')).toBe('Tests');
+            expect(categorizer.getCategory('debug.log')).toBe('Logs');
+            expect(categorizer.getCategory('server.log')).toBe('Logs');
+            expect(categorizer.getCategory('deploy_script.sh')).toBe('Scripts');
+            expect(categorizer.getCategory('demo_app.py')).toBe('Demos');
         });
 
         it('should respect custom rules', () => {
@@ -38,7 +47,7 @@ describe('CategorizerService', () => {
                 }
             ]);
 
-            expect(categorizer.getCategory('test.xyz')).toBe('Secret');
+            expect(categorizer.getCategory('file.xyz')).toBe('Secret');
             // Higher priority regex match
             expect(categorizer.getCategory('secret_file.txt')).toBe('TopSecret');
         });

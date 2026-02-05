@@ -96,7 +96,7 @@ describe('File Organization Tool', () => {
         });
 
         it('should move files when dry_run is false', async () => {
-            const filePath = await createFile('test.pdf');
+            const filePath = await createFile('document.pdf');
 
             await handleOrganizeFiles({
                 directory: testDir,

@@ -17,11 +17,24 @@ describe('Integration: Full Organization Flow', () => {
     });
 
     afterEach(async () => {
-        try {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            await fs.rm(testDir, { recursive: true, force: true });
-        } catch (error) {
-            console.error('Cleanup error:', error);
+        // Give time for any pending IO to settle
+        await new Promise(resolve => setTimeout(resolve, 500));
+        // Drain any pending microtasks
+        await new Promise(resolve => setImmediate(resolve));
+
+        let retries = 5;
+        while (retries > 0) {
+            try {
+                await fs.rm(testDir, { recursive: true, force: true });
+                break;
+            } catch (error) {
+                retries--;
+                if (retries === 0) {
+                    console.error('Cleanup failed after retries:', error);
+                } else {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
         }
     });
 

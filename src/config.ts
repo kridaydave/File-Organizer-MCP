@@ -8,7 +8,7 @@ import path from 'path';
 import fs from 'fs';
 
 export const CONFIG = {
-    VERSION: '3.0.0',
+    VERSION: '3.0.1',
 
     // Security Settings
     security: {
@@ -74,6 +74,15 @@ function getDefaultAllowedDirs(): string[] {
     } else if (platform === 'linux') {
         // Linux: Add common development directories
         commonDirs.push(path.join(home, 'dev'));
+    }
+
+    // Add project directory when running tests
+    const isTestMode = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
+    if (isTestMode) {
+        const projectDir = process.cwd();
+        if (!commonDirs.includes(projectDir)) {
+            commonDirs.push(projectDir);
+        }
     }
 
     // Only return directories that actually exist

@@ -97,8 +97,8 @@ export class RollbackService {
 
         for (const action of reverseActions) {
             try {
-                if (action.type === 'move' && action.currentPath) {
-                    // Undo Move: Move currentPath -> originalPath
+                if ((action.type === 'move' || action.type === 'rename') && action.currentPath) {
+                    // Undo Move/Rename: Move currentPath -> originalPath
                     if (await fileExists(action.currentPath)) {
                         await fs.mkdir(path.dirname(action.originalPath), { recursive: true });
 

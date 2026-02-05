@@ -11,7 +11,7 @@ import type { CategoryName } from './types.js';
 export const CATEGORIES: Record<CategoryName, readonly string[]> = {
     Executables: ['.exe', '.msi', '.bat', '.cmd', '.sh'],
     Videos: ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v'],
-    Documents: ['.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt'],
+    Documents: ['.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt', '.md', '.tex'],
     Presentations: ['.ppt', '.pptx', '.odp', '.key'],
     Spreadsheets: ['.xls', '.xlsx', '.csv', '.ods'],
     Images: ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.ico', '.webp'],

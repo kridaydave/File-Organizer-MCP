@@ -61,6 +61,8 @@ import { previewOrganizationToolDefinition } from './organization-preview.js';
 import { getCategoriesToolDefinition, setCustomRulesToolDefinition } from './file-management.js';
 import { analyzeDuplicatesToolDefinition, deleteDuplicatesToolDefinition } from './duplicate-management.js';
 import { undoLastOperationToolDefinition } from './rollback.js';
+import { batchRenameToolDefinition } from './file-renaming.js';
+import { inspectMetadataToolDefinition } from './metadata-inspection.js';
 
 export {
     undoLastOperationToolDefinition,
@@ -92,6 +94,18 @@ export {
     DeleteDuplicatesInputSchema
 } from './duplicate-management.js';
 
+export {
+    batchRenameToolDefinition,
+    handleBatchRename,
+    BatchRenameInputSchema
+} from './file-renaming.js';
+
+export {
+    inspectMetadataToolDefinition,
+    handleInspectMetadata,
+    InspectMetadataInputSchema
+} from './metadata-inspection.js';
+
 /**
  * All available tools for MCP registration
  * @description Array of all tool definitions that can be registered with the MCP server.
@@ -110,4 +124,6 @@ export const TOOLS: ToolDefinition[] = [
     analyzeDuplicatesToolDefinition,
     deleteDuplicatesToolDefinition,
     undoLastOperationToolDefinition,
+    batchRenameToolDefinition,
+    inspectMetadataToolDefinition,
 ];

@@ -20,6 +20,8 @@ import {
     handleAnalyzeDuplicates,
     handleDeleteDuplicates,
     handleUndoLastOperation,
+    handleBatchRename,
+    handleInspectMetadata,
 } from './tools/index.js';
 import { sanitizeErrorMessage } from './utils/error-handler.js';
 
@@ -93,44 +95,85 @@ async function handleToolCall(
         }
     }
 
-    switch (name) {
-        case 'file_organizer_list_files':
-            return handleListFiles(args as Record<string, unknown>);
+    // Logging Wrapper
+    const startTime = Date.now();
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        tool: name,
+        args: args,
+        success: false,
+        durationMs: 0,
+        result: undefined as unknown,
+        error: undefined as string | undefined
+    };
 
-        case 'file_organizer_scan_directory':
-            return handleScanDirectory(args as Record<string, unknown>);
+    console.log(`[AUDIT] Tool Call: ${name}`, JSON.stringify(args));
 
-        case 'file_organizer_categorize_by_type':
-            return handleCategorizeByType(args as Record<string, unknown>);
+    try {
+        let response: MCPToolResponse;
+        switch (name) {
+            case 'file_organizer_list_files':
+                response = await handleListFiles(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_scan_directory':
+                response = await handleScanDirectory(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_categorize_by_type':
+                response = await handleCategorizeByType(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_find_largest_files':
+                response = await handleFindLargestFiles(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_find_duplicate_files':
+                response = await handleFindDuplicateFiles(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_organize_files':
+                response = await handleOrganizeFiles(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_preview_organization':
+                response = await handlePreviewOrganization(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_get_categories':
+                response = await handleGetCategories(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_set_custom_rules':
+                response = await handleSetCustomRules(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_analyze_duplicates':
+                response = await handleAnalyzeDuplicates(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_delete_duplicates':
+                response = await handleDeleteDuplicates(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_undo_last_operation':
+                response = await handleUndoLastOperation(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_batch_rename':
+                response = await handleBatchRename(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_inspect_metadata':
+                response = await handleInspectMetadata(args as Record<string, unknown>);
+                break;
+            default:
+                throw new Error(`Unknown tool: ${name}`);
+        }
 
-        case 'file_organizer_find_largest_files':
-            return handleFindLargestFiles(args as Record<string, unknown>);
+        logEntry.success = true;
+        logEntry.result = response; // Be careful if response is huge
 
-        case 'file_organizer_find_duplicate_files':
-            return handleFindDuplicateFiles(args as Record<string, unknown>);
+        // Log simplified result for audit to avoid spamming console with huge file lists
+        const summary = { ...response, content: response.content.map(c => ({ ...c, text: c.text.length > 500 ? c.text.substring(0, 500) + '...' : c.text })) };
+        console.log(`[AUDIT] Success: ${name}`, JSON.stringify(summary));
 
-        case 'file_organizer_organize_files':
-            return handleOrganizeFiles(args as Record<string, unknown>);
+        return response;
 
-        case 'file_organizer_preview_organization':
-            return handlePreviewOrganization(args as Record<string, unknown>);
-
-        case 'file_organizer_get_categories':
-            return handleGetCategories(args as Record<string, unknown>);
-
-        case 'file_organizer_set_custom_rules':
-            return handleSetCustomRules(args as Record<string, unknown>);
-
-        case 'file_organizer_analyze_duplicates':
-            return handleAnalyzeDuplicates(args as Record<string, unknown>);
-
-        case 'file_organizer_delete_duplicates':
-            return handleDeleteDuplicates(args as Record<string, unknown>);
-
-        case 'file_organizer_undo_last_operation':
-            return handleUndoLastOperation(args as Record<string, unknown>);
-
-        default:
-            throw new Error(`Unknown tool: ${name}`);
+    } catch (error) {
+        logEntry.success = false;
+        logEntry.error = error instanceof Error ? error.message : String(error);
+        console.error(`[AUDIT] Failed: ${name}`, JSON.stringify(logEntry.error));
+        throw error;
+    } finally {
+        logEntry.durationMs = Date.now() - startTime;
+        // Could enable structured JSON logging to file here if Config allowed it
     }
 }

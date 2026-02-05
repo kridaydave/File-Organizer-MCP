@@ -270,7 +270,7 @@ describe('DuplicateFinderService', () => {
         it('should reject deleting last copy of file (auto-verify enabled)', async () => {
             const uniqueFile = await createFile('unique_verify.txt', 'unique content');
 
-            const result = await duplicateFinder.deleteFiles([uniqueFile.path]); // autoVerify=true by default
+            const result = await duplicateFinder.deleteFiles([uniqueFile.path], { autoVerify: true }); // autoVerify=true explicitly
 
             expect(result.failed.length).toBe(1);
             expect(result.failed[0].error).toContain('last copy');
@@ -282,7 +282,7 @@ describe('DuplicateFinderService', () => {
             const file2 = await createFile('file2_del.txt', 'shared content');
 
             // Delete file2, file1 remains
-            const result = await duplicateFinder.deleteFiles([file2.path]); // autoVerify=true
+            const result = await duplicateFinder.deleteFiles([file2.path], { autoVerify: true }); // autoVerify=true
 
             expect(result.deleted).toContain(file2.path);
             expect(result.failed.length).toBe(0);
@@ -296,7 +296,7 @@ describe('DuplicateFinderService', () => {
             const file2 = await createFile('file2_all.txt', 'shared content all');
 
             // Try to delete both
-            const result = await duplicateFinder.deleteFiles([file1.path, file2.path]);
+            const result = await duplicateFinder.deleteFiles([file1.path, file2.path], { autoVerify: true });
 
             expect(result.failed.length).toBe(2); // Should reject both
             expect(result.deleted.length).toBe(0);

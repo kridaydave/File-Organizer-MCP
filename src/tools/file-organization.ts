@@ -38,7 +38,7 @@ export const organizeFilesToolDefinition: ToolDefinition = {
         type: 'object',
         properties: {
             directory: { type: 'string', description: 'Full path to the directory' },
-            dry_run: { type: 'boolean', description: 'Simulate organization', default: false },
+            dry_run: { type: 'boolean', description: 'Simulate organization', default: true },
             response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
         },
         required: ['directory'],

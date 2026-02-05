@@ -1,30 +1,35 @@
-# File Organizer MCP - API Reference
+# <a id="top"></a>File Organizer MCP - API Reference
 
 > Auto-generated from tool definitions
 
 **Version:** 3.0.0  
-**Generated:** 2026-02-03T14:44:25.169Z
+**Generated:** 2026-02-05T11:17:14.746Z
+
+[⬆ Back to Top](#top)
 
 ---
 
 ## Table of Contents
 
-- [file_organizer_analyze_duplicates](#fileorganizeranalyzeduplicates)
-- [file_organizer_categorize_by_type](#fileorganizercategorizebytype)
-- [file_organizer_delete_duplicates](#fileorganizerdeleteduplicates)
-- [file_organizer_find_duplicate_files](#fileorganizerfindduplicatefiles)
-- [file_organizer_find_largest_files](#fileorganizerfindlargestfiles)
-- [file_organizer_get_categories](#fileorganizergetcategories)
-- [file_organizer_list_files](#fileorganizerlistfiles)
-- [file_organizer_organize_files](#fileorganizerorganizefiles)
-- [file_organizer_preview_organization](#fileorganizerprevieworganization)
-- [file_organizer_scan_directory](#fileorganizerscandirectory)
-- [file_organizer_set_custom_rules](#fileorganizersetcustomrules)
-- [file_organizer_undo_last_operation](#fileorganizerundolastoperation)
+- [file_organizer_analyze_duplicates](#file_organizer_analyze_duplicates)
+- [file_organizer_batch_rename](#file_organizer_batch_rename)
+- [file_organizer_categorize_by_type](#file_organizer_categorize_by_type)
+- [file_organizer_delete_duplicates](#file_organizer_delete_duplicates)
+- [file_organizer_find_duplicate_files](#file_organizer_find_duplicate_files)
+- [file_organizer_find_largest_files](#file_organizer_find_largest_files)
+- [file_organizer_get_categories](#file_organizer_get_categories)
+- [file_organizer_inspect_metadata](#file_organizer_inspect_metadata)
+- [file_organizer_list_files](#file_organizer_list_files)
+- [file_organizer_organize_files](#file_organizer_organize_files)
+- [file_organizer_preview_organization](#file_organizer_preview_organization)
+- [file_organizer_scan_directory](#file_organizer_scan_directory)
+- [file_organizer_set_custom_rules](#file_organizer_set_custom_rules)
+- [file_organizer_undo_last_operation](#file_organizer_undo_last_operation)
 
 ---
 
 ## file_organizer_analyze_duplicates
+[⬆ Back to Top](#top)
 
 **Description:** Finds duplicate files and suggests which to keep/delete based on location, name quality, and age.
 
@@ -48,10 +53,43 @@ file_organizer_analyze_duplicates({
 });
 ```
 
+---
+
+## file_organizer_batch_rename
+[⬆ Back to Top](#top)
+
+**Description:** Rename multiple files using rules (find/replace, case, add text, numbering). 
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `files` | array | List of absolute file paths | - |
+| `items` | string | - | - |
+| `directory` | string | Directory to scan (optional) | - |
+| `rules` | array | List of renaming rules. See specific rule schemas. | - |
+| `items` | object | - | - |
+| `dry_run` | boolean | Simulate renaming | true |
+| `response_format` | string | - | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_batch_rename({
+  files: [],
+  items: "value",
+  directory: "value",
+  rules: [],
+  items: value,
+  dry_run: true,
+  response_format: "value",
+});
+```
 
 ---
 
 ## file_organizer_categorize_by_type
+[⬆ Back to Top](#top)
 
 **Description:** Categorize files by their type (Executables, Videos, Documents, etc.) and show statistics for each category.
 
@@ -73,10 +111,10 @@ file_organizer_categorize_by_type({
 });
 ```
 
-
 ---
 
 ## file_organizer_delete_duplicates
+[⬆ Back to Top](#top)
 
 **Description:** Permanently deletes specified duplicate files. DESTRUCTIVE. Verifies hash/size before deletion.
 
@@ -100,10 +138,10 @@ file_organizer_delete_duplicates({
 });
 ```
 
-
 ---
 
 ## file_organizer_find_duplicate_files
+[⬆ Back to Top](#top)
 
 **Description:** Find duplicate files in a directory based on their content (SHA-256 hash). Shows potential wasted space.
 
@@ -127,10 +165,10 @@ file_organizer_find_duplicate_files({
 });
 ```
 
-
 ---
 
 ## file_organizer_find_largest_files
+[⬆ Back to Top](#top)
 
 **Description:** Find the largest files in a directory. Useful for identifying space-consuming files and cleanup opportunities.
 
@@ -154,10 +192,10 @@ file_organizer_find_largest_files({
 });
 ```
 
-
 ---
 
 ## file_organizer_get_categories
+[⬆ Back to Top](#top)
 
 **Description:** Returns the list of categories used for file organization
 
@@ -175,10 +213,33 @@ file_organizer_get_categories({
 });
 ```
 
+---
+
+## file_organizer_inspect_metadata
+[⬆ Back to Top](#top)
+
+**Description:** Inspects a file and returns comprehensive but privacy-safe metadata. For images, extracts EXIF data (date, camera, dimensions). For audio, extracts ID3 tags (artist, album, title). Excludes sensitive data like GPS coordinates.
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `file` | string | Full path to the file to inspect | - |
+| `response_format` | string | - | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_inspect_metadata({
+  file: "value",
+  response_format: "value",
+});
+```
 
 ---
 
 ## file_organizer_list_files
+[⬆ Back to Top](#top)
 
 **Description:** List all files in a directory with basic information. Returns file names and paths. Does not recurse into subdirectories.
 
@@ -202,10 +263,10 @@ file_organizer_list_files({
 });
 ```
 
-
 ---
 
 ## file_organizer_organize_files
+[⬆ Back to Top](#top)
 
 **Description:** Automatically organize files into categorized folders. Use dry_run=true to preview changes.
 
@@ -214,7 +275,7 @@ file_organizer_list_files({
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
 | `directory` | string | Full path to the directory | - |
-| `dry_run` | boolean | Simulate organization | false |
+| `dry_run` | boolean | Simulate organization | true |
 | `response_format` | string | - | 'markdown' |
 
 ### Example
@@ -227,10 +288,10 @@ file_organizer_organize_files({
 });
 ```
 
-
 ---
 
 ## file_organizer_preview_organization
+[⬆ Back to Top](#top)
 
 **Description:** Shows what would happen if files were organized, WITHOUT making any changes. Shows moves, conflicts, and skip reasons.
 
@@ -252,10 +313,10 @@ file_organizer_preview_organization({
 });
 ```
 
-
 ---
 
 ## file_organizer_scan_directory
+[⬆ Back to Top](#top)
 
 **Description:** Scan directory and get detailed file information including size, dates, and extensions. Supports recursive scanning.
 
@@ -283,10 +344,10 @@ file_organizer_scan_directory({
 });
 ```
 
-
 ---
 
 ## file_organizer_set_custom_rules
+[⬆ Back to Top](#top)
 
 **Description:** Customize how files are categorized. Rules persist for the current session.
 
@@ -318,10 +379,10 @@ file_organizer_set_custom_rules({
 });
 ```
 
-
 ---
 
 ## file_organizer_undo_last_operation
+[⬆ Back to Top](#top)
 
 **Description:** Reverses file moves and renames from a previous organization task.
 
@@ -340,7 +401,3 @@ file_organizer_undo_last_operation({
   response_format: "value",
 });
 ```
-
-
----
-

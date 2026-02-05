@@ -13,6 +13,7 @@ import { logger } from '../utils/logger.js';
 import { CategorizerService } from './categorizer.service.js';
 import { RollbackService } from './rollback.service.js';
 import { PathValidatorService } from './path-validator.service.js';
+import { MetadataService } from './metadata.service.js';
 
 export type ConflictStrategy = 'rename' | 'skip' | 'overwrite' | 'overwrite_if_newer';
 
@@ -31,7 +32,10 @@ export interface OrganizeResult {
  * Organizer Service - file organization logic
  */
 export class OrganizerService {
-    constructor(private categorizer: CategorizerService = new CategorizerService()) { }
+    constructor(
+        private categorizer: CategorizerService = new CategorizerService(),
+        private metadataService: MetadataService = new MetadataService()
+    ) { }
 
     /**
      * Generate a plan for organization without moving files
@@ -58,7 +62,13 @@ export class OrganizerService {
                 if (!categoryCounts[category]) categoryCounts[category] = 0;
                 categoryCounts[category]++;
 
-                const destFolder = path.join(directory, category);
+                // Get metadata-based subpath (e.g., "2024/02" for images or "Artist/Album" for audio)
+                const metadataSubpath = await this.metadataService.getMetadataSubpath(file.path, category);
+
+                // Build destination path with optional metadata subdirectories
+                const destFolder = metadataSubpath
+                    ? path.join(directory, category, metadataSubpath)
+                    : path.join(directory, category);
                 let destPath = path.join(destFolder, file.name);
                 let hasConflict = false;
                 let conflictResolution: 'rename' | 'skip' | 'overwrite' | undefined;
@@ -235,14 +245,22 @@ export class OrganizerService {
 
                     if (move.conflictResolution === 'rename') {
 
-                        // BUG-002 FIX: Use consistent naming pattern for rename counters
-                        // Extract the original filename from the source file (not from targetPath)
+                        // Extract the original filename from the source file
                         const sourceExt = path.extname(sourcePath);
                         const sourceBaseName = path.basename(sourcePath, sourceExt);
                         const destDir = path.dirname(targetPath);
 
+                        // Extract the counter from the planned targetPath to continue from there
+                        // e.g., if plan gave us "test_1.txt", start retrying from counter=2
+                        let startCounter = 1;
+                        const plannedBaseName = path.basename(targetPath, path.extname(targetPath));
+                        const counterMatch = plannedBaseName.match(/_(\d+)$/);
+                        if (counterMatch && counterMatch[1]) {
+                            startCounter = parseInt(counterMatch[1], 10) + 1;
+                        }
+
                         let success = false;
-                        let retryCount = 0;
+                        let retryCount = startCounter - 1; // Will increment to startCounter on first EEXIST
                         let effectivePath = targetPath;
 
                         while (!success && retryCount < 100) {

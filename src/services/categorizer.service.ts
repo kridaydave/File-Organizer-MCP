@@ -73,7 +73,9 @@ export class CategorizerService {
     getCategory(name: string): CategoryName {
         const ext = path.extname(name).toLowerCase();
 
-        // Check custom rules first
+        const lowerName = name.toLowerCase();
+
+        // Check custom rules first (highest priority)
         for (const rule of this.customRules) {
             // Check extension match
             if (rule.extensions && rule.extensions.some(e => e.toLowerCase() === ext)) {
@@ -91,6 +93,35 @@ export class CategorizerService {
                     // Ignore invalid regex
                 }
             }
+        }
+
+        // Check Pattern-Based Rules (Hardcoded fallback)
+        // Tests
+        if (lowerName.includes('test') || lowerName.includes('spec') || lowerName.endsWith('.test.ts') || lowerName.endsWith('.spec.ts')) {
+            // or create a new 'Tests' category if allowed? Re-reading task: "organize as test/debug code/script". 
+            // The user wants sub-organization or main categories?
+            // "organize as test/debug code/script". 
+            // If I return a new string, it will create a new folder. Ideally I should allow it.
+            // Actually, let's map them to subfolders of Code? Or just top level folders?
+            // "test/debug code/script" implies maybe:
+            // - Tests/
+            // - Scripts/
+            // - Debug/
+            // But these are not in CategoryName enum.
+            // If I cast to `as any` it will work because `categorizeFiles` uses string keys eventually.
+            return 'Tests' as any;
+        }
+
+        if (lowerName.includes('debug') || lowerName.includes('log') || lowerName.endsWith('.log')) {
+            return 'Logs' as any;
+        }
+
+        if (lowerName.includes('demo') || lowerName.includes('sample') || lowerName.includes('example')) {
+            return 'Demos' as any;
+        }
+
+        if (lowerName.includes('script') || lowerName.endsWith('.sh') || lowerName.endsWith('.bat')) {
+            return 'Scripts' as any;
         }
 
         return getCategory(ext);

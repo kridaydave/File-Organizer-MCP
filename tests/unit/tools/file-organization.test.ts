@@ -25,7 +25,7 @@ describe('organizeFiles Tool', () => {
 
     it('should organize files in a directory', async () => {
         // Create a file to organize
-        const file = path.join(testDir, 'test.jpg');
+        const file = path.join(testDir, 'image.jpg');
         await fs.writeFile(file, 'content');
 
         // ensure Images directory exists if organizer doesn't create it? 
@@ -43,7 +43,7 @@ describe('organizeFiles Tool', () => {
 
         // Verify file moved on disk
         const imagesDir = path.join(testDir, 'Images');
-        const movedFile = path.join(imagesDir, 'test.jpg');
+        const movedFile = path.join(imagesDir, 'image.jpg');
         await expect(fs.access(movedFile)).resolves.not.toThrow();
     });
 

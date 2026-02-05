@@ -1,18 +1,18 @@
 # File Organizer MCP Server 🗂️
 
-**Version:** 3.0.0 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.0.1 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
-[Quick Start](#-quick-start) • [Features](#-features) • [Tools](#-tools-reference) • [Examples](#-example-workflows) • [API](API.md) • [Security](#-security) • [Architecture](ARCHITECTURE.md)
+[Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
 ---
 
-[![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer)
-[![npm version](https://img.shields.io/badge/npm-v3.0.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+
+[![npm version](https://img.shields.io/badge/npm-v3.0.1-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-133%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-148%20passing-success.svg)](tests/)
 
 **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
 
@@ -20,7 +20,7 @@
 
 ---
 
-## 🚀 Quick Start
+## <a id="quick-start"></a>Quick Start 🚀
 
 ### Installation
 
@@ -62,12 +62,14 @@ Add to `claude_desktop_config.json`:
 
 ---
 
-## 🎯 Features
+## Features 🎯
 
 ### Core Functionality
 
 * **🤖 Auto-categorization** - Intelligently organizes files into 12+ categories
 * **🔍 Duplicate Detection** - Finds duplicate files using SHA-256 content hashing
+* **🏷️ Smart Metadata** - Extracts EXIF/ID3 tags for content-aware organization
+* **✏️ Batch Renaming** - Flexible renaming with patterns, regex, and case conversion
 * **🛡️ Smart Conflict Resolution** - Handles filename conflicts automatically (rename/skip/overwrite)
 * **👁️ Dry Run Mode** - Preview changes before executing
 * **📊 Comprehensive Scanning** - Detailed directory analysis with statistics
@@ -76,6 +78,7 @@ Add to `claude_desktop_config.json`:
 * **⚛️ Safe Atomic Moves** - Uses `COPYFILE_EXCL` to prevent race conditions during file moves
 * **💾 Automatic Backups** - Safely backs up files before overwriting to `.file-organizer-backups`
 * **📝 Structured Logging** - JSON-formatted logs with configurable log levels (debug/info/warn/error)
+* **📜 Audit Trail** - Complete logging of all tool inputs, outputs, and execution status for transparency
 * **💻 Multi-Platform Support** - Native support for Windows, macOS, and Linux (Ubuntu, Debian, etc.)
 
 ### Security Features
@@ -105,6 +108,11 @@ This server implements a multi-layered security architecture designed to operate
 - **Race Condition Mitigation**: Uses atomic copy-then-delete strategy to prevent data loss if a file is modified during a move operation.
 - **Safe Overwrites**: When `conflict_strategy: 'overwrite'` is used, the existing file is moved to a timestamped backup folder before replacement.
 
+### 🚀 Upcoming Features
+
+*   **🧙‍♂️ TUI Setup Wizard** - Interactive terminal interface for easy configuration
+*   **☁️ Cloud Support** - Seamless integration with Google Drive, Dropbox, and OneDrive
+
 ### What's New in v3
 
 **Architecture:**
@@ -125,7 +133,7 @@ This server implements a multi-layered security architecture designed to operate
 
 ---
 
-## 🛠️  Tools Reference
+## Tools Reference 🛠️
 
 ### Core Tools
 
@@ -259,7 +267,7 @@ Automatically organize files into categorized folders.
 
 **Parameters:**
 - `directory` (string, required) - Full path to directory
-- `dry_run` (boolean, optional) - Preview without moving (default: false)
+- `dry_run` (boolean, optional) - Preview without moving (default: true)
 - `conflict_strategy` ('rename'|'skip'|'overwrite'|'overwrite_if_newer', optional) - How to handle conflicts
 - `response_format` ('json'|'markdown', optional) - Output format
 
@@ -293,6 +301,34 @@ Reverse file moves and renames from a previous organization.
 - `response_format` ('json'|'markdown', optional) - Output format
 
 **Returns:** Rollback results with success/failure counts
+
+---
+
+#### `file_organizer_batch_rename`
+
+Batch rename files using pattern matching, case conversion, or sequence numbering.
+
+**Parameters:**
+- `directory` (string, optional) - Directory to scan (either this or `files` required)
+- `files` (array, optional) - Specific files to rename
+- `rules` (array, required) - Renaming rules:
+  - `type`: 'find_replace' | 'case' | 'add_text' | 'numbering'
+  - *...plus rule-specific options (replace, with, conversion, text, position, etc.)*
+- `dry_run` (boolean, optional) - Preview only (default: true)
+
+**Annotations:** ⚠️ Destructive (if dry_run=false) • 🔍 Dry-run
+
+**Example:**
+```typescript
+file_organizer_batch_rename({
+  directory: "/Docs",
+  rules: [
+    { type: "find_replace", find: "IMG", replace: "Photo" },
+    { type: "case", conversion: "lowercase" }
+  ],
+  dry_run: true
+})
+```
 
 ---
 
@@ -345,7 +381,7 @@ Permanently delete specified duplicate files. **This operation is destructive an
 
 ---
 
-## 📁 File Categories
+## File Categories
 
 Files are automatically sorted into these categories:
 
@@ -353,13 +389,16 @@ Files are automatically sorted into these categories:
 | --- | --- |
 | **Executables** | `.exe`, `.msi`, `.bat`, `.cmd`, `.sh` |
 | **Videos** | `.mp4`, `.avi`, `.mkv`, `.mov`, `.wmv`, `.flv`, `.webm`, `.m4v` |
-| **Documents** | `.pdf`, `.doc`, `.docx`, `.txt`, `.rtf`, `.odt` |
+| **Documents** | `.pdf`, `.doc`, `.docx`, `.txt`, `.rtf`, `.odt`, `.md`, `.tex` |
 | **Presentations** | `.ppt`, `.pptx`, `.odp`, `.key` |
 | **Spreadsheets** | `.xls`, `.xlsx`, `.csv`, `.ods` |
 | **Images** | `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.svg`, `.ico`, `.webp` |
 | **Audio** | `.mp3`, `.wav`, `.flac`, `.aac`, `.ogg`, `.wma`, `.m4a` |
 | **Archives** | `.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.bz2`, `.xz` |
 | **Code** | `.py`, `.js`, `.ts`, `.java`, `.cpp`, `.c`, `.html`, `.css`, `.php`, `.rb`, `.go`, `.json` |
+| **Tests** | `*test*`, `*spec*`, `.test.ts`, `.spec.ts` |
+| **Logs** | `*debug*`, `*.log` |
+| **Scripts** | `*script*`, `.sh`, `.bat` |
 | **Installers** | `.dmg`, `.pkg`, `.deb`, `.rpm`, `.apk` |
 | **Ebooks** | `.epub`, `.mobi`, `.azw`, `.azw3` |
 | **Fonts** | `.ttf`, `.otf`, `.woff`, `.woff2` |
@@ -367,7 +406,7 @@ Files are automatically sorted into these categories:
 
 ---
 
-## 💡 Example Workflows
+## Example Workflows 💡
 
 ### Workflow 1: Intelligent Downloads Cleanup
 
@@ -396,7 +435,7 @@ User: "Claude, organize my project folder at ~/myproject"
 Claude:
 1. Scans the project → 423 files across multiple subdirectories
 2. Identifies file types → Code (289), Assets (87), Docs (47)
-3. Suggests organization → Preserves src/ structure, organizes root files
+3. Suggestions organization → Preserves src/ structure, organizes root files
 4. Previews changes → Shows (47) items to organize
 5. Executes → Moves config files, readmes, screenshots to proper folders
 
@@ -441,7 +480,7 @@ Result: Clear visibility into space usage with actionable insights
 
 ---
 
-## 🔐 Security Configuration
+## Security Configuration 🔐
 
 **Security Score: 10/10 🌟**
 

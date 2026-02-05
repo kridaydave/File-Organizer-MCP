@@ -446,6 +446,7 @@ Tests catch bugs when:
 
 ### 5. **Documentation**
 Tests serve as **executable documentation** showing:
+
 - How APIs should be called
 - What inputs are valid
 - What outputs to expect
@@ -523,10 +524,10 @@ describe('MyService', () => {
 ## Test Coverage Goals
 
 Current coverage targets:
-- **Services**: 100% (critical business logic)
-- **Tools**: 95% (API contract coverage)
-- **Utilities**: 90%
-- **Overall**: \> 95%
+
+-   **Services**: 100% (critical paths)
+-   **Tools**: 100% (core functionality)
+-   **Utils**: >90% (helper functions)
 
 Run `npm run test:coverage` to generate coverage report.
 
@@ -535,9 +536,14 @@ Run `npm run test:coverage` to generate coverage report.
 ## Maintenance
 
 Tests should be reviewed when:
-- Adding new features (add corresponding tests)
+
 - Fixing bugs (add regression tests)
 - Refactoring (ensure tests still pass)
 - Updating dependencies (run full suite)
+
+### 6. **Future Improvements**
+
+- Adding new features (add corresponding tests first).
+- improving test performance (parallel execution).
 
 **Golden Rule**: If it can break, it should have a test.
