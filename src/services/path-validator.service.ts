@@ -123,6 +123,7 @@ export interface ValidatePathOptions {
     allowedPaths?: string | string[] | null;
     requireExists?: boolean;
     checkWrite?: boolean;
+    allowSymlinks?: boolean;
 }
 
 /**
@@ -137,6 +138,7 @@ export async function validatePathBase(
         allowedPaths = null,
         requireExists = false,
         checkWrite = false,
+        allowSymlinks = true,
     } = options;
 
     // Layer 1: Type check on raw input
@@ -171,6 +173,22 @@ export async function validatePathBase(
         if (!validation.allowed) {
             const message = formatAccessDeniedMessage(rawValidatedPath, validation);
             throw new AccessDeniedError(rawValidatedPath, message);
+        }
+    }
+
+    // Check for symlinks if disallowed (Before resolution)
+    if (!allowSymlinks) {
+        try {
+            const stats = await fs.lstat(absolutePath);
+            if (stats.isSymbolicLink()) {
+                throw new ValidationError('Symlink traversal detected (Symlinks are not allowed)');
+            }
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+                // Does not exist, proceed to resolution failing or handling it later
+            } else {
+                throw error;
+            }
         }
     }
 
@@ -260,7 +278,8 @@ export class PathValidatorService {
      */
     async openAndValidateFile(inputPath: string): Promise<fs.FileHandle> {
         // 1. Validate the path string first (checks permissions, blocklist, etc.)
-        const validatedPath = await this.validatePath(inputPath);
+        // Explicitly disallow symlinks at validation level for this operation
+        const validatedPath = await this.validatePath(inputPath, { allowSymlinks: false });
 
         // 2. Open with O_NOFOLLOW to ensure we don't follow symlinks at the last mile
         try {
