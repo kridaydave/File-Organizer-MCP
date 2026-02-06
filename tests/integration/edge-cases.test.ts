@@ -38,13 +38,8 @@ describe('OrganizerService Edge Cases', () => {
     const files = await scanner.getAllFiles(testDir);
     const result = await organizer.organize(testDir, files);
 
-    if (process.platform === 'win32') {
-      // On Windows, these files should fail to create, so actions should be empty
-      expect(result.actions).toHaveLength(0);
-    } else {
-      // On Linux/Mac, they exist, so they should be organized
-      expect(result.actions.length).toBeGreaterThan(0);
-    }
+    // We now skip reserved names on ALL platforms for consistency and safety.
+    expect(result.actions).toHaveLength(0);
   });
 
   it('should handle files with very long names', async () => {
