@@ -8,7 +8,7 @@ import path from 'path';
 import fs from 'fs';
 
 export const CONFIG = {
-  VERSION: '3.0.1',
+  VERSION: '3.1.2',
 
   // Security Settings
   security: {

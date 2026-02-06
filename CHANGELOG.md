@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.1.2] - 2026-02-06
+
+### 🐛 Fixed
+- **Bin Entry**: Fixed `file-organizer-setup` bin path (`tui-index.js` → `index.js`)
+- **Postinstall**: Added postinstall welcome message after npm install
+
 ## [3.1.1] - 2026-02-06
 
 ### ✨ New Features
