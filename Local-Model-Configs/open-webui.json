@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+        "file-organizer": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "file-organizer-mcp"
+            ],
+            "env": {
+                "NODE_ENV": "production"
+            }
+        }
+    }
+}

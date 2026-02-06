@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+        "file-organizer": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "file-organizer-mcp"
+            ],
+            "settings": {
+                "auto_organize": false
+            }
+        }
+    }
+}

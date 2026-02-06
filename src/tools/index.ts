@@ -106,6 +106,23 @@ export {
     InspectMetadataInputSchema
 } from './metadata-inspection.js';
 
+export {
+    watchDirectoryToolDefinition,
+    handleWatchDirectory,
+    WatchDirectoryInputSchema,
+    unwatchDirectoryToolDefinition,
+    handleUnwatchDirectory,
+    UnwatchDirectoryInputSchema,
+    listWatchesToolDefinition,
+    handleListWatches,
+    ListWatchesInputSchema,
+} from './watch.tool.js';
+export type { WatchDirectoryInput, UnwatchDirectoryInput, ListWatchesInput } from './watch.tool.js';
+
+// ==================== Tool Registry ====================
+
+import { watchDirectoryToolDefinition, unwatchDirectoryToolDefinition, listWatchesToolDefinition } from './watch.tool.js';
+
 /**
  * All available tools for MCP registration
  * @description Array of all tool definitions that can be registered with the MCP server.
@@ -126,4 +143,7 @@ export const TOOLS: ToolDefinition[] = [
     undoLastOperationToolDefinition,
     batchRenameToolDefinition,
     inspectMetadataToolDefinition,
+    watchDirectoryToolDefinition,
+    unwatchDirectoryToolDefinition,
+    listWatchesToolDefinition,
 ];

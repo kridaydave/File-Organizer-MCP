@@ -12,6 +12,7 @@ import { FileScannerService } from '../services/file-scanner.service.js';
 import { OrganizerService } from '../services/organizer.service.js';
 import { createErrorResponse } from '../utils/error-handler.js';
 import { CommonParamsSchema } from '../schemas/common.schemas.js';
+import { loadUserConfig } from '../config.js';
 
 export const OrganizeFilesInputSchema = z
     .object({
@@ -24,6 +25,10 @@ export const OrganizeFilesInputSchema = z
             .optional()
             .default(false)
             .describe('If true, only simulate the organization without moving files'),
+        conflict_strategy: z
+            .enum(['rename', 'skip', 'overwrite'])
+            .optional()
+            .describe('How to handle file conflicts. Uses config default if not specified'),
     })
     .merge(CommonParamsSchema);
 
@@ -40,6 +45,11 @@ export const organizeFilesToolDefinition: ToolDefinition = {
             directory: { type: 'string', description: 'Full path to the directory' },
             dry_run: { type: 'boolean', description: 'Simulate organization', default: true },
             response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
+            conflict_strategy: { 
+                type: 'string', 
+                enum: ['rename', 'skip', 'overwrite'],
+                description: 'How to handle file conflicts (rename/skip/overwrite). Uses config default if not specified'
+            },
         },
         required: ['directory'],
     },
@@ -51,6 +61,14 @@ export const organizeFilesToolDefinition: ToolDefinition = {
     },
 };
 
+/**
+ * Get conflict strategy from user config or return default
+ */
+function getConflictStrategy(): 'rename' | 'skip' | 'overwrite' {
+    const userConfig = loadUserConfig();
+    return userConfig.conflictStrategy ?? 'rename';
+}
+
 export async function handleOrganizeFiles(args: Record<string, unknown>): Promise<ToolResponse> {
     try {
         const parsed = OrganizeFilesInputSchema.safeParse(args);
@@ -60,14 +78,18 @@ export async function handleOrganizeFiles(args: Record<string, unknown>): Promis
             };
         }
 
-        const { directory, dry_run, response_format } = parsed.data;
+        const { directory, dry_run, response_format, conflict_strategy } = parsed.data;
         const validatedPath = await validateStrictPath(directory);
         const scanner = new FileScannerService();
         const organizer = new OrganizerService();
 
+        // Use provided strategy, or fall back to config, or default to 'rename'
+        const effectiveConflictStrategy = conflict_strategy ?? getConflictStrategy();
+
         const files = await scanner.getAllFiles(validatedPath, false);
         const { statistics, actions, errors } = await organizer.organize(validatedPath, files, {
             dryRun: dry_run,
+            conflictStrategy: effectiveConflictStrategy,
         });
 
         const result: OrganizeResult = {
@@ -90,6 +112,7 @@ export async function handleOrganizeFiles(args: Record<string, unknown>): Promis
 
 **Total Files Processed:** ${result.total_files}
 **Errors:** ${result.errors.length}
+**Conflict Strategy:** ${effectiveConflictStrategy}
 
 **Statistics:**
 ${Object.entries(result.statistics).map(([cat, count]) => `- ${cat}: ${count}`).join('\n')}

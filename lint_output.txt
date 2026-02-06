@@ -1,0 +1,23 @@
+markdownlint-cli2 v0.20.0 (markdownlint v0.40.0)
+Finding: *.md
+Linting: 7 file(s)
+Summary: 19 error(s)
+ARCHITECTURE.md:584 error MD012/no-multiple-blanks Multiple consecutive blank lines [Expected: 1; Actual: 2]
+CHANGELOG.md:30 error MD036/no-emphasis-as-heading Emphasis used instead of a heading [Context: "Architecture"]
+CHANGELOG.md:65 error MD036/no-emphasis-as-heading Emphasis used instead of a heading [Context: "Testing"]
+CHANGELOG.md:98 error MD012/no-multiple-blanks Multiple consecutive blank lines [Expected: 1; Actual: 2]
+CHANGELOG.md:139:74 error MD047/single-trailing-newline Files should end with a single newline character
+CONTRIBUTING.md:11 error MD036/no-emphasis-as-heading Emphasis used instead of a heading [Context: "⚠️ DO NOT open public issues f..."]
+MIGRATION.md:347:25 error MD026/no-trailing-punctuation Trailing punctuation in heading [Punctuation: '!']
+README.md:5:31 error MD051/link-fragments Link fragments should be valid [Context: "[Features](#features)"]
+README.md:5:55 error MD051/link-fragments Link fragments should be valid [Context: "[Tools](#tools-reference)"]
+README.md:5:83 error MD051/link-fragments Link fragments should be valid [Context: "[Examples](#example-workflows)"]
+README.md:5:132 error MD051/link-fragments Link fragments should be valid [Context: "[Security](#security-configuration)"]
+README.md:9 error MD012/no-multiple-blanks Multiple consecutive blank lines [Expected: 1; Actual: 2]
+README.md:17 error MD036/no-emphasis-as-heading Emphasis used instead of a heading [Context: "A powerful, security-hardened ..."]
+README.md:485 error MD036/no-emphasis-as-heading Emphasis used instead of a heading [Context: "Security Score: 10/10 🌟"]
+README.md:537:1 error MD029/ol-prefix Ordered list item prefix [Expected: 1; Actual: 3; Style: 1/1/1]
+README.md:641 error MD036/no-emphasis-as-heading Emphasis used instead of a heading [Context: "Happy Organizing! 🎯"]
+README.md:643 error MD036/no-emphasis-as-heading Emphasis used instead of a heading [Context: "Built with ❤️ for the MCP comm..."]
+README.md:645:44 error MD047/single-trailing-newline Files should end with a single newline character
+README.md:645:1 error MD051/link-fragments Link fragments should be valid [Context: "[⬆ Back to Top](#file-organizer-mcp-server-)"]

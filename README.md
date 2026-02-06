@@ -1,17 +1,17 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.0.1 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.1.0 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
 [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
 ---
 
-[![npm version](https://img.shields.io/badge/npm-v3.0.1-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v3.1.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-148%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-209%20passing-success.svg)](tests/)
 
 > **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
 
@@ -29,6 +29,9 @@ npm install -g file-organizer-mcp
 
 # Option 2: Use npx (no installation)
 npx file-organizer-mcp
+
+# Option 3: Run the interactive setup wizard (Recommended)
+npx file-organizer-mcp --setup
 ```
 
 ### Claude Desktop Configuration
@@ -71,6 +74,7 @@ Add to `claude_desktop_config.json`:
 * **✏️ Batch Renaming** - Flexible renaming with patterns, regex, and case conversion
 * **🛡️ Smart Conflict Resolution** - Handles filename conflicts automatically (rename/skip/overwrite)
 * **👁️ Dry Run Mode** - Preview changes before executing
+* **👀 File Watching** - Schedule automatic organization with cron-based triggers
 * **📊 Comprehensive Scanning** - Detailed directory analysis with statistics
 * **📈 Space Analysis** - Quickly identify space-consuming files
 * **⏮️ Rollback Support** - Undo file organization operations
@@ -109,26 +113,26 @@ This server implements a multi-layered security architecture designed to operate
 
 ### 🚀 Upcoming Features
 
-*   **🧙‍♂️ TUI Setup Wizard** - Interactive terminal interface for easy configuration
-*   **☁️ Cloud Support** - Seamless integration with Google Drive, Dropbox, and OneDrive
+### ⚙️ Interactive Configuration
+The new TUI Setup Wizard makes configuration easy:
+`npx file-organizer-mcp --setup`
 
-### What's New in v3
+- **📁 Folder Selection**: Interactively choose which folders to manage.
+- **⚡ Conflict Handling**: Choose between **Rename**, **Skip**, or **Overwrite** strategies.
+- **🤖 Claude Integration**: Automatically generates/updates your `claude_desktop_config.json`.
 
-**Architecture:**
-* **TypeScript Migration** - Complete rewrite from JavaScript to TypeScript with strict type safety
-* **Modular Design** - Layered architecture with Services, Tools, Utils, and Schemas layers
-* **Zod Validation** - Runtime input validation with descriptive error messages
 
-**Security:**
-* **Secure by Default** - Whitelist-based authorization for directory access
-* **System Protection** - Critical system folders are strictly blocked
-* **Platform Awareness** - Automatically detects safe folders for Windows, Mac, and Linux
-* **8-Layer Path Validation** - Comprehensive validation pipeline preventing path traversal attacks
+### What's New in v3.1.0
 
-**Breaking changes:**
-* Access is now denied for non-whitelisted directories by default.
-* You must add custom paths to `config.json` to access them.
-* See [MIGRATION.md](MIGRATION.md) for the upgrade guide.
+**New Features:**
+* **🧙 Interactive Setup Wizard** - Run `npx file-organizer-mcp --setup` for a guided configuration experience.
+* **🎵 Smart Metadata** - Organize images by Year/Month and audio by Artist/Album automatically.
+* **👀 File Watching** - Schedule folders for automatic organization using cron expressions.
+* **🏷️ Batch Renaming** - Powerful bulk renaming with find/replace, regex, and numbering support.
+* **🛡️ Enhanced Security** - Improved symlink detection and path validation.
+* **🆓 Free Models** - Optimized default configuration to use free models.
+
+See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 

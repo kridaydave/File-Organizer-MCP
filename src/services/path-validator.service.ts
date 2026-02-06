@@ -277,14 +277,27 @@ export class PathValidatorService {
      * Mitigates TOCTOU by ensuring the file validated is the one opened
      */
     async openAndValidateFile(inputPath: string): Promise<fs.FileHandle> {
-        // 1. Validate the path string first (checks permissions, blocklist, etc.)
-        // Explicitly disallow symlinks at validation level for this operation
-        // This validates security, permissions, and ensures no symlinks exist in the ideal case
+        // 1. Validate the path string first (checks permissions, whitelist, etc.)
         await this.validatePath(inputPath, { allowSymlinks: false });
 
         // 2. Resolve the absolute path manually to ensuring we open the exact path we requested
-        // (validatePath returns the *resolved* realPath, which defeats O_NOFOLLOW if used directly)
         const absolutePath = path.resolve(this.basePath, normalizePath(inputPath));
+
+        // 3. Explicitly check for symlinks using lstat before opening
+        // This is necessary because O_NOFOLLOW behavior varies or can be subtle, 
+        // and we want to be 100% sure we reject symlinks on all platforms.
+        try {
+            const stats = await fs.lstat(absolutePath);
+            if (stats.isSymbolicLink()) {
+                throw new ValidationError('Symlink traversal detected (Symlinks are not allowed)');
+            }
+        } catch (error) {
+            // If file doesn't exist, we ignore error here and let fs.open handle it (it will throw ENOENT)
+            // If other error, we let it propagate or let fs.open handle it
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                throw error;
+            }
+        }
 
         // 3. Open with O_NOFOLLOW to ensure we don't follow symlinks at the last mile
         try {

@@ -22,8 +22,12 @@ import {
     handleUndoLastOperation,
     handleBatchRename,
     handleInspectMetadata,
+    handleWatchDirectory,
+    handleUnwatchDirectory,
+    handleListWatches,
 } from './tools/index.js';
 import { sanitizeErrorMessage } from './utils/error-handler.js';
+import { logger } from './utils/logger.js';
 
 interface MCPToolResponse {
     content: Array<{ type: 'text'; text: string }>;
@@ -107,7 +111,7 @@ async function handleToolCall(
         error: undefined as string | undefined
     };
 
-    console.log(`[AUDIT] Tool Call: ${name}`, JSON.stringify(args));
+    logger.info(`[AUDIT] Tool Call: ${name}`, { args });
 
     try {
         let response: MCPToolResponse;
@@ -154,6 +158,15 @@ async function handleToolCall(
             case 'file_organizer_inspect_metadata':
                 response = await handleInspectMetadata(args as Record<string, unknown>);
                 break;
+            case 'file_organizer_watch_directory':
+                response = await handleWatchDirectory(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_unwatch_directory':
+                response = await handleUnwatchDirectory(args as Record<string, unknown>);
+                break;
+            case 'file_organizer_list_watches':
+                response = await handleListWatches(args as Record<string, unknown>);
+                break;
             default:
                 throw new Error(`Unknown tool: ${name}`);
         }
@@ -163,14 +176,14 @@ async function handleToolCall(
 
         // Log simplified result for audit to avoid spamming console with huge file lists
         const summary = { ...response, content: response.content.map(c => ({ ...c, text: c.text.length > 500 ? c.text.substring(0, 500) + '...' : c.text })) };
-        console.log(`[AUDIT] Success: ${name}`, JSON.stringify(summary));
+        logger.info(`[AUDIT] Success: ${name}`, { summary });
 
         return response;
 
     } catch (error) {
         logEntry.success = false;
         logEntry.error = error instanceof Error ? error.message : String(error);
-        console.error(`[AUDIT] Failed: ${name}`, JSON.stringify(logEntry.error));
+        logger.error(`[AUDIT] Failed: ${name}`, { error: logEntry.error });
         throw error;
     } finally {
         logEntry.durationMs = Date.now() - startTime;

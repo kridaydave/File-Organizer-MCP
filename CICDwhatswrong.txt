@@ -1,0 +1,1608 @@
+Run npm test
+
+> file-organizer-mcp@3.0.1 test
+> node --experimental-vm-modules node_modules/jest/bin/jest.js
+
+(node:2313) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2320) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/tools/file_inspection.test.ts
+  ● Console
+
+    console.error
+      Created default config file at: /home/runner/.config/file-organizer-mcp/config.json
+
+      230 |
+      231 |             fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
+    > 232 |             console.error(`Created default config file at: ${configPath}`);
+          |                     ^
+      233 |         }
+      234 |     } catch (error) {
+      235 |         console.error('Error initializing user config:', (error as Error).message);
+
+      at initializeUserConfig (src/config.ts:232:21)
+      at src/config.ts:240:1
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.264Z","level":"error","message":"Error ID 1fb3c3c7-e35c-4caa-89b1-1c16ed96b1c5: ValidationError: Directory does not exist: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/tests/temp/test-scan-oPMdz4/nonexistent\n    at handleScanDirectory (/home/runner/work/File-Organizer-MCP/File-Organizer-MCP/src/tools/file-scanning.ts:85:23)\n    at Object.<anonymous> (/home/runner/work/File-Organizer-MCP/File-Organizer-MCP/tests/unit/tools/file_inspection.test.ts:179:28)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.error (src/utils/logger.ts:39:14)
+      at createErrorResponse (src/utils/error-handler.ts:36:12)
+      at handleScanDirectory (src/tools/file-scanning.ts:137:16)
+      at Object.<anonymous> (tests/unit/tools/file_inspection.test.ts:179:28)
+
+(node:2314) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/tools/file_organization.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.355Z","level":"info","message":"Created rollback manifest: 59b6a455-dadd-4060-86d5-ed556b7a16e1 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/unit/tools/file_organization.test.ts:101:13)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.416Z","level":"info","message":"Created rollback manifest: 5f703c4b-e0d7-4f71-978b-ebc4e60b8dad (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/unit/tools/file_organization.test.ts:245:28)
+
+PASS tests/unit/services/renaming.test.ts
+PASS tests/unit/tools/file_management.test.ts
+PASS tests/integration/services/renaming-integration.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.672Z","level":"info","message":"Created rollback manifest: 59938a73-4caf-4a09-82f0-b75b4bd16131 (2 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at RenamingService.executeRename (src/services/renaming.service.ts:297:13)
+      at Object.<anonymous> (tests/integration/services/renaming-integration.test.ts:57:24)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.679Z","level":"info","message":"Created rollback manifest: 4d3194e9-7eca-4130-9104-48979e757770 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at RenamingService.executeRename (src/services/renaming.service.ts:297:13)
+      at Object.<anonymous> (tests/integration/services/renaming-integration.test.ts:86:24)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.685Z","level":"info","message":"Created rollback manifest: 54cac72f-cb09-4f52-a4da-6745dfa7d8ea (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at RenamingService.executeRename (src/services/renaming.service.ts:297:13)
+      at Object.<anonymous> (tests/integration/services/renaming-integration.test.ts:128:24)
+
+FAIL tests/unit/security_suite.test.ts
+  ● Security Hardening Suite › 3. Symlink Attacks (O_NOFOLLOW) › should reject opening a symlink directly via openAndValidateFile
+
+    expect(received).rejects.toThrow()
+
+    Received promise resolved instead of rejected
+    Resolved to value: {"_events": {}, "_eventsCount": 0, "_maxListeners": undefined, "close": [Function close], Symbol(shapeMode): false, Symbol(kCapture): false, Symbol(kHandle): {}, Symbol(kFd): 22, Symbol(kRefs): 1, Symbol(kClosePromise): null}
+
+      129 |
+      130 |             // Implementation uses O_NOFOLLOW
+    > 131 |             await expect(validator.openAndValidateFile(link)).rejects.toThrow(/Symlink/);
+          |                   ^
+      132 |         });
+      133 |     });
+      134 | });
+
+      at expect (node_modules/expect/build/index.js:113:15)
+      at Object.<anonymous> (tests/unit/security_suite.test.ts:131:19)
+
+(node:2314) Warning: Closing file descriptor 22 on garbage collection
+(node:2314) [DEP0137] DeprecationWarning: Closing a FileHandle object on garbage collection is deprecated. Please close FileHandle objects explicitly using FileHandle.prototype.close(). In the future, an error will be thrown if a file descriptor is closed during garbage collection.
+PASS tests/integration/full_organization_flow.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.033Z","level":"info","message":"Created rollback manifest: cafd4644-0e0b-4e18-8145-b5cf8f1f4ecd (4 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/integration/full_organization_flow.test.ts:55:27)
+
+PASS tests/unit/services/file-scanner.test.ts
+PASS tests/unit/services/path-validator.test.ts
+PASS tests/unit/services/conflict_resolution.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.738Z","level":"info","message":"Created rollback manifest: 26fb0a18-cecb-424c-af4e-cc6177967b06 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/unit/services/conflict_resolution.test.ts:45:24)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.748Z","level":"info","message":"Created rollback manifest: 4439179c-8b89-469d-8195-c3b65c47e5bb (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/unit/services/conflict_resolution.test.ts:87:24)
+
+PASS tests/unit/services/duplicate-finder.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.514Z","level":"info","message":"Created rollback manifest: b7c7ccab-5154-4d6f-aa90-c788a72b15ef (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:119:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.756Z","level":"info","message":"Created rollback manifest: 0504f17e-c7f1-4f4f-b5d9-cac9de2d2145 (2 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:156:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.863Z","level":"info","message":"Created rollback manifest: 999e0ee3-0390-42a0-9235-1c2ff3bd6bc7 (3 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:174:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.971Z","level":"info","message":"Created rollback manifest: fbc3311a-4b17-4550-b75d-d06c58a277d9 (3 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:192:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.078Z","level":"info","message":"Created rollback manifest: 108363b7-ce67-4678-bc3a-52be3d3e3414 (4 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:215:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.183Z","level":"info","message":"Created rollback manifest: a09068d5-aff0-4567-94a0-33b3cc2a062b (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:235:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.286Z","level":"info","message":"Created rollback manifest: 2f596d26-9797-4071-8d05-7c117ffc096b (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:246:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.389Z","level":"info","message":"Created rollback manifest: 6a5d5132-6c3a-402d-a2ab-0a59c913c4bb (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:260:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.601Z","level":"info","message":"Created rollback manifest: ddc44dc1-6b41-42fc-9414-4134c6da2f20 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:285:28)
+
+PASS tests/integration/edge-cases.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.903Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/AUX"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.905Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/COM1"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.905Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/CON"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.905Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/LPT1"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.908Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/NUL"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.909Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/PRN"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.917Z","level":"info","message":"Created rollback manifest: a6850590-60e2-41bb-83a2-131757bcbd6e (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:50:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.928Z","level":"info","message":"Created rollback manifest: 66c2a712-26d2-49ed-8c85-dcb3f713556b (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:61:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.932Z","level":"info","message":"Created rollback manifest: d3a39974-0937-410f-81de-2f368daa9b76 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:72:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.939Z","level":"info","message":"Created rollback manifest: 9d0f9ab1-1f0d-4c4a-9183-f584792bdff2 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:94:20)
+
+PASS tests/unit/tools/duplicate_management.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.979Z","level":"info","message":"Created rollback manifest: be61bcb7-131e-48c9-b846-3451add13e22 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at handleDeleteDuplicates (src/tools/duplicate-management.ts:142:24)
+      at Object.<anonymous> (tests/unit/tools/duplicate_management.test.ts:58:24)
+
+    console.log
+      DEBUG_DUPE_FAIL: ### Deletion Report
+      ✅ **Deleted:** 1 files
+      ❌ **Failed:** 0 files
+
+      at Object.<anonymous> (tests/unit/tools/duplicate_management.test.ts:64:21)
+
+PASS tests/integration/tools/organize.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.138Z","level":"info","message":"Created rollback manifest: 18a202a0-3256-49dd-884b-0df1b0b5d640 (3 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/integration/tools/organize.test.ts:30:24)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.162Z","level":"info","message":"Created rollback manifest: c177f8f3-4fb2-48f7-b79a-4fceed03dac6 (3 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/integration/tools/organize.test.ts:60:9)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.166Z","level":"info","message":"Created rollback manifest: 3266ca74-d6e8-4197-a6ff-9b48053f6723 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/integration/tools/organize.test.ts:70:24)
+
+PASS tests/unit/services/organizer.test.ts
+PASS tests/unit/services/categorizer.test.ts
+PASS tests/integration/tools/file-renaming.tool.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.385Z","level":"info","message":"Created rollback manifest: 87c0c733-fa4e-4195-a3c9-0e03fb2cfc78 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at RenamingService.executeRename (src/services/renaming.service.ts:297:13)
+      at handleBatchRename (src/tools/file-renaming.ts:111:24)
+      at Object.<anonymous> (tests/integration/tools/file-renaming.tool.test.ts:58:24)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.393Z","level":"info","message":"Created rollback manifest: 961078ef-4e5f-4097-8bbc-017ef477eefe (2 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at RenamingService.executeRename (src/services/renaming.service.ts:297:13)
+      at handleBatchRename (src/tools/file-renaming.ts:111:24)
+      at Object.<anonymous> (tests/integration/tools/file-renaming.tool.test.ts:78:24)
+
+PASS tests/unit/tools/file-inspection.test.ts
+PASS tests/unit/tools/file-organization.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.468Z","level":"info","message":"Created rollback manifest: 68963adf-98fa-44c9-89ba-12f51b3cc267 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/unit/tools/file-organization.test.ts:34:24)
+
+PASS tests/unit/services/streaming-scanner.test.ts
+PASS tests/unit/services/hash-calculator.test.ts
+PASS tests/unit/security_repro.test.ts
+  ● Console
+
+    console.log
+      DEBUG_MAX_DEPTH: "Error: Too big: expected number to be <=100"
+
+      at Object.<anonymous> (tests/unit/security_repro.test.ts:38:21)
+
+PASS tests/performance/performance.test.ts
+  ● Console
+
+    console.log
+      Memory increase: 0.11 MB
+
+      at Object.<anonymous> (tests/performance/performance.test.ts:65:17)
+
+PASS tests/unit/tools/file-management.test.ts
+PASS tests/integration/duplicate_resolution_flow.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:14.206Z","level":"info","message":"Created rollback manifest: 2b29dd9a-d7ad-4c65-b65b-eed0df2defb1 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at handleDeleteDuplicates (src/tools/duplicate-management.ts:142:24)
+      at Object.<anonymous> (tests/integration/duplicate_resolution_flow.test.ts:49:30)
+
+PASS tests/unit/services/rollback.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:14.312Z","level":"info","message":"Created rollback manifest: 3bd4fb78-6b7a-4b6e-8b23-b8c7ea29285a (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at Object.<anonymous> (tests/unit/services/rollback.test.ts:37:28)
+
+PASS tests/unit/pagination.test.ts
+PASS tests/unit/tools/custom_rules.test.ts
+PASS tests/unit/category_security.test.ts
+PASS tests/integration/organize.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:14.492Z","level":"info","message":"Created rollback manifest: e9c4b922-15eb-4d4c-a6af-ffda9d2cc9a1 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/integration/organize.test.ts:29:20)
+
+
+Summary of all failing tests
+FAIL tests/unit/security_suite.test.ts
+  ● Security Hardening Suite › 3. Symlink Attacks (O_NOFOLLOW) › should reject opening a symlink directly via openAndValidateFile
+
+    expect(received).rejects.toThrow()
+
+    Received promise resolved instead of rejected
+    Resolved to value: {"_events": {}, "_eventsCount": 0, "_maxListeners": undefined, "close": [Function close], Symbol(shapeMode): false, Symbol(kCapture): false, Symbol(kHandle): {}, Symbol(kFd): 22, Symbol(kRefs): 1, Symbol(kClosePromise): null}
+
+      129 |
+      130 |             // Implementation uses O_NOFOLLOW
+    > 131 |             await expect(validator.openAndValidateFile(link)).rejects.toThrow(/Symlink/);
+          |                   ^
+      132 |         });
+      133 |     });
+      134 | });
+
+      at expect (node_modules/expect/build/index.js:113:15)
+      at Object.<anonymous> (tests/unit/security_suite.test.ts:131:19)
+
+
+Test Suites: 1 failed, 29 passed, 30 total
+Tests:       1 failed, 1 skipped, 155 passed, 157 total
+Snapshots:   0 total
+Time:        5.067 s
+Ran all test suites.
+Error: Process completed with exit code 1.
+
+
+---------TEST-2---------------
+
+Run npm test
+
+> file-organizer-mcp@3.0.1 test
+> node --experimental-vm-modules node_modules/jest/bin/jest.js
+
+(node:2313) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2320) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/tools/file_inspection.test.ts
+  ● Console
+
+    console.error
+      Created default config file at: /home/runner/.config/file-organizer-mcp/config.json
+
+      230 |
+      231 |             fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
+    > 232 |             console.error(`Created default config file at: ${configPath}`);
+          |                     ^
+      233 |         }
+      234 |     } catch (error) {
+      235 |         console.error('Error initializing user config:', (error as Error).message);
+
+      at initializeUserConfig (src/config.ts:232:21)
+      at src/config.ts:240:1
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.264Z","level":"error","message":"Error ID 1fb3c3c7-e35c-4caa-89b1-1c16ed96b1c5: ValidationError: Directory does not exist: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/tests/temp/test-scan-oPMdz4/nonexistent\n    at handleScanDirectory (/home/runner/work/File-Organizer-MCP/File-Organizer-MCP/src/tools/file-scanning.ts:85:23)\n    at Object.<anonymous> (/home/runner/work/File-Organizer-MCP/File-Organizer-MCP/tests/unit/tools/file_inspection.test.ts:179:28)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.error (src/utils/logger.ts:39:14)
+      at createErrorResponse (src/utils/error-handler.ts:36:12)
+      at handleScanDirectory (src/tools/file-scanning.ts:137:16)
+      at Object.<anonymous> (tests/unit/tools/file_inspection.test.ts:179:28)
+
+(node:2314) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/tools/file_organization.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.355Z","level":"info","message":"Created rollback manifest: 59b6a455-dadd-4060-86d5-ed556b7a16e1 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/unit/tools/file_organization.test.ts:101:13)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.416Z","level":"info","message":"Created rollback manifest: 5f703c4b-e0d7-4f71-978b-ebc4e60b8dad (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/unit/tools/file_organization.test.ts:245:28)
+
+PASS tests/unit/services/renaming.test.ts
+PASS tests/unit/tools/file_management.test.ts
+PASS tests/integration/services/renaming-integration.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.672Z","level":"info","message":"Created rollback manifest: 59938a73-4caf-4a09-82f0-b75b4bd16131 (2 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at RenamingService.executeRename (src/services/renaming.service.ts:297:13)
+      at Object.<anonymous> (tests/integration/services/renaming-integration.test.ts:57:24)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.679Z","level":"info","message":"Created rollback manifest: 4d3194e9-7eca-4130-9104-48979e757770 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at RenamingService.executeRename (src/services/renaming.service.ts:297:13)
+      at Object.<anonymous> (tests/integration/services/renaming-integration.test.ts:86:24)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.685Z","level":"info","message":"Created rollback manifest: 54cac72f-cb09-4f52-a4da-6745dfa7d8ea (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at RenamingService.executeRename (src/services/renaming.service.ts:297:13)
+      at Object.<anonymous> (tests/integration/services/renaming-integration.test.ts:128:24)
+
+FAIL tests/unit/security_suite.test.ts
+  ● Security Hardening Suite › 3. Symlink Attacks (O_NOFOLLOW) › should reject opening a symlink directly via openAndValidateFile
+
+    expect(received).rejects.toThrow()
+
+    Received promise resolved instead of rejected
+    Resolved to value: {"_events": {}, "_eventsCount": 0, "_maxListeners": undefined, "close": [Function close], Symbol(shapeMode): false, Symbol(kCapture): false, Symbol(kHandle): {}, Symbol(kFd): 22, Symbol(kRefs): 1, Symbol(kClosePromise): null}
+
+      129 |
+      130 |             // Implementation uses O_NOFOLLOW
+    > 131 |             await expect(validator.openAndValidateFile(link)).rejects.toThrow(/Symlink/);
+          |                   ^
+      132 |         });
+      133 |     });
+      134 | });
+
+      at expect (node_modules/expect/build/index.js:113:15)
+      at Object.<anonymous> (tests/unit/security_suite.test.ts:131:19)
+
+(node:2314) Warning: Closing file descriptor 22 on garbage collection
+(node:2314) [DEP0137] DeprecationWarning: Closing a FileHandle object on garbage collection is deprecated. Please close FileHandle objects explicitly using FileHandle.prototype.close(). In the future, an error will be thrown if a file descriptor is closed during garbage collection.
+PASS tests/integration/full_organization_flow.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.033Z","level":"info","message":"Created rollback manifest: cafd4644-0e0b-4e18-8145-b5cf8f1f4ecd (4 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/integration/full_organization_flow.test.ts:55:27)
+
+PASS tests/unit/services/file-scanner.test.ts
+PASS tests/unit/services/path-validator.test.ts
+PASS tests/unit/services/conflict_resolution.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.738Z","level":"info","message":"Created rollback manifest: 26fb0a18-cecb-424c-af4e-cc6177967b06 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/unit/services/conflict_resolution.test.ts:45:24)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.748Z","level":"info","message":"Created rollback manifest: 4439179c-8b89-469d-8195-c3b65c47e5bb (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/unit/services/conflict_resolution.test.ts:87:24)
+
+PASS tests/unit/services/duplicate-finder.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.514Z","level":"info","message":"Created rollback manifest: b7c7ccab-5154-4d6f-aa90-c788a72b15ef (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:119:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.756Z","level":"info","message":"Created rollback manifest: 0504f17e-c7f1-4f4f-b5d9-cac9de2d2145 (2 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:156:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.863Z","level":"info","message":"Created rollback manifest: 999e0ee3-0390-42a0-9235-1c2ff3bd6bc7 (3 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:174:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:11.971Z","level":"info","message":"Created rollback manifest: fbc3311a-4b17-4550-b75d-d06c58a277d9 (3 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:192:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.078Z","level":"info","message":"Created rollback manifest: 108363b7-ce67-4678-bc3a-52be3d3e3414 (4 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:215:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.183Z","level":"info","message":"Created rollback manifest: a09068d5-aff0-4567-94a0-33b3cc2a062b (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:235:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.286Z","level":"info","message":"Created rollback manifest: 2f596d26-9797-4071-8d05-7c117ffc096b (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:246:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.389Z","level":"info","message":"Created rollback manifest: 6a5d5132-6c3a-402d-a2ab-0a59c913c4bb (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:260:28)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.601Z","level":"info","message":"Created rollback manifest: ddc44dc1-6b41-42fc-9414-4134c6da2f20 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at Object.<anonymous> (tests/unit/services/duplicate-finder.test.ts:285:28)
+
+PASS tests/integration/edge-cases.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.903Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/AUX"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.905Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/COM1"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.905Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/CON"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.905Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/LPT1"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.908Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/NUL"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.909Z","level":"warn","message":"Skipped reserved Windows filename: /home/runner/work/File-Organizer-MCP/File-Organizer-MCP/test-edge-cases/PRN"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.warn (src/utils/logger.ts:35:14)
+      at OrganizerService.organize (src/services/organizer.service.ts:203:24)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:39:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.917Z","level":"info","message":"Created rollback manifest: a6850590-60e2-41bb-83a2-131757bcbd6e (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:50:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.928Z","level":"info","message":"Created rollback manifest: 66c2a712-26d2-49ed-8c85-dcb3f713556b (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:61:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.932Z","level":"info","message":"Created rollback manifest: d3a39974-0937-410f-81de-2f368daa9b76 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:72:20)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.939Z","level":"info","message":"Created rollback manifest: 9d0f9ab1-1f0d-4c4a-9183-f584792bdff2 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/integration/edge-cases.test.ts:94:20)
+
+PASS tests/unit/tools/duplicate_management.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:12.979Z","level":"info","message":"Created rollback manifest: be61bcb7-131e-48c9-b846-3451add13e22 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at handleDeleteDuplicates (src/tools/duplicate-management.ts:142:24)
+      at Object.<anonymous> (tests/unit/tools/duplicate_management.test.ts:58:24)
+
+    console.log
+      DEBUG_DUPE_FAIL: ### Deletion Report
+      ✅ **Deleted:** 1 files
+      ❌ **Failed:** 0 files
+
+      at Object.<anonymous> (tests/unit/tools/duplicate_management.test.ts:64:21)
+
+PASS tests/integration/tools/organize.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.138Z","level":"info","message":"Created rollback manifest: 18a202a0-3256-49dd-884b-0df1b0b5d640 (3 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/integration/tools/organize.test.ts:30:24)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.162Z","level":"info","message":"Created rollback manifest: c177f8f3-4fb2-48f7-b79a-4fceed03dac6 (3 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/integration/tools/organize.test.ts:60:9)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.166Z","level":"info","message":"Created rollback manifest: 3266ca74-d6e8-4197-a6ff-9b48053f6723 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/integration/tools/organize.test.ts:70:24)
+
+PASS tests/unit/services/organizer.test.ts
+PASS tests/unit/services/categorizer.test.ts
+PASS tests/integration/tools/file-renaming.tool.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.385Z","level":"info","message":"Created rollback manifest: 87c0c733-fa4e-4195-a3c9-0e03fb2cfc78 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at RenamingService.executeRename (src/services/renaming.service.ts:297:13)
+      at handleBatchRename (src/tools/file-renaming.ts:111:24)
+      at Object.<anonymous> (tests/integration/tools/file-renaming.tool.test.ts:58:24)
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.393Z","level":"info","message":"Created rollback manifest: 961078ef-4e5f-4097-8bbc-017ef477eefe (2 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at RenamingService.executeRename (src/services/renaming.service.ts:297:13)
+      at handleBatchRename (src/tools/file-renaming.ts:111:24)
+      at Object.<anonymous> (tests/integration/tools/file-renaming.tool.test.ts:78:24)
+
+PASS tests/unit/tools/file-inspection.test.ts
+PASS tests/unit/tools/file-organization.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:13.468Z","level":"info","message":"Created rollback manifest: 68963adf-98fa-44c9-89ba-12f51b3cc267 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at handleOrganizeFiles (src/tools/file-organization.ts:69:49)
+      at Object.<anonymous> (tests/unit/tools/file-organization.test.ts:34:24)
+
+PASS tests/unit/services/streaming-scanner.test.ts
+PASS tests/unit/services/hash-calculator.test.ts
+PASS tests/unit/security_repro.test.ts
+  ● Console
+
+    console.log
+      DEBUG_MAX_DEPTH: "Error: Too big: expected number to be <=100"
+
+      at Object.<anonymous> (tests/unit/security_repro.test.ts:38:21)
+
+PASS tests/performance/performance.test.ts
+  ● Console
+
+    console.log
+      Memory increase: 0.11 MB
+
+      at Object.<anonymous> (tests/performance/performance.test.ts:65:17)
+
+PASS tests/unit/tools/file-management.test.ts
+PASS tests/integration/duplicate_resolution_flow.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:14.206Z","level":"info","message":"Created rollback manifest: 2b29dd9a-d7ad-4c65-b65b-eed0df2defb1 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at DuplicateFinderService.deleteFiles (src/services/duplicate-finder.service.ts:241:32)
+      at handleDeleteDuplicates (src/tools/duplicate-management.ts:142:24)
+      at Object.<anonymous> (tests/integration/duplicate_resolution_flow.test.ts:49:30)
+
+PASS tests/unit/services/rollback.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:14.312Z","level":"info","message":"Created rollback manifest: 3bd4fb78-6b7a-4b6e-8b23-b8c7ea29285a (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at Object.<anonymous> (tests/unit/services/rollback.test.ts:37:28)
+
+PASS tests/unit/pagination.test.ts
+PASS tests/unit/tools/custom_rules.test.ts
+PASS tests/unit/category_security.test.ts
+PASS tests/integration/organize.test.ts
+  ● Console
+
+    console.error
+      {"timestamp":"2026-02-06T12:53:14.492Z","level":"info","message":"Created rollback manifest: e9c4b922-15eb-4d4c-a6af-ffda9d2cc9a1 (1 actions)"}
+
+      21 |         };
+      22 |
+    > 23 |         console.error(JSON.stringify(entry)); // stderr for stdio servers
+         |                 ^
+      24 |     }
+      25 |
+      26 |     debug(message: string, context?: Record<string, any>) {
+
+      at Logger.log (src/utils/logger.ts:23:17)
+      at Logger.info (src/utils/logger.ts:31:14)
+      at RollbackService.createManifest (src/services/rollback.service.ts:49:16)
+      at OrganizerService.organize (src/services/organizer.service.ts:376:13)
+      at Object.<anonymous> (tests/integration/organize.test.ts:29:20)
+
+
+Summary of all failing tests
+FAIL tests/unit/security_suite.test.ts
+  ● Security Hardening Suite › 3. Symlink Attacks (O_NOFOLLOW) › should reject opening a symlink directly via openAndValidateFile
+
+    expect(received).rejects.toThrow()
+
+    Received promise resolved instead of rejected
+    Resolved to value: {"_events": {}, "_eventsCount": 0, "_maxListeners": undefined, "close": [Function close], Symbol(shapeMode): false, Symbol(kCapture): false, Symbol(kHandle): {}, Symbol(kFd): 22, Symbol(kRefs): 1, Symbol(kClosePromise): null}
+
+      129 |
+      130 |             // Implementation uses O_NOFOLLOW
+    > 131 |             await expect(validator.openAndValidateFile(link)).rejects.toThrow(/Symlink/);
+          |                   ^
+      132 |         });
+      133 |     });
+      134 | });
+
+      at expect (node_modules/expect/build/index.js:113:15)
+      at Object.<anonymous> (tests/unit/security_suite.test.ts:131:19)
+
+
+Test Suites: 1 failed, 29 passed, 30 total
+Tests:       1 failed, 1 skipped, 155 passed, 157 total
+Snapshots:   0 total
+Time:        5.067 s
+Ran all test suites.
+Error: Process completed with exit code 1.

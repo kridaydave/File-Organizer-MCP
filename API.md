@@ -2,8 +2,8 @@
 
 > Auto-generated from tool definitions
 
-**Version:** 3.0.0  
-**Generated:** 2026-02-05T11:17:14.746Z
+**Version:** 3.1.0  
+**Generated:** 2026-02-06T16:29:55.618Z
 
 [⬆ Back to Top](#top)
 
@@ -20,11 +20,14 @@
 - [file_organizer_get_categories](#file_organizer_get_categories)
 - [file_organizer_inspect_metadata](#file_organizer_inspect_metadata)
 - [file_organizer_list_files](#file_organizer_list_files)
+- [file_organizer_list_watches](#file_organizer_list_watches)
 - [file_organizer_organize_files](#file_organizer_organize_files)
 - [file_organizer_preview_organization](#file_organizer_preview_organization)
 - [file_organizer_scan_directory](#file_organizer_scan_directory)
 - [file_organizer_set_custom_rules](#file_organizer_set_custom_rules)
 - [file_organizer_undo_last_operation](#file_organizer_undo_last_operation)
+- [file_organizer_unwatch_directory](#file_organizer_unwatch_directory)
+- [file_organizer_watch_directory](#file_organizer_watch_directory)
 
 ---
 
@@ -265,6 +268,27 @@ file_organizer_list_files({
 
 ---
 
+## file_organizer_list_watches
+[⬆ Back to Top](#top)
+
+**Description:** List all directories currently being watched with their schedules.
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `response_format` | string | - | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_list_watches({
+  response_format: "value",
+});
+```
+
+---
+
 ## file_organizer_organize_files
 [⬆ Back to Top](#top)
 
@@ -277,6 +301,7 @@ file_organizer_list_files({
 | `directory` | string | Full path to the directory | - |
 | `dry_run` | boolean | Simulate organization | true |
 | `response_format` | string | - | 'markdown' |
+| `conflict_strategy` | string | How to handle file conflicts (rename/skip/overwrite). Uses config default if not specified | - |
 
 ### Example
 
@@ -285,6 +310,7 @@ file_organizer_organize_files({
   directory: "value",
   dry_run: true,
   response_format: "value",
+  conflict_strategy: "value",
 });
 ```
 
@@ -302,6 +328,7 @@ file_organizer_organize_files({
 | `directory` | string | Full path to the directory | - |
 | `show_conflicts_only` | boolean | - | false |
 | `response_format` | string | - | 'markdown' |
+| `conflict_strategy` | string | How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified | - |
 
 ### Example
 
@@ -310,6 +337,7 @@ file_organizer_preview_organization({
   directory: "value",
   show_conflicts_only: true,
   response_format: "value",
+  conflict_strategy: "value",
 });
 ```
 
@@ -399,5 +427,59 @@ file_organizer_set_custom_rules({
 file_organizer_undo_last_operation({
   manifest_id: "value",
   response_format: "value",
+});
+```
+
+---
+
+## file_organizer_unwatch_directory
+[⬆ Back to Top](#top)
+
+**Description:** Remove a directory from the watch list.
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `directory` | string | Full path to the directory | - |
+| `response_format` | string | - | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_unwatch_directory({
+  directory: "value",
+  response_format: "value",
+});
+```
+
+---
+
+## file_organizer_watch_directory
+[⬆ Back to Top](#top)
+
+**Description:** Add a directory to the watch list with a cron-based schedule for automatic organization. 
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `directory` | string | Full path to the directory to watch (e.g.,  | - |
+| `schedule` | string | Cron expression. Convert natural language to cron:  | - |
+| `auto_organize` | boolean | Enable auto-organization | true |
+| `response_format` | string | - | 'markdown' |
+| `min_file_age_minutes` | number | Minimum file age in minutes before organizing | - |
+| `max_files_per_run` | number | Maximum files to process per run | - |
+
+### Example
+
+```typescript
+file_organizer_watch_directory({
+  directory: "value",
+  schedule: "value",
+  auto_organize: true,
+  response_format: "value",
+  min_file_age_minutes: 123,
+  max_files_per_run: 123,
 });
 ```

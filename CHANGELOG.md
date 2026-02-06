@@ -1,21 +1,26 @@
 # Changelog
 
-## [3.0.1] - 2026-02-04
-
+## [3.1.0] - 2026-02-06
+    
 ### ✨ New Features
-- **Batch Renaming Tool**: New `file_organizer_batch_rename` tool for powerful bulk renaming (find/replace, case conversion, numbering).
-- **Audit Logging**: Comprehensive logging of all tool inputs, outputs, and status for enhanced transparency.
+- **Interactive Setup Wizard**: New TUI-based setup (`npx file-organizer-mcp --setup`) for easy configuration of folders, conflict strategies, and Claude Desktop integration.
+- **Smart Metadata Organization**: 
+  - Organization by Year/Month for images and videos.
+  - Organization by Artist/Album for audio files.
+  - New tool `file_organizer_inspect_metadata` for safe metadata extraction.
+- **File Watching**: 
+  - New tools (`watch_directory`, `unwatch_directory`, `list_watches`) to schedule automatic organization.
+  - Cron-based scheduling support.
+- **Batch Renaming**: New powerful `file_organizer_batch_rename` tool.
 
-### 🛡️ Improved Safety
-- **Default Dry Run**: `file_organizer_organize_files` now defaults to `dry_run: true` to prevent accidental moves.
-- **Race Condition Fix**: Resolved issue with case-only renames (e.g., `A.txt` -> `a.txt`) on Windows triggering false errors.
-
-### 🧠 Enhanced Categorization
-- **New File Types**: Added support for Markdown (`.md`) and LaTeX (`.tex`) in Documents.
-- **Smart Patterns**: Files with 'test', 'spec', 'debug', 'log', 'demo', or 'script' in their names are now automatically categorized into dedicated folders (Tests, Logs, Demos, Scripts).
+### 🛡️ Improvements
+- **Security Check**: Enforced stricter validation for symlink security.
+- **Free Models**: Updated default configuration to prioritize free models.
 
 ### 🐛 Fixed
-- Fixed typo in README examples.
+- Resolved JSON configuration errors.
+- Fixed Cloud Authentication issues.
+- Fixed server disconnection stability issues.
 
 ---
 

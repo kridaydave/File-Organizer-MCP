@@ -12,6 +12,7 @@ import { FileScannerService } from '../services/file-scanner.service.js';
 import { globalOrganizerService } from '../services/index.js';
 import { createErrorResponse } from '../utils/error-handler.js';
 import { CommonParamsSchema } from '../schemas/common.schemas.js';
+import { loadUserConfig } from '../config.js';
 
 export const PreviewOrganizationInputSchema = z
     .object({
@@ -20,6 +21,10 @@ export const PreviewOrganizationInputSchema = z
             .min(1, 'Directory path cannot be empty')
             .describe('Full path to the directory to preview organization for'),
         show_conflicts_only: z.boolean().default(false).describe('Only show files that will cause naming conflicts'),
+        conflict_strategy: z
+            .enum(['rename', 'skip', 'overwrite'])
+            .optional()
+            .describe('How to handle file conflicts for preview. Uses config default if not specified'),
     })
     .merge(CommonParamsSchema);
 
@@ -34,6 +39,11 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
             directory: { type: 'string', description: 'Full path to the directory' },
             show_conflicts_only: { type: 'boolean', default: false },
             response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
+            conflict_strategy: { 
+                type: 'string', 
+                enum: ['rename', 'skip', 'overwrite'],
+                description: 'How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified'
+            },
         },
         required: ['directory'],
     },
@@ -44,6 +54,14 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
         openWorldHint: true,
     },
 };
+
+/**
+ * Get conflict strategy from user config or return default
+ */
+function getConflictStrategy(): 'rename' | 'skip' | 'overwrite' {
+    const userConfig = loadUserConfig();
+    return userConfig.conflictStrategy ?? 'rename';
+}
 
 export async function handlePreviewOrganization(
     args: Record<string, unknown>
@@ -56,14 +74,17 @@ export async function handlePreviewOrganization(
             };
         }
 
-        const { directory, show_conflicts_only, response_format } = parsed.data;
+        const { directory, show_conflicts_only, response_format, conflict_strategy } = parsed.data;
         const validatedPath = await validateStrictPath(directory);
 
         const scanner = new FileScannerService();
         const organizer = globalOrganizerService;
 
+        // Use provided strategy, or fall back to config, or default to 'rename'
+        const effectiveConflictStrategy = conflict_strategy ?? getConflictStrategy();
+
         const files = await scanner.getAllFiles(validatedPath, false);
-        const plan = await organizer.generateOrganizationPlan(validatedPath, files);
+        const plan = await organizer.generateOrganizationPlan(validatedPath, files, effectiveConflictStrategy);
 
         const output = {
             summary: {
@@ -103,12 +124,13 @@ export async function handlePreviewOrganization(
 - Files to Move: ${output.summary.total_files}
 - Estimated Time: ${output.summary.estimated_duration_seconds.toFixed(2)}s
 - Conflicts: ${output.moves.filter((m: any) => m.conflict).length}
+- Conflict Strategy: ${effectiveConflictStrategy}
 
 **Category Breakdown:**
 ${Object.entries(output.summary.categories_affected).map(([cat, count]) => `- **${cat}**: ${count}`).join('\n')}
 
 **Proposed Moves:**
-${output.moves.map((m: any) => `- \`${m.source}\` -> \`${m.destination}\` ${m.conflict ? '⚠️ (Rename)' : ''}`).join('\n')}
+${output.moves.map((m: any) => `- \`${m.source}\` -> \`${m.destination}\` ${m.conflict ? `⚠️ (${m.conflict_resolution || 'Rename'})` : ''}`).join('\n')}
 
 ${output.skipped_files.length ? `**Skipped Files:**\n${output.skipped_files.map((f: any) => `- ${f.path}: ${f.reason}`).join('\n')}` : ''}
 `;

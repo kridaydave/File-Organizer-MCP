@@ -1,0 +1,16 @@
+// Example config.json
+{
+  "watchFolders": ["/custom/watch/folder"],
+  "debounceTime": 1500,
+  "rules": [
+    {
+      "pattern": "*.{jpg,png,gif}",
+      "destination": "Pictures",
+      "overwrite": false
+    },
+    {
+      "pattern": "*.pdf",
+      "destination": "Documents/PDFs"
+    }
+  ]
+}

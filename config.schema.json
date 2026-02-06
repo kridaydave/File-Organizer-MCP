@@ -1,0 +1,33 @@
+// config.schema.json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "File Organizer Config",
+  "type": "object",
+  "properties": {
+    "watchFolders": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Additional folders to watch beyond platform defaults"
+    },
+    "debounceTime": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 10000,
+      "default": 1000
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern": { "type": "string" },
+          "destination": { "type": "string" },
+          "overwrite": { "type": "boolean", "default": false }
+        },
+        "required": ["pattern", "destination"]
+      }
+    }
+  }
+}
