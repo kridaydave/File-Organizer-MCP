@@ -63,12 +63,22 @@ describe('Watch Mode Integration', () => {
       });
 
       expect(watchResult.isError).toBeFalsy();
-      const watchData = JSON.parse(watchResult.content[0].text);
+      let watchData;
+      try {
+        watchData = JSON.parse(watchResult.content[0].text);
+      } catch (e) {
+        throw new Error(`Failed to parse watch add response: ${watchResult.content[0].text}`);
+      }
       expect(watchData.success).toBe(true);
 
       // Step 2: Verify in list
       const listResult = await handleListWatches({ response_format: 'json' });
-      const listData = JSON.parse(listResult.content[0].text);
+      let listData;
+      try {
+        listData = JSON.parse(listResult.content[0].text);
+      } catch (e) {
+        throw new Error(`Failed to parse list response: ${listResult.content[0].text}`);
+      }
       expect(listData.count).toBe(1);
       expect(listData.watches[0].directory).toBe(testDir);
       expect(listData.watches[0].schedule).toBe('0 10 * * *');
@@ -83,7 +93,12 @@ describe('Watch Mode Integration', () => {
 
       // Step 4: Verify list is empty
       const finalListResult = await handleListWatches({ response_format: 'json' });
-      const finalListData = JSON.parse(finalListResult.content[0].text);
+      let finalListData;
+      try {
+        finalListData = JSON.parse(finalListResult.content[0].text);
+      } catch (e) {
+        throw new Error(`Failed to parse final list response: ${finalListResult.content[0].text}`);
+      }
       expect(finalListData.count).toBe(0);
     });
 
@@ -103,12 +118,22 @@ describe('Watch Mode Integration', () => {
         response_format: 'json',
       });
 
-      const updateData = JSON.parse(updateResult.content[0].text);
+      let updateData;
+      try {
+        updateData = JSON.parse(updateResult.content[0].text);
+      } catch (e) {
+        throw new Error(`Failed to parse update response: ${updateResult.content[0].text}`);
+      }
       expect(updateData.action).toBe('Updated');
 
       // Verify only one entry exists with new values
       const listResult = await handleListWatches({ response_format: 'json' });
-      const listData = JSON.parse(listResult.content[0].text);
+      let listData;
+      try {
+        listData = JSON.parse(listResult.content[0].text);
+      } catch (e) {
+        throw new Error(`Failed to parse updated list response: ${listResult.content[0].text}`);
+      }
       expect(listData.count).toBe(1);
       expect(listData.watches[0].schedule).toBe('*/30 * * * *');
     });
@@ -130,7 +155,7 @@ describe('Watch Mode Integration', () => {
 
       expect(config.watchList).toBeDefined();
       expect(config.watchList!.length).toBeGreaterThan(0);
-      
+
       const watch = config.watchList!.find(w => w.directory === testDir);
       expect(watch).toBeDefined();
       expect(watch!.schedule).toBe('0 15 * * *');
@@ -219,7 +244,12 @@ describe('Watch Mode Integration', () => {
 
         // Verify both in list
         const listResult = await handleListWatches({ response_format: 'json' });
-        const listData = JSON.parse(listResult.content[0].text);
+        let listData;
+        try {
+          listData = JSON.parse(listResult.content[0].text);
+        } catch (e) {
+          throw new Error(`Failed to parse multiple watches list response: ${listResult.content[0].text}`);
+        }
 
         expect(listData.count).toBe(2);
         const directories = listData.watches.map((w: any) => w.directory);
@@ -227,8 +257,8 @@ describe('Watch Mode Integration', () => {
         expect(directories).toContain(testDir2);
       } finally {
         // Cleanup
-        await handleUnwatchDirectory({ directory: testDir, response_format: 'json' }).catch(() => {});
-        await handleUnwatchDirectory({ directory: testDir2, response_format: 'json' }).catch(() => {});
+        await handleUnwatchDirectory({ directory: testDir, response_format: 'json' }).catch(() => { });
+        await handleUnwatchDirectory({ directory: testDir2, response_format: 'json' }).catch(() => { });
         if (fs.existsSync(testDir2)) {
           fs.rmdirSync(testDir2);
         }
@@ -251,14 +281,19 @@ describe('Watch Mode Integration', () => {
 
         // Verify only second remains
         const listResult = await handleListWatches({ response_format: 'json' });
-        const listData = JSON.parse(listResult.content[0].text);
+        let listData;
+        try {
+          listData = JSON.parse(listResult.content[0].text);
+        } catch (e) {
+          throw new Error(`Failed to parse filtered list response: ${listResult.content[0].text}`);
+        }
 
         expect(listData.count).toBe(1);
         expect(listData.watches[0].directory).toBe(testDir2);
       } finally {
         // Cleanup
-        await handleUnwatchDirectory({ directory: testDir, response_format: 'json' }).catch(() => {});
-        await handleUnwatchDirectory({ directory: testDir2, response_format: 'json' }).catch(() => {});
+        await handleUnwatchDirectory({ directory: testDir, response_format: 'json' }).catch(() => { });
+        await handleUnwatchDirectory({ directory: testDir2, response_format: 'json' }).catch(() => { });
         if (fs.existsSync(testDir2)) {
           fs.rmdirSync(testDir2);
         }
