@@ -1,16 +1,24 @@
 # Changelog
 
+## [3.1.3] - 2026-02-06
+
+### 📝 Documentation
+
+- **Version Bump**: Updated all documentation and source files to v3.1.3
+
 ## [3.1.2] - 2026-02-06
 
 ### 🐛 Fixed
+
 - **Bin Entry**: Fixed `file-organizer-setup` bin path (`tui-index.js` → `index.js`)
 - **Postinstall**: Added postinstall welcome message after npm install
 
 ## [3.1.1] - 2026-02-06
 
 ### ✨ New Features
+
 - **Interactive Setup Wizard**: New TUI-based setup (`npx file-organizer-mcp --setup`) for easy configuration of folders, conflict strategies, and Claude Desktop integration.
-- **Smart Metadata Organization**: 
+- **Smart Metadata Organization**:
   - Organization by Year/Month for images and videos.
   - Organization by Artist/Album for audio files.
   - New tool `file_organizer_inspect_metadata` for safe metadata extraction.
@@ -24,12 +32,14 @@
 - **Batch Renaming**: New powerful `file_organizer_batch_rename` tool.
 
 ### 🛡️ Improvements
+
 - **Conflict Strategy**: Configurable default conflict resolution (`rename`/`skip`/`overwrite`) via config.
 - **Security Check**: Enforced stricter validation for symlink security with explicit `lstat` checks.
 - **Config Management**: Deep merge updates preserve existing settings when adding new configuration.
 - **Free Models**: Updated default configuration to prioritize free models.
 
 ### 🐛 Fixed
+
 - Resolved JSON configuration errors.
 - Fixed Cloud Authentication issues.
 - Fixed server disconnection stability issues.
@@ -45,11 +55,13 @@ Complete rewrite from monolithic JavaScript to modular TypeScript architecture.
 ### ✨ Added
 
 #### Architecture
+
 - New `src/` directory structure with layered architecture
 - TypeScript strict mode with full type safety
 - ESLint + Prettier configuration for code quality
 
 **Services Layer** (`src/services/`)
+
 - `PathValidatorService` - 8-layer path validation with Zod schemas
 - `FileScannerService` - Recursive file scanning with depth/count limits
 - `HashCalculatorService` - SHA-256 hashing for duplicate detection
@@ -58,28 +70,33 @@ Complete rewrite from monolithic JavaScript to modular TypeScript architecture.
 - `RollbackService` - Undo file operations with manifest tracking
 
 **Tools Layer** (`src/tools/`)
+
 - Each tool in its own file with Zod input validation
 - Comprehensive JSDoc documentation with examples
 - Exported TypeScript types inferred from Zod schemas
 
 **Utilities** (`src/utils/`)
+
 - `formatters.ts` - Byte/date/duration formatting
 - `file-utils.ts` - Path normalization, expansion, validation
 - `error-handler.ts` - Centralized error handling with sanitization
 - `logger.ts` - Structured JSON logging with configurable log levels (debug/info/warn/error)
 
 **Configuration** (`src/config.ts`)
+
 - Platform-aware default directory detection (Windows/macOS/Linux)
 - User configuration loading from platform-specific locations
 - Whitelist/blacklist system for directory access control
 - Auto-initialization of user config file
 
 **Schemas** (`src/schemas/`)
+
 - Zod schemas for all tool inputs
 - Runtime validation with descriptive error messages
 - Type inference from schemas
 
 #### Testing
+
 - Comprehensive unit tests for all services
 - Integration tests for complete workflows
 - Performance benchmarks
@@ -87,6 +104,7 @@ Complete rewrite from monolithic JavaScript to modular TypeScript architecture.
 - `TESTS.md` - Complete test documentation
 
 ### 🔧 Changed
+
 - Entry point: `dist/index.js` (compiled from TypeScript)
 - Build: `npm run build` compiles TypeScript
 - Tests: `npm test` runs complete test suite
@@ -94,6 +112,7 @@ Complete rewrite from monolithic JavaScript to modular TypeScript architecture.
 - Enhanced security with TOCTOU mitigation using file descriptors
 
 ### 🐛 Fixed
+
 - Path traversal vulnerability (8-layer validation pipeline)
 - Race conditions in file operations (atomic copy with `COPYFILE_EXCL`)
 - Data loss during overwrites (automatic backups to `.file-organizer-backups/`)
@@ -101,11 +120,13 @@ Complete rewrite from monolithic JavaScript to modular TypeScript architecture.
 - Multiple test failures in duplicate management, organization flow, and file inspection
 
 ### 🗑️ Removed
+
 - `server.js` (672-line monolith) → replaced by `src/` modules
 - `lib/` folder → migrated to `src/services/`
 - JavaScript test files → migrated to TypeScript
 
 ### 📦 Dependencies Added
+
 - `typescript` ^5.3.2
 - `zod` ^3.22.4
 - `@types/node` ^20.10.0
@@ -117,6 +138,7 @@ Complete rewrite from monolithic JavaScript to modular TypeScript architecture.
 ## [3.0.0-beta.1] - 2026-02-02
 
 ### 🔒 Security (CRITICAL)
+
 - **FIXED**: Path traversal vulnerability (CVE-pending)
   - Previous versions allowed `../` to access parent directories
   - Now implements 8-layer validation pipeline
@@ -124,27 +146,32 @@ Complete rewrite from monolithic JavaScript to modular TypeScript architecture.
 - **FIXED**: Windows Path Case-Sensitivity
   - Resolves access denial for paths like `c:\Users` vs `C:\Users`
   - Ensures robust whitelist matching on Windows platforms
-  
+
 ### ✨ Added
+
 - New 8-layer path validation system
 - Custom error classes (AccessDeniedError, ValidationError)
 - Comprehensive security test suite (5/5 passing)
 - Forward compatibility for Phase 2 (config system)
 
 ### 🔧 Changed
+
 - Updated to v3.0.0 architecture
 - Path validation now uses base-validator.js
 - Improved error messages with sanitized paths
 
 ### ⚠️ Breaking Changes
+
 - **NONE** - Fully backward compatible with v2.x for valid use cases
 - Only breaking for invalid use cases (accessing parent directories)
 
 ### 📦 Migration from v2.x
+
 No changes needed! All existing workflows continue to work.
 If you were using `../` paths (which was a security bug), those now correctly fail.
 
 ### 🧪 Testing
+
 - 5/5 critical security tests passing
 - All 6 original MCP tools tested and working
 - Cross-platform tested (Windows, macOS, Linux)
@@ -152,4 +179,5 @@ If you were using `../` paths (which was a security bug), those now correctly fa
 ---
 
 ## [2.1.0] - 2026-02-01
+
 (Previous version with path traversal vulnerability - UPGRADE IMMEDIATELY)

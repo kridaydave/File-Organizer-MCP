@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.0.0
+ * File Organizer MCP Server v3.1.3
  * Organizer Service
  */
 
@@ -130,7 +130,7 @@ export class OrganizerService {
                 });
 
             } catch (error) {
-                skippedFiles.push({ path: file.path, reason: (error as Error).message });
+                skippedFiles.push({ path: file.path, reason: error instanceof Error ? error.message : String(error) });
             }
         }
 

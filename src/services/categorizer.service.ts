@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.0.0
+ * File Organizer MCP Server v3.1.3
  * Categorizer Service
  */
 
@@ -32,7 +32,7 @@ export class CategorizerService {
 
                 validRules.push(rule);
             } catch (error) {
-                console.error(`Skipping invalid rule for category '${rule.category}': ${(error as Error).message}`);
+                console.error(`Skipping invalid rule for category '${rule.category}': ${error instanceof Error ? error.message : String(error)}`);
             }
         }
 

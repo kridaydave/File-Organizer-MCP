@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * File Organizer MCP Server v3.0.0
+ * File Organizer MCP Server v3.1.3
  *
  * A powerful, security-hardened Model Context Protocol server for intelligent file organization.
  * Features 7-layer path validation, file categorization, duplicate detection, and more.
@@ -12,7 +12,7 @@
  *   npx file-organizer-mcp --version    - Show version
  *   npx file-organizer-mcp --help       - Show help
  *
- * @version 3.0.0
+ * @version 3.1.3
  * @license MIT
  */
 
@@ -20,10 +20,10 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createServer } from './server.js';
 import { CONFIG } from './config.js';
 import { logger } from './utils/logger.js';
-import { 
-  startAutoOrganizeScheduler, 
+import {
+  startAutoOrganizeScheduler,
   stopAutoOrganizeScheduler,
-  getAutoOrganizeScheduler 
+  getAutoOrganizeScheduler,
 } from './services/auto-organize.service.js';
 
 async function main(): Promise<void> {
@@ -70,7 +70,7 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
   // Log allowed directories
   const allowedDirs = [...CONFIG.paths.defaultAllowed, ...CONFIG.paths.customAllowed];
   logger.info(`Allowed directories (${allowedDirs.length}):`);
-  allowedDirs.forEach(dir => logger.info(`  - ${dir}`));
+  allowedDirs.forEach((dir) => logger.info(`  - ${dir}`));
 
   if (CONFIG.paths.customAllowed.length > 0) {
     logger.info(`Custom allowed directories: ${CONFIG.paths.customAllowed.length}`);
@@ -78,7 +78,7 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
 
   // Start auto-organize scheduler if enabled
   startAutoOrganizeScheduler();
-  
+
   // Log scheduler status
   const scheduler = getAutoOrganizeScheduler();
   if (scheduler?.isActive()) {
@@ -107,10 +107,10 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
 function setupGracefulShutdown(): void {
   const shutdown = (signal: string): void => {
     logger.info(`Received ${signal}, shutting down gracefully...`);
-    
+
     // Stop the auto-organize scheduler
     stopAutoOrganizeScheduler();
-    
+
     logger.info('Cleanup complete, exiting...');
     process.exit(0);
   };
@@ -118,7 +118,7 @@ function setupGracefulShutdown(): void {
   // Handle common termination signals
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
-  
+
   // Handle Windows specific signals
   if (process.platform === 'win32') {
     process.on('SIGBREAK', () => shutdown('SIGBREAK'));

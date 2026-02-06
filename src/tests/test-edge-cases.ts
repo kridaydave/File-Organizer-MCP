@@ -38,7 +38,9 @@ async function runTests(): Promise<void> {
         } finally {
             try {
                 await fs.rm(TEST_DIR, { recursive: true, force: true });
-            } catch { }
+            } catch (error) {
+                console.warn(`Warning: Failed to cleanup test directory ${TEST_DIR}:`, error);
+            }
         }
     }
 

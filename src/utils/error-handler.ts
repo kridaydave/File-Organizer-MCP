@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.0.0
+ * File Organizer MCP Server v3.1.3
  * Centralized Error Handling
  */
 
@@ -76,4 +76,16 @@ Options:
 3. Enable UNRESTRICTED mode (advanced users only)
 
 Learn more: https://github.com/kridaydave/File-Organizer-MCP#security-modes`;
+}
+
+/**
+ * Type guard to check if an error is a NodeJS.ErrnoException
+ */
+export function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+    return (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        typeof (error as Record<string, unknown>).code === 'string'
+    );
 }

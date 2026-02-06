@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.0.0
+ * File Organizer MCP Server v3.1.3
  * File Scanner Service
  */
 
@@ -8,6 +8,7 @@ import path from 'path';
 import type { FileInfo, FileWithSize, ScanOptions } from '../types.js';
 import { CONFIG, SKIP_DIRECTORIES } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { isErrnoException } from '../utils/error-handler.js';
 
 /**
  * File Scanner Service - core scanning logic
@@ -55,8 +56,9 @@ export class FileScannerService {
             try {
                 items = await fs.readdir(dir, { withFileTypes: true });
             } catch (error) {
-                const err = error as NodeJS.ErrnoException;
-                if (err.code === 'EACCES' || err.code === 'EPERM' || err.code === 'ENOENT') return;
+                if (isErrnoException(error)) {
+                    if (error.code === 'EACCES' || error.code === 'EPERM' || error.code === 'ENOENT') return;
+                }
                 throw error;
             }
 
@@ -89,11 +91,14 @@ export class FileScannerService {
                             });
                         } catch (error) {
                             // BUG-003 FIX: Store error instead of throwing to ensure finally executes
-                            const err = error as NodeJS.ErrnoException;
-                            if (err.code === 'ELOOP' || err.code === 'EACCES' || err.code === 'EPERM' || err.code === 'EBUSY') {
-                                // Skip file silently
+                            if (isErrnoException(error)) {
+                                if (error.code === 'ELOOP' || error.code === 'EACCES' || error.code === 'EPERM' || error.code === 'EBUSY') {
+                                    // Skip file silently
+                                } else {
+                                    statError = error;
+                                }
                             } else {
-                                statError = err;
+                                statError = error instanceof Error ? error : new Error(String(error));
                             }
                         } finally {
                             // BUG-003 FIX: Always close handle
@@ -111,9 +116,11 @@ export class FileScannerService {
                         await scanDir(fullPath, depth + 1, visited);
                     }
                 } catch (error) {
-                    const err = error as NodeJS.ErrnoException;
-                    if (err.message.includes('Maximum file limit')) throw error;
-                    if (err.code === 'EACCES' || err.code === 'ENOENT') continue;
+                    if (error instanceof Error && error.message.includes('Maximum file limit')) throw error;
+
+                    if (isErrnoException(error)) {
+                        if (error.code === 'EACCES' || error.code === 'ENOENT') continue;
+                    }
                 }
             }
         };
@@ -156,14 +163,15 @@ export class FileScannerService {
         try {
             items = await fs.readdir(dir, { withFileTypes: true });
         } catch (error) {
-            const err = error as NodeJS.ErrnoException;
-            if (err.code === 'EACCES' || err.code === 'EPERM') {
-                logger.warn(`Permission denied at ${dir}, skipping`);
-                return;
-            }
-            if (err.code === 'ENOENT') {
-                // Directory disappeared
-                return;
+            if (isErrnoException(error)) {
+                if (error.code === 'EACCES' || error.code === 'EPERM') {
+                    logger.warn(`Permission denied at ${dir}, skipping`);
+                    return;
+                }
+                if (error.code === 'ENOENT') {
+                    // Directory disappeared
+                    return;
+                }
             }
             throw error;
         }
@@ -199,12 +207,15 @@ export class FileScannerService {
                         });
                     } catch (error) {
                         // BUG-003 FIX: Store error instead of throwing to ensure finally executes
-                        const err = error as NodeJS.ErrnoException;
                         // Skip if symlink or access denied
-                        if (err.code === 'ELOOP' || err.code === 'EACCES' || err.code === 'EPERM' || err.code === 'EBUSY') {
-                            // Skip file silently
+                        if (isErrnoException(error)) {
+                            if (error.code === 'ELOOP' || error.code === 'EACCES' || error.code === 'EPERM' || error.code === 'EBUSY') {
+                                // Skip file silently
+                            } else {
+                                statError = error;
+                            }
                         } else {
-                            statError = err;
+                            statError = error instanceof Error ? error : new Error(String(error));
                         }
                     } finally {
                         // BUG-003 FIX: Always close handle
@@ -221,14 +232,15 @@ export class FileScannerService {
                     await this.scanDir(fullPath, results, includeSubdirs, maxDepth, currentDepth + 1, visited);
                 }
             } catch (error) {
-                const err = error as NodeJS.ErrnoException;
-                if (err.message.includes('Maximum file limit')) throw error;
+                if (error instanceof Error && error.message.includes('Maximum file limit')) throw error;
 
                 // Ignore individual file access errors (race condition or permission)
-                if (err.code === 'EACCES' || err.code === 'EPERM' || err.code === 'ENOENT' || err.code === 'EINVAL') {
-                    continue;
+                if (isErrnoException(error)) {
+                    if (error.code === 'EACCES' || error.code === 'EPERM' || error.code === 'ENOENT' || error.code === 'EINVAL') {
+                        continue;
+                    }
                 }
-                logger.error(`Error processing ${fullPath}: ${err.message}`);
+                logger.error(`Error processing ${fullPath}: ${error instanceof Error ? error.message : String(error)}`);
             }
         }
     }

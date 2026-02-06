@@ -11,6 +11,20 @@ class FileTracker {
     this.debounceTimeout = null;
   }
 
+  /**
+   * Stop all watchers and clear resources
+   */
+  async stop() {
+    for (const [path, watcher] of this.watchers) {
+      await watcher.close();
+    }
+    this.watchers.clear();
+    if (this.debounceTimeout) {
+      clearTimeout(this.debounceTimeout);
+      this.debounceTimeout = null;
+    }
+  }
+
   async init() {
     await this.loadConfig();
     this.watchConfig();
@@ -23,7 +37,7 @@ class FileTracker {
       const rawConfig = JSON.parse(data);
 
       // Validate config structure
-      if (!rawConfig.rules || rawConfig.rules.length === 0) {
+      if (!rawConfig || typeof rawConfig !== 'object' || !rawConfig.rules || rawConfig.rules.length === 0) {
         throw new Error('No organization rules defined in config');
       }
 

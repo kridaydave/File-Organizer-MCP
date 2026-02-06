@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.0.0
+ * File Organizer MCP Server v3.1.3
  * Auto-Organize Scheduler Service
  *
  * Smart scheduling with cron-based per-directory configuration.
@@ -26,7 +26,7 @@ export class AutoOrganizeService {
   constructor(
     private scanner = new FileScannerService(),
     private organizer = new OrganizerService()
-  ) {}
+  ) { }
 
   /**
    * Start the auto-organize scheduler
@@ -39,9 +39,9 @@ export class AutoOrganizeService {
     }
 
     logger.info('Starting smart auto-organize scheduler...');
-    
+
     this.reloadTasks();
-    
+
     logger.info(`Started ${this.tasks.size} scheduled task(s)`);
   }
 
@@ -49,12 +49,18 @@ export class AutoOrganizeService {
    * Stop all scheduled tasks
    */
   stop(): void {
-    for (const [directory, task] of this.tasks) {
-      task.stop();
-      logger.debug(`Stopped task for: ${directory}`);
+    try {
+      for (const [directory, task] of this.tasks) {
+        task.stop();
+        logger.debug(`Stopped task for: ${directory}`);
+      }
+    } catch (error) {
+      logger.error('Error stopping auto-organize tasks:', error);
+    } finally {
+      this.tasks.clear();
+      this.runningDirectories.clear();
+      logger.info('Auto-organize scheduler stopped');
     }
-    this.tasks.clear();
-    logger.info('Auto-organize scheduler stopped');
   }
 
   /**
@@ -71,16 +77,16 @@ export class AutoOrganizeService {
 
     // Load watch list
     const watchList = userConfig.watchList ?? [];
-    
+
     // Also support legacy autoOrganize config for backward compatibility
     if (userConfig.autoOrganize?.enabled && userConfig.autoOrganize.schedule) {
       const legacyFolders = userConfig.customAllowedDirectories ?? [];
       const legacyCron = this.legacyScheduleToCron(userConfig.autoOrganize.schedule);
-      
+
       for (const folder of legacyFolders) {
         // Skip if already in watch list
         if (watchList.some(w => w.directory === folder)) continue;
-        
+
         watchList.push({
           directory: folder,
           schedule: legacyCron,
@@ -94,7 +100,7 @@ export class AutoOrganizeService {
     // Create cron tasks for each watch config
     for (const watch of watchList) {
       if (!watch.rules.auto_organize) continue;
-      
+
       if (!cron.validate(watch.schedule)) {
         logger.error(`Invalid cron expression "${watch.schedule}" for ${watch.directory}`);
         continue;
@@ -216,7 +222,7 @@ export class AutoOrganizeService {
       try {
         const stats = await fs.stat(file.path);
         const fileAge = now - stats.mtime.getTime();
-        
+
         if (fileAge >= minAgeMs) {
           filtered.push(file);
         }
@@ -269,7 +275,7 @@ export class AutoOrganizeService {
   async triggerNow(directory: string): Promise<boolean> {
     const userConfig = loadUserConfig();
     const watch = userConfig.watchList?.find(w => w.directory === directory);
-    
+
     if (!watch) {
       logger.error(`Directory not in watch list: ${directory}`);
       return false;

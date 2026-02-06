@@ -1,12 +1,12 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.1.1 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.1.3 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
 [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
 ---
 
-[![npm version](https://img.shields.io/badge/npm-v3.1.2-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v3.1.3-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
@@ -58,9 +58,11 @@ Add to `claude_desktop_config.json`:
 ### First Steps
 
 1. **Run the Setup Wizard (Recommended)**
+
    ```bash
    npx file-organizer-mcp --setup
    ```
+
    This interactive wizard helps you:
    - Select folders to organize
    - Set your preferred conflict strategy
@@ -78,30 +80,30 @@ Add to `claude_desktop_config.json`:
 
 ### Core Functionality
 
-* **🤖 Auto-categorization** - Intelligently organizes files into 12+ categories
-* **📅 Smart Scheduling** - Cron-based automatic organization with per-directory configuration
-* **🔍 Duplicate Detection** - Finds duplicate files using SHA-256 content hashing
-* **🏷️ Smart Metadata** - Extracts EXIF/ID3 tags for content-aware organization
-* **✏️ Batch Renaming** - Flexible renaming with patterns, regex, and case conversion
-* **🛡️ Smart Conflict Resolution** - Handles filename conflicts (rename/skip/overwrite)
-* **👁️ Dry Run Mode** - Preview changes before executing
-* **👀 File Watching** - Watch directories and auto-organize on schedule
-* **⏱️ Age-Based Filtering** - Skip files newer than X minutes (prevents organizing in-progress downloads)
-* **📊 Comprehensive Scanning** - Detailed directory analysis with statistics
-* **📈 Space Analysis** - Quickly identify space-consuming files
-* **⏮️ Rollback Support** - Undo file organization operations
-* **⚛️ Safe Atomic Moves** - Uses `COPYFILE_EXCL` to prevent race conditions during file moves
-* **💾 Automatic Backups** - Safely backs up files before overwriting to `.file-organizer-backups`
-* **📝 Structured Logging** - JSON-formatted logs with configurable log levels
-* **📜 Audit Trail** - Complete logging of all operations for transparency
-* **💻 Multi-Platform Support** - Native support for Windows, macOS, and Linux
+- **🤖 Auto-categorization** - Intelligently organizes files into 12+ categories
+- **📅 Smart Scheduling** - Cron-based automatic organization with per-directory configuration
+- **🔍 Duplicate Detection** - Finds duplicate files using SHA-256 content hashing
+- **🏷️ Smart Metadata** - Extracts EXIF/ID3 tags for content-aware organization
+- **✏️ Batch Renaming** - Flexible renaming with patterns, regex, and case conversion
+- **🛡️ Smart Conflict Resolution** - Handles filename conflicts (rename/skip/overwrite)
+- **👁️ Dry Run Mode** - Preview changes before executing
+- **👀 File Watching** - Watch directories and auto-organize on schedule
+- **⏱️ Age-Based Filtering** - Skip files newer than X minutes (prevents organizing in-progress downloads)
+- **📊 Comprehensive Scanning** - Detailed directory analysis with statistics
+- **📈 Space Analysis** - Quickly identify space-consuming files
+- **⏮️ Rollback Support** - Undo file organization operations
+- **⚛️ Safe Atomic Moves** - Uses `COPYFILE_EXCL` to prevent race conditions during file moves
+- **💾 Automatic Backups** - Safely backs up files before overwriting to `.file-organizer-backups`
+- **📝 Structured Logging** - JSON-formatted logs with configurable log levels
+- **📜 Audit Trail** - Complete logging of all operations for transparency
+- **💻 Multi-Platform Support** - Native support for Windows, macOS, and Linux
 
 ### Security Features
 
 This server implements a multi-layered security architecture designed to operate safely in untrusted environments.
 
 - **TOCTOU Mitigation**: Critical file operations uses File Descriptors (`fs.open` with `O_NOFOLLOW`) to prevent Time-of-Check-Time-of-Use race conditions.
-- **Path Traversal Protection**: 
+- **Path Traversal Protection**:
   - Robust canonicalization handling URI encodings (`%2e%2e`), null bytes, and Unicode normalization.
   - Strict sandboxing ensuring operations stay within allowed directories.
 - **Input Sanitization**:
@@ -115,18 +117,22 @@ This server implements a multi-layered security architecture designed to operate
   - Symbolic links are strictly managed or blocked in critical paths.
 
 ### Limitations
+
 - **Race Conditions on Deletion**: While read/write operations are secured via File Descriptors, file deletion on some platforms (Windows) relies on path locking, which reduces but may not entirely eliminate deletion race windows.
 - **Symlinks**: Symlinks are generally blocked from being opened as files to prevent security issues.
 - **Windows**: Requires standard user permissions. Admin privileges are not recommended or supported.
 
 ### Data Integrity
+
 - **Race Condition Mitigation**: Uses atomic copy-then-delete strategy to prevent data loss if a file is modified during a move operation.
 - **Safe Overwrites**: When `conflict_strategy: 'overwrite'` is used, the existing file is moved to a timestamped backup folder before replacement.
 
 ### 🚀 Features Overview
 
 ### ⚙️ Interactive Setup Wizard
+
 Run `npx file-organizer-mcp --setup` for guided configuration:
+
 - **📁 Folder Selection** - Interactively choose folders to manage
 - **⚡ Conflict Handling** - Set default rename/skip/overwrite strategy
 - **📅 Schedule Setup** - Configure automatic organization schedules
@@ -135,13 +141,14 @@ Run `npx file-organizer-mcp --setup` for guided configuration:
 ### What's New in v3.1.0
 
 **New Features:**
-* **🧙 Interactive Setup Wizard** - Run `npx file-organizer-mcp --setup` for guided configuration
-* **📅 Smart Scheduling** - Cron-based watch mode with `file_organizer_watch_directory`
-* **⏱️ Age Filtering** - Skip recently modified files during auto-organization
-* **🎵 Smart Metadata** - Organize images by Year/Month and audio by Artist/Album
-* **🏷️ Batch Renaming** - Bulk renaming with patterns, regex, and numbering
-* **⚙️ Conflict Strategy** - Configurable default conflict resolution
-* **🛡️ Enhanced Security** - Improved symlink detection and path validation
+
+- **🧙 Interactive Setup Wizard** - Run `npx file-organizer-mcp --setup` for guided configuration
+- **📅 Smart Scheduling** - Cron-based watch mode with `file_organizer_watch_directory`
+- **⏱️ Age Filtering** - Skip recently modified files during auto-organization
+- **🎵 Smart Metadata** - Organize images by Year/Month and audio by Artist/Album
+- **🏷️ Batch Renaming** - Bulk renaming with patterns, regex, and numbering
+- **⚙️ Conflict Strategy** - Configurable default conflict resolution
+- **🛡️ Enhanced Security** - Improved symlink detection and path validation
 
 See [CHANGELOG.md](CHANGELOG.md) for full details.
 
@@ -156,6 +163,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 Scan directory with detailed file information including size, dates, and extensions.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to directory
 - `include_subdirs` (boolean, optional) - Include subdirectories (default: false)
 - `max_depth` (number, optional) - Maximum depth (default: -1, max: 10)
@@ -166,13 +174,14 @@ Scan directory with detailed file information including size, dates, and extensi
 **Annotations:** ✅ Read-only • ⚡ Idempotent • 🌍 Filesystem access
 
 **Example:**
+
 ```typescript
 file_organizer_scan_directory({
-  directory: "/Users/john/Downloads",
+  directory: '/Users/john/Downloads',
   include_subdirs: true,
   max_depth: 3,
-  limit: 100
-})
+  limit: 100,
+});
 ```
 
 ---
@@ -182,6 +191,7 @@ file_organizer_scan_directory({
 List all files in a directory with basic information. Simple, fast listing.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to directory
 - `response_format` ('json'|'markdown', optional) - Output format
 
@@ -194,6 +204,7 @@ List all files in a directory with basic information. Simple, fast listing.
 Group files by category with statistics. Shows breakdown by file type.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to directory
 - `include_subdirs` (boolean, optional) - Include subdirectories
 - `response_format` ('json'|'markdown', optional) - Output format
@@ -201,10 +212,11 @@ Group files by category with statistics. Shows breakdown by file type.
 **Returns:** Category breakdown with file counts and sizes
 
 **Example:**
+
 ```typescript
 file_organizer_categorize_by_type({
-  directory: "/Users/john/Downloads"
-})
+  directory: '/Users/john/Downloads',
+});
 // Output:
 // Executables    - 12 files (45 MB)
 // Videos         - 24 files (2.3 GB)
@@ -218,6 +230,7 @@ file_organizer_categorize_by_type({
 Find the largest space-consuming files in a directory.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to directory
 - `include_subdirs` (boolean, optional) - Include subdirectories
 - `top_n` (number, optional) - Number of files to return (default: 10)
@@ -232,6 +245,7 @@ Find the largest space-consuming files in a directory.
 Find duplicate files using SHA-256 content hashing.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to directory
 - `response_format` ('json'|'markdown', optional) - Output format
 
@@ -246,6 +260,7 @@ Find duplicate files using SHA-256 content hashing.
 Advanced duplicate analysis with keep/delete suggestions based on location, name quality, and age.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to directory
 - `response_format` ('json'|'markdown', optional) - Output format
 
@@ -260,17 +275,19 @@ Advanced duplicate analysis with keep/delete suggestions based on location, name
 Preview file organization WITHOUT making changes. Shows planned moves, conflicts, and reasons.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to directory
 - `conflict_strategy` ('rename'|'skip'|'overwrite'|'overwrite_if_newer', optional) - Conflict resolution (default: 'rename')
 
 **Annotations:** ✅ Read-only • 🔍 Dry-run
 
 **Example:**
+
 ```typescript
 file_organizer_preview_organization({
-  directory: "/Users/john/Downloads",
-  conflict_strategy: "rename"
-})
+  directory: '/Users/john/Downloads',
+  conflict_strategy: 'rename',
+});
 ```
 
 ---
@@ -280,6 +297,7 @@ file_organizer_preview_organization({
 Automatically organize files into categorized folders.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to directory
 - `dry_run` (boolean, optional) - Preview without moving (default: true)
 - `conflict_strategy` ('rename'|'skip'|'overwrite'|'overwrite_if_newer', optional) - How to handle conflicts
@@ -290,18 +308,19 @@ Automatically organize files into categorized folders.
 **⚠️ Modifies filesystem** - Use `dry_run: true` first!
 
 **Example:**
+
 ```typescript
 // Preview first
 file_organizer_organize_files({
-  directory: "/Users/john/Downloads",
-  dry_run: true
-})
+  directory: '/Users/john/Downloads',
+  dry_run: true,
+});
 
 // Then execute
 file_organizer_organize_files({
-  directory: "/Users/john/Downloads",
-  dry_run: false
-})
+  directory: '/Users/john/Downloads',
+  dry_run: false,
+});
 ```
 
 ---
@@ -311,6 +330,7 @@ file_organizer_organize_files({
 Reverse file moves and renames from a previous organization.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to directory
 - `response_format` ('json'|'markdown', optional) - Output format
 
@@ -323,25 +343,27 @@ Reverse file moves and renames from a previous organization.
 Batch rename files using pattern matching, case conversion, or sequence numbering.
 
 **Parameters:**
+
 - `directory` (string, optional) - Directory to scan (either this or `files` required)
 - `files` (array, optional) - Specific files to rename
 - `rules` (array, required) - Renaming rules:
   - `type`: 'find_replace' | 'case' | 'add_text' | 'numbering'
-  - *...plus rule-specific options (replace, with, conversion, text, position, etc.)*
+  - _...plus rule-specific options (replace, with, conversion, text, position, etc.)_
 - `dry_run` (boolean, optional) - Preview only (default: true)
 
 **Annotations:** ⚠️ Destructive (if dry_run=false) • 🔍 Dry-run
 
 **Example:**
+
 ```typescript
 file_organizer_batch_rename({
-  directory: "/Docs",
+  directory: '/Docs',
   rules: [
-    { type: "find_replace", find: "IMG", replace: "Photo" },
-    { type: "case", conversion: "lowercase" }
+    { type: 'find_replace', find: 'IMG', replace: 'Photo' },
+    { type: 'case', conversion: 'lowercase' },
   ],
-  dry_run: true
-})
+  dry_run: true,
+});
 ```
 
 ---
@@ -354,6 +376,7 @@ Add a directory to the automatic organization watch list with cron-based schedul
 Files will be automatically organized based on the schedule you set.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to the directory to watch
 - `schedule` (string, required) - Cron expression (e.g., `"0 10 * * *"` for daily at 10am)
 - `auto_organize` (boolean, optional) - Enable auto-organization (default: true)
@@ -371,14 +394,15 @@ Files will be automatically organized based on the schedule you set.
 | `0 0 * * 0` | Weekly on Sunday at midnight |
 
 **Example:**
+
 ```typescript
 // Watch Downloads folder - organize daily at 9am, files must be 5+ minutes old
 file_organizer_watch_directory({
-  directory: "/Users/john/Downloads",
-  schedule: "0 9 * * *",
+  directory: '/Users/john/Downloads',
+  schedule: '0 9 * * *',
   min_file_age_minutes: 5,
-  max_files_per_run: 100
-})
+  max_files_per_run: 100,
+});
 ```
 
 ---
@@ -388,6 +412,7 @@ file_organizer_watch_directory({
 Remove a directory from the watch list.
 
 **Parameters:**
+
 - `directory` (string, required) - Full path to remove from watch list
 - `response_format` ('json'|'markdown', optional) - Output format
 
@@ -398,6 +423,7 @@ Remove a directory from the watch list.
 List all directories currently being watched with their schedules.
 
 **Parameters:**
+
 - `response_format` ('json'|'markdown', optional) - Output format
 
 **Returns:** List of watched directories with schedules and rules
@@ -421,6 +447,7 @@ Returns the list of categories used for file organization.
 Customize how files are categorized. Rules persist for the current session.
 
 **Parameters:**
+
 - `rules` (array, required) - Array of rule objects, each containing:
   - `category` (string, required) - Target category name
   - `extensions` (array of strings, optional) - File extensions to match
@@ -428,13 +455,19 @@ Customize how files are categorized. Rules persist for the current session.
   - `priority` (number, optional) - Rule priority (lower = higher priority)
 
 **Example:**
+
 ```typescript
 file_organizer_set_custom_rules({
   rules: [
-    { category: "Tax Docs", extensions: [".pdf"], filename_pattern: "*tax*", priority: 1 },
-    { category: "Receipts", extensions: [".pdf", ".png"], filename_pattern: "*receipt*", priority: 2 }
-  ]
-})
+    { category: 'Tax Docs', extensions: ['.pdf'], filename_pattern: '*tax*', priority: 1 },
+    {
+      category: 'Receipts',
+      extensions: ['.pdf', '.png'],
+      filename_pattern: '*receipt*',
+      priority: 2,
+    },
+  ],
+});
 ```
 
 ---
@@ -444,6 +477,7 @@ file_organizer_set_custom_rules({
 Permanently delete specified duplicate files. **This operation is destructive and cannot be undone.**
 
 **Parameters:**
+
 - `files_to_delete` (array of strings, required) - Full paths of duplicate files to remove
 - `verify_duplicates` (boolean, optional) - Re-verify files are duplicates before deleting (default: true)
 - `create_backup_manifest` (boolean, optional) - Save a manifest of deleted files for reference (default: true)
@@ -457,24 +491,24 @@ Permanently delete specified duplicate files. **This operation is destructive an
 
 Files are automatically sorted into these categories:
 
-| Category | Extensions |
-| --- | --- |
-| **Executables** | `.exe`, `.msi`, `.bat`, `.cmd`, `.sh` |
-| **Videos** | `.mp4`, `.avi`, `.mkv`, `.mov`, `.wmv`, `.flv`, `.webm`, `.m4v` |
-| **Documents** | `.pdf`, `.doc`, `.docx`, `.txt`, `.rtf`, `.odt`, `.md`, `.tex` |
-| **Presentations** | `.ppt`, `.pptx`, `.odp`, `.key` |
-| **Spreadsheets** | `.xls`, `.xlsx`, `.csv`, `.ods` |
-| **Images** | `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.svg`, `.ico`, `.webp` |
-| **Audio** | `.mp3`, `.wav`, `.flac`, `.aac`, `.ogg`, `.wma`, `.m4a` |
-| **Archives** | `.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.bz2`, `.xz` |
-| **Code** | `.py`, `.js`, `.ts`, `.java`, `.cpp`, `.c`, `.html`, `.css`, `.php`, `.rb`, `.go`, `.json` |
-| **Tests** | `*test*`, `*spec*`, `.test.ts`, `.spec.ts` |
-| **Logs** | `*debug*`, `*.log` |
-| **Scripts** | `*script*`, `.sh`, `.bat` |
-| **Installers** | `.dmg`, `.pkg`, `.deb`, `.rpm`, `.apk` |
-| **Ebooks** | `.epub`, `.mobi`, `.azw`, `.azw3` |
-| **Fonts** | `.ttf`, `.otf`, `.woff`, `.woff2` |
-| **Others** | Everything else |
+| Category          | Extensions                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------ |
+| **Executables**   | `.exe`, `.msi`, `.bat`, `.cmd`, `.sh`                                                      |
+| **Videos**        | `.mp4`, `.avi`, `.mkv`, `.mov`, `.wmv`, `.flv`, `.webm`, `.m4v`                            |
+| **Documents**     | `.pdf`, `.doc`, `.docx`, `.txt`, `.rtf`, `.odt`, `.md`, `.tex`                             |
+| **Presentations** | `.ppt`, `.pptx`, `.odp`, `.key`                                                            |
+| **Spreadsheets**  | `.xls`, `.xlsx`, `.csv`, `.ods`                                                            |
+| **Images**        | `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, `.svg`, `.ico`, `.webp`                           |
+| **Audio**         | `.mp3`, `.wav`, `.flac`, `.aac`, `.ogg`, `.wma`, `.m4a`                                    |
+| **Archives**      | `.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.bz2`, `.xz`                                        |
+| **Code**          | `.py`, `.js`, `.ts`, `.java`, `.cpp`, `.c`, `.html`, `.css`, `.php`, `.rb`, `.go`, `.json` |
+| **Tests**         | `*test*`, `*spec*`, `.test.ts`, `.spec.ts`                                                 |
+| **Logs**          | `*debug*`, `*.log`                                                                         |
+| **Scripts**       | `*script*`, `.sh`, `.bat`                                                                  |
+| **Installers**    | `.dmg`, `.pkg`, `.deb`, `.rpm`, `.apk`                                                     |
+| **Ebooks**        | `.epub`, `.mobi`, `.azw`, `.azw3`                                                          |
+| **Fonts**         | `.ttf`, `.otf`, `.woff`, `.woff2`                                                          |
+| **Others**        | Everything else                                                                            |
 
 ---
 
@@ -558,7 +592,7 @@ Result: Clear visibility into space usage with actionable insights
 User: "Claude, automatically organize my Downloads folder every day at 9am"
 
 Claude:
-1. Sets up watch directory → 
+1. Sets up watch directory →
    file_organizer_watch_directory({
      directory: "/Users/john/Downloads",
      schedule: "0 9 * * *",
@@ -592,45 +626,45 @@ The server uses a **Secure by Default** approach. Access is restricted to a spec
 
 The server automatically detects and allows access to these safe user locations:
 
-| Platform | Allowed Directories |
-| --- | --- |
+| Platform    | Allowed Directories                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
 | **Windows** | `Desktop`, `Documents`, `Downloads`, `Pictures`, `Videos`, `Music`, `OneDrive`, `Projects`, `Workspace` |
-| **macOS** | `Desktop`, `Documents`, `Downloads`, `Movies`, `Music`, `Pictures`, `iCloud Drive`, `Projects` |
-| **Linux** | `Desktop`, `Documents`, `Downloads`, `Music`, `Pictures`, `Videos`, `~/dev`, `~/workspace` |
+| **macOS**   | `Desktop`, `Documents`, `Downloads`, `Movies`, `Music`, `Pictures`, `iCloud Drive`, `Projects`          |
+| **Linux**   | `Desktop`, `Documents`, `Downloads`, `Music`, `Pictures`, `Videos`, `~/dev`, `~/workspace`              |
 
-*> Note: Only directories that actually exist on your system are enabled.*
+_> Note: Only directories that actually exist on your system are enabled._
 
 ### ❌ Always Blocked
 
 To prevent accidents, the following are **always blocked**, even if added to config:
 
-* **Windows:** `C:\Windows`, `Program Files`, `AppData`, `$Recycle.Bin`
-* **macOS:** `/System`, `/Library`, `/Applications`, `/private`, `/usr`
-* **Linux:** `/etc`, `/usr`, `/var`, `/root`, `/sys`, `/proc`
-* **Global:** `node_modules`, `.git`, `.vscode`, `.idea`, `dist`, `build`
+- **Windows:** `C:\Windows`, `Program Files`, `AppData`, `$Recycle.Bin`
+- **macOS:** `/System`, `/Library`, `/Applications`, `/private`, `/usr`
+- **Linux:** `/etc`, `/usr`, `/var`, `/root`, `/sys`, `/proc`
+- **Global:** `node_modules`, `.git`, `.vscode`, `.idea`, `dist`, `build`
 
 ### ⚙️ Custom Configuration
 
 You can customize behavior by editing the user configuration file.
 
 **Config Location:**
-* **Windows:** `%APPDATA%\file-organizer-mcp\config.json`
-* **macOS:** `$HOME/Library/Application Support/file-organizer-mcp/config.json`
-* **Linux:** `$HOME/.config/file-organizer-mcp/config.json`
+
+- **Windows:** `%APPDATA%\file-organizer-mcp\config.json`
+- **macOS:** `$HOME/Library/Application Support/file-organizer-mcp/config.json`
+- **Linux:** `$HOME/.config/file-organizer-mcp/config.json`
 
 **How to Add Directories:**
+
 1. Open `config.json`
 2. Add paths to `customAllowedDirectories`:
 
-    ```json
-    {
-      "customAllowedDirectories": [
-        "C:\\Users\\Name\\My Special Folder",
-        "D:\\Backups"
-      ]
-    }
-    ```
-    > 💡 **Tip:** You can copy a folder path directly from your file explorer's address bar and paste it into `customAllowedDirectories`.
+   ```json
+   {
+     "customAllowedDirectories": ["C:\\Users\\Name\\My Special Folder", "D:\\Backups"]
+   }
+   ```
+
+   > 💡 **Tip:** You can copy a folder path directly from your file explorer's address bar and paste it into `customAllowedDirectories`.
 
 3. Restart Claude Desktop.
 
@@ -645,6 +679,7 @@ Set your preferred default conflict resolution strategy:
 ```
 
 Available strategies:
+
 - `"rename"` (default) - Renames new file (e.g., `file (1).txt`)
 - `"skip"` - Keeps existing file, skips new one
 - `"overwrite"` - Replaces existing file (creates backup first)
@@ -666,12 +701,12 @@ For advanced cron-based scheduling, use the `file_organizer_watch_directory` too
 
 ### Security Defenses
 
-| Attack Type | Protection Mechanism | Status |
-| --- | --- | --- |
-| **Unauthorized Access** | Whitelist + Blacklist Enforcement | ✅ Protected |
-| **Path Traversal** | 8-Layer Validation Pipeline | ✅ Protected |
-| **Symlink Attacks** | Real Path Resolution | ✅ Protected |
-| **DoS** | Resource Limits (Files, Depth, Size) | ✅ Protected |
+| Attack Type             | Protection Mechanism                 | Status       |
+| ----------------------- | ------------------------------------ | ------------ |
+| **Unauthorized Access** | Whitelist + Blacklist Enforcement    | ✅ Protected |
+| **Path Traversal**      | 8-Layer Validation Pipeline          | ✅ Protected |
+| **Symlink Attacks**     | Real Path Resolution                 | ✅ Protected |
+| **DoS**                 | Resource Limits (Files, Depth, Size) | ✅ Protected |
 
 ---
 
@@ -701,14 +736,14 @@ For advanced cron-based scheduling, use the `file_organizer_watch_directory` too
 
 ## 📝 Important Notes
 
-* ⚠️ Organizes files in **root directory only**, not subdirectories (by default)
-* ⚠️ Existing category folders won't be reorganized (prevents loops)
-* ✅ File extensions are case-insensitive
-* ✅ Original modification dates are preserved
-* ✅ Hidden files (starting with `.`) are automatically skipped
-* ✅ Maximum 10,000 files processed per operation (security limit)
-* ✅ Maximum 10 directory levels scanned (security limit)
-* ✅ Rollback support for undo operations
+- ⚠️ Organizes files in **root directory only**, not subdirectories (by default)
+- ⚠️ Existing category folders won't be reorganized (prevents loops)
+- ✅ File extensions are case-insensitive
+- ✅ Original modification dates are preserved
+- ✅ Hidden files (starting with `.`) are automatically skipped
+- ✅ Maximum 10,000 files processed per operation (security limit)
+- ✅ Maximum 10 directory levels scanned (security limit)
+- ✅ Rollback support for undo operations
 
 ---
 
@@ -751,23 +786,23 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ## 🙏 Acknowledgments
 
-* **Anthropic** - For the Model Context Protocol specification
-* **NetworkChuck** - For the MCP tutorial that inspired this project
-* **The MCP Community** - For feedback and support
+- **Anthropic** - For the Model Context Protocol specification
+- **NetworkChuck** - For the MCP tutorial that inspired this project
+- **The MCP Community** - For feedback and support
 
 ---
 
 ## 📞 Support
 
-* **MCP Registry:** [View Listing](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer)
-* **NPM Package:** [View on NPM](https://www.npmjs.com/package/file-organizer-mcp)
-* **Issues:** [GitHub Issues](https://github.com/kridaydave/File-Organizer-MCP/issues)
-* **MCP Spec:** [Model Context Protocol](https://modelcontextprotocol.io)
+- **MCP Registry:** [View Listing](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer)
+- **NPM Package:** [View on NPM](https://www.npmjs.com/package/file-organizer-mcp)
+- **Issues:** [GitHub Issues](https://github.com/kridaydave/File-Organizer-MCP/issues)
+- **MCP Spec:** [Model Context Protocol](https://modelcontextprotocol.io)
 
 ---
 
 ### Happy Organizing! 🎯
 
-> *Built with ❤️ for the MCP community*
+> _Built with ❤️ for the MCP community_
 
 [⬆ Back to Top](#file-organizer-mcp-server)
