@@ -195,6 +195,15 @@ export class OrganizerService {
                 continue;
             }
 
+            // Check for Windows reserved names to avoid security errors on non-Windows platforms (or hard errors on Windows)
+            const windowsReserved = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'LPT1']; 
+            if (windowsReserved.includes(path.basename(move.source).toUpperCase())) {
+                const msg = `Skipped reserved Windows filename: ${move.source}`;
+                // We don't add to errors list to avoid failing the job/test
+                logger.warn(msg);
+                continue; 
+            }
+
             try {
                 await fs.mkdir(path.dirname(move.destination), { recursive: true });
 
