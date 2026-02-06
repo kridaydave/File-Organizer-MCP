@@ -279,13 +279,18 @@ export class PathValidatorService {
     async openAndValidateFile(inputPath: string): Promise<fs.FileHandle> {
         // 1. Validate the path string first (checks permissions, blocklist, etc.)
         // Explicitly disallow symlinks at validation level for this operation
-        const validatedPath = await this.validatePath(inputPath, { allowSymlinks: false });
+        // This validates security, permissions, and ensures no symlinks exist in the ideal case
+        await this.validatePath(inputPath, { allowSymlinks: false });
 
-        // 2. Open with O_NOFOLLOW to ensure we don't follow symlinks at the last mile
+        // 2. Resolve the absolute path manually to ensuring we open the exact path we requested
+        // (validatePath returns the *resolved* realPath, which defeats O_NOFOLLOW if used directly)
+        const absolutePath = path.resolve(this.basePath, normalizePath(inputPath));
+
+        // 3. Open with O_NOFOLLOW to ensure we don't follow symlinks at the last mile
         try {
-            // We use fs.promises.open which takes flags as string or number.
+            // Use constants directly from 'fs' import
             // constants.O_RDONLY | constants.O_NOFOLLOW
-            const handle = await fs.open(validatedPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+            const handle = await fs.open(absolutePath, constants.O_RDONLY | constants.O_NOFOLLOW);
 
             try {
                 const stats = await handle.stat();
