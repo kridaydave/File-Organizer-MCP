@@ -116,11 +116,9 @@ This server implements a multi-layered security architecture designed to operate
 ### ⚙️ Interactive Configuration
 The new TUI Setup Wizard makes configuration easy:
 `npx file-organizer-mcp --setup`
-
 - **📁 Folder Selection**: Interactively choose which folders to manage.
 - **⚡ Conflict Handling**: Choose between **Rename**, **Skip**, or **Overwrite** strategies.
 - **🤖 Claude Integration**: Automatically generates/updates your `claude_desktop_config.json`.
-
 
 ### What's New in v3.1.0
 

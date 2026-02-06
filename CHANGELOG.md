@@ -1,7 +1,7 @@
 # Changelog
 
 ## [3.1.0] - 2026-02-06
-    
+
 ### ✨ New Features
 - **Interactive Setup Wizard**: New TUI-based setup (`npx file-organizer-mcp --setup`) for easy configuration of folders, conflict strategies, and Claude Desktop integration.
 - **Smart Metadata Organization**: 
