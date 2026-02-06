@@ -7,7 +7,7 @@
   "bin": {
     "file-organizer-mcp": "./dist/index.js",
     "file-organizer": "./dist/index.js",
-    "file-organizer-setup": "./dist/tui/tui-index.js"
+    "file-organizer-setup": "./dist/tui/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -19,6 +19,7 @@
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "test:security": "node dist/tests/test-security.js",
     "setup": "node dist/tui/index.js",
+    "postinstall": "node scripts/postinstall.js",
     "test:phase1": "node dist/tests/test-phase1.js",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
@@ -83,6 +84,7 @@
   },
   "files": [
     "dist",
+    "scripts/postinstall.js",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
