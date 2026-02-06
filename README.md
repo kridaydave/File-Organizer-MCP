@@ -1,11 +1,10 @@
-# File Organizer MCP Server 🗂️
+# <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
 **Version:** 3.0.1 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
 [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
 ---
-
 
 [![npm version](https://img.shields.io/badge/npm-v3.0.1-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
@@ -14,7 +13,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-148%20passing-success.svg)](tests/)
 
-**A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
+> **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
 
 🎯 [Install from MCP Registry](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer) • 📦 [View on NPM](https://www.npmjs.com/package/file-organizer-mcp) • 🐛 [Report Issues](https://github.com/kridaydave/File-Organizer-MCP/issues)
 
@@ -62,7 +61,7 @@ Add to `claude_desktop_config.json`:
 
 ---
 
-## Features 🎯
+## <a id="features"></a>Features 🎯
 
 ### Core Functionality
 
@@ -133,7 +132,7 @@ This server implements a multi-layered security architecture designed to operate
 
 ---
 
-## Tools Reference 🛠️
+## <a id="tools-reference"></a>Tools Reference 🛠️
 
 ### Core Tools
 
@@ -406,7 +405,7 @@ Files are automatically sorted into these categories:
 
 ---
 
-## Example Workflows 💡
+## <a id="example-workflows"></a>Example Workflows 💡
 
 ### Workflow 1: Intelligent Downloads Cleanup
 
@@ -480,9 +479,9 @@ Result: Clear visibility into space usage with actionable insights
 
 ---
 
-## Security Configuration 🔐
+## <a id="security-configuration"></a>Security Configuration 🔐
 
-**Security Score: 10/10 🌟**
+### Security Score: 10/10 🌟
 
 The server uses a **Secure by Default** approach. Access is restricted to a specific whitelist of user directories. All system directories are blacklisted.
 
@@ -520,19 +519,19 @@ You can allow access to additional folders by editing the user configuration fil
 1. Open `config.json`
 2. Add paths to `customAllowedDirectories`:
 
-```json
-{
-  "customAllowedDirectories": [
-    "C:\\Users\\Name\\My Special Folder",
-    "D:\\Backups"
-  ],
-  "settings": {
-    "maxScanDepth": 10,
-    "logAccess": true
-  }
-}
-```
-> 💡 **Tip:** You can copy a folder path directly from your file explorer's address bar and paste it into `customAllowedDirectories`.
+    ```json
+    {
+      "customAllowedDirectories": [
+        "C:\\Users\\Name\\My Special Folder",
+        "D:\\Backups"
+      ],
+      "settings": {
+        "maxScanDepth": 10,
+        "logAccess": true
+      }
+    }
+    ```
+    > 💡 **Tip:** You can copy a folder path directly from your file explorer's address bar and paste it into `customAllowedDirectories`.
 
 3. Restart Claude Desktop.
 
@@ -638,8 +637,8 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ---
 
-**Happy Organizing! 🎯**
+### Happy Organizing! 🎯
 
-*Built with ❤️ for the MCP community*
+> *Built with ❤️ for the MCP community*
 
-[⬆ Back to Top](#file-organizer-mcp-server-)
+[⬆ Back to Top](#file-organizer-mcp-server)

@@ -8,7 +8,7 @@ This project prioritizes security. All contributions must maintain or improve th
 
 ### Reporting Security Vulnerabilities
 
-**⚠️ DO NOT open public issues for security vulnerabilities**
+> **⚠️ DO NOT open public issues for security vulnerabilities**
 
 Instead, email security concerns to: **<technocratix902@gmail.com>**
 

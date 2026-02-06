@@ -344,7 +344,7 @@ When reporting issues, include:
 - **Advanced duplicate detection** - Fuzzy matching, content similarity
 - **Performance mode** - Skip security checks for trusted paths
 
-## 🎉 Migration Complete!
+## 🎉 Migration Complete
 
 If you've followed all steps, you're now running File Organizer MCP v3.0 with enhanced security and reliability.
 

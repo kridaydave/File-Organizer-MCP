@@ -580,4 +580,3 @@ type Args = z.infer<typeof ArgsSchema>;
 
 **Last Updated:** February 3, 2026  
 **Version:** 3.0.0
-
