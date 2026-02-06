@@ -1,6 +1,6 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.1.0 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.1.1 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
 [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
@@ -57,10 +57,20 @@ Add to `claude_desktop_config.json`:
 
 ### First Steps
 
-1. **Restart Claude Desktop**
-2. Try: `"Scan my Downloads folder"`
-3. Then: `"Show me the largest files"`
-4. Finally: `"Organize my files — preview first"`
+1. **Run the Setup Wizard (Recommended)**
+   ```bash
+   npx file-organizer-mcp --setup
+   ```
+   This interactive wizard helps you:
+   - Select folders to organize
+   - Set your preferred conflict strategy
+   - Configure auto-organize schedules
+   - Generate Claude Desktop config
+
+2. **Restart Claude Desktop**
+3. Try: `"Scan my Downloads folder"`
+4. Then: `"Show me the largest files"`
+5. Finally: `"Organize my files — preview first"`
 
 ---
 
@@ -69,20 +79,22 @@ Add to `claude_desktop_config.json`:
 ### Core Functionality
 
 * **🤖 Auto-categorization** - Intelligently organizes files into 12+ categories
+* **📅 Smart Scheduling** - Cron-based automatic organization with per-directory configuration
 * **🔍 Duplicate Detection** - Finds duplicate files using SHA-256 content hashing
 * **🏷️ Smart Metadata** - Extracts EXIF/ID3 tags for content-aware organization
 * **✏️ Batch Renaming** - Flexible renaming with patterns, regex, and case conversion
-* **🛡️ Smart Conflict Resolution** - Handles filename conflicts automatically (rename/skip/overwrite)
+* **🛡️ Smart Conflict Resolution** - Handles filename conflicts (rename/skip/overwrite)
 * **👁️ Dry Run Mode** - Preview changes before executing
-* **👀 File Watching** - Schedule automatic organization with cron-based triggers
+* **👀 File Watching** - Watch directories and auto-organize on schedule
+* **⏱️ Age-Based Filtering** - Skip files newer than X minutes (prevents organizing in-progress downloads)
 * **📊 Comprehensive Scanning** - Detailed directory analysis with statistics
 * **📈 Space Analysis** - Quickly identify space-consuming files
 * **⏮️ Rollback Support** - Undo file organization operations
 * **⚛️ Safe Atomic Moves** - Uses `COPYFILE_EXCL` to prevent race conditions during file moves
 * **💾 Automatic Backups** - Safely backs up files before overwriting to `.file-organizer-backups`
-* **📝 Structured Logging** - JSON-formatted logs with configurable log levels (debug/info/warn/error)
-* **📜 Audit Trail** - Complete logging of all tool inputs, outputs, and execution status for transparency
-* **💻 Multi-Platform Support** - Native support for Windows, macOS, and Linux (Ubuntu, Debian, etc.)
+* **📝 Structured Logging** - JSON-formatted logs with configurable log levels
+* **📜 Audit Trail** - Complete logging of all operations for transparency
+* **💻 Multi-Platform Support** - Native support for Windows, macOS, and Linux
 
 ### Security Features
 
@@ -111,24 +123,25 @@ This server implements a multi-layered security architecture designed to operate
 - **Race Condition Mitigation**: Uses atomic copy-then-delete strategy to prevent data loss if a file is modified during a move operation.
 - **Safe Overwrites**: When `conflict_strategy: 'overwrite'` is used, the existing file is moved to a timestamped backup folder before replacement.
 
-### 🚀 Upcoming Features
+### 🚀 Features Overview
 
-### ⚙️ Interactive Configuration
-The new TUI Setup Wizard makes configuration easy:
-`npx file-organizer-mcp --setup`
-- **📁 Folder Selection**: Interactively choose which folders to manage.
-- **⚡ Conflict Handling**: Choose between **Rename**, **Skip**, or **Overwrite** strategies.
-- **🤖 Claude Integration**: Automatically generates/updates your `claude_desktop_config.json`.
+### ⚙️ Interactive Setup Wizard
+Run `npx file-organizer-mcp --setup` for guided configuration:
+- **📁 Folder Selection** - Interactively choose folders to manage
+- **⚡ Conflict Handling** - Set default rename/skip/overwrite strategy
+- **📅 Schedule Setup** - Configure automatic organization schedules
+- **🤖 Claude Integration** - Auto-generates `claude_desktop_config.json`
 
 ### What's New in v3.1.0
 
 **New Features:**
-* **🧙 Interactive Setup Wizard** - Run `npx file-organizer-mcp --setup` for a guided configuration experience.
-* **🎵 Smart Metadata** - Organize images by Year/Month and audio by Artist/Album automatically.
-* **👀 File Watching** - Schedule folders for automatic organization using cron expressions.
-* **🏷️ Batch Renaming** - Powerful bulk renaming with find/replace, regex, and numbering support.
-* **🛡️ Enhanced Security** - Improved symlink detection and path validation.
-* **🆓 Free Models** - Optimized default configuration to use free models.
+* **🧙 Interactive Setup Wizard** - Run `npx file-organizer-mcp --setup` for guided configuration
+* **📅 Smart Scheduling** - Cron-based watch mode with `file_organizer_watch_directory`
+* **⏱️ Age Filtering** - Skip recently modified files during auto-organization
+* **🎵 Smart Metadata** - Organize images by Year/Month and audio by Artist/Album
+* **🏷️ Batch Renaming** - Bulk renaming with patterns, regex, and numbering
+* **⚙️ Conflict Strategy** - Configurable default conflict resolution
+* **🛡️ Enhanced Security** - Improved symlink detection and path validation
 
 See [CHANGELOG.md](CHANGELOG.md) for full details.
 
@@ -333,6 +346,64 @@ file_organizer_batch_rename({
 
 ---
 
+### Watch & Schedule Tools
+
+#### `file_organizer_watch_directory`
+
+Add a directory to the automatic organization watch list with cron-based scheduling.
+Files will be automatically organized based on the schedule you set.
+
+**Parameters:**
+- `directory` (string, required) - Full path to the directory to watch
+- `schedule` (string, required) - Cron expression (e.g., `"0 10 * * *"` for daily at 10am)
+- `auto_organize` (boolean, optional) - Enable auto-organization (default: true)
+- `min_file_age_minutes` (number, optional) - Only organize files older than X minutes
+- `max_files_per_run` (number, optional) - Maximum files to process per run
+- `response_format` ('json'|'markdown', optional) - Output format
+
+**Cron Expression Examples:**
+| Expression | Schedule |
+|------------|----------|
+| `0 10 * * *` | Daily at 10:00 AM |
+| `*/30 * * * *` | Every 30 minutes |
+| `0 */6 * * *` | Every 6 hours |
+| `0 9 * * 1` | Every Monday at 9:00 AM |
+| `0 0 * * 0` | Weekly on Sunday at midnight |
+
+**Example:**
+```typescript
+// Watch Downloads folder - organize daily at 9am, files must be 5+ minutes old
+file_organizer_watch_directory({
+  directory: "/Users/john/Downloads",
+  schedule: "0 9 * * *",
+  min_file_age_minutes: 5,
+  max_files_per_run: 100
+})
+```
+
+---
+
+#### `file_organizer_unwatch_directory`
+
+Remove a directory from the watch list.
+
+**Parameters:**
+- `directory` (string, required) - Full path to remove from watch list
+- `response_format` ('json'|'markdown', optional) - Output format
+
+---
+
+#### `file_organizer_list_watches`
+
+List all directories currently being watched with their schedules.
+
+**Parameters:**
+- `response_format` ('json'|'markdown', optional) - Output format
+
+**Returns:** List of watched directories with schedules and rules
+
+---
+
 ### Utility Tools
 
 #### `file_organizer_get_categories`
@@ -481,6 +552,36 @@ Result: Clear visibility into space usage with actionable insights
 
 ---
 
+### Workflow 5: Set Up Automatic Organization
+
+```
+User: "Claude, automatically organize my Downloads folder every day at 9am"
+
+Claude:
+1. Sets up watch directory → 
+   file_organizer_watch_directory({
+     directory: "/Users/john/Downloads",
+     schedule: "0 9 * * *",
+     min_file_age_minutes: 5
+   })
+2. Confirms setup → "Downloads folder will be organized daily at 9:00 AM"
+3. Shows current watches → Lists all watched directories
+
+User: "Also watch my Desktop folder every hour"
+
+Claude:
+4. Adds second watch →
+   file_organizer_watch_directory({
+     directory: "/Users/john/Desktop",
+     schedule: "0 * * * *",
+     max_files_per_run: 50
+   })
+
+Result: Automatic background organization with smart scheduling
+```
+
+---
+
 ## <a id="security-configuration"></a>Security Configuration 🔐
 
 ### Security Score: 10/10 🌟
@@ -510,7 +611,7 @@ To prevent accidents, the following are **always blocked**, even if added to con
 
 ### ⚙️ Custom Configuration
 
-You can allow access to additional folders by editing the user configuration file.
+You can customize behavior by editing the user configuration file.
 
 **Config Location:**
 * **Windows:** `%APPDATA%\file-organizer-mcp\config.json`
@@ -526,16 +627,42 @@ You can allow access to additional folders by editing the user configuration fil
       "customAllowedDirectories": [
         "C:\\Users\\Name\\My Special Folder",
         "D:\\Backups"
-      ],
-      "settings": {
-        "maxScanDepth": 10,
-        "logAccess": true
-      }
+      ]
     }
     ```
     > 💡 **Tip:** You can copy a folder path directly from your file explorer's address bar and paste it into `customAllowedDirectories`.
 
 3. Restart Claude Desktop.
+
+### Conflict Strategy
+
+Set your preferred default conflict resolution strategy:
+
+```json
+{
+  "conflictStrategy": "rename"
+}
+```
+
+Available strategies:
+- `"rename"` (default) - Renames new file (e.g., `file (1).txt`)
+- `"skip"` - Keeps existing file, skips new one
+- `"overwrite"` - Replaces existing file (creates backup first)
+
+### Auto-Organize Schedule (Legacy)
+
+Simple schedule configuration (for basic hourly/daily/weekly):
+
+```json
+{
+  "autoOrganize": {
+    "enabled": true,
+    "schedule": "daily"
+  }
+}
+```
+
+For advanced cron-based scheduling, use the `file_organizer_watch_directory` tool.
 
 ### Security Defenses
 

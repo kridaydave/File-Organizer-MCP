@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.1.0] - 2026-02-06
+## [3.1.1] - 2026-02-06
 
 ### ✨ New Features
 - **Interactive Setup Wizard**: New TUI-based setup (`npx file-organizer-mcp --setup`) for easy configuration of folders, conflict strategies, and Claude Desktop integration.
@@ -8,13 +8,19 @@
   - Organization by Year/Month for images and videos.
   - Organization by Artist/Album for audio files.
   - New tool `file_organizer_inspect_metadata` for safe metadata extraction.
-- **File Watching**: 
-  - New tools (`watch_directory`, `unwatch_directory`, `list_watches`) to schedule automatic organization.
-  - Cron-based scheduling support.
+- **Smart Scheduling & Watch Mode**:
+  - New tools: `file_organizer_watch_directory`, `file_organizer_unwatch_directory`, `file_organizer_list_watches`.
+  - Cron-based scheduling for automatic organization (e.g., `"0 10 * * *"` for daily at 10am).
+  - Per-directory configuration with independent schedules.
+  - `min_file_age_minutes` - Skip files newer than X minutes (prevents organizing in-progress downloads).
+  - `max_files_per_run` - Limit files processed per scheduled run.
+  - Hot-reload configuration without server restart.
 - **Batch Renaming**: New powerful `file_organizer_batch_rename` tool.
 
 ### 🛡️ Improvements
-- **Security Check**: Enforced stricter validation for symlink security.
+- **Conflict Strategy**: Configurable default conflict resolution (`rename`/`skip`/`overwrite`) via config.
+- **Security Check**: Enforced stricter validation for symlink security with explicit `lstat` checks.
+- **Config Management**: Deep merge updates preserve existing settings when adding new configuration.
 - **Free Models**: Updated default configuration to prioritize free models.
 
 ### 🐛 Fixed
