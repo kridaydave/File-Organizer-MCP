@@ -105,6 +105,7 @@ await fs.rename(existingFile, backupPath);
 ```
 
 **Limitations:**
+
 - File deletion on Windows uses path-based locking (not file descriptor)
 - Symlinks are blocked for security but may limit legitimate use cases
 
@@ -113,10 +114,10 @@ await fs.rename(existingFile, backupPath);
 ```typescript
 // Security Constants
 const SECURITY_LIMITS = {
-    MAX_FILE_SIZE: 100 * 1024 * 1024,  // 100 MB
-    MAX_FILES: 10000,                   // Per operation
-    MAX_DEPTH: 10,                      // Directory recursion
-    MAX_PATH_LENGTH: 4096               // Characters
+  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100 MB
+  MAX_FILES: 10000, // Per operation
+  MAX_DEPTH: 10, // Directory recursion
+  MAX_PATH_LENGTH: 4096, // Characters
 };
 ```
 
@@ -136,6 +137,7 @@ const SECURITY_LIMITS = {
 ```
 
 **Key Features:**
+
 - Automatic tool discovery from `tools/` directory
 - Structured response formatting (JSON/Markdown)
 - Centralized error handling
@@ -148,21 +150,22 @@ Each tool follows this pattern:
 
 ```typescript
 export const toolDefinition: ToolDefinition = {
-    name: 'tool_name',
-    description: 'What it does',
-    inputSchema: ZodSchema  // Validation
+  name: 'tool_name',
+  description: 'What it does',
+  inputSchema: ZodSchema, // Validation
 };
 
 export async function handleTool(args: ToolArgs): Promise<ToolResponse> {
-    // 1. Validate inputs (Zod)
-    // 2. Validate security (PathValidator)
-    // 3. Call service layer
-    // 4. Format response
-    // 5. Handle errors
+  // 1. Validate inputs (Zod)
+  // 2. Validate security (PathValidator)
+  // 3. Call service layer
+  // 4. Format response
+  // 5. Handle errors
 }
 ```
 
 **Available Tools:**
+
 1.  **List Files in Directory** (`file_organizer_list_files`)
 2.  **Scan Directory for Detailed Info** (`file_organizer_scan_directory`)
 3.  **Categorize Files by Type** (`file_organizer_categorize_files`)
@@ -181,94 +184,97 @@ export async function handleTool(args: ToolArgs): Promise<ToolResponse> {
 **Responsibility:** Core business logic
 
 #### PathValidatorService
+
 ```typescript
 class PathValidatorService {
-    // Multi-layer path validation
-    async validateStrictPath(inputPath: unknown, options?: ValidatePathOptions): Promise<string>
-    
-    // Symlink resolution
-    async resolvePath(path: string): Promise<string>
-    
-    // Containment checking
-    isPathWithinRoots(path: string, roots: string[]): boolean
+  // Multi-layer path validation
+  async validateStrictPath(inputPath: unknown, options?: ValidatePathOptions): Promise<string>;
+
+  // Symlink resolution
+  async resolvePath(path: string): Promise<string>;
+
+  // Containment checking
+  isPathWithinRoots(path: string, roots: string[]): boolean;
 }
 ```
 
 #### OrganizerService
+
 ```typescript
 class OrganizerService {
-    // Generate organization plan
-    async generateOrganizationPlan(
-        directory: string,
-        files: FileWithSize[],
-        strategy?: ConflictStrategy  // 'rename' | 'skip' | 'overwrite' | 'overwrite_if_newer'
-    ): Promise<OrganizationPlan>
-    
-    // Execute organization with safety guarantees
-    async organize(
-        directory: string,
-        files: FileWithSize[],
-        options?: OrganizeOptions
-    ): Promise<OrganizeResult>
-    
-    // Safety mechanisms:
-    // 1. File descriptor validation before move
-    // 2. Atomic copy with COPYFILE_EXCL (race-safe)
-    // 3. Automatic backup to .file-organizer-backups/ on overwrite
-    // 4. Retry loop for race condition recovery
+  // Generate organization plan
+  async generateOrganizationPlan(
+    directory: string,
+    files: FileWithSize[],
+    strategy?: ConflictStrategy // 'rename' | 'skip' | 'overwrite' | 'overwrite_if_newer'
+  ): Promise<OrganizationPlan>;
+
+  // Execute organization with safety guarantees
+  async organize(
+    directory: string,
+    files: FileWithSize[],
+    options?: OrganizeOptions
+  ): Promise<OrganizeResult>;
+
+  // Safety mechanisms:
+  // 1. File descriptor validation before move
+  // 2. Atomic copy with COPYFILE_EXCL (race-safe)
+  // 3. Automatic backup to .file-organizer-backups/ on overwrite
+  // 4. Retry loop for race condition recovery
 }
 ```
 
 #### HashCalculatorService
+
 ```typescript
 class HashCalculatorService {
-    // Streaming hash calculation
-    async calculateHash(filePath: string): Promise<string>
-    
-    // Find duplicates (memory-safe)
-    async findDuplicates(files: FileWithSize[]): Promise<DuplicateGroup[]>
+  // Streaming hash calculation
+  async calculateHash(filePath: string): Promise<string>;
+
+  // Find duplicates (memory-safe)
+  async findDuplicates(files: FileWithSize[]): Promise<DuplicateGroup[]>;
 }
 ```
 
 #### FileScannerService
+
 ```typescript
 class FileScannerService {
-    // Recursive directory scanning
-    async getAllFiles(
-        directory: string,
-        options?: ScanOptions
-    ): Promise<FileWithSize[]>
-    
-    // Size calculation
-    async calculateDirectorySize(directory: string): Promise<number>
+  // Recursive directory scanning
+  async getAllFiles(directory: string, options?: ScanOptions): Promise<FileWithSize[]>;
+
+  // Size calculation
+  async calculateDirectorySize(directory: string): Promise<number>;
 }
 ```
 
 #### CategorizerService
+
 ```typescript
 class CategorizerService {
-    // File categorization
-    getCategory(fileName: string): CategoryName
-    
-    // Custom rules support
-    setCustomRules(rules: CategoryRule[]): void
-    
-    // Category statistics
-    categorizeFiles(files: FileWithSize[]): CategoryBreakdown
+  // File categorization
+  getCategory(fileName: string): CategoryName;
+
+  // Custom rules support
+  setCustomRules(rules: CategoryRule[]): void;
+
+  // Category statistics
+  categorizeFiles(files: FileWithSize[]): CategoryBreakdown;
 }
 ```
 
 #### RollbackService
+
 ```typescript
 class RollbackService {
-    // Create rollback manifest
-    async createManifest(actions: OrganizeAction[]): Promise<string>
-    
-    // Execute rollback
-    async rollback(manifestId: string): Promise<RollbackResult>
-    
-    // List available rollbacks
-    async listRollbacks(): Promise<RollbackManifest[]>
+  // Create rollback manifest
+  async createManifest(actions: OrganizeAction[]): Promise<string>;
+
+  // Execute rollback
+  async rollback(manifestId: string): Promise<RollbackResult>;
+
+  // List available rollbacks
+  async listRollbacks(): Promise<RollbackManifest[]>;
 }
 ```
 
@@ -277,19 +283,20 @@ class RollbackService {
 **Responsibility:** Shared utility functions
 
 #### Logger
+
 ```typescript
 class Logger {
-    // Structured JSON logging to stderr (MCP stdio protocol)
-    debug(message: string, context?: Record<string, any>): void
-    info(message: string, context?: Record<string, any>): void
-    warn(message: string, context?: Record<string, any>): void
-    error(message: string, error?: Error, context?: Record<string, any>): void
-    
-    // Features:
-    // - ISO 8601 timestamps
-    // - Configurable log levels (debug/info/warn/error)
-    // - Error stack traces for error logs
-    // - JSON format for machine parsing
+  // Structured JSON logging to stderr (MCP stdio protocol)
+  debug(message: string, context?: Record<string, any>): void;
+  info(message: string, context?: Record<string, any>): void;
+  warn(message: string, context?: Record<string, any>): void;
+  error(message: string, error?: Error, context?: Record<string, any>): void;
+
+  // Features:
+  // - ISO 8601 timestamps
+  // - Configurable log levels (debug/info/warn/error)
+  // - Error stack traces for error logs
+  // - JSON format for machine parsing
 }
 ```
 
@@ -303,13 +310,11 @@ class Logger {
 
 ```typescript
 // Example: Path validation
-export const PathSchema = z.string()
-    .min(1, 'Path cannot be empty')
-    .max(4096, 'Path exceeds maximum length')
-    .refine(
-        (path) => !path.includes('\0'),
-        'Path contains null bytes'
-    );
+export const PathSchema = z
+  .string()
+  .min(1, 'Path cannot be empty')
+  .max(4096, 'Path exceeds maximum length')
+  .refine((path) => !path.includes('\0'), 'Path contains null bytes');
 ```
 
 ## 🔄 Data Flow
@@ -460,43 +465,44 @@ stream.on('data', (chunk) => hash.update(chunk));
 The server uses a platform-aware configuration system that combines hardcoded defaults with user customization.
 
 **Structure:**
+
 ```typescript
 export const CONFIG = {
-    VERSION: '3.0.0',
-    
-    security: {
-        enablePathValidation: true,
-        allowCustomDirectories: true,
-        logAccess: true,
-        maxScanDepth: 10,
-        maxFilesPerOperation: 10000
-    },
-    
-    paths: {
-        defaultAllowed: getDefaultAllowedDirs(),    // Platform-aware safe directories
-        customAllowed: loadCustomAllowedDirs(),     // User-defined from config.json
-        alwaysBlocked: getAlwaysBlockedPatterns()   // System protection patterns
-    }
+  VERSION: '3.0.0',
+
+  security: {
+    enablePathValidation: true,
+    allowCustomDirectories: true,
+    logAccess: true,
+    maxScanDepth: 10,
+    maxFilesPerOperation: 10000,
+  },
+
+  paths: {
+    defaultAllowed: getDefaultAllowedDirs(), // Platform-aware safe directories
+    customAllowed: loadCustomAllowedDirs(), // User-defined from config.json
+    alwaysBlocked: getAlwaysBlockedPatterns(), // System protection patterns
+  },
 };
 ```
 
 **Default Allowed Directories:**
+
 - **Windows:** Desktop, Documents, Downloads, Pictures, Videos, Music, OneDrive, Projects
 - **macOS:** Desktop, Documents, Downloads, Movies, Music, Pictures, iCloud Drive, Projects
 - **Linux:** Desktop, Documents, Downloads, Music, Pictures, Videos, ~/dev, ~/workspace
 
 **User Configuration:**
+
 - **Windows:** `%APPDATA%\file-organizer-mcp\config.json`
 - **macOS:** `~/Library/Application Support/file-organizer-mcp/config.json`
 - **Linux:** `~/.config/file-organizer-mcp/config.json`
 
 **Config File Format:**
+
 ```json
 {
-  "customAllowedDirectories": [
-    "C:\\Users\\Name\\CustomFolder",
-    "D:\\Projects"
-  ],
+  "customAllowedDirectories": ["C:\\Users\\Name\\CustomFolder", "D:\\Projects"],
   "settings": {
     "maxScanDepth": 10,
     "logAccess": true
@@ -511,10 +517,10 @@ export const CONFIG = {
 ```typescript
 // Services receive dependencies via constructor
 class OrganizerService {
-    constructor(
-        private categorizer: CategorizerService,
-        private rollback?: RollbackService
-    ) {}
+  constructor(
+    private categorizer: CategorizerService,
+    private rollback?: RollbackService
+  ) {}
 }
 ```
 
@@ -523,9 +529,9 @@ class OrganizerService {
 ```typescript
 // Centralized error handling
 try {
-    const result = await operation();
+  const result = await operation();
 } catch (error) {
-    return createErrorResponse(error);
+  return createErrorResponse(error);
 }
 ```
 
@@ -534,8 +540,8 @@ try {
 ```typescript
 // Strict types with Zod runtime validation
 const ArgsSchema = z.object({
-    directory: PathSchema,
-    dry_run: z.boolean().optional()
+  directory: PathSchema,
+  dry_run: z.boolean().optional(),
 });
 
 type Args = z.infer<typeof ArgsSchema>;
@@ -547,9 +553,9 @@ type Args = z.infer<typeof ArgsSchema>;
 
 ```json
 {
-    "timestamp": "2026-02-02T14:09:04.413Z",
-    "level": "info",
-    "message": "Created rollback manifest: uuid (6 actions)"
+  "timestamp": "2026-02-02T14:09:04.413Z",
+  "level": "info",
+  "message": "Created rollback manifest: uuid (6 actions)"
 }
 ```
 

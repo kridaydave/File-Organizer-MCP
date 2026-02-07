@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.1.4] - 2026-02-07
+
+### 📝 Documentation
+
+- **Fixed**: Corrected Prettier and Markdown lint errors across all documentation files.
+- **Badges**: Updated README badges for v3.1.4 and current test status.
+
+### 🛡️ Security & Integrity
+
+- **Source Code**: Fixed code linting warnings (`prefer-const` and unused `eslint-disable` directives).
+- **Cleanup**: Removed unneeded temporary/log files for a cleaner project structure.
+
 ## [3.1.3] - 2026-02-06
 
 ### 📝 Documentation

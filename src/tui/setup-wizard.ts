@@ -1,51 +1,242 @@
-import { input, confirm, select, checkbox } from '@inquirer/prompts';
+#!/usr/bin/env node
+
+/**
+ * File Organizer MCP - Streamlined Setup Wizard
+ * 
+ * User-friendly setup that:
+ * 1. Auto-detects installed MCP clients
+ * 2. Lets users select which clients to configure
+ * 3. Auto-installs dependencies
+ * 4. Configures everything with minimal user input
+ */
+
+import { input, confirm, select, checkbox, Separator } from '@inquirer/prompts';
+import { fileURLToPath } from 'url';
 import chalk from 'chalk';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
+import { execSync } from 'child_process';
 import { updateUserConfig, getUserConfigPath, loadUserConfig, type UserConfig } from '../config.js';
+import { detectMCPClients, writeClientConfig, type MCPClient } from './client-detector.js';
 
 interface SetupAnswers {
   folders: string[];
   customFolders: string[];
-  autoOrganize: boolean;
   conflictStrategy: 'rename' | 'skip' | 'overwrite';
-  generateClaudeConfig: boolean;
+  selectedClients: string[];
 }
 
-interface ClaudeDesktopConfig {
-  mcpServers?: Record<string, {
-    command: string;
-    args: string[];
-    env?: Record<string, string>;
-  }>;
+// Color scheme for better UX
+const colors = {
+  primary: chalk.cyan,
+  success: chalk.green,
+  warning: chalk.yellow,
+  error: chalk.red,
+  info: chalk.blue,
+  muted: chalk.gray,
+  bold: chalk.bold,
+};
+
+/**
+ * Print the welcome banner
+ */
+function printWelcomeBanner(): void {
+  console.clear();
+  console.log(colors.primary.bold('╔════════════════════════════════════════════════════════════════╗'));
+  console.log(colors.primary.bold('║                                                                ║'));
+  console.log(colors.primary.bold('║              🗂️  File Organizer MCP Server                    ║'));
+  console.log(colors.primary.bold('║                                                                ║'));
+  console.log(colors.primary.bold('║     Organize your files automatically with AI assistance       ║'));
+  console.log(colors.primary.bold('║                                                                ║'));
+  console.log(colors.primary.bold('╚════════════════════════════════════════════════════════════════╝'));
+  console.log();
+}
+
+/**
+ * Print a section header
+ */
+function printSection(title: string, icon: string = ''): void {
+  console.log();
+  console.log(colors.warning.bold(`${icon} ${title}`));
+  console.log(colors.muted('─'.repeat(60)));
+}
+
+/**
+ * Print a success message
+ */
+function printSuccess(message: string): void {
+  console.log(colors.success(`  ✓ ${message}`));
+}
+
+/**
+ * Print an info message
+ */
+function printInfo(message: string): void {
+  console.log(colors.info(`  ℹ ${message}`));
+}
+
+/**
+ * Print a step indicator
+ */
+function printStep(step: number, total: number, message: string): void {
+  console.log();
+  console.log(colors.primary.bold(`Step ${step}/${total}: ${message}`));
+}
+
+/**
+ * Check if dependencies are installed
+ */
+function checkDependencies(): boolean {
+  const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+  const nodeModulesPath = path.join(packageRoot, 'node_modules');
+  
+  const criticalDeps = ['@modelcontextprotocol/sdk', 'chalk', 'node-cron'];
+  return criticalDeps.every(dep => 
+    fs.existsSync(path.join(nodeModulesPath, dep))
+  );
+}
+
+/**
+ * Install dependencies
+ */
+async function installDependencies(): Promise<boolean> {
+  const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+  
+  printInfo('Installing dependencies (this may take a minute)...');
+  
+  try {
+    execSync('npm install', { 
+      cwd: packageRoot, 
+      stdio: 'pipe',
+      timeout: 120000,
+    });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Check and install if TypeScript build is needed
+ */
+async function ensureBuild(): Promise<boolean> {
+  const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+  const distPath = path.join(packageRoot, 'dist', 'index.js');
+  
+  if (fs.existsSync(distPath)) {
+    return true;
+  }
+
+  printInfo('Building the application...');
+  
+  try {
+    execSync('npm run build', { 
+      cwd: packageRoot, 
+      stdio: 'pipe',
+      timeout: 60000,
+    });
+    printSuccess('Build complete!');
+    return true;
+  } catch (error) {
+    console.log(colors.error('  ✗ Build failed. Please run "npm run build" manually.'));
+    return false;
+  }
 }
 
 /**
  * Start the interactive setup wizard
  */
 export async function startSetupWizard(): Promise<void> {
-  console.clear();
-  console.log(chalk.cyan.bold('╔════════════════════════════════════════════════════════╗'));
-  console.log(chalk.cyan.bold('║     File Organizer MCP - Setup Wizard                  ║'));
-  console.log(chalk.cyan.bold('╚════════════════════════════════════════════════════════╝'));
-  console.log();
-  console.log(chalk.gray('This wizard will help you configure the File Organizer MCP server.'));
-  console.log();
+  printWelcomeBanner();
+
+  // Step 0: Check and install dependencies
+  printStep(0, 4, 'Checking installation...');
+  
+  if (!checkDependencies()) {
+    printInfo('Some dependencies are missing. Installing now...');
+    const depsInstalled = await installDependencies();
+    if (!depsInstalled) {
+      console.log(colors.error('\n✗ Failed to install dependencies. Please try:'));
+      console.log(colors.info('  npm install'));
+      process.exit(1);
+    }
+    printSuccess('Dependencies installed!');
+  }
+
+  // Ensure the app is built
+  const built = await ensureBuild();
+  if (!built) {
+    process.exit(1);
+  }
 
   try {
     const answers = await promptUser();
     await applyConfiguration(answers);
 
+    printWelcomeBanner();
+    console.log(colors.success.bold('🎉 Setup Complete!'));
     console.log();
-    console.log(chalk.green.bold('✓ Setup complete!'));
+    console.log(colors.muted('Your file organizer is ready to use. You can:'));
     console.log();
-    console.log(chalk.gray('You can re-run this wizard anytime with:'));
-    console.log(chalk.cyan('  npx file-organizer-mcp --setup'));
+    console.log(colors.info('  1. Open your AI client (Claude, Cursor, etc.)'));
+    console.log(colors.info('  2. Try saying: "Organize my Downloads folder"'));
+    console.log(colors.info('  3. Or: "Find duplicate files in my Documents"'));
+    console.log();
+    console.log(colors.muted('To re-run this setup anytime:'));
+    console.log(colors.primary('  npx file-organizer-mcp --setup'));
+    console.log();
   } catch (error) {
-    console.error(chalk.red('Setup failed:'), (error as Error).message);
+    if ((error as Error).message.includes('User force closed')) {
+      console.log(colors.muted('\n\nSetup cancelled. You can re-run it anytime.'));
+      process.exit(0);
+    }
+    console.error(colors.error('\n✗ Setup failed:'), (error as Error).message);
     process.exit(1);
   }
+}
+
+/**
+ * Detect and display MCP clients
+ */
+async function detectAndSelectClients(): Promise<string[]> {
+  printSection('Detecting AI Clients', '🤖');
+  
+  printInfo('Scanning for installed MCP-compatible clients...');
+  const detection = detectMCPClients();
+  
+  const installedClients = detection.clients.filter(c => c.installed);
+  const availableClients = detection.clients.filter(c => !c.installed);
+
+  if (installedClients.length === 0) {
+    console.log(colors.warning('\n  No MCP clients detected on your system.'));
+    console.log(colors.muted('\n  Don\'t worry! You can still use the file organizer.'));
+    console.log(colors.muted('  Popular options:'));
+    console.log(colors.info('    • Claude Desktop - https://claude.ai/download'));
+    console.log(colors.info('    • Cursor - https://cursor.com'));
+    console.log(colors.info('    • Cline (VS Code extension)'));
+    return [];
+  }
+
+  console.log();
+  console.log(colors.success(`  Found ${installedClients.length} client(s):`));
+  
+  for (const client of installedClients) {
+    console.log(colors.success(`    ${client.icon} ${client.name}`));
+  }
+
+  console.log();
+  const selectedClients = await checkbox({
+    message: 'Select which clients to configure (Space to select, Enter to confirm):',
+    choices: installedClients.map(client => ({
+      name: `${client.icon} ${client.name}`,
+      value: client.id,
+      description: client.description,
+      checked: true,
+    })),
+  });
+
+  return selectedClients;
 }
 
 /**
@@ -54,7 +245,10 @@ export async function startSetupWizard(): Promise<void> {
 async function promptUser(): Promise<SetupAnswers> {
   const home = os.homedir();
 
-  // Predefined folder options
+  // Step 1: Select folders to organize
+  printStep(1, 4, 'Choose folders to organize');
+  
+  // Predefined folder options - only show existing ones
   const folderOptions = [
     { name: 'Desktop', value: path.join(home, 'Desktop') },
     { name: 'Downloads', value: path.join(home, 'Downloads') },
@@ -64,10 +258,12 @@ async function promptUser(): Promise<SetupAnswers> {
     { name: 'Music', value: path.join(home, 'Music') },
   ].filter(option => fs.existsSync(option.value));
 
-  // Select folders to organize
-  console.log(chalk.yellow.bold('📁 Step 1: Select folders to organize'));
+  if (folderOptions.length === 0) {
+    console.log(colors.warning('  No standard folders found. You can add custom folders.'));
+  }
+
   const selectedFolders = await checkbox({
-    message: 'Choose folders to organize (Space to select, Enter to confirm):',
+    message: 'Select folders to organize:',
     choices: folderOptions.map(option => ({
       name: option.name,
       value: option.value,
@@ -77,79 +273,98 @@ async function promptUser(): Promise<SetupAnswers> {
 
   // Custom folders
   const customFolders: string[] = [];
-  let addCustom = true;
-
-  while (addCustom) {
+  
+  while (true) {
     const addMore = await confirm({
-      message: 'Would you like to add a custom folder path?',
+      message: 'Add a custom folder?',
       default: false,
     });
 
     if (!addMore) break;
 
     const customPath = await input({
-      message: 'Enter the full path to the custom folder:',
+      message: 'Enter the full folder path:',
       validate: (value) => {
         if (!value.trim()) return 'Please enter a path';
         if (!fs.existsSync(value)) return 'Path does not exist';
-        if (!fs.statSync(value).isDirectory()) return 'Path is not a directory';
+        if (!fs.statSync(value).isDirectory()) return 'Path is not a folder';
         return true;
       },
     });
 
     customFolders.push(customPath);
-    console.log(chalk.green(`  Added: ${customPath}`));
+    printSuccess(`Added: ${customPath}`);
   }
 
-  // Auto-organize schedule
-  console.log();
-  console.log(chalk.yellow.bold('⏰ Step 2: Auto-organize schedule'));
-  const autoOrganize = await confirm({
-    message: 'Enable automatic organization on a schedule?',
-    default: false,
-  });
-
-  // Conflict strategy
-  console.log();
-  console.log(chalk.yellow.bold('⚡ Step 3: Conflict resolution strategy'));
-  console.log(chalk.gray('What should happen when a file with the same name already exists?'));
-
+  // Step 2: Conflict strategy (simplified)
+  printStep(2, 4, 'Choose how to handle duplicate files');
+  
+  console.log(colors.muted('\n  What happens when a file with the same name exists?'));
+  
   const conflictStrategy = await select<'rename' | 'skip' | 'overwrite'>({
-    message: 'Select conflict strategy:',
+    message: 'Select option:',
     choices: [
       {
-        name: 'rename - Rename the new file (e.g., file (1).txt)',
+        name: 'Rename the new file (safest)',
         value: 'rename',
-        description: 'Safest option - keeps all files',
+        description: 'Example: file.txt becomes "file (1).txt"',
       },
       {
-        name: 'skip - Skip the file and keep the existing one',
+        name: 'Skip the new file',
         value: 'skip',
-        description: 'Preserves existing files only',
+        description: 'Keep the existing file only',
       },
       {
-        name: 'overwrite - Replace the existing file',
+        name: 'Overwrite the existing file',
         value: 'overwrite',
-        description: 'Use with caution - data loss risk',
+        description: 'Replaces old file (backup created automatically)',
       },
     ],
     default: 'rename',
   });
 
-  // Claude Desktop config
+  // Step 3: Detect and select MCP clients
+  const selectedClients = await detectAndSelectClients();
+
+  // Step 4: Review
+  printStep(4, 4, 'Review your settings');
+  
+  const allFolders = [...selectedFolders, ...customFolders];
+  
   console.log();
-  console.log(chalk.yellow.bold('🤖 Step 4: Claude Desktop integration'));
-  const generateClaudeConfig = await confirm({
-    message: 'Generate/update claude_desktop_config.json?',
+  console.log(colors.muted('Folders to organize:'));
+  if (allFolders.length > 0) {
+    allFolders.forEach(f => console.log(colors.info(`  • ${f}`)));
+  } else {
+    console.log(colors.warning('  (none selected - will use defaults)'));
+  }
+  
+  console.log();
+  console.log(colors.muted('Conflict strategy:'));
+  console.log(colors.info(`  ${conflictStrategy === 'rename' ? '✨ Rename new files' : conflictStrategy === 'skip' ? '⏭️ Skip duplicates' : '📝 Overwrite existing'}`));
+  
+  console.log();
+  console.log(colors.muted('AI clients to configure:'));
+  if (selectedClients.length > 0) {
+    selectedClients.forEach(c => console.log(colors.info(`  • ${c}`)));
+  } else {
+    console.log(colors.warning('  (none selected)'));
+  }
+
+  const confirmed = await confirm({
+    message: '\nSave these settings?',
     default: true,
   });
+
+  if (!confirmed) {
+    throw new Error('Setup cancelled by user');
+  }
 
   return {
     folders: selectedFolders,
     customFolders,
-    autoOrganize,
     conflictStrategy,
-    generateClaudeConfig,
+    selectedClients,
   };
 }
 
@@ -158,7 +373,7 @@ async function promptUser(): Promise<SetupAnswers> {
  */
 async function applyConfiguration(answers: SetupAnswers): Promise<void> {
   console.log();
-  console.log(chalk.blue.bold('💾 Applying configuration...'));
+  printSection('Saving configuration...', '💾');
 
   // Merge all folders
   const allFolders = [...answers.folders, ...answers.customFolders];
@@ -167,101 +382,31 @@ async function applyConfiguration(answers: SetupAnswers): Promise<void> {
   const configUpdate: Partial<UserConfig> = {
     customAllowedDirectories: allFolders,
     conflictStrategy: answers.conflictStrategy,
-    autoOrganize: {
-      enabled: answers.autoOrganize,
-      schedule: answers.autoOrganize ? 'daily' : undefined,
-    },
   };
 
   updateUserConfig(configUpdate);
-  console.log(chalk.green(`  ✓ Saved configuration to ${getUserConfigPath()}`));
+  printSuccess(`Settings saved to ${getUserConfigPath()}`);
 
-  // Generate Claude Desktop config if requested
-  if (answers.generateClaudeConfig) {
-    await generateClaudeDesktopConfig();
-  }
-}
-
-/**
- * Generate or update Claude Desktop configuration
- */
-async function generateClaudeDesktopConfig(): Promise<void> {
-  const configDir = getClaudeConfigDir();
-  const configPath = path.join(configDir, 'claude_desktop_config.json');
-
-  let existingConfig: ClaudeDesktopConfig = {};
-
-  // Read existing config if it exists
-  if (fs.existsSync(configPath)) {
-    try {
-      const data = fs.readFileSync(configPath, 'utf-8');
-      existingConfig = JSON.parse(data);
-      console.log(chalk.gray(`  Found existing Claude Desktop config`));
-    } catch {
-      console.log(chalk.yellow(`  Warning: Could not parse existing config, creating new one`));
+  // Configure selected clients
+  if (answers.selectedClients.length > 0) {
+    printSection('Configuring AI clients...', '🤖');
+    
+    const detection = detectMCPClients();
+    
+    for (const clientId of answers.selectedClients) {
+      const client = detection.clients.find(c => c.id === clientId);
+      if (client) {
+        const result = await writeClientConfig(client);
+        if (result.success) {
+          printSuccess(`${client.icon} ${client.name} configured`);
+        } else {
+          console.log(colors.error(`  ✗ ${client.name}: ${result.message}`));
+        }
+      }
     }
   }
-
-  // Build the MCP server entry
-  const serverEntry = buildServerEntry();
-
-  // Merge with existing config
-  const newConfig: ClaudeDesktopConfig = {
-    ...existingConfig,
-    mcpServers: {
-      ...existingConfig.mcpServers,
-      'file-organizer': serverEntry,
-    },
-  };
-
-  // Ensure directory exists
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-
-  // Write config
-  fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
-  console.log(chalk.green(`  ✓ Updated Claude Desktop config at ${configPath}`));
 }
 
-/**
- * Get Claude Desktop config directory based on OS
- */
-function getClaudeConfigDir(): string {
-  const platform = os.platform();
-  const home = os.homedir();
-
-  if (platform === 'win32') {
-    // Windows: %APPDATA%\Claude
-    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    return path.join(appData, 'Claude');
-  } else if (platform === 'darwin') {
-    // macOS: ~/Library/Application Support/Claude
-    return path.join(home, 'Library', 'Application Support', 'Claude');
-  } else {
-    // Linux: ~/.config/Claude
-    return path.join(home, '.config', 'Claude');
-  }
-}
-
-/**
- * Build the server entry for Claude Desktop config
- */
-function buildServerEntry(): { command: string; args: string[]; env?: Record<string, string> } {
-  // Determine if running from npx or local
-  const isNpx = process.argv[1]?.includes('npx') || false;
-
-  if (isNpx || process.env.NODE_ENV === 'production') {
-    // Production: use npx
-    return {
-      command: 'npx',
-      args: ['-y', 'file-organizer-mcp'],
-    };
-  } else {
-    // Development: use node directly
-    return {
-      command: 'node',
-      args: [path.resolve(process.cwd(), 'dist/index.js')],
-    };
-  }
-}
+export default {
+  startSetupWizard,
+};

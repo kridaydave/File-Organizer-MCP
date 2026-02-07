@@ -1,13 +1,13 @@
 {
   "name": "file-organizer-mcp",
-  "version": "3.1.3",
+  "version": "3.1.4",
   "description": "Intelligent file organization MCP server for Claude with security-hardened operations, auto-categorization, and duplicate detection",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "file-organizer-mcp": "./dist/index.js",
-    "file-organizer": "./dist/index.js",
-    "file-organizer-setup": "./dist/tui/index.js"
+    "file-organizer-mcp": "./bin/file-organizer-mcp.mjs",
+    "file-organizer": "./bin/file-organizer-mcp.mjs",
+    "file-organizer-setup": "./bin/file-organizer-setup.mjs"
   },
   "scripts": {
     "build": "tsc",
@@ -19,14 +19,15 @@
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "test:security": "node dist/tests/test-security.js",
     "setup": "node dist/tui/index.js",
-    "postinstall": "node scripts/postinstall.js",
+    "postinstall": "node scripts/postinstall.cjs",
+    "prepare": "node scripts/prepare.cjs",
+    "prepublishOnly": "npm run clean && npm run build && npm test",
     "test:phase1": "node dist/tests/test-phase1.js",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
     "docs:generate": "node scripts/generate-docs.js",
-    "clean": "rimraf dist",
-    "prepublishOnly": "npm run clean && npm run build && npm test"
+    "clean": "rimraf dist"
   },
   "keywords": [
     "mcp",
@@ -83,8 +84,10 @@
     "node": ">=18.0.0"
   },
   "files": [
+    "bin",
     "dist",
-    "scripts/postinstall.js",
+    "scripts/postinstall.cjs",
+    "scripts/prepare.cjs",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",

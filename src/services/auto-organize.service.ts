@@ -7,7 +7,8 @@
  */
 
 import cron from 'node-cron';
-import fs from 'fs/promises';
+import fs, { existsSync } from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 import { FileScannerService } from './file-scanner.service.js';
 import { OrganizerService } from './organizer.service.js';
@@ -31,18 +32,37 @@ export class AutoOrganizeService {
   /**
    * Start the auto-organize scheduler
    * Loads watch list from config and creates cron tasks
+   * @returns Result object with success status, task count, and any errors
    */
-  start(): void {
+  start(): { success: boolean; taskCount: number; errors: string[] } {
+    const errors: string[] = [];
+
     if (this.tasks.size > 0) {
-      logger.warn('Auto-organize scheduler already running');
-      return;
+      const msg = 'Auto-organize scheduler already running';
+      logger.warn(msg);
+      return { success: true, taskCount: this.tasks.size, errors: [msg] };
     }
 
     logger.info('Starting smart auto-organize scheduler...');
 
-    this.reloadTasks();
+    const result = this.reloadTasks();
+    errors.push(...result.errors);
 
-    logger.info(`Started ${this.tasks.size} scheduled task(s)`);
+    if (result.taskCount === 0 && result.errors.length === 0) {
+      const noTasksMsg = 'No directories configured for auto-organize';
+      logger.info(noTasksMsg);
+      errors.push(noTasksMsg);
+    }
+
+    if (result.taskCount > 0) {
+      logger.info(`Started ${result.taskCount} scheduled task(s)`);
+    }
+
+    return {
+      success: result.taskCount > 0 || result.errors.length === 0,
+      taskCount: result.taskCount,
+      errors,
+    };
   }
 
   /**
@@ -65,8 +85,11 @@ export class AutoOrganizeService {
 
   /**
    * Reload tasks from config (useful when config changes)
+   * @returns Result object with task count and any errors encountered
    */
-  reloadTasks(): void {
+  reloadTasks(): { taskCount: number; errors: string[] } {
+    const errors: string[] = [];
+
     // Stop existing tasks
     for (const task of this.tasks.values()) {
       task.stop();
@@ -101,18 +124,42 @@ export class AutoOrganizeService {
     for (const watch of watchList) {
       if (!watch.rules.auto_organize) continue;
 
-      if (!cron.validate(watch.schedule)) {
-        logger.error(`Invalid cron expression "${watch.schedule}" for ${watch.directory}`);
+      try {
+        if (!existsSync(watch.directory)) {
+          const errorMsg = `Directory does not exist: ${watch.directory}`;
+          logger.error(errorMsg);
+          errors.push(errorMsg);
+          continue;
+        }
+      } catch (error) {
+        const errorMsg = `Cannot access directory ${watch.directory}: ${error}`;
+        logger.error(errorMsg);
+        errors.push(errorMsg);
         continue;
       }
 
-      const task = cron.schedule(watch.schedule, async () => {
-        await this.runOrganization(watch);
-      });
+      if (!cron.validate(watch.schedule)) {
+        const errorMsg = `Invalid cron expression "${watch.schedule}" for ${watch.directory}. Use format like "0 9 * * *" (daily at 9am) or "0 * * * *" (hourly)`;
+        logger.error(errorMsg);
+        errors.push(errorMsg);
+        continue;
+      }
 
-      this.tasks.set(watch.directory, task);
-      logger.info(`Scheduled "${watch.directory}" with cron: ${watch.schedule}`);
+      try {
+        const task = cron.schedule(watch.schedule, async () => {
+          await this.runOrganization(watch);
+        });
+
+        this.tasks.set(watch.directory, task);
+        logger.info(`Scheduled "${watch.directory}" with cron: ${watch.schedule}`);
+      } catch (error) {
+        const errorMsg = `Failed to schedule task for ${watch.directory}: ${error}`;
+        logger.error(errorMsg);
+        errors.push(errorMsg);
+      }
     }
+
+    return { taskCount: this.tasks.size, errors };
   }
 
   /**
@@ -220,7 +267,7 @@ export class AutoOrganizeService {
 
     for (const file of files) {
       try {
-        const stats = await fs.stat(file.path);
+        const stats = await fsPromises.stat(file.path);
         const fileAge = now - stats.mtime.getTime();
 
         if (fileAge >= minAgeMs) {
@@ -291,12 +338,13 @@ let globalScheduler: AutoOrganizeService | null = null;
 
 /**
  * Initialize and start the global auto-organize scheduler
+ * @returns Result object with success status, task count, and any errors
  */
-export function startAutoOrganizeScheduler(): void {
+export function startAutoOrganizeScheduler(): { success: boolean; taskCount: number; errors: string[] } {
   if (!globalScheduler) {
     globalScheduler = new AutoOrganizeService();
   }
-  globalScheduler.start();
+  return globalScheduler.start();
 }
 
 /**

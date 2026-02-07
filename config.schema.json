@@ -1,4 +1,3 @@
-// config.schema.json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "File Organizer Config",
@@ -22,11 +21,21 @@
       "items": {
         "type": "object",
         "properties": {
-          "pattern": { "type": "string" },
-          "destination": { "type": "string" },
-          "overwrite": { "type": "boolean", "default": false }
+          "pattern": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": false
+          }
         },
-        "required": ["pattern", "destination"]
+        "required": [
+          "pattern",
+          "destination"
+        ]
       }
     }
   }

@@ -1,17 +1,17 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.1.3 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.1.4 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
 [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
 ---
 
-[![npm version](https://img.shields.io/badge/npm-v3.1.3-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v3.1.4-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-209%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-211%20passing-success.svg)](tests/)
 
 > **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
 
@@ -21,58 +21,52 @@
 
 ## <a id="quick-start"></a>Quick Start 🚀
 
-### Installation
+### One-Command Setup (Recommended)
+
+Just run this single command and follow the interactive prompts:
 
 ```bash
-# Option 1: Install globally
-npm install -g file-organizer-mcp
-
-# Option 2: Use npx (no installation)
-npx file-organizer-mcp
-
-# Option 3: Run the interactive setup wizard (Recommended)
 npx file-organizer-mcp --setup
 ```
 
-### Claude Desktop Configuration
+That's it! The wizard will:
 
-Add to `claude_desktop_config.json`:
+- ✅ Auto-detect your installed AI clients (Claude Desktop, Cursor, Windsurf, Cline, etc.)
+- ✅ Configure them automatically with one click
+- ✅ Let you choose which folders to organize
+- ✅ Set up your preferences
 
-**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`  
-**macOS:** `$HOME/Library/Application Support/Claude/claude_desktop_config.json`  
-**Linux:** `$HOME/.config/Claude/claude_desktop_config.json`
+### What You'll Need
 
-```json
-{
-  "mcpServers": {
-    "file-organizer": {
-      "command": "npx",
-      "args": ["path/to/file-organizer-mcp"]
-    }
-  }
-}
-```
+- [Node.js 18+](https://nodejs.org/) (only requirement!)
 
-> 💡 **Local models:** For LM Studio, Ollama, OpenRouter, etc., see the [Local-Model-Configs folder](Local-Model-Configs/) for ready-made configurations.
+### First Time Using an MCP Server?
 
-### First Steps
+1. **Install** - Run the command above
+2. **Select clients** - Pick which AI apps you want to use (Claude, Cursor, etc.)
+3. **Choose folders** - Select Downloads, Desktop, Documents, etc.
+4. **Done!** - Start chatting with your AI about files
 
-1. **Run the Setup Wizard (Recommended)**
+Try these commands in your AI client:
 
-   ```bash
-   npx file-organizer-mcp --setup
-   ```
+- `"Organize my Downloads folder"`
+- `"Find duplicate files in my Documents"`
+- `"Show me my largest files"`
 
-   This interactive wizard helps you:
-   - Select folders to organize
-   - Set your preferred conflict strategy
-   - Configure auto-organize schedules
-   - Generate Claude Desktop config
+### Supported AI Clients
 
-2. **Restart Claude Desktop**
-3. Try: `"Scan my Downloads folder"`
-4. Then: `"Show me the largest files"`
-5. Finally: `"Organize my files — preview first"`
+The setup wizard auto-detects and configures:
+
+| Client                 | Platform            | Auto-Config |
+| ---------------------- | ------------------- | ----------- |
+| **Claude Desktop**     | Windows, Mac        | ✅ Yes      |
+| **Cursor**             | Windows, Mac, Linux | ✅ Yes      |
+| **Windsurf**           | Windows, Mac        | ✅ Yes      |
+| **Cline** (VS Code)    | All platforms       | ✅ Yes      |
+| **Roo Code** (VS Code) | All platforms       | ✅ Yes      |
+| **Continue** (VS Code) | All platforms       | ✅ Yes      |
+
+> 💡 **Don't see your client?** The file organizer works with any MCP-compatible client. Check your client's documentation for manual configuration.
 
 ---
 
@@ -385,13 +379,14 @@ Files will be automatically organized based on the schedule you set.
 - `response_format` ('json'|'markdown', optional) - Output format
 
 **Cron Expression Examples:**
-| Expression | Schedule |
-|------------|----------|
-| `0 10 * * *` | Daily at 10:00 AM |
-| `*/30 * * * *` | Every 30 minutes |
-| `0 */6 * * *` | Every 6 hours |
-| `0 9 * * 1` | Every Monday at 9:00 AM |
-| `0 0 * * 0` | Weekly on Sunday at midnight |
+
+| Expression     | Schedule                     |
+| -------------- | ---------------------------- |
+| `0 10 * * *`   | Daily at 10:00 AM            |
+| `*/30 * * * *` | Every 30 minutes             |
+| `0 */6 * * *`  | Every 6 hours                |
+| `0 9 * * 1`    | Every Monday at 9:00 AM      |
+| `0 0 * * 0`    | Weekly on Sunday at midnight |
 
 **Example:**
 

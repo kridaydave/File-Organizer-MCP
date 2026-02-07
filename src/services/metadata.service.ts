@@ -99,7 +99,6 @@ export class MetadataService {
             // Using require-like logic or just trying.
             // Note: exif-parser is old (2012) and purely JS.
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const parser = (ExifParser as any).create(buffer.subarray(0, bytesRead));
             const result = parser.parse();
 
@@ -146,7 +145,6 @@ export class MetadataService {
         if (!trimmed) return undefined;
 
         // Replace illegal chars
-        // eslint-disable-next-line no-control-regex
         const sanitized = trimmed.replace(/[\\/:*?"<>|\x00-\x1F]/g, '_');
 
         // Prevent strictly reserved names if it's the whole segment (though unlikely for Artist names)

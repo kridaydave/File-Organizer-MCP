@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * File Organizer MCP Server v3.1.3
+ * File Organizer MCP Server v3.1.4
  *
  * A powerful, security-hardened Model Context Protocol server for intelligent file organization.
  * Features 7-layer path validation, file categorization, duplicate detection, and more.
@@ -12,9 +12,118 @@
  *   npx file-organizer-mcp --version    - Show version
  *   npx file-organizer-mcp --help       - Show help
  *
- * @version 3.1.3
+ * @version 3.1.4
  * @license MIT
  */
+
+// ==================== PRE-FLIGHT CHECKS ====================
+// These run before any imports to catch installation issues early
+
+// Node.js version check
+const MIN_NODE_VERSION = 18;
+const currentNodeVersion = process.versions.node;
+const majorVersion = parseInt(currentNodeVersion.split('.')[0] || '0', 10);
+
+if (majorVersion < MIN_NODE_VERSION) {
+  console.error(`
+╔══════════════════════════════════════════════════════════════════╗
+║  ERROR: Node.js version ${currentNodeVersion.padEnd(8)} is not supported                ║
+╠══════════════════════════════════════════════════════════════════╣
+║  File Organizer MCP requires Node.js ${MIN_NODE_VERSION} or higher                          ║
+║                                                                  ║
+║  To upgrade:                                                     ║
+║    • Visit: https://nodejs.org/                                  ║
+║    • Or use a version manager:                                   ║
+║      - nvm (Linux/Mac): nvm install ${MIN_NODE_VERSION} && nvm use ${MIN_NODE_VERSION}                   ║
+║      - nvm-windows: nvm install ${MIN_NODE_VERSION}.0.0 && nvm use ${MIN_NODE_VERSION}.0.0            ║
+╚══════════════════════════════════════════════════════════════════╝
+  `.trim());
+  process.exit(1);
+}
+
+// Installation integrity check
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Check if dist files exist
+const distPath = path.resolve(__dirname, '..', 'dist');
+const distIndexPath = path.join(distPath, 'index.js');
+const distServerPath = path.join(distPath, 'server.js');
+
+if (!fs.existsSync(distIndexPath) || !fs.existsSync(distServerPath)) {
+  const packageRoot = path.resolve(__dirname, '..');
+  console.error(`
+╔══════════════════════════════════════════════════════════════════╗
+║  INSTALLATION INCOMPLETE                                         ║
+╠══════════════════════════════════════════════════════════════════╣
+║  The server files (dist/) are missing or incomplete.             ║
+║                                                                  ║
+║  Common causes:                                                  ║
+║    • npm install --ignore-scripts (skipped prepare script)       ║
+║    • Global install without proper build step                    ║
+║    • Installing from GitHub without devDependencies              ║
+║    • Package corruption during download                          ║
+║                                                                  ║
+║  How to fix:                                                     ║
+║                                                                  ║
+║  For regular users:                                              ║
+║    npm uninstall -g file-organizer-mcp                           ║
+║    npm install -g file-organizer-mcp                             ║
+║                                                                  ║
+║  For GitHub/source installs:                                     ║
+║    cd "${packageRoot}"                                           ║
+║    npm install && npm run build                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+  `.trim());
+  process.exit(1);
+}
+
+// Verify critical dependencies
+const nodeModulesPath = path.resolve(__dirname, '..', 'node_modules');
+const criticalDeps = ['@modelcontextprotocol/sdk', 'chalk', 'node-cron', 'zod'];
+const missingDeps: string[] = [];
+
+for (const dep of criticalDeps) {
+  const depPath = path.join(nodeModulesPath, dep);
+  if (!fs.existsSync(depPath)) {
+    missingDeps.push(dep);
+  }
+}
+
+if (missingDeps.length > 0) {
+  console.error(`
+╔══════════════════════════════════════════════════════════════════╗
+║  INCOMPLETE DEPENDENCIES                                         ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Required packages failed to install:                            ║
+║                                                                  ║
+${missingDeps.map(d => `║    • ${d.padEnd(59)}║`).join('\n')}
+║                                                                  ║
+║  Common causes:                                                  ║
+║    • npm install --production (skipped dependencies)             ║
+║    • Network interruption during install                         ║
+║    • npm cache corruption                                        ║
+║                                                                  ║
+║  How to fix:                                                     ║
+║                                                                  ║
+║    rm -rf node_modules package-lock.json                         ║
+║    npm cache clean --force                                       ║
+║    npm install                                                   ║
+║                                                                  ║
+║  For global installs:                                            ║
+║    npm uninstall -g file-organizer-mcp                           ║
+║    npm cache clean --force                                       ║
+║    npm install -g file-organizer-mcp                             ║
+╚══════════════════════════════════════════════════════════════════╝
+  `.trim());
+  process.exit(1);
+}
+
+// ==================== MAIN IMPORTS ====================
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './server.js';
@@ -25,6 +134,8 @@ import {
   stopAutoOrganizeScheduler,
   getAutoOrganizeScheduler,
 } from './services/auto-organize.service.js';
+
+// ==================== MAIN FUNCTION ====================
 
 async function main(): Promise<void> {
   // Handle CLI arguments
@@ -77,9 +188,9 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
   }
 
   // Start auto-organize scheduler if enabled
-  startAutoOrganizeScheduler();
+  const schedulerResult = startAutoOrganizeScheduler();
 
-  // Log scheduler status
+  // Log scheduler status and report any errors
   const scheduler = getAutoOrganizeScheduler();
   if (scheduler?.isActive()) {
     const status = scheduler.getStatus();
@@ -91,11 +202,93 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
     logger.info('Auto-organize scheduler inactive');
   }
 
+  // Report scheduler errors to user
+  if (schedulerResult.errors.length > 0) {
+    const hasRealErrors = schedulerResult.errors.some(e =>
+      !e.includes('already running') &&
+      !e.includes('No directories configured')
+    );
+
+    if (hasRealErrors) {
+      console.error('\n⚠️  Auto-Organize Scheduler Issues:');
+      schedulerResult.errors.forEach(error => {
+        if (!error.includes('already running') && !error.includes('No directories configured')) {
+          console.error(`   • ${error}`);
+        }
+      });
+      console.error('\n   To fix configuration:');
+      console.error('   npx file-organizer-mcp --setup\n');
+    }
+  }
+
+  // Warn if auto-organize is enabled but no tasks are running
+  if (schedulerResult.taskCount === 0 && schedulerResult.errors.length > 0) {
+    const hasConfigErrors = schedulerResult.errors.some(e =>
+      e.includes('Invalid cron') || e.includes('does not exist')
+    );
+
+    if (hasConfigErrors) {
+      console.log('\nℹ️  Auto-organize is not monitoring any directories.');
+      console.log('   Run the setup wizard to configure scheduled organization:\n');
+      console.log('   npx file-organizer-mcp --setup\n');
+    }
+  }
+
   const server = createServer();
   const transport = new StdioServerTransport();
 
-  await server.connect(transport);
-  logger.info('File Organizer MCP Server running on stdio');
+  // Handle transport-level errors
+  transport.onerror = (error: Error) => {
+    logger.error('Transport error:', error.message);
+  };
+
+  transport.onclose = () => {
+    logger.info('Transport connection closed');
+    stopAutoOrganizeScheduler();
+    process.exit(0);
+  };
+
+  try {
+    await server.connect(transport);
+    logger.info('File Organizer MCP Server running on stdio');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Failed to connect to MCP transport:', errorMessage);
+
+    // Provide helpful error messages for common issues
+    if (errorMessage.includes('EPIPE') || errorMessage.includes('broken pipe')) {
+      console.error(`
+╔══════════════════════════════════════════════════════════════════╗
+║  CONNECTION ERROR                                                ║
+╠══════════════════════════════════════════════════════════════════╣
+║  The connection to Claude Desktop was broken.                    ║
+║                                                                  ║
+║  Common causes:                                                  ║
+║    • Claude Desktop was closed                                   ║
+║    • Another MCP server is using the same stdio transport        ║
+║    • The MCP server was restarted too quickly                    ║
+║                                                                  ║
+║  To fix:                                                         ║
+║    1. Restart Claude Desktop                                     ║
+║    2. Check for duplicate MCP server entries in config           ║
+║    3. Wait a few seconds before restarting                       ║
+╚══════════════════════════════════════════════════════════════════╝
+      `.trim());
+    } else if (errorMessage.includes('ECONNREFUSED')) {
+      console.error(`
+╔══════════════════════════════════════════════════════════════════╗
+║  CONNECTION REFUSED                                              ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Could not connect to the MCP transport.                         ║
+║                                                                  ║
+║  This usually means Claude Desktop is not running or             ║
+║  the MCP configuration is incorrect.                             ║
+╚══════════════════════════════════════════════════════════════════╝
+      `.trim());
+    }
+
+    throw error;
+  }
 
   // Handle graceful shutdown
   setupGracefulShutdown();

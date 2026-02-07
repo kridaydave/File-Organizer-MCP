@@ -8,7 +8,7 @@ import path from 'path';
 import fs from 'fs';
 
 export const CONFIG = {
-  VERSION: '3.1.2',
+  VERSION: '3.1.4',
 
   // Security Settings
   security: {
@@ -174,18 +174,56 @@ function deepMerge(target: UserConfig, source: Partial<UserConfig>): UserConfig 
  * Load custom allowed directories from user config file
  */
 export function loadUserConfig(): UserConfig {
-  try {
-    const configPath = getUserConfigPath();
+  const configPath = getUserConfigPath();
 
-    if (fs.existsSync(configPath)) {
-      const configData = fs.readFileSync(configPath, 'utf-8');
-      return JSON.parse(configData) as UserConfig;
-    }
-  } catch (error) {
-    console.error('Error loading user config:', (error as Error).message);
+  if (!fs.existsSync(configPath)) {
+    return {};
   }
 
-  return {};
+  try {
+    const configData = fs.readFileSync(configPath, 'utf-8');
+
+    // Handle empty file
+    if (!configData.trim()) {
+      console.warn(`Warning: Config file is empty: ${configPath}`);
+      return {};
+    }
+
+    const parsed = JSON.parse(configData) as UserConfig;
+
+    // Validate that parsed result is an object
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error('Config file does not contain a valid JSON object');
+    }
+
+    return parsed;
+  } catch (error) {
+    const errorMessage = (error as Error).message;
+
+    // Handle specific JSON parse errors
+    if (errorMessage.includes('JSON') || errorMessage.includes('Unexpected token')) {
+      console.error(`
+⚠️  CONFIG FILE CORRUPTED ⚠️
+
+The config file at:
+  ${configPath}
+
+appears to be corrupted or contains invalid JSON.
+Error: ${errorMessage}
+
+To fix this:
+  1. Backup the corrupted file: cp "${configPath}" "${configPath}.backup"
+  2. Delete the corrupted file: rm "${configPath}"
+  3. Re-run the setup wizard: npx file-organizer-mcp --setup
+
+Your file organization settings will be reset, but your actual files are safe.
+      `.trim());
+    } else {
+      console.error('Error loading user config:', errorMessage);
+    }
+
+    return {};
+  }
 }
 
 /**

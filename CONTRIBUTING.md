@@ -105,10 +105,10 @@ import { jest } from '@jest/globals';
 import { YourService } from '../src/services/your-service.js';
 
 describe('YourService', () => {
-    it('should do something', () => {
-        const service = new YourService();
-        expect(service.doSomething()).toBe(expected);
-    });
+  it('should do something', () => {
+    const service = new YourService();
+    expect(service.doSomething()).toBe(expected);
+  });
 });
 ```
 
@@ -142,7 +142,7 @@ Always validate and sanitize user inputs:
 // ✅ Good
 const result = PathSchema.safeParse(inputPath);
 if (!result.success) {
-    throw new ValidationError('Invalid path');
+  throw new ValidationError('Invalid path');
 }
 
 // ❌ Bad
@@ -239,6 +239,7 @@ git push origin feature/amazing-feature
 ```
 
 Create a Pull Request with:
+
 - Clear description of changes
 - Link to related issue(s)
 - Screenshots (if UI changes)
@@ -305,6 +306,7 @@ Before submitting your PR, ensure:
 ## 🙏 Recognition
 
 Contributors will be recognized in:
+
 - README.md acknowledgments
 - CHANGELOG.md release notes
 - GitHub contributors page

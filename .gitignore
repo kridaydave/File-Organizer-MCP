@@ -69,3 +69,6 @@ pids/
 .agent
 debug_output.txt
 *.bat
+.sisyphus
+.github 
+node_modules

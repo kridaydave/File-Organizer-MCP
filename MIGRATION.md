@@ -9,6 +9,7 @@ This guide helps you migrate from File Organizer MCP v2.x to v3.0.
 **v2.1.0 and earlier versions** contain a critical path traversal vulnerability that could expose files outside your working directory.
 
 **v3.0.0** implements a comprehensive 7-layer security validation pipeline that prevents:
+
 - Path traversal attacks
 - Symlink attacks
 - Resource exhaustion
@@ -19,6 +20,7 @@ This guide helps you migrate from File Organizer MCP v2.x to v3.0.
 **v3.0.0 is Secure by Default.**
 
 Unlike v2.x, which allowed access to almost any directory, v3.0 **blocks access** to all directories unless they are:
+
 1.  In the default whitelist (Desktop, Documents, Downloads, etc.)
 2.  Explicitly added to `config.json`
 
@@ -69,9 +71,7 @@ Your `claude_desktop_config.json` typically doesn't need changes, but verify the
   "mcpServers": {
     "file-organizer": {
       "command": "node",
-      "args": [
-        "/path/to/node_modules/file-organizer-mcp/dist/index.js"
-      ]
+      "args": ["/path/to/node_modules/file-organizer-mcp/dist/index.js"]
     }
   }
 }
@@ -89,6 +89,7 @@ Your `claude_desktop_config.json` typically doesn't need changes, but verify the
 ### Step 5: Verify Installation
 
 Ask Claude:
+
 ```
 Hey Claude, scan my Downloads folder
 ```
@@ -100,6 +101,7 @@ If Claude can access the file organizer tools, migration is complete! ✅
 ### New Features in v3.0
 
 #### 1. Enhanced Security
+
 - **8-layer path validation pipeline**
 - **Symlink resolution and validation**
 - **Resource limits** (file size, count, depth)
@@ -107,22 +109,26 @@ If Claude can access the file organizer tools, migration is complete! ✅
 - **Comprehensive security test suite**
 
 #### 2. Improved Services Architecture
+
 - Service-based architecture with dependency injection
 - `PathValidatorService` for all path operations
 - `RollbackService` for undo functionality
 - `CategorizerService` with custom rules support
 
 #### 3. Better Error Handling
+
 - Structured error messages
 - No internal path disclosure
 - Graceful degradation for edge cases
 
 #### 4. TypeScript Improvements
+
 - Strict type checking
 - Zod schema validation
 - ESM modules with `.js` extensions
 
 #### 5. Testing Infrastructure
+
 - Unit tests for all services
 - Integration tests for tools
 - Performance benchmarks
@@ -137,14 +143,14 @@ All v2.x tool calls work identically in v3.0:
 ```javascript
 // v2.x - Still works in v3.0
 await scanDirectory({
-    directory: "C:/Users/Admin/Downloads",
-    include_subdirs: true
+  directory: 'C:/Users/Admin/Downloads',
+  include_subdirs: true,
 });
 
 // v2.x - Still works in v3.0
 await organizeFiles({
-    directory: "C:/Users/Admin/Downloads",
-    dry_run: true
+  directory: 'C:/Users/Admin/Downloads',
+  dry_run: true,
 });
 ```
 
@@ -153,7 +159,7 @@ await organizeFiles({
 ```javascript
 // ❌ v2.x: This worked but was a security bug
 await scanDirectory({
-    directory: "C:/Users/Admin/Downloads/../../../Windows"
+  directory: 'C:/Users/Admin/Downloads/../../../Windows',
 });
 
 // ✅ v3.0: This now correctly fails with ValidationError
@@ -184,13 +190,13 @@ await scanDirectory({
 
 ```javascript
 // ❌ Don't use parent directory access
-directory: "./../../some/path"
+directory: './../../some/path';
 
 // ✅ Use absolute paths
-directory: "C:/Users/Admin/Documents"
+directory: 'C:/Users/Admin/Documents';
 
 // ✅ Or relative paths within working directory
-directory: "./Documents"
+directory: './Documents';
 ```
 
 ### Issue: "Files larger than 100MB skipped"
@@ -210,6 +216,7 @@ directory: "./Documents"
 **Cause:** Jest configuration issues on Windows
 
 **Solution:**
+
 ```bash
 # Clear Jest cache
 npx jest --clearCache
@@ -222,12 +229,12 @@ npm test
 
 ### Expected Performance Changes
 
-| Operation | v2.x | v3.0 | Change |
-|-----------|------|------|--------|
-| Path validation | ~1ms | ~5ms | +4ms (security overhead) |
-| Directory scan (1000 files) | 500ms | 520ms | +20ms (validation) |
-| Organize files (1000 files) | 2.5s | 2.6s | +100ms (rollback) |
-| Duplicate detection | 3.0s | 3.1s | +100ms (validation) |
+| Operation                   | v2.x  | v3.0  | Change                   |
+| --------------------------- | ----- | ----- | ------------------------ |
+| Path validation             | ~1ms  | ~5ms  | +4ms (security overhead) |
+| Directory scan (1000 files) | 500ms | 520ms | +20ms (validation)       |
+| Organize files (1000 files) | 2.5s  | 2.6s  | +100ms (rollback)        |
+| Duplicate detection         | 3.0s  | 3.1s  | +100ms (validation)      |
 
 **Verdict:** Minimal performance impact (<5%) for significantly improved security.
 
@@ -235,13 +242,13 @@ npm test
 
 ### What's Protected Now
 
-| Attack Type | v2.x | v3.0 |
-|-------------|------|------|
-| Path Traversal | ❌ Vulnerable | ✅ Protected |
+| Attack Type     | v2.x          | v3.0         |
+| --------------- | ------------- | ------------ |
+| Path Traversal  | ❌ Vulnerable | ✅ Protected |
 | Symlink Attacks | ❌ Vulnerable | ✅ Protected |
-| DoS - Memory | ⚠️ Partial | ✅ Protected |
-| DoS - CPU | ⚠️ Partial | ✅ Protected |
-| Info Disclosure | ⚠️ Partial | ✅ Protected |
+| DoS - Memory    | ⚠️ Partial    | ✅ Protected |
+| DoS - CPU       | ⚠️ Partial    | ✅ Protected |
+| Info Disclosure | ⚠️ Partial    | ✅ Protected |
 
 ### Security Limits
 
@@ -263,9 +270,9 @@ MAX_PATH_LENGTH: 4,096     // Characters
 ```javascript
 // v2.x - Still works identically in v3.0
 const result = await scanDirectory({
-    directory: "C:/Users/Admin/Downloads",
-    include_subdirs: true,
-    max_depth: 5
+  directory: 'C:/Users/Admin/Downloads',
+  include_subdirs: true,
+  max_depth: 5,
 });
 
 // No changes needed! ✅
@@ -276,8 +283,8 @@ const result = await scanDirectory({
 ```javascript
 // v2.x - Still works identically in v3.0
 const result = await organizeFiles({
-    directory: "C:/Users/Admin/Downloads",
-    dry_run: false
+  directory: 'C:/Users/Admin/Downloads',
+  dry_run: false,
 });
 
 // No changes needed! ✅
@@ -288,7 +295,7 @@ const result = await organizeFiles({
 ```javascript
 // v2.x - Still works identically in v3.0
 const result = await findDuplicateFiles({
-    directory: "C:/Users/Admin/Documents"
+  directory: 'C:/Users/Admin/Documents',
 });
 
 // No changes needed! ✅

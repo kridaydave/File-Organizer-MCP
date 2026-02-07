@@ -55,7 +55,7 @@ export class RenamingService {
             if (!originalPath) continue;
             const dirname = path.dirname(originalPath);
             const ext = path.extname(originalPath);
-            let basename = path.basename(originalPath, ext);
+            const basename = path.basename(originalPath, ext);
             // Note: basename in Node.js path module excludes extension if provided.
 
             let newBasename = basename;
