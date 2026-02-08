@@ -10,11 +10,11 @@ import { z } from 'zod';
  * without null bytes (security check)
  */
 export const PathSchema = z
-    .string()
-    .min(1, 'Path is required')
-    .refine((path) => !path.includes('\0'), {
-        message: 'Path contains invalid null byte',
-    });
+  .string()
+  .min(1, 'Path is required')
+  .refine((path) => !path.includes('\0'), {
+    message: 'Path contains invalid null byte',
+  });
 
 /**
  * Schema for security mode configuration

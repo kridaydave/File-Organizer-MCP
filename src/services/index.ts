@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.1.3
+ * File Organizer MCP Server v3.1.4
  * Services Module Exports
  */
 
@@ -10,6 +10,7 @@ export * from './categorizer.service.js';
 export * from './organizer.service.js';
 export * from './duplicate-finder.service.js';
 export * from './renaming.service.js';
+export * from './scheduler-state.service.js';
 
 import { CategorizerService } from './categorizer.service.js';
 import { OrganizerService } from './organizer.service.js';

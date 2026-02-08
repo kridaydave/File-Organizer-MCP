@@ -2,7 +2,7 @@
 
 /**
  * File Organizer MCP - Streamlined Setup Wizard
- * 
+ *
  * User-friendly setup that:
  * 1. Auto-detects installed MCP clients
  * 2. Lets users select which clients to configure
@@ -43,13 +43,27 @@ const colors = {
  */
 function printWelcomeBanner(): void {
   console.clear();
-  console.log(colors.primary.bold('╔════════════════════════════════════════════════════════════════╗'));
-  console.log(colors.primary.bold('║                                                                ║'));
-  console.log(colors.primary.bold('║              🗂️  File Organizer MCP Server                    ║'));
-  console.log(colors.primary.bold('║                                                                ║'));
-  console.log(colors.primary.bold('║     Organize your files automatically with AI assistance       ║'));
-  console.log(colors.primary.bold('║                                                                ║'));
-  console.log(colors.primary.bold('╚════════════════════════════════════════════════════════════════╝'));
+  console.log(
+    colors.primary.bold('╔════════════════════════════════════════════════════════════════╗')
+  );
+  console.log(
+    colors.primary.bold('║                                                                ║')
+  );
+  console.log(
+    colors.primary.bold('║              🗂️  File Organizer MCP Server                    ║')
+  );
+  console.log(
+    colors.primary.bold('║                                                                ║')
+  );
+  console.log(
+    colors.primary.bold('║     Organize your files automatically with AI assistance       ║')
+  );
+  console.log(
+    colors.primary.bold('║                                                                ║')
+  );
+  console.log(
+    colors.primary.bold('╚════════════════════════════════════════════════════════════════╝')
+  );
   console.log();
 }
 
@@ -90,11 +104,9 @@ function printStep(step: number, total: number, message: string): void {
 function checkDependencies(): boolean {
   const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
   const nodeModulesPath = path.join(packageRoot, 'node_modules');
-  
+
   const criticalDeps = ['@modelcontextprotocol/sdk', 'chalk', 'node-cron'];
-  return criticalDeps.every(dep => 
-    fs.existsSync(path.join(nodeModulesPath, dep))
-  );
+  return criticalDeps.every((dep) => fs.existsSync(path.join(nodeModulesPath, dep)));
 }
 
 /**
@@ -102,12 +114,12 @@ function checkDependencies(): boolean {
  */
 async function installDependencies(): Promise<boolean> {
   const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
-  
+
   printInfo('Installing dependencies (this may take a minute)...');
-  
+
   try {
-    execSync('npm install', { 
-      cwd: packageRoot, 
+    execSync('npm install', {
+      cwd: packageRoot,
       stdio: 'pipe',
       timeout: 120000,
     });
@@ -123,16 +135,16 @@ async function installDependencies(): Promise<boolean> {
 async function ensureBuild(): Promise<boolean> {
   const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
   const distPath = path.join(packageRoot, 'dist', 'index.js');
-  
+
   if (fs.existsSync(distPath)) {
     return true;
   }
 
   printInfo('Building the application...');
-  
+
   try {
-    execSync('npm run build', { 
-      cwd: packageRoot, 
+    execSync('npm run build', {
+      cwd: packageRoot,
       stdio: 'pipe',
       timeout: 60000,
     });
@@ -152,7 +164,7 @@ export async function startSetupWizard(): Promise<void> {
 
   // Step 0: Check and install dependencies
   printStep(0, 4, 'Checking installation...');
-  
+
   if (!checkDependencies()) {
     printInfo('Some dependencies are missing. Installing now...');
     const depsInstalled = await installDependencies();
@@ -201,16 +213,16 @@ export async function startSetupWizard(): Promise<void> {
  */
 async function detectAndSelectClients(): Promise<string[]> {
   printSection('Detecting AI Clients', '🤖');
-  
+
   printInfo('Scanning for installed MCP-compatible clients...');
   const detection = detectMCPClients();
-  
-  const installedClients = detection.clients.filter(c => c.installed);
-  const availableClients = detection.clients.filter(c => !c.installed);
+
+  const installedClients = detection.clients.filter((c) => c.installed);
+  const availableClients = detection.clients.filter((c) => !c.installed);
 
   if (installedClients.length === 0) {
     console.log(colors.warning('\n  No MCP clients detected on your system.'));
-    console.log(colors.muted('\n  Don\'t worry! You can still use the file organizer.'));
+    console.log(colors.muted("\n  Don't worry! You can still use the file organizer."));
     console.log(colors.muted('  Popular options:'));
     console.log(colors.info('    • Claude Desktop - https://claude.ai/download'));
     console.log(colors.info('    • Cursor - https://cursor.com'));
@@ -220,7 +232,7 @@ async function detectAndSelectClients(): Promise<string[]> {
 
   console.log();
   console.log(colors.success(`  Found ${installedClients.length} client(s):`));
-  
+
   for (const client of installedClients) {
     console.log(colors.success(`    ${client.icon} ${client.name}`));
   }
@@ -228,7 +240,7 @@ async function detectAndSelectClients(): Promise<string[]> {
   console.log();
   const selectedClients = await checkbox({
     message: 'Select which clients to configure (Space to select, Enter to confirm):',
-    choices: installedClients.map(client => ({
+    choices: installedClients.map((client) => ({
       name: `${client.icon} ${client.name}`,
       value: client.id,
       description: client.description,
@@ -247,7 +259,7 @@ async function promptUser(): Promise<SetupAnswers> {
 
   // Step 1: Select folders to organize
   printStep(1, 4, 'Choose folders to organize');
-  
+
   // Predefined folder options - only show existing ones
   const folderOptions = [
     { name: 'Desktop', value: path.join(home, 'Desktop') },
@@ -256,7 +268,7 @@ async function promptUser(): Promise<SetupAnswers> {
     { name: 'Pictures', value: path.join(home, 'Pictures') },
     { name: 'Videos', value: path.join(home, 'Videos') },
     { name: 'Music', value: path.join(home, 'Music') },
-  ].filter(option => fs.existsSync(option.value));
+  ].filter((option) => fs.existsSync(option.value));
 
   if (folderOptions.length === 0) {
     console.log(colors.warning('  No standard folders found. You can add custom folders.'));
@@ -264,7 +276,7 @@ async function promptUser(): Promise<SetupAnswers> {
 
   const selectedFolders = await checkbox({
     message: 'Select folders to organize:',
-    choices: folderOptions.map(option => ({
+    choices: folderOptions.map((option) => ({
       name: option.name,
       value: option.value,
       checked: ['Desktop', 'Downloads'].includes(option.name),
@@ -273,7 +285,7 @@ async function promptUser(): Promise<SetupAnswers> {
 
   // Custom folders
   const customFolders: string[] = [];
-  
+
   while (true) {
     const addMore = await confirm({
       message: 'Add a custom folder?',
@@ -298,9 +310,9 @@ async function promptUser(): Promise<SetupAnswers> {
 
   // Step 2: Conflict strategy (simplified)
   printStep(2, 4, 'Choose how to handle duplicate files');
-  
+
   console.log(colors.muted('\n  What happens when a file with the same name exists?'));
-  
+
   const conflictStrategy = await select<'rename' | 'skip' | 'overwrite'>({
     message: 'Select option:',
     choices: [
@@ -328,25 +340,29 @@ async function promptUser(): Promise<SetupAnswers> {
 
   // Step 4: Review
   printStep(4, 4, 'Review your settings');
-  
+
   const allFolders = [...selectedFolders, ...customFolders];
-  
+
   console.log();
   console.log(colors.muted('Folders to organize:'));
   if (allFolders.length > 0) {
-    allFolders.forEach(f => console.log(colors.info(`  • ${f}`)));
+    allFolders.forEach((f) => console.log(colors.info(`  • ${f}`)));
   } else {
     console.log(colors.warning('  (none selected - will use defaults)'));
   }
-  
+
   console.log();
   console.log(colors.muted('Conflict strategy:'));
-  console.log(colors.info(`  ${conflictStrategy === 'rename' ? '✨ Rename new files' : conflictStrategy === 'skip' ? '⏭️ Skip duplicates' : '📝 Overwrite existing'}`));
-  
+  console.log(
+    colors.info(
+      `  ${conflictStrategy === 'rename' ? '✨ Rename new files' : conflictStrategy === 'skip' ? '⏭️ Skip duplicates' : '📝 Overwrite existing'}`
+    )
+  );
+
   console.log();
   console.log(colors.muted('AI clients to configure:'));
   if (selectedClients.length > 0) {
-    selectedClients.forEach(c => console.log(colors.info(`  • ${c}`)));
+    selectedClients.forEach((c) => console.log(colors.info(`  • ${c}`)));
   } else {
     console.log(colors.warning('  (none selected)'));
   }
@@ -390,11 +406,11 @@ async function applyConfiguration(answers: SetupAnswers): Promise<void> {
   // Configure selected clients
   if (answers.selectedClients.length > 0) {
     printSection('Configuring AI clients...', '🤖');
-    
+
     const detection = detectMCPClients();
-    
+
     for (const clientId of answers.selectedClients) {
-      const client = detection.clients.find(c => c.id === clientId);
+      const client = detection.clients.find((c) => c.id === clientId);
       if (client) {
         const result = await writeClientConfig(client);
         if (result.success) {

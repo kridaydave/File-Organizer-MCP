@@ -1,5 +1,39 @@
 # Changelog
 
+## [3.1.5] - 2026-02-08
+
+### Security & Stability Improvements
+
+- Fixed infinite loop in file-scanner.service.ts cycle detection (broken visited Set)
+- Fixed allowSymlinks ignored during path resolution in path-validator.service.ts
+- Fixed Windows root infinite loop in path traversal detection
+- Fixed TOCTOU race conditions across organizer, rollback, and duplicate-finder services
+- Fixed double-count bug in rollback service success/failure tracking
+- Fixed silent overwrites in rollback operations
+- Fixed backup name collisions in duplicate-finder.service.ts
+- Fixed race condition in auto-organize.service.ts runningDirectories management
+- Fixed symlink attack vulnerability in config.ts
+- Fixed path traversal in custom directory loading
+
+### Bug Fixes
+
+- Fixed file handle leaks across scanner, validator, and finder services
+- Fixed unprotected JSON parsing in rollback manifest handling
+- Fixed incomplete Windows reserved names regex in organizer
+- Fixed silent realpath failures in file scanner
+- Fixed file handle close errors masking stat errors
+
+### Testing Improvements
+
+- Added comprehensive ESM mocking pattern documentation
+- Fixed 7 test files with proper Jest ESM mocking
+- All 268 tests passing (267 passing, 1 skipped)
+
+### Documentation
+
+- Added ESM Jest Mocking Pattern to AGENTS.md
+- Updated JSDoc comments across all service files
+
 ## [3.1.4] - 2026-02-07
 
 ### 📝 Documentation

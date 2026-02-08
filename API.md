@@ -2,8 +2,8 @@
 
 > Auto-generated from tool definitions
 
-**Version:** 3.1.3  
-**Generated:** 2026-02-06T16:29:55.618Z
+**Version:** 3.1.5  
+**Generated:** 2026-02-08
 
 [⬆ Back to Top](#top)
 
@@ -500,3 +500,13 @@ file_organizer_watch_directory({
   max_files_per_run: 123,
 });
 ```
+
+---
+
+## Notes
+
+### New Export: checkAccess Function
+
+The `checkAccess` function has been exported from `path-validator` module. This function provides path validation and access checking capabilities for file operations.
+
+[⬆ Back to Top](#top)

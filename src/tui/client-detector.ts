@@ -2,7 +2,7 @@
 
 /**
  * MCP Client Detector - Auto-detects installed MCP-compatible clients
- * 
+ *
  * Detects clients like:
  * - Claude Desktop
  * - Cursor
@@ -40,7 +40,7 @@ const CLIENT_DEFINITIONS = [
   {
     id: 'claude-desktop',
     name: 'Claude Desktop',
-    description: 'Anthropic\'s official desktop app for Claude',
+    description: "Anthropic's official desktop app for Claude",
     icon: '🤖',
     website: 'https://claude.ai/download',
     configFile: 'claude_desktop_config.json',
@@ -56,7 +56,7 @@ const CLIENT_DEFINITIONS = [
   {
     id: 'windsurf',
     name: 'Windsurf',
-    description: 'Codeium\'s AI code editor with MCP support',
+    description: "Codeium's AI code editor with MCP support",
     icon: '🌊',
     website: 'https://codeium.com/windsurf',
     configFile: 'mcp_config.json',
@@ -131,7 +131,14 @@ function getVSCodeConfigDir(): string | null {
     case 'darwin': {
       const paths = [
         path.join(home, 'Library', 'Application Support', 'Code', 'User', 'globalStorage'),
-        path.join(home, 'Library', 'Application Support', 'Code - Insiders', 'User', 'globalStorage'),
+        path.join(
+          home,
+          'Library',
+          'Application Support',
+          'Code - Insiders',
+          'User',
+          'globalStorage'
+        ),
         path.join(home, '.vscode', 'extensions'),
       ];
       for (const p of paths) {
@@ -139,7 +146,8 @@ function getVSCodeConfigDir(): string | null {
       }
       return null;
     }
-    default: { // linux
+    default: {
+      // linux
       const paths = [
         path.join(home, '.config', 'Code', 'User', 'globalStorage'),
         path.join(home, '.config', 'Code - Insiders', 'User', 'globalStorage'),
@@ -169,10 +177,10 @@ function isVSCodeExtensionInstalled(extensionId: string): boolean {
     const extensionsDir = vscodeDir.includes('globalStorage')
       ? path.join(vscodeDir, '..', '..', '..', 'extensions')
       : vscodeDir;
-    
+
     if (fs.existsSync(extensionsDir)) {
       const entries = fs.readdirSync(extensionsDir);
-      return entries.some(entry => entry.toLowerCase().includes(extensionId.toLowerCase()));
+      return entries.some((entry) => entry.toLowerCase().includes(extensionId.toLowerCase()));
     }
   } catch {
     // Ignore errors
@@ -192,7 +200,7 @@ function detectClaudeDesktop(): MCPClient | null {
   return {
     id: 'claude-desktop',
     name: 'Claude Desktop',
-    description: 'Anthropic\'s official desktop app for Claude',
+    description: "Anthropic's official desktop app for Claude",
     icon: '🤖',
     installed,
     configPath: configDir,
@@ -218,12 +226,17 @@ function detectCursor(): MCPClient | null {
   }
 
   const configPath = configDir ? path.join(configDir, 'mcp.json') : null;
-  
+
   // Check if Cursor is installed by looking for the app
   let appInstalled = false;
   try {
     if (platform === 'win32') {
-      const cursorPath = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'cursor', 'Cursor.exe');
+      const cursorPath = path.join(
+        process.env.LOCALAPPDATA || '',
+        'Programs',
+        'cursor',
+        'Cursor.exe'
+      );
       appInstalled = fs.existsSync(cursorPath);
     } else if (platform === 'darwin') {
       appInstalled = fs.existsSync('/Applications/Cursor.app');
@@ -268,7 +281,12 @@ function detectWindsurf(): MCPClient | null {
   let appInstalled = false;
   try {
     if (platform === 'win32') {
-      const windsurfPath = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'windsurf', 'Windsurf.exe');
+      const windsurfPath = path.join(
+        process.env.LOCALAPPDATA || '',
+        'Programs',
+        'windsurf',
+        'Windsurf.exe'
+      );
       appInstalled = fs.existsSync(windsurfPath);
     } else if (platform === 'darwin') {
       appInstalled = fs.existsSync('/Applications/Windsurf.app');
@@ -282,7 +300,7 @@ function detectWindsurf(): MCPClient | null {
   return {
     id: 'windsurf',
     name: 'Windsurf',
-    description: 'Codeium\'s AI code editor with MCP support',
+    description: "Codeium's AI code editor with MCP support",
     icon: '🌊',
     installed,
     configPath: configDir || undefined,
@@ -297,17 +315,22 @@ function detectWindsurf(): MCPClient | null {
 function detectCline(): MCPClient | null {
   const vscodeDir = getVSCodeConfigDir();
   const installed = isVSCodeExtensionInstalled('saoudrizwan.claude-dev');
-  
+
   let configPath: string | undefined;
   if (vscodeDir) {
-    configPath = path.join(vscodeDir, 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json');
+    configPath = path.join(
+      vscodeDir,
+      'saoudrizwan.claude-dev',
+      'settings',
+      'cline_mcp_settings.json'
+    );
     // Normalize path - VS Code might use different case
     if (!fs.existsSync(configPath)) {
       // Try to find any matching directory
       const parentDir = path.dirname(path.dirname(configPath));
       if (fs.existsSync(parentDir)) {
         const entries = fs.readdirSync(parentDir);
-        const match = entries.find(e => e.toLowerCase().includes('claude-dev'));
+        const match = entries.find((e) => e.toLowerCase().includes('claude-dev'));
         if (match) {
           configPath = path.join(parentDir, match, 'settings', 'cline_mcp_settings.json');
         }
@@ -321,7 +344,8 @@ function detectCline(): MCPClient | null {
     description: 'VS Code extension for AI coding with MCP',
     icon: '👨‍💻',
     installed,
-    configPath: configPath || (vscodeDir ? path.join(vscodeDir, 'saoudrizwan.claude-dev') : undefined),
+    configPath:
+      configPath || (vscodeDir ? path.join(vscodeDir, 'saoudrizwan.claude-dev') : undefined),
     configFormat: 'json',
     website: 'https://github.com/cline/cline',
   };
@@ -333,10 +357,15 @@ function detectCline(): MCPClient | null {
 function detectRooCode(): MCPClient | null {
   const vscodeDir = getVSCodeConfigDir();
   const installed = isVSCodeExtensionInstalled('RooVeterinaryInc.roo-cline');
-  
+
   let configPath: string | undefined;
   if (vscodeDir) {
-    configPath = path.join(vscodeDir, 'RooVeterinaryInc.roo-cline', 'settings', 'roo_code_mcp_settings.json');
+    configPath = path.join(
+      vscodeDir,
+      'RooVeterinaryInc.roo-cline',
+      'settings',
+      'roo_code_mcp_settings.json'
+    );
   }
 
   return {
@@ -345,7 +374,8 @@ function detectRooCode(): MCPClient | null {
     description: 'VS Code extension for AI coding (Cline fork)',
     icon: '🦘',
     installed,
-    configPath: configPath || (vscodeDir ? path.join(vscodeDir, 'RooVeterinaryInc.roo-cline') : undefined),
+    configPath:
+      configPath || (vscodeDir ? path.join(vscodeDir, 'RooVeterinaryInc.roo-cline') : undefined),
     configFormat: 'json',
     website: 'https://github.com/RooVetGit/Roo-Code',
   };
@@ -357,12 +387,12 @@ function detectRooCode(): MCPClient | null {
 function detectContinue(): MCPClient | null {
   const vscodeDir = getVSCodeConfigDir();
   const installed = isVSCodeExtensionInstalled('Continue.continue');
-  
+
   // Continue config is in a different location
   const platform = os.platform();
   const home = os.homedir();
   let configPath: string | undefined;
-  
+
   if (platform === 'win32') {
     configPath = path.join(home, '.continue', 'config.json');
   } else if (platform === 'darwin') {
@@ -396,7 +426,7 @@ export function detectMCPClients(): ClientDetectionResult {
     detectContinue(),
   ].filter((client): client is MCPClient => client !== null);
 
-  const detectedCount = clients.filter(c => c.installed).length;
+  const detectedCount = clients.filter((c) => c.installed).length;
 
   return {
     clients,
@@ -406,51 +436,17 @@ export function detectMCPClients(): ClientDetectionResult {
 }
 
 /**
- * Check if we're running from development or installed package
- */
-function isDevelopmentMode(): boolean {
-  // Get the directory of this module using import.meta.url
-  const modulePath = fileURLToPath(import.meta.url);
-  const moduleDir = path.dirname(modulePath);
-  
-  // Check if we're in the git repo with source files
-  const distDir = path.resolve(moduleDir, '..');
-  const srcDir = path.join(distDir, '..', 'src');
-  const gitDir = path.join(distDir, '..', '.git');
-  
-  // If src and .git exist alongside dist, we're in dev mode
-  return fs.existsSync(srcDir) && fs.existsSync(gitDir);
-}
-
-/**
  * Generate MCP server configuration for a specific client
  */
 export function generateClientConfig(
   clientId: string,
   serverName: string = 'file-organizer'
 ): Record<string, unknown> | null {
-  const inDevMode = isDevelopmentMode();
-
-  // Determine the command to use
-  let command: string;
-  let args: string[];
-
-  if (inDevMode) {
-    // Local development - use direct path
-    command = 'node';
-    const modulePath = fileURLToPath(import.meta.url);
-    const moduleDir = path.dirname(modulePath);
-    args = [path.join(moduleDir, '..', 'index.js')];
-  } else {
-    // Installed package (global or local node_modules) - use npx
-    // This ensures the command works regardless of where dist/ is
-    command = 'npx';
-    args = ['-y', 'file-organizer-mcp'];
-  }
-
+  // Always use npx for maximum compatibility
+  // npx will download the package if not installed, or use the installed version
   const serverConfig = {
-    command,
-    args,
+    command: 'npx',
+    args: ['-y', 'file-organizer-mcp'],
   };
 
   switch (clientId) {
@@ -546,7 +542,7 @@ export async function writeClientConfig(
       ...existingConfig,
       ...config,
       mcpServers: {
-        ...(existingConfig.mcpServers as Record<string, unknown> || {}),
+        ...((existingConfig.mcpServers as Record<string, unknown>) || {}),
         ...(config.mcpServers || {}),
       },
     };

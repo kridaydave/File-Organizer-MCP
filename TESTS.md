@@ -4,13 +4,13 @@ This document provides comprehensive information about all tests in the File Org
 
 ## Test Suite Overview
 
-The test suite contains **27 test files** organized into three main categories:
+The test suite contains **268 tests** organized into three main categories:
 
-- **Unit Tests** (21 files): Test individual components in isolation
-- **Integration Tests** (5 files): Test complete workflows and component interactions
-- **Performance Tests** (1 file): Measure performance and resource usage
+- **Unit Tests**: Test individual components in isolation
+- **Integration Tests**: Test complete workflows and component interactions
+- **Performance Tests**: Measure performance and resource usage
 
-**Current Status**: 126/129 tests passing (97.7%)
+**Current Status**: 267 passing, 1 skipped (99.6%)
 
 ---
 
@@ -131,7 +131,9 @@ tests/
 
 #### 7. `path-validator.test.ts`
 
-**Purpose**: Tests security-critical path validation  
+**Purpose**: Tests security-critical path validation
+**Tests**: 4 tests, all passing
+
 **What it tests**:
 
 - **Path traversal protection** (`../etc/passwd` blocked)
@@ -147,6 +149,73 @@ tests/
 - `should reject paths with ../ sequences` - Prevents directory traversal
 - `should reject symlinks pointing outside allowed roots` - Prevents escaping sandbox
 - `should reject paths with suspicious characters` - Blocks XSS/shell injection attempts
+- `should reject Windows reserved names` - Prevents system file conflicts
+
+---
+
+#### 7b. `auto-organize.test.ts`
+
+**Purpose**: Tests automatic file organization logic
+**Tests**: 17 tests, all passing
+
+**What it tests**:
+
+- Automatic file categorization without user intervention
+- Custom rule precedence over default categorization
+- Nested directory handling during organization
+- Conflict resolution during auto-organization
+- Dry-run mode for previewing organizational changes
+
+**Why necessary**: Validates the automated organization workflow that users rely on for hands-free file management.
+
+---
+
+## ESM Mocking Pattern
+
+When writing tests for ESM modules in this project, a specific mocking pattern was discovered that ensures proper module isolation:
+
+### The Pattern
+
+```typescript
+import { jest } from '@jest/globals';
+
+// Mock the module before any imports
+const mockFunction = jest.fn<() => ReturnType>();
+jest.unstable_mockModule('./path/to/module.js', () => ({
+  default: mockFunction,
+  namedExport: jest.fn(),
+}));
+
+// Import after mocking
+const moduleUnderTest = await import('./module-under-test.js');
+```
+
+### Why This Pattern
+
+1. **ESM modules are hoisted differently** - Imports are hoisted to the top of the file, which means mocks must be set up before any imports occur
+2. **Dynamic imports are required** - Since ESM modules are evaluated immediately, you must use `jest.unstable_mockModule()` with dynamic `import()`
+3. **Default exports need special handling** - The default export is accessed via `.default` on the mock object
+
+### Files Fixed for ESM Compatibility
+
+7 test files were updated to use this ESM mocking pattern:
+
+1. `duplicate-finder.test.ts`
+2. `file-scanner.test.ts`
+3. `hash-calculator.test.ts`
+4. `organizer.test.ts`
+5. `streaming-scanner.test.ts`
+6. `full_organization_flow.test.ts`
+7. `duplicate_resolution_flow.test.ts`
+
+These files originally used CommonJS-style mocking which doesn't work with ESM modules due to the different module loading semantics.
+
+### Common Pitfalls
+
+- **Import ordering**: Always mock before importing the module under test
+- **Async/Await**: ESM mocking is asynchronous, always use `await`
+- **Default exports**: Access via `.default` when mocking
+- **Named exports**: Access by the export name directly
 
 ---
 

@@ -15,14 +15,14 @@ export const ListFilesInputSchema = DirectoryInputSchema;
  * Schema for scan_directory tool
  */
 export const ScanDirectoryInputSchema = RecursiveInputSchema.extend({
-    max_depth: z.number().int().min(-1).max(100).default(-1),
+  max_depth: z.number().int().min(-1).max(100).default(-1),
 });
 
 /**
  * Schema for find_largest_files tool
  */
 export const FindLargestFilesInputSchema = RecursiveInputSchema.extend({
-    top_n: z.number().int().positive().default(10),
+  top_n: z.number().int().positive().default(10),
 });
 
 /**

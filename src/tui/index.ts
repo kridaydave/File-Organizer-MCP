@@ -2,7 +2,7 @@
 
 /**
  * File Organizer MCP - TUI Entry Point
- * 
+ *
  * Streamlined setup wizard for non-technical users.
  * Run via: npm run setup or npx file-organizer-mcp --setup
  */
@@ -26,7 +26,7 @@ main().catch((error) => {
     console.log('\n\nSetup cancelled. You can re-run anytime with: npx file-organizer-mcp --setup');
     process.exit(0);
   }
-  
+
   console.error('\nAn error occurred:', error.message);
   console.log('\nFor help, visit: https://github.com/kridaydave/File-Organizer-MCP#readme');
   process.exit(1);

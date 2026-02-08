@@ -73,6 +73,8 @@ export interface WatchConfig {
     min_file_age_minutes?: number;
     /** Maximum files to process per run (0 or undefined = unlimited) */
     max_files_per_run?: number;
+    /** Catchup behavior when server starts */
+    catchup_mode?: 'smart' | 'always' | 'never';
   };
 }
 
@@ -129,10 +131,11 @@ function getDefaultAllowedDirs(): string[] {
     }
   }
 
-  // Only return directories that actually exist
+  // Only return directories that actually exist and are not symlinks
   return commonDirs.filter((dir) => {
     try {
-      return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+      const stats = fs.lstatSync(dir);
+      return stats.isDirectory() && !stats.isSymbolicLink();
     } catch {
       return false;
     }
@@ -202,7 +205,8 @@ export function loadUserConfig(): UserConfig {
 
     // Handle specific JSON parse errors
     if (errorMessage.includes('JSON') || errorMessage.includes('Unexpected token')) {
-      console.error(`
+      console.error(
+        `
 ⚠️  CONFIG FILE CORRUPTED ⚠️
 
 The config file at:
@@ -217,7 +221,8 @@ To fix this:
   3. Re-run the setup wizard: npx file-organizer-mcp --setup
 
 Your file organization settings will be reset, but your actual files are safe.
-      `.trim());
+      `.trim()
+      );
     } else {
       console.error('Error loading user config:', errorMessage);
     }
@@ -265,10 +270,40 @@ function loadCustomAllowedDirs(): string[] {
     const config = loadUserConfig();
 
     if (Array.isArray(config.customAllowedDirectories)) {
-      // Validate that custom directories exist
+      // Validate that custom directories exist, are not symlinks, and block path traversal
       return config.customAllowedDirectories.filter((dir: string) => {
         try {
-          return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+          // First check if path exists and get stats (before any resolution)
+          const stats = fs.lstatSync(dir);
+
+          // Reject symlinks immediately
+          if (stats.isSymbolicLink()) {
+            console.error(`Warning: Custom directory blocked (symlink): ${dir}`);
+            return false;
+          }
+
+          // Only accept directories
+          if (!stats.isDirectory()) {
+            return false;
+          }
+
+          // Resolve to absolute path to check for traversal attempts
+          const resolvedDir = path.resolve(dir);
+          const home = os.homedir();
+
+          // Block path traversal outside of home directory
+          if (!resolvedDir.startsWith(home)) {
+            console.error(`Warning: Custom directory blocked (outside home): ${dir}`);
+            return false;
+          }
+
+          // Block relative path traversal patterns
+          if (dir.includes('..') || dir.includes('~')) {
+            console.error(`Warning: Custom directory blocked (path traversal): ${dir}`);
+            return false;
+          }
+
+          return true;
         } catch {
           console.error(`Warning: Custom directory does not exist: ${dir}`);
           return false;

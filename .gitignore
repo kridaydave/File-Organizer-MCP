@@ -31,7 +31,6 @@ Thumbs.db
 .continue/
 
 # Local configuration (may contain API keys/tokens)
-
 .mcpregistry_github_token
 .mcpregistry_registry_token
 
@@ -47,6 +46,7 @@ test_*.txt
 *.test.log
 coverage/
 .hidden_test/
+lint_output.txt
 
 # Debug and verification scripts (may expose internal paths)
 verify_*.js
@@ -65,10 +65,19 @@ pids/
 *.seed
 *.pid.lock
 
+# Jest cache
+.jest-cache/
+
 # User Configs & Scripts
 .agent
 debug_output.txt
 *.bat
 .sisyphus
-.github 
-node_modules
+
+# Development files
+mestuff/
+.temp/
+.temp
+
+# Windows artifacts
+nul

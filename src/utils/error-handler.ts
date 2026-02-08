@@ -13,48 +13,48 @@ import { logger } from './logger.js';
  * Improved regex to handle paths with spaces
  */
 export function sanitizeErrorMessage(error: Error | string): string {
-    const message = error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
 
-    // Replace Windows paths (Look for drive letter, colon, backslash, then chars including spaces until end or distinct break)
-    let sanitized = message.replace(/[a-zA-Z]:\\[\w\s\-\.\(\)\\$]+/g, '[PATH]');
+  // Replace Windows paths (Look for drive letter, colon, backslash, then chars including spaces until end or distinct break)
+  let sanitized = message.replace(/[a-zA-Z]:\\[\w\s\-\.\(\)\\$]+/g, '[PATH]');
 
-    // Replace Unix paths (start with / and contain path chars)
-    sanitized = sanitized.replace(/(^|\s)\/[\w\s\-\.\/]+/g, '$1[PATH]');
+  // Replace Unix paths (start with / and contain path chars)
+  sanitized = sanitized.replace(/(^|\s)\/[\w\s\-\.\/]+/g, '$1[PATH]');
 
-    return sanitized;
+  return sanitized;
 }
 
 /**
  * Create standardized error response string with Error ID
  */
 export function createErrorResponse(error: unknown): ToolResponse {
-    const errorId = crypto.randomUUID();
-    let clientMessage: string;
+  const errorId = crypto.randomUUID();
+  let clientMessage: string;
 
-    // Log full details server-side
-    const fullMessage = error instanceof Error ? error.stack || error.message : String(error);
-    logger.error(`Error ID ${errorId}: ${fullMessage}`);
+  // Log full details server-side
+  const fullMessage = error instanceof Error ? error.stack || error.message : String(error);
+  logger.error(`Error ID ${errorId}: ${fullMessage}`);
 
-    if (error instanceof FileOrganizerError) {
-        return error.toResponse();
-    } else if (error instanceof AccessDeniedError) {
-        // Safe to show sanitized message for expected errors
-        clientMessage = `Access Denied: ${sanitizeErrorMessage(error)}`;
-    } else if (error instanceof ValidationError) {
-        clientMessage = `Validation Error: ${sanitizeErrorMessage(error.message)}`;
-    } else {
-        // Hide internal details for unknown errors
-        clientMessage = `An unexpected error occurred. Error ID: ${errorId}. Please check server logs.`;
-    }
+  if (error instanceof FileOrganizerError) {
+    return error.toResponse();
+  } else if (error instanceof AccessDeniedError) {
+    // Safe to show sanitized message for expected errors
+    clientMessage = `Access Denied: ${sanitizeErrorMessage(error)}`;
+  } else if (error instanceof ValidationError) {
+    clientMessage = `Validation Error: ${sanitizeErrorMessage(error.message)}`;
+  } else {
+    // Hide internal details for unknown errors
+    clientMessage = `An unexpected error occurred. Error ID: ${errorId}. Please check server logs.`;
+  }
 
-    return {
-        content: [
-            {
-                type: 'text',
-                text: `Error: ${clientMessage}`,
-            },
-        ],
-    };
+  return {
+    content: [
+      {
+        type: 'text',
+        text: `Error: ${clientMessage}`,
+      },
+    ],
+  };
 }
 
 /**
@@ -63,9 +63,9 @@ export function createErrorResponse(error: unknown): ToolResponse {
  * @returns Formatted error message
  */
 export function formatAccessDeniedError(requestedPath: string): string {
-    const sanitizedPath = sanitizeErrorMessage(requestedPath);
+  const sanitizedPath = sanitizeErrorMessage(requestedPath);
 
-    return `❌ Access Denied: ${sanitizedPath}
+  return `❌ Access Denied: ${sanitizedPath}
 
 This directory is not allowed in STRICT mode.
 STRICT mode only allows access to the current working directory.
@@ -82,10 +82,10 @@ Learn more: https://github.com/kridaydave/File-Organizer-MCP#security-modes`;
  * Type guard to check if an error is a NodeJS.ErrnoException
  */
 export function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
-    return (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        typeof (error as Record<string, unknown>).code === 'string'
-    );
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as Record<string, unknown>).code === 'string'
+  );
 }

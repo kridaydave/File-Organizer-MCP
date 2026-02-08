@@ -9,14 +9,14 @@
  * @returns Formatted string (e.g., "1.5 MB")
  */
 export function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) return '0 Bytes';
 
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'] as const;
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    const index = Math.min(i, sizes.length - 1);
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'] as const;
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const index = Math.min(i, sizes.length - 1);
 
-    return `${Math.round((bytes / Math.pow(k, index)) * 100) / 100} ${sizes[index]}`;
+  return `${Math.round((bytes / Math.pow(k, index)) * 100) / 100} ${sizes[index]}`;
 }
 
 /**
@@ -25,7 +25,7 @@ export function formatBytes(bytes: number): string {
  * @returns ISO date string
  */
 export function formatDate(date: Date): string {
-    return date.toISOString();
+  return date.toISOString();
 }
 
 /**
@@ -34,7 +34,7 @@ export function formatDate(date: Date): string {
  * @returns Formatted duration string
  */
 export function formatDuration(ms: number): string {
-    if (ms < 1000) return `${ms}ms`;
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-    return `${(ms / 60000).toFixed(1)}m`;
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60000).toFixed(1)}m`;
 }

@@ -1,19 +1,43 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.1.4 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.1.5 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
-[Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
+[Why Us](#why-specialized-tools) • [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
 ---
 
-[![npm version](https://img.shields.io/badge/npm-v3.1.4-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v3.1.5-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-211%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-268%20passing-success.svg)](tests/)
 
 > **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
+
+---
+
+## <a id="why-specialized-tools"></a>Why File Organizer MCP? 🤖
+
+Traditional filesystem MCP servers provide primitive tools: `read`, `write`, `make`, `delete`. When you ask an AI to organize a folder using only these tools, the AI must:
+
+1. **Think 50 steps ahead** - Planning file moves, renames, and categorizations
+2. **Waste tokens** - Describing every single file operation in detail
+3. **Risk hallucinations** - More steps = more chances for the AI to make mistakes
+4. **Move slowly** - Each primitive operation requires separate reasoning
+
+### Enter File Organizer MCP
+
+We provide **specialized, high-level tools** that encapsulate complex file operations:
+
+| Primitive Approach                                     | File Organizer MCP                                   |
+| ------------------------------------------------------ | ---------------------------------------------------- |
+| `read` → `analyze` → `read` → `write` → `rename` → ... | `organize_files()` - one tool, complete organization |
+| 50+ reasoning steps                                    | 1 reasoning step                                     |
+| High token usage                                       | Minimal tokens                                       |
+| Error-prone                                            | Atomic, rollback-safe operations                     |
+
+**The AI simply decides _what_ to do. We handle _how_ to do it securely.**
 
 🎯 [Install from MCP Registry](https://registry.modelcontextprotocol.io/servers/io.github.kridaydave/file-organizer) • 📦 [View on NPM](https://www.npmjs.com/package/file-organizer-mcp) • 🐛 [Report Issues](https://github.com/kridaydave/File-Organizer-MCP/issues)
 
@@ -145,6 +169,14 @@ Run `npx file-organizer-mcp --setup` for guided configuration:
 - **🛡️ Enhanced Security** - Improved symlink detection and path validation
 
 See [CHANGELOG.md](CHANGELOG.md) for full details.
+
+### Recent Fixes (v3.1.5)
+
+- Fixed test coverage and added 57 new test cases
+- Improved duplicate detection accuracy
+- Enhanced file categorization logic
+- Better handling of special characters in filenames
+- Improved error messages for permission denied scenarios
 
 ---
 

@@ -6,7 +6,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import {
   handleWatchDirectory,
   handleUnwatchDirectory,
@@ -16,6 +15,7 @@ import { loadUserConfig, updateUserConfig, getUserConfigPath } from '../../src/c
 
 describe('Watch Mode Integration', () => {
   let testDir: string;
+  let testDir2: string;
   let originalConfig: string | null = null;
   const configPath = getUserConfigPath();
 
@@ -25,17 +25,34 @@ describe('Watch Mode Integration', () => {
       originalConfig = fs.readFileSync(configPath, 'utf-8');
     }
 
-    // Use Downloads folder as test directory (it's in allowed list)
-    testDir = path.join(os.homedir(), 'Downloads', 'watch-test-folder');
-    if (!fs.existsSync(testDir)) {
-      fs.mkdirSync(testDir, { recursive: true });
+    // Use temp directory for tests (works on all platforms and CI)
+    // This is within the project directory which is allowed in test mode
+    const tempTestDir = path.join(process.cwd(), 'tests', 'temp', 'watch-test-folder');
+    const tempTestDir2 = path.join(process.cwd(), 'tests', 'temp', 'watch-test-folder-2');
+
+    // Create test directories
+    if (!fs.existsSync(tempTestDir)) {
+      fs.mkdirSync(tempTestDir, { recursive: true });
     }
+    if (!fs.existsSync(tempTestDir2)) {
+      fs.mkdirSync(tempTestDir2, { recursive: true });
+    }
+
+    testDir = tempTestDir;
+    testDir2 = tempTestDir2;
   });
 
   afterAll(() => {
-    // Cleanup test directory
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true, force: true });
+    // Cleanup test directories
+    try {
+      if (fs.existsSync(testDir)) {
+        fs.rmSync(testDir, { recursive: true, force: true });
+      }
+      if (fs.existsSync(testDir2)) {
+        fs.rmSync(testDir2, { recursive: true, force: true });
+      }
+    } catch {
+      // Ignore cleanup errors
     }
 
     // Restore original config
@@ -156,7 +173,7 @@ describe('Watch Mode Integration', () => {
       expect(config.watchList).toBeDefined();
       expect(config.watchList!.length).toBeGreaterThan(0);
 
-      const watch = config.watchList!.find(w => w.directory === testDir);
+      const watch = config.watchList!.find((w) => w.directory === testDir);
       expect(watch).toBeDefined();
       expect(watch!.schedule).toBe('0 15 * * *');
       expect(watch!.rules.max_files_per_run).toBe(25);
@@ -222,11 +239,6 @@ describe('Watch Mode Integration', () => {
 
   describe('Multiple Watches', () => {
     it('should handle multiple directories with different schedules', async () => {
-      const testDir2 = path.join(os.homedir(), 'Downloads', 'watch-test-folder-2');
-      if (!fs.existsSync(testDir2)) {
-        fs.mkdirSync(testDir2, { recursive: true });
-      }
-
       try {
         // Add multiple watches
         await handleWatchDirectory({
@@ -248,7 +260,9 @@ describe('Watch Mode Integration', () => {
         try {
           listData = JSON.parse(listResult.content[0].text);
         } catch (e) {
-          throw new Error(`Failed to parse multiple watches list response: ${listResult.content[0].text}`);
+          throw new Error(
+            `Failed to parse multiple watches list response: ${listResult.content[0].text}`
+          );
         }
 
         expect(listData.count).toBe(2);
@@ -257,24 +271,28 @@ describe('Watch Mode Integration', () => {
         expect(directories).toContain(testDir2);
       } finally {
         // Cleanup
-        await handleUnwatchDirectory({ directory: testDir, response_format: 'json' }).catch(() => { });
-        await handleUnwatchDirectory({ directory: testDir2, response_format: 'json' }).catch(() => { });
-        if (fs.existsSync(testDir2)) {
-          fs.rmdirSync(testDir2);
-        }
+        await handleUnwatchDirectory({ directory: testDir, response_format: 'json' }).catch(
+          () => {}
+        );
+        await handleUnwatchDirectory({ directory: testDir2, response_format: 'json' }).catch(
+          () => {}
+        );
       }
     });
 
     it('should allow removing one watch while keeping others', async () => {
-      const testDir2 = path.join(os.homedir(), 'Downloads', 'watch-test-folder-2');
-      if (!fs.existsSync(testDir2)) {
-        fs.mkdirSync(testDir2, { recursive: true });
-      }
-
       try {
         // Add two watches
-        await handleWatchDirectory({ directory: testDir, schedule: '0 9 * * *', response_format: 'json' });
-        await handleWatchDirectory({ directory: testDir2, schedule: '0 10 * * *', response_format: 'json' });
+        await handleWatchDirectory({
+          directory: testDir,
+          schedule: '0 9 * * *',
+          response_format: 'json',
+        });
+        await handleWatchDirectory({
+          directory: testDir2,
+          schedule: '0 10 * * *',
+          response_format: 'json',
+        });
 
         // Remove first
         await handleUnwatchDirectory({ directory: testDir, response_format: 'json' });
@@ -292,11 +310,12 @@ describe('Watch Mode Integration', () => {
         expect(listData.watches[0].directory).toBe(testDir2);
       } finally {
         // Cleanup
-        await handleUnwatchDirectory({ directory: testDir, response_format: 'json' }).catch(() => { });
-        await handleUnwatchDirectory({ directory: testDir2, response_format: 'json' }).catch(() => { });
-        if (fs.existsSync(testDir2)) {
-          fs.rmdirSync(testDir2);
-        }
+        await handleUnwatchDirectory({ directory: testDir, response_format: 'json' }).catch(
+          () => {}
+        );
+        await handleUnwatchDirectory({ directory: testDir2, response_format: 'json' }).catch(
+          () => {}
+        );
       }
     });
   });

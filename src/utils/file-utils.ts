@@ -13,12 +13,12 @@ import os from 'os';
  * @returns True if file exists
  */
 export async function fileExists(filePath: string): Promise<boolean> {
-    try {
-        await fs.access(filePath);
-        return true;
-    } catch {
-        return false;
-    }
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -26,7 +26,7 @@ export async function fileExists(filePath: string): Promise<boolean> {
  * @param dirPath - Directory path
  */
 export async function ensureDir(dirPath: string): Promise<void> {
-    await fs.mkdir(dirPath, { recursive: true });
+  await fs.mkdir(dirPath, { recursive: true });
 }
 
 /**
@@ -35,19 +35,19 @@ export async function ensureDir(dirPath: string): Promise<void> {
  * @returns Path with ~ expanded
  */
 export function expandHomePath(inputPath: string): string {
-    if (!inputPath || typeof inputPath !== 'string') {
-        return inputPath;
-    }
-
-    if (inputPath === '~') {
-        return os.homedir();
-    }
-
-    if (inputPath.startsWith('~/') || inputPath.startsWith('~\\')) {
-        return path.join(os.homedir(), inputPath.slice(2));
-    }
-
+  if (!inputPath || typeof inputPath !== 'string') {
     return inputPath;
+  }
+
+  if (inputPath === '~') {
+    return os.homedir();
+  }
+
+  if (inputPath.startsWith('~/') || inputPath.startsWith('~\\')) {
+    return path.join(os.homedir(), inputPath.slice(2));
+  }
+
+  return inputPath;
 }
 
 /**
@@ -57,18 +57,21 @@ export function expandHomePath(inputPath: string): string {
  * @returns Path with env vars expanded
  */
 export function expandEnvVars(inputPath: string): string {
-    if (!inputPath || typeof inputPath !== 'string') {
-        return inputPath;
-    }
+  if (!inputPath || typeof inputPath !== 'string') {
+    return inputPath;
+  }
 
-    // Unix style: $VAR or ${VAR}
-    let result = inputPath.replace(/\$\{([^}]+)\}/g, (_, name: string) => process.env[name] ?? '');
-    result = result.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, name: string) => process.env[name] ?? '');
+  // Unix style: $VAR or ${VAR}
+  let result = inputPath.replace(/\$\{([^}]+)\}/g, (_, name: string) => process.env[name] ?? '');
+  result = result.replace(
+    /\$([A-Za-z_][A-Za-z0-9_]*)/g,
+    (_, name: string) => process.env[name] ?? ''
+  );
 
-    // Windows style: %VAR%
-    result = result.replace(/%([^%]+)%/g, (_, name: string) => process.env[name] ?? '');
+  // Windows style: %VAR%
+  result = result.replace(/%([^%]+)%/g, (_, name: string) => process.env[name] ?? '');
 
-    return result;
+  return result;
 }
 
 /**
@@ -77,29 +80,29 @@ export function expandEnvVars(inputPath: string): string {
  * @returns Normalized path
  */
 export function normalizePath(inputPath: string): string {
-    if (!inputPath || typeof inputPath !== 'string') {
-        return inputPath;
-    }
+  if (!inputPath || typeof inputPath !== 'string') {
+    return inputPath;
+  }
 
-    // 1. Decode URI components (e.g. %2e%2e -> ..) to prevent bypasses
-    try {
-        inputPath = decodeURIComponent(inputPath);
-    } catch {
-        // Continue with original if malformed
-    }
+  // 1. Decode URI components (e.g. %2e%2e -> ..) to prevent bypasses
+  try {
+    inputPath = decodeURIComponent(inputPath);
+  } catch {
+    // Continue with original if malformed
+  }
 
-    // 2. Unicode Normalization (NFC)
-    // Ensures consistent representation of characters
-    inputPath = inputPath.normalize('NFC');
+  // 2. Unicode Normalization (NFC)
+  // Ensures consistent representation of characters
+  inputPath = inputPath.normalize('NFC');
 
-    // 3. Strip Null Bytes (prevent truncation attacks)
-    inputPath = inputPath.replace(/\0/g, '');
+  // 3. Strip Null Bytes (prevent truncation attacks)
+  inputPath = inputPath.replace(/\0/g, '');
 
-    let normalized = expandHomePath(inputPath);
-    normalized = expandEnvVars(normalized);
-    normalized = path.normalize(normalized);
+  let normalized = expandHomePath(inputPath);
+  normalized = expandEnvVars(normalized);
+  normalized = path.normalize(normalized);
 
-    return normalized;
+  return normalized;
 }
 
 /**
@@ -109,18 +112,18 @@ export function normalizePath(inputPath: string): string {
  * @returns True if child is within parent
  */
 export function isSubPath(parentPath: string, childPath: string): boolean {
-    if (!parentPath || !childPath) {
-        return false;
-    }
+  if (!parentPath || !childPath) {
+    return false;
+  }
 
-    const normalizedParent = path.resolve(parentPath);
-    const normalizedChild = path.resolve(childPath);
+  const normalizedParent = path.resolve(parentPath);
+  const normalizedChild = path.resolve(childPath);
 
-    if (process.platform === 'win32') {
-        const relative = path.relative(normalizedParent.toLowerCase(), normalizedChild.toLowerCase());
-        return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-    }
-
-    const relative = path.relative(normalizedParent, normalizedChild);
+  if (process.platform === 'win32') {
+    const relative = path.relative(normalizedParent.toLowerCase(), normalizedChild.toLowerCase());
     return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  }
+
+  const relative = path.relative(normalizedParent, normalizedChild);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }

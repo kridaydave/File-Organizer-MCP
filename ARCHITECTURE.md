@@ -83,26 +83,43 @@ Validated Path ✅
 
 **Implementation:** [`src/services/path-validator.service.ts`](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/path-validator.service.ts)
 
-### Race Condition Mitigation (TOCTOU Protection)
+### Race Condition Mitigation (TOCTOU Protection) - v3.1.4 Updates
 
 **Problem:** Time-of-Check-Time-of-Use vulnerabilities can occur when a file is checked, then used later, allowing an attacker to swap the file between operations.
 
-**Solution:** Multi-layered approach:
+**v3.1.4 TOCTOU Fixes and Race Condition Prevention:**
 
-```typescript
-// Layer 1: File Descriptor Validation
-// Open file with O_NOFOLLOW to prevent symlink following
-const handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+1. **File Descriptor Validation**
+   - Open files with `O_NOFOLLOW` flag to prevent symlink attacks
+   - Use file descriptors directly rather than path strings after initial validation
+   - Release file handles immediately after use to minimize attack window
 
-// Layer 2: Atomic Copy Operations
-// Use COPYFILE_EXCL to ensure destination doesn't exist
-await fs.copyFile(source, dest, constants.COPYFILE_EXCL);
+2. **Atomic File Operations**
+   - Use `COPYFILE_EXCL` flag for atomic copy operations (fails if destination exists)
+   - Use `O_EXCL` flag when creating files to prevent race conditions
+   - Utilize `rename()` for atomic moves within the same filesystem
 
-// Layer 3: Safe Overwrites
-// Move existing file to backup before replacing
-const backupPath = path.join('.file-organizer-backups', `${Date.now()}_overwrite_${basename}`);
-await fs.rename(existingFile, backupPath);
-```
+3. **Retry Logic with Jitter**
+   - Implement exponential backoff with random jitter for retry operations
+   - Maximum 3 retries with increasing delays (10ms, 50ms, 100ms)
+   - Fail fast after retries to prevent denial-of-service
+
+4. **Safe Overwrite Pattern**
+   - Write to temporary file in target directory first
+   - Sync file to disk before atomic rename
+   - Move existing file to backup before replacing
+
+   ```typescript
+   // Safe overwrite with atomic rename
+   const tempPath = path.join(targetDir, `.tmp_${Date.now()}_${basename}`);
+   await fs.writeFile(tempPath, content);
+   await fs.rename(tempPath, targetPath); // Atomic on same filesystem
+   ```
+
+5. **Verification After Operations**
+   - Re-validate file stats after critical operations
+   - Verify file hash matches expected value after write
+   - Check file permissions haven't changed unexpectedly
 
 **Limitations:**
 
@@ -183,7 +200,9 @@ export async function handleTool(args: ToolArgs): Promise<ToolResponse> {
 
 **Responsibility:** Core business logic
 
-#### PathValidatorService
+**Service Versions:** All services v3.1.3 or v3.1.4
+
+#### PathValidatorService (v3.1.3)
 
 ```typescript
 class PathValidatorService {
@@ -198,7 +217,7 @@ class PathValidatorService {
 }
 ```
 
-#### OrganizerService
+#### OrganizerService (v3.1.4)
 
 ```typescript
 class OrganizerService {
@@ -236,7 +255,7 @@ class HashCalculatorService {
 }
 ```
 
-#### FileScannerService
+#### FileScannerService (v3.1.4)
 
 ```typescript
 class FileScannerService {
@@ -263,7 +282,7 @@ class CategorizerService {
 }
 ```
 
-#### RollbackService
+#### RollbackService (v3.1.4)
 
 ```typescript
 class RollbackService {
@@ -468,7 +487,7 @@ The server uses a platform-aware configuration system that combines hardcoded de
 
 ```typescript
 export const CONFIG = {
-  VERSION: '3.0.0',
+  VERSION: '3.1.5',
 
   security: {
     enablePathValidation: true,
@@ -553,7 +572,7 @@ type Args = z.infer<typeof ArgsSchema>;
 
 ```json
 {
-  "timestamp": "2026-02-02T14:09:04.413Z",
+  "timestamp": "2026-02-08T00:00:00.000Z",
   "level": "info",
   "message": "Created rollback manifest: uuid (6 actions)"
 }
@@ -584,5 +603,5 @@ type Args = z.infer<typeof ArgsSchema>;
 
 ---
 
-**Last Updated:** February 3, 2026  
-**Version:** 3.0.0
+**Last Updated:** February 8, 2026  
+**Version:** 3.1.5

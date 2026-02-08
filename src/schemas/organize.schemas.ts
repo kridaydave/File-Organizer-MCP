@@ -10,7 +10,7 @@ import { DirectoryInputSchema } from './common.schemas.js';
  * Schema for organize_files tool
  */
 export const OrganizeFilesInputSchema = DirectoryInputSchema.extend({
-    dry_run: z.boolean().default(false),
+  dry_run: z.boolean().default(false),
 });
 
 export type OrganizeFilesInput = z.infer<typeof OrganizeFilesInputSchema>;

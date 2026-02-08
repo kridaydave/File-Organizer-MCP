@@ -25,7 +25,8 @@ const currentNodeVersion = process.versions.node;
 const majorVersion = parseInt(currentNodeVersion.split('.')[0] || '0', 10);
 
 if (majorVersion < MIN_NODE_VERSION) {
-  console.error(`
+  console.error(
+    `
 ╔══════════════════════════════════════════════════════════════════╗
 ║  ERROR: Node.js version ${currentNodeVersion.padEnd(8)} is not supported                ║
 ╠══════════════════════════════════════════════════════════════════╣
@@ -37,7 +38,8 @@ if (majorVersion < MIN_NODE_VERSION) {
 ║      - nvm (Linux/Mac): nvm install ${MIN_NODE_VERSION} && nvm use ${MIN_NODE_VERSION}                   ║
 ║      - nvm-windows: nvm install ${MIN_NODE_VERSION}.0.0 && nvm use ${MIN_NODE_VERSION}.0.0            ║
 ╚══════════════════════════════════════════════════════════════════╝
-  `.trim());
+  `.trim()
+  );
   process.exit(1);
 }
 
@@ -56,7 +58,8 @@ const distServerPath = path.join(distPath, 'server.js');
 
 if (!fs.existsSync(distIndexPath) || !fs.existsSync(distServerPath)) {
   const packageRoot = path.resolve(__dirname, '..');
-  console.error(`
+  console.error(
+    `
 ╔══════════════════════════════════════════════════════════════════╗
 ║  INSTALLATION INCOMPLETE                                         ║
 ╠══════════════════════════════════════════════════════════════════╣
@@ -78,7 +81,8 @@ if (!fs.existsSync(distIndexPath) || !fs.existsSync(distServerPath)) {
 ║    cd "${packageRoot}"                                           ║
 ║    npm install && npm run build                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
-  `.trim());
+  `.trim()
+  );
   process.exit(1);
 }
 
@@ -95,13 +99,14 @@ for (const dep of criticalDeps) {
 }
 
 if (missingDeps.length > 0) {
-  console.error(`
+  console.error(
+    `
 ╔══════════════════════════════════════════════════════════════════╗
 ║  INCOMPLETE DEPENDENCIES                                         ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Required packages failed to install:                            ║
 ║                                                                  ║
-${missingDeps.map(d => `║    • ${d.padEnd(59)}║`).join('\n')}
+${missingDeps.map((d) => `║    • ${d.padEnd(59)}║`).join('\n')}
 ║                                                                  ║
 ║  Common causes:                                                  ║
 ║    • npm install --production (skipped dependencies)             ║
@@ -119,7 +124,8 @@ ${missingDeps.map(d => `║    • ${d.padEnd(59)}║`).join('\n')}
 ║    npm cache clean --force                                       ║
 ║    npm install -g file-organizer-mcp                             ║
 ╚══════════════════════════════════════════════════════════════════╝
-  `.trim());
+  `.trim()
+  );
   process.exit(1);
 }
 
@@ -188,7 +194,7 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
   }
 
   // Start auto-organize scheduler if enabled
-  const schedulerResult = startAutoOrganizeScheduler();
+  const schedulerResult = await startAutoOrganizeScheduler();
 
   // Log scheduler status and report any errors
   const scheduler = getAutoOrganizeScheduler();
@@ -202,16 +208,23 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
     logger.info('Auto-organize scheduler inactive');
   }
 
+  // Run missed schedule catch-up in background without blocking server readiness
+  if (scheduler?.isActive()) {
+    logger.info('Running missed schedule catch-up...');
+    scheduler.runMissedSchedules().catch((error) => {
+      logger.error('Missed schedule catch-up failed:', error.message);
+    });
+  }
+
   // Report scheduler errors to user
   if (schedulerResult.errors.length > 0) {
-    const hasRealErrors = schedulerResult.errors.some(e =>
-      !e.includes('already running') &&
-      !e.includes('No directories configured')
+    const hasRealErrors = schedulerResult.errors.some(
+      (e) => !e.includes('already running') && !e.includes('No directories configured')
     );
 
     if (hasRealErrors) {
       console.error('\n⚠️  Auto-Organize Scheduler Issues:');
-      schedulerResult.errors.forEach(error => {
+      schedulerResult.errors.forEach((error) => {
         if (!error.includes('already running') && !error.includes('No directories configured')) {
           console.error(`   • ${error}`);
         }
@@ -223,8 +236,8 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
 
   // Warn if auto-organize is enabled but no tasks are running
   if (schedulerResult.taskCount === 0 && schedulerResult.errors.length > 0) {
-    const hasConfigErrors = schedulerResult.errors.some(e =>
-      e.includes('Invalid cron') || e.includes('does not exist')
+    const hasConfigErrors = schedulerResult.errors.some(
+      (e) => e.includes('Invalid cron') || e.includes('does not exist')
     );
 
     if (hasConfigErrors) {
@@ -257,7 +270,8 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
 
     // Provide helpful error messages for common issues
     if (errorMessage.includes('EPIPE') || errorMessage.includes('broken pipe')) {
-      console.error(`
+      console.error(
+        `
 ╔══════════════════════════════════════════════════════════════════╗
 ║  CONNECTION ERROR                                                ║
 ╠══════════════════════════════════════════════════════════════════╣
@@ -273,9 +287,11 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
 ║    2. Check for duplicate MCP server entries in config           ║
 ║    3. Wait a few seconds before restarting                       ║
 ╚══════════════════════════════════════════════════════════════════╝
-      `.trim());
+      `.trim()
+      );
     } else if (errorMessage.includes('ECONNREFUSED')) {
-      console.error(`
+      console.error(
+        `
 ╔══════════════════════════════════════════════════════════════════╗
 ║  CONNECTION REFUSED                                              ║
 ╠══════════════════════════════════════════════════════════════════╣
@@ -284,7 +300,8 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
 ║  This usually means Claude Desktop is not running or             ║
 ║  the MCP configuration is incorrect.                             ║
 ╚══════════════════════════════════════════════════════════════════╝
-      `.trim());
+      `.trim()
+      );
     }
 
     throw error;
