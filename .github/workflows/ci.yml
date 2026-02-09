@@ -25,7 +25,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Cache Jest
         uses: actions/cache@v4
@@ -58,8 +58,15 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Clean Jest cache
-        run: npx jest --clearCache
+      - name: Clean Jest cache (if exists)
+        run: |
+          if [ -d ".jest-cache" ]; then
+            echo "Clearing existing Jest cache..."
+            npx jest --clearCache || rm -rf .jest-cache
+          else
+            echo "Jest cache directory not found, skipping clear..."
+          fi
+        continue-on-error: true
 
       - name: Run tests
         run: npm test
@@ -85,8 +92,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -110,8 +117,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -135,7 +142,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: npm-package
-          path: '*.tgz'
+          path: "*.tgz"
           retention-days: 7
 
   lint-docs:
@@ -149,4 +156,4 @@ jobs:
       - name: Check markdown files
         uses: DavidAnson/markdownlint-cli2-action@v15
         with:
-          globs: '*.md'
+          globs: "*.md"
