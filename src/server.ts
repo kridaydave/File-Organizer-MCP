@@ -1,11 +1,14 @@
 /**
- * File Organizer MCP Server v3.1.3
+ * File Organizer MCP Server v3.2.0
  * Server Initialization
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { CONFIG } from './config.js';
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
+import { CONFIG } from "./config.js";
 import {
   TOOLS,
   handleListFiles,
@@ -25,12 +28,13 @@ import {
   handleWatchDirectory,
   handleUnwatchDirectory,
   handleListWatches,
-} from './tools/index.js';
-import { sanitizeErrorMessage } from './utils/error-handler.js';
-import { logger } from './utils/logger.js';
+  handleReadFile,
+} from "./tools/index.js";
+import { sanitizeErrorMessage } from "./utils/error-handler.js";
+import { logger } from "./utils/logger.js";
 
 interface MCPToolResponse {
-  content: Array<{ type: 'text'; text: string }>;
+  content: Array<{ type: "text"; text: string }>;
   [key: string]: unknown;
 }
 
@@ -40,14 +44,14 @@ interface MCPToolResponse {
 export function createServer(): Server {
   const server = new Server(
     {
-      name: 'file-organizer',
+      name: "file-organizer",
       version: CONFIG.VERSION,
     },
     {
       capabilities: {
         tools: {},
       },
-    }
+    },
   );
 
   // Register tool list handler
@@ -63,9 +67,10 @@ export function createServer(): Server {
       const typedArgs = (args ?? {}) as Record<string, unknown>;
       return await handleToolCall(name, typedArgs);
     } catch (error) {
-      const message = error instanceof Error ? sanitizeErrorMessage(error) : 'Unknown error';
+      const message =
+        error instanceof Error ? sanitizeErrorMessage(error) : "Unknown error";
       return {
-        content: [{ type: 'text' as const, text: `Error: ${message}` }],
+        content: [{ type: "text" as const, text: `Error: ${message}` }],
       };
     }
   });
@@ -76,7 +81,7 @@ export function createServer(): Server {
 /**
  * Route tool calls to appropriate handlers
  */
-import { RateLimiter } from './services/security/rate-limiter.service.js';
+import { RateLimiter } from "./services/security/rate-limiter.service.js";
 
 const rateLimiter = new RateLimiter();
 
@@ -85,20 +90,23 @@ const rateLimiter = new RateLimiter();
  */
 async function handleToolCall(
   name: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ): Promise<MCPToolResponse> {
   // Apply Rate Limiter to heavy scanning tools
   if (
-    name.includes('scan') ||
-    name.includes('list_files') ||
-    name.includes('find_largest') ||
-    name.includes('find_duplicate')
+    name.includes("scan") ||
+    name.includes("list_files") ||
+    name.includes("find_largest") ||
+    name.includes("find_duplicate")
   ) {
-    const limit = rateLimiter.checkLimit('scan_operations');
+    const limit = rateLimiter.checkLimit("scan_operations");
     if (!limit.allowed) {
       return {
         content: [
-          { type: 'text', text: `Rate limit exceeded. Please wait ${limit.resetIn} seconds.` },
+          {
+            type: "text",
+            text: `Rate limit exceeded. Please wait ${limit.resetIn} seconds.`,
+          },
         ],
         isError: true,
       };
@@ -122,56 +130,75 @@ async function handleToolCall(
   try {
     let response: MCPToolResponse;
     switch (name) {
-      case 'file_organizer_list_files':
+      case "file_organizer_list_files":
         response = await handleListFiles(args as Record<string, unknown>);
         break;
-      case 'file_organizer_scan_directory':
+      case "file_organizer_scan_directory":
         response = await handleScanDirectory(args as Record<string, unknown>);
         break;
-      case 'file_organizer_categorize_by_type':
-        response = await handleCategorizeByType(args as Record<string, unknown>);
+      case "file_organizer_categorize_by_type":
+        response = await handleCategorizeByType(
+          args as Record<string, unknown>,
+        );
         break;
-      case 'file_organizer_find_largest_files':
-        response = await handleFindLargestFiles(args as Record<string, unknown>);
+      case "file_organizer_find_largest_files":
+        response = await handleFindLargestFiles(
+          args as Record<string, unknown>,
+        );
         break;
-      case 'file_organizer_find_duplicate_files':
-        response = await handleFindDuplicateFiles(args as Record<string, unknown>);
+      case "file_organizer_find_duplicate_files":
+        response = await handleFindDuplicateFiles(
+          args as Record<string, unknown>,
+        );
         break;
-      case 'file_organizer_organize_files':
+      case "file_organizer_organize_files":
         response = await handleOrganizeFiles(args as Record<string, unknown>);
         break;
-      case 'file_organizer_preview_organization':
-        response = await handlePreviewOrganization(args as Record<string, unknown>);
+      case "file_organizer_preview_organization":
+        response = await handlePreviewOrganization(
+          args as Record<string, unknown>,
+        );
         break;
-      case 'file_organizer_get_categories':
+      case "file_organizer_get_categories":
         response = await handleGetCategories(args as Record<string, unknown>);
         break;
-      case 'file_organizer_set_custom_rules':
+      case "file_organizer_set_custom_rules":
         response = await handleSetCustomRules(args as Record<string, unknown>);
         break;
-      case 'file_organizer_analyze_duplicates':
-        response = await handleAnalyzeDuplicates(args as Record<string, unknown>);
+      case "file_organizer_analyze_duplicates":
+        response = await handleAnalyzeDuplicates(
+          args as Record<string, unknown>,
+        );
         break;
-      case 'file_organizer_delete_duplicates':
-        response = await handleDeleteDuplicates(args as Record<string, unknown>);
+      case "file_organizer_delete_duplicates":
+        response = await handleDeleteDuplicates(
+          args as Record<string, unknown>,
+        );
         break;
-      case 'file_organizer_undo_last_operation':
-        response = await handleUndoLastOperation(args as Record<string, unknown>);
+      case "file_organizer_undo_last_operation":
+        response = await handleUndoLastOperation(
+          args as Record<string, unknown>,
+        );
         break;
-      case 'file_organizer_batch_rename':
+      case "file_organizer_batch_rename":
         response = await handleBatchRename(args as Record<string, unknown>);
         break;
-      case 'file_organizer_inspect_metadata':
+      case "file_organizer_inspect_metadata":
         response = await handleInspectMetadata(args as Record<string, unknown>);
         break;
-      case 'file_organizer_watch_directory':
+      case "file_organizer_watch_directory":
         response = await handleWatchDirectory(args as Record<string, unknown>);
         break;
-      case 'file_organizer_unwatch_directory':
-        response = await handleUnwatchDirectory(args as Record<string, unknown>);
+      case "file_organizer_unwatch_directory":
+        response = await handleUnwatchDirectory(
+          args as Record<string, unknown>,
+        );
         break;
-      case 'file_organizer_list_watches':
+      case "file_organizer_list_watches":
         response = await handleListWatches(args as Record<string, unknown>);
+        break;
+      case "file_organizer_read_file":
+        response = await handleReadFile(args as Record<string, unknown>);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
@@ -185,7 +212,7 @@ async function handleToolCall(
       ...response,
       content: response.content.map((c) => ({
         ...c,
-        text: c.text.length > 500 ? c.text.substring(0, 500) + '...' : c.text,
+        text: c.text.length > 500 ? c.text.substring(0, 500) + "..." : c.text,
       })),
     };
     logger.info(`[AUDIT] Success: ${name}`, { summary });

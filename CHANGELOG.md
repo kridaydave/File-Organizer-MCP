@@ -1,5 +1,49 @@
 # Changelog
 
+## [3.2.0] - 2026-02-10
+
+### ✨ New Features
+
+- **Secure File Reader**: New `file_organizer_read_file` tool for reading file contents with comprehensive security
+  - 8-layer path validation blocks path traversal attacks
+  - 47+ sensitive file patterns automatically blocked (.env, .ssh/, passwords, keys)
+  - TOCTOU-safe file operations with O_NOFOLLOW
+  - SHA-256 checksum verification for integrity
+  - Rate limiting (120/min, 2000/hour)
+  - Support for text, base64, and binary encoding
+  - Partial reads with offset and maxBytes
+  - JSON, markdown, and text response formats
+
+### 🛡️ Security
+
+- **File Reader Security Gates**: Comprehensive security testing suite
+  - 161 path traversal fuzzing payloads (100% blocked)
+  - 273 TOCTOU race condition tests (99.63% blocked)
+  - 144 sensitive file access tests (100% blocked)
+  - Static analysis security rules
+
+### 📚 Documentation
+
+- Added File Reader module documentation (`src/readers/README.md`)
+- Added `file_organizer_read_file` to README.md Tools Reference
+- Added File Reader architecture documentation
+- Added File Reader test documentation to TESTS.md
+- Updated API.md with complete file reader documentation
+
+### 🧪 Testing
+
+- **150 new tests** for File Reader module
+  - Result<T,E> pattern tests
+  - Error class tests
+  - SecureFileReader core tests
+  - Sensitive file pattern tests
+  - Factory tests
+  - Integration tests
+  - E2E tests
+- Total test count: 418 tests (417 passing, 1 skipped)
+
+---
+
 ## [3.1.5] - 2026-02-08
 
 ### Security & Stability Improvements

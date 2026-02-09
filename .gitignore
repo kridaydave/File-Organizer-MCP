@@ -44,9 +44,18 @@ test-*/
 test_*.txt
 *_test_output.txt
 *.test.log
+test-fixtures-reader/
+test-fixtures/
 coverage/
 .hidden_test/
 lint_output.txt
+
+# Security gate outputs
+security-gate-output/
+security-report.json
+
+# Benchmark outputs
+benchmark-results/
 
 # Debug and verification scripts (may expose internal paths)
 verify_*.js

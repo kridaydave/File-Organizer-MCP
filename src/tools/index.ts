@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.1.3
+ * File Organizer MCP Server v3.2.0
  * Tools Registry
  *
  * @module tools
@@ -7,77 +7,84 @@
  * Each tool has its own file with Zod schema validation and JSDoc documentation.
  */
 
-import type { ToolDefinition } from '../types.js';
+import type { ToolDefinition } from "../types.js";
 
 // ==================== Tool Definitions ====================
 
-export { listFilesToolDefinition, handleListFiles, ListFilesInputSchema } from './file-listing.js';
-export type { ListFilesInput } from './file-listing.js';
+export {
+  listFilesToolDefinition,
+  handleListFiles,
+  ListFilesInputSchema,
+} from "./file-listing.js";
+export type { ListFilesInput } from "./file-listing.js";
 
 export {
   scanDirectoryToolDefinition,
   handleScanDirectory,
   ScanDirectoryInputSchema,
-} from './file-scanning.js';
-export type { ScanDirectoryInput } from './file-scanning.js';
+} from "./file-scanning.js";
+export type { ScanDirectoryInput } from "./file-scanning.js";
 
 export {
   categorizeByTypeToolDefinition,
   handleCategorizeByType,
   CategorizeByTypeInputSchema,
-} from './file-categorization.js';
-export type { CategorizeByTypeInput } from './file-categorization.js';
+} from "./file-categorization.js";
+export type { CategorizeByTypeInput } from "./file-categorization.js";
 
 export {
   findLargestFilesToolDefinition,
   handleFindLargestFiles,
   FindLargestFilesInputSchema,
-} from './file-analysis.js';
-export type { FindLargestFilesInput } from './file-analysis.js';
+} from "./file-analysis.js";
+export type { FindLargestFilesInput } from "./file-analysis.js";
 
 export {
   findDuplicateFilesToolDefinition,
   handleFindDuplicateFiles,
   FindDuplicateFilesInputSchema,
-} from './file-duplicates.js';
-export type { FindDuplicateFilesInput } from './file-duplicates.js';
+} from "./file-duplicates.js";
+export type { FindDuplicateFilesInput } from "./file-duplicates.js";
 
 export {
   organizeFilesToolDefinition,
   handleOrganizeFiles,
   OrganizeFilesInputSchema,
-} from './file-organization.js';
-export type { OrganizeFilesInput } from './file-organization.js';
+} from "./file-organization.js";
+export type { OrganizeFilesInput } from "./file-organization.js";
 
 // ==================== Tool Registry ====================
 
-import { listFilesToolDefinition } from './file-listing.js';
-import { scanDirectoryToolDefinition } from './file-scanning.js';
-import { categorizeByTypeToolDefinition } from './file-categorization.js';
-import { findLargestFilesToolDefinition } from './file-analysis.js';
-import { findDuplicateFilesToolDefinition } from './file-duplicates.js';
-import { organizeFilesToolDefinition } from './file-organization.js';
-import { previewOrganizationToolDefinition } from './organization-preview.js';
-import { getCategoriesToolDefinition, setCustomRulesToolDefinition } from './file-management.js';
+import { listFilesToolDefinition } from "./file-listing.js";
+import { scanDirectoryToolDefinition } from "./file-scanning.js";
+import { categorizeByTypeToolDefinition } from "./file-categorization.js";
+import { findLargestFilesToolDefinition } from "./file-analysis.js";
+import { findDuplicateFilesToolDefinition } from "./file-duplicates.js";
+import { organizeFilesToolDefinition } from "./file-organization.js";
+import { previewOrganizationToolDefinition } from "./organization-preview.js";
+import {
+  getCategoriesToolDefinition,
+  setCustomRulesToolDefinition,
+} from "./file-management.js";
 import {
   analyzeDuplicatesToolDefinition,
   deleteDuplicatesToolDefinition,
-} from './duplicate-management.js';
-import { undoLastOperationToolDefinition } from './rollback.js';
-import { batchRenameToolDefinition } from './file-renaming.js';
-import { inspectMetadataToolDefinition } from './metadata-inspection.js';
+} from "./duplicate-management.js";
+import { undoLastOperationToolDefinition } from "./rollback.js";
+import { batchRenameToolDefinition } from "./file-renaming.js";
+import { inspectMetadataToolDefinition } from "./metadata-inspection.js";
 
 export {
   undoLastOperationToolDefinition,
   handleUndoLastOperation,
   UndoLastOperationInputSchema,
-} from './rollback.js';
+} from "./rollback.js";
 
 export {
   previewOrganizationToolDefinition,
   handlePreviewOrganization,
   PreviewOrganizationInputSchema,
-} from './organization-preview.js';
+} from "./organization-preview.js";
 
 export {
   getCategoriesToolDefinition,
@@ -86,7 +93,7 @@ export {
   setCustomRulesToolDefinition,
   handleSetCustomRules,
   SetCustomRulesInputSchema,
-} from './file-management.js';
+} from "./file-management.js";
 
 export {
   analyzeDuplicatesToolDefinition,
@@ -95,19 +102,19 @@ export {
   deleteDuplicatesToolDefinition,
   handleDeleteDuplicates,
   DeleteDuplicatesInputSchema,
-} from './duplicate-management.js';
+} from "./duplicate-management.js";
 
 export {
   batchRenameToolDefinition,
   handleBatchRename,
   BatchRenameInputSchema,
-} from './file-renaming.js';
+} from "./file-renaming.js";
 
 export {
   inspectMetadataToolDefinition,
   handleInspectMetadata,
   InspectMetadataInputSchema,
-} from './metadata-inspection.js';
+} from "./metadata-inspection.js";
 
 export {
   watchDirectoryToolDefinition,
@@ -119,8 +126,19 @@ export {
   listWatchesToolDefinition,
   handleListWatches,
   ListWatchesInputSchema,
-} from './watch.tool.js';
-export type { WatchDirectoryInput, UnwatchDirectoryInput, ListWatchesInput } from './watch.tool.js';
+} from "./watch.tool.js";
+export type {
+  WatchDirectoryInput,
+  UnwatchDirectoryInput,
+  ListWatchesInput,
+} from "./watch.tool.js";
+
+export {
+  fileReaderToolDefinition,
+  handleReadFile,
+  ReadFileInputSchema,
+} from "./file-reader.tool.js";
+export type { ReadFileInput } from "./file-reader.tool.js";
 
 // ==================== Tool Registry ====================
 
@@ -128,7 +146,8 @@ import {
   watchDirectoryToolDefinition,
   unwatchDirectoryToolDefinition,
   listWatchesToolDefinition,
-} from './watch.tool.js';
+} from "./watch.tool.js";
+import { fileReaderToolDefinition } from "./file-reader.tool.js";
 
 /**
  * All available tools for MCP registration
@@ -153,4 +172,5 @@ export const TOOLS: ToolDefinition[] = [
   watchDirectoryToolDefinition,
   unwatchDirectoryToolDefinition,
   listWatchesToolDefinition,
+  fileReaderToolDefinition,
 ];

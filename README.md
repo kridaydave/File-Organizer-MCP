@@ -1,12 +1,12 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.1.5 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.2.0 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
 [Why Us](#why-specialized-tools) • [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
 ---
 
-[![npm version](https://img.shields.io/badge/npm-v3.1.5-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v3.2.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
@@ -114,6 +114,7 @@ The setup wizard auto-detects and configures:
 - **💾 Automatic Backups** - Safely backs up files before overwriting to `.file-organizer-backups`
 - **📝 Structured Logging** - JSON-formatted logs with configurable log levels
 - **📜 Audit Trail** - Complete logging of all operations for transparency
+- **📖 Secure File Reading** - Read file contents with 8-layer security validation, encoding support (utf-8/base64/binary), partial reads, and SHA-256 integrity verification
 - **💻 Multi-Platform Support** - Native support for Windows, macOS, and Linux
 
 ### Security Features
@@ -170,7 +171,7 @@ Run `npx file-organizer-mcp --setup` for guided configuration:
 
 See [CHANGELOG.md](CHANGELOG.md) for full details.
 
-### Recent Fixes (v3.1.5)
+### Recent Fixes (v3.2.0)
 
 - Fixed test coverage and added 57 new test cases
 - Improved duplicate detection accuracy
@@ -203,7 +204,7 @@ Scan directory with detailed file information including size, dates, and extensi
 
 ```typescript
 file_organizer_scan_directory({
-  directory: '/Users/john/Downloads',
+  directory: "/Users/john/Downloads",
   include_subdirs: true,
   max_depth: 3,
   limit: 100,
@@ -225,6 +226,55 @@ List all files in a directory with basic information. Simple, fast listing.
 
 ---
 
+#### `file_organizer_read_file` ⭐ NEW in v3.2.0
+
+Read file contents with comprehensive security checks. Supports text, binary, and base64 encoding with SHA-256 checksum verification.
+
+**Parameters:**
+
+- `path` (string, required) - Absolute path to the file
+- `encoding` ('utf-8'|'base64'|'binary', optional) - Text encoding (default: 'utf-8')
+- `maxBytes` (number, optional) - Maximum bytes to read, 1B to 100MB (default: 10MB)
+- `offset` (number, optional) - Byte offset to start reading from (default: 0)
+- `limit` (number, optional) - Maximum bytes to read (alias for maxBytes)
+- `response_format` ('json'|'markdown'|'text', optional) - Output format (default: 'markdown')
+- `calculateChecksum` (boolean, optional) - Include SHA-256 checksum (default: true)
+
+**Annotations:** ✅ Read-only • ⚡ Idempotent • 🛡️ Security-hardened
+
+**Security Features:**
+
+- 🔒 8-layer path validation blocks path traversal attacks
+- 🔒 Automatic blocking of sensitive files (.env, .ssh/, passwords, keys)
+- 🔒 Rate limiting (120/min, 2000/hour)
+- 🔒 TOCTOU-safe file operations with O_NOFOLLOW
+- 🔒 SHA-256 checksums for integrity verification
+
+**Example:**
+
+```typescript
+// Read a text file
+file_organizer_read_file({
+  path: "/home/user/documents/report.txt"
+});
+
+// Read image as base64
+file_organizer_read_file({
+  path: "/home/user/photos/avatar.png",
+  encoding: "base64"
+});
+
+// Read partial content (first 1KB of log)
+file_organizer_read_file({
+  path: "/var/log/app.log",
+  offset: 0,
+  maxBytes: 1024,
+  response_format: "text"
+});
+```
+
+---
+
 #### `file_organizer_categorize_by_type`
 
 Group files by category with statistics. Shows breakdown by file type.
@@ -241,7 +291,7 @@ Group files by category with statistics. Shows breakdown by file type.
 
 ```typescript
 file_organizer_categorize_by_type({
-  directory: '/Users/john/Downloads',
+  directory: "/Users/john/Downloads",
 });
 // Output:
 // Executables    - 12 files (45 MB)
@@ -311,8 +361,8 @@ Preview file organization WITHOUT making changes. Shows planned moves, conflicts
 
 ```typescript
 file_organizer_preview_organization({
-  directory: '/Users/john/Downloads',
-  conflict_strategy: 'rename',
+  directory: "/Users/john/Downloads",
+  conflict_strategy: "rename",
 });
 ```
 
@@ -338,13 +388,13 @@ Automatically organize files into categorized folders.
 ```typescript
 // Preview first
 file_organizer_organize_files({
-  directory: '/Users/john/Downloads',
+  directory: "/Users/john/Downloads",
   dry_run: true,
 });
 
 // Then execute
 file_organizer_organize_files({
-  directory: '/Users/john/Downloads',
+  directory: "/Users/john/Downloads",
   dry_run: false,
 });
 ```
@@ -383,10 +433,10 @@ Batch rename files using pattern matching, case conversion, or sequence numberin
 
 ```typescript
 file_organizer_batch_rename({
-  directory: '/Docs',
+  directory: "/Docs",
   rules: [
-    { type: 'find_replace', find: 'IMG', replace: 'Photo' },
-    { type: 'case', conversion: 'lowercase' },
+    { type: "find_replace", find: "IMG", replace: "Photo" },
+    { type: "case", conversion: "lowercase" },
   ],
   dry_run: true,
 });
@@ -425,8 +475,8 @@ Files will be automatically organized based on the schedule you set.
 ```typescript
 // Watch Downloads folder - organize daily at 9am, files must be 5+ minutes old
 file_organizer_watch_directory({
-  directory: '/Users/john/Downloads',
-  schedule: '0 9 * * *',
+  directory: "/Users/john/Downloads",
+  schedule: "0 9 * * *",
   min_file_age_minutes: 5,
   max_files_per_run: 100,
 });
@@ -486,11 +536,16 @@ Customize how files are categorized. Rules persist for the current session.
 ```typescript
 file_organizer_set_custom_rules({
   rules: [
-    { category: 'Tax Docs', extensions: ['.pdf'], filename_pattern: '*tax*', priority: 1 },
     {
-      category: 'Receipts',
-      extensions: ['.pdf', '.png'],
-      filename_pattern: '*receipt*',
+      category: "Tax Docs",
+      extensions: [".pdf"],
+      filename_pattern: "*tax*",
+      priority: 1,
+    },
+    {
+      category: "Receipts",
+      extensions: [".pdf", ".png"],
+      filename_pattern: "*receipt*",
       priority: 2,
     },
   ],
@@ -687,7 +742,10 @@ You can customize behavior by editing the user configuration file.
 
    ```json
    {
-     "customAllowedDirectories": ["C:\\Users\\Name\\My Special Folder", "D:\\Backups"]
+     "customAllowedDirectories": [
+       "C:\\Users\\Name\\My Special Folder",
+       "D:\\Backups"
+     ]
    }
    ```
 

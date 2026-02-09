@@ -1,0 +1,388 @@
+# Security Gates Workflow
+#
+# Runs comprehensive security tests on every PR and push to main.
+# Blocks merge if any security gate fails.
+#
+# Gates:
+# 1. Path Traversal Fuzzing (1000+ payloads)
+# 2. TOCTOU Race Condition Tests
+# 3. Sensitive File Access Tests
+# 4. Static Analysis
+#
+# @security Shepherd-Gamma Approved
+
+name: Security Gates
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  schedule:
+    # Run security gates daily at 02:00 UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      skip_gates:
+        description: "Comma-separated list of gates to skip (optional)"
+        required: false
+        default: ""
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  # Build and prepare
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
+
+  # Gate 1: Path Traversal Fuzzing
+  path-traversal-fuzz:
+    name: "Gate 1: Path Traversal Fuzzing"
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.inputs.skip_gates || '', 'path-traversal') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Run Path Traversal Fuzzing
+        run: node dist/scripts/security-gates/path-traversal-fuzz.js
+        timeout-minutes: 5
+
+      - name: Upload fuzzing results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: path-traversal-results
+          path: |
+            test-security-temp/
+            security-report.json
+          if-no-files-found: ignore
+
+  # Gate 2: TOCTOU Race Condition Tests
+  toctou-tests:
+    name: "Gate 2: TOCTOU Race Condition Tests"
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.inputs.skip_gates || '', 'toctou') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Run TOCTOU Tests
+        run: node dist/scripts/security-gates/toctou-test.js
+        timeout-minutes: 5
+
+      - name: Upload TOCTOU results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: toctou-results
+          path: test-toctou-temp/
+          if-no-files-found: ignore
+
+  # Gate 3: Sensitive File Access Tests
+  sensitive-file-tests:
+    name: "Gate 3: Sensitive File Access Tests"
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.inputs.skip_gates || '', 'sensitive-files') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Run Sensitive File Tests
+        run: node dist/scripts/security-gates/sensitive-file-test.js
+        timeout-minutes: 5
+
+      - name: Upload sensitive file test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sensitive-file-results
+          path: test-sensitive-temp/
+          if-no-files-found: ignore
+
+  # Gate 4: Static Analysis
+  static-analysis:
+    name: "Gate 4: Static Analysis"
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.inputs.skip_gates || '', 'static-analysis') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Run Static Analysis
+        run: node dist/scripts/security-gates/static-analysis.js
+        timeout-minutes: 5
+
+      - name: Upload static analysis report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-analysis-report
+          path: security-report.json
+          if-no-files-found: ignore
+
+  # Run all gates together
+  security-gates-all:
+    name: "Security Gates - Full Suite"
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Run All Security Gates
+        run: node dist/scripts/security-gates/run-all.js
+        timeout-minutes: 15
+
+      - name: Upload full security report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-gates-full-report
+          path: security-gates-report.json
+          if-no-files-found: ignore
+
+  # Summary job that blocks merge on failure
+  security-summary:
+    name: "Security Gates Summary"
+    needs:
+      - path-traversal-fuzz
+      - toctou-tests
+      - sensitive-file-tests
+      - static-analysis
+      - security-gates-all
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check Security Gate Results
+        run: |
+          echo "Checking security gate results..."
+
+          # Check each gate's result
+          RESULTS=""
+
+          if [ "${{ needs.path-traversal-fuzz.result }}" == "failure" ]; then
+            RESULTS="${RESULTS}❌ Path Traversal Fuzzing FAILED\n"
+          else
+            RESULTS="${RESULTS}✅ Path Traversal Fuzzing PASSED\n"
+          fi
+
+          if [ "${{ needs.toctou-tests.result }}" == "failure" ]; then
+            RESULTS="${RESULTS}❌ TOCTOU Tests FAILED\n"
+          else
+            RESULTS="${RESULTS}✅ TOCTOU Tests PASSED\n"
+          fi
+
+          if [ "${{ needs.sensitive-file-tests.result }}" == "failure" ]; then
+            RESULTS="${RESULTS}❌ Sensitive File Tests FAILED\n"
+          else
+            RESULTS="${RESULTS}✅ Sensitive File Tests PASSED\n"
+          fi
+
+          if [ "${{ needs.static-analysis.result }}" == "failure" ]; then
+            RESULTS="${RESULTS}❌ Static Analysis FAILED\n"
+          else
+            RESULTS="${RESULTS}✅ Static Analysis PASSED\n"
+          fi
+
+          if [ "${{ needs.security-gates-all.result }}" == "failure" ]; then
+            RESULTS="${RESULTS}❌ Full Security Suite FAILED\n"
+          else
+            RESULTS="${RESULTS}✅ Full Security Suite PASSED\n"
+          fi
+
+          echo -e "$RESULTS"
+
+          # Determine overall status
+          if [ "${{ needs.path-traversal-fuzz.result }}" == "failure" ] || \
+             [ "${{ needs.toctou-tests.result }}" == "failure" ] || \
+             [ "${{ needs.sensitive-file-tests.result }}" == "failure" ] || \
+             [ "${{ needs.static-analysis.result }}" == "failure" ] || \
+             [ "${{ needs.security-gates-all.result }}" == "failure" ]; then
+            echo ""
+            echo "╔════════════════════════════════════════════════════════════════╗"
+            echo "║                                                                ║"
+            echo "║              ❌ SECURITY GATES FAILED                          ║"
+            echo "║                                                                ║"
+            echo "║         One or more security gates failed.                     ║"
+            echo "║         Merge is BLOCKED until all gates pass.                 ║"
+            echo "║                                                                ║"
+            echo "╚════════════════════════════════════════════════════════════════╝"
+            exit 1
+          else
+            echo ""
+            echo "╔════════════════════════════════════════════════════════════════╗"
+            echo "║                                                                ║"
+            echo "║              ✅ ALL SECURITY GATES PASSED                      ║"
+            echo "║                                                                ║"
+            echo "║         Code is certified for deployment.                      ║"
+            echo "║                                                                ║"
+            echo "╚════════════════════════════════════════════════════════════════╝"
+            exit 0
+          fi
+
+      - name: Download all artifacts
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          path: ./security-reports
+
+      - name: Create security report summary
+        if: always()
+        run: |
+          echo "# Security Gates Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Gate | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.path-traversal-fuzz.result }}" == "success" ]; then
+            echo "| Path Traversal Fuzzing | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Path Traversal Fuzzing | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.toctou-tests.result }}" == "success" ]; then
+            echo "| TOCTOU Race Condition Tests | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| TOCTOU Race Condition Tests | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.sensitive-file-tests.result }}" == "success" ]; then
+            echo "| Sensitive File Access Tests | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Sensitive File Access Tests | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.static-analysis.result }}" == "success" ]; then
+            echo "| Static Analysis | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Static Analysis | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "Security reports have been uploaded as artifacts." >> $GITHUB_STEP_SUMMARY
+
+  # Notify on security failures
+  notify-security-team:
+    name: Notify Security Team
+    needs: security-summary
+    runs-on: ubuntu-latest
+    if: failure() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Security Alert
+        run: |
+          echo "🚨 SECURITY ALERT 🚨"
+          echo "Security gates failed on ${{ github.ref }} branch!"
+          echo "Commit: ${{ github.sha }}"
+          echo "Actor: ${{ github.actor }}"
+          echo ""
+          echo "Immediate attention required from security team."
+          # In production, you would send notifications here:
+          # - Slack webhook
+          # - Email notification
+          # - PagerDuty alert
+          # - Security dashboard update

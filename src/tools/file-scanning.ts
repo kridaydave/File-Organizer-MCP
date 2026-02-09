@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.1.3
+ * File Organizer MCP Server v3.2.0
  * scan_directory Tool
  *
  * @module tools/file-scanning

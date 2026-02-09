@@ -297,7 +297,76 @@ class RollbackService {
 }
 ```
 
-### 4. Utils Layer (`utils/`)
+### 4. File Reader Module (`readers/`) ⭐ NEW in v3.2.0
+
+**Responsibility:** Secure file reading with comprehensive security controls
+
+**Architecture:** 3-layer security architecture with Result-based error handling
+
+#### SecureFileReader
+
+```typescript
+class SecureFileReader {
+  // Read file with full security validation
+  async read(
+    filePath: string,
+    options?: Partial<FileReadOptions>
+  ): Promise<Result<FileReadResult, FileReadError>>;
+
+  // Create readable stream for large files
+  async readStream(
+    filePath: string,
+    options?: Partial<FileReadOptions>
+  ): Promise<Result<Readable, FileReadError>>;
+
+  // Read raw buffer (binary data)
+  async readBuffer(
+    filePath: string,
+    options?: Partial<FileReadOptions>
+  ): Promise<Result<Buffer, FileReadError>>;
+}
+```
+
+**Security Layers:**
+
+1. **Layer 1 - Input Validation:**
+   - Path validation using PathValidatorService
+   - Sensitive file pattern checking (47+ patterns)
+   - Zod schema validation for inputs
+
+2. **Layer 2 - Security Controls:**
+   - Rate limiting (120 req/min, 2000 req/hour)
+   - Audit logging (all operations logged)
+   - Size limits (default 10MB, max 100MB)
+
+3. **Layer 3 - Execution:**
+   - TOCTOU-safe file opening with O_NOFOLLOW
+   - SHA-256 checksum calculation
+   - Streaming for large files (>100KB)
+
+**Error Types:**
+
+- `FileNotFoundError` - File doesn't exist
+- `FileAccessDeniedError` - Permission denied or sensitive file
+- `FileTooLargeError` - Exceeds size limit
+- `PathValidationError` - Security check failed
+- `RateLimitError` - Too many requests
+
+#### FileReaderFactory
+
+```typescript
+class FileReaderFactory {
+  // Create with default settings
+  static createDefault(): SecureFileReader;
+
+  // Create with custom options
+  static createWithOptions(options: ReaderOptions): SecureFileReader;
+}
+```
+
+**Integration:** The File Reader is exposed via the `file_organizer_read_file` MCP tool with Zod schema validation.
+
+### 5. Utils Layer (`utils/`)
 
 **Responsibility:** Shared utility functions
 

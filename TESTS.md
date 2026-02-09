@@ -4,13 +4,13 @@ This document provides comprehensive information about all tests in the File Org
 
 ## Test Suite Overview
 
-The test suite contains **268 tests** organized into three main categories:
+The test suite contains **418 tests** organized into three main categories:
 
 - **Unit Tests**: Test individual components in isolation
 - **Integration Tests**: Test complete workflows and component interactions
 - **Performance Tests**: Measure performance and resource usage
 
-**Current Status**: 267 passing, 1 skipped (99.6%)
+**Current Status**: 417 passing, 1 skipped (99.8%)
 
 ---
 
@@ -31,8 +31,16 @@ tests/
 │   ├── organize.test.ts
 │   ├── edge-cases.test.ts
 │   └── tools/organize.test.ts
-└── performance/                    # Performance benchmarks
-    └── performance.test.ts
+├── performance/                    # Performance benchmarks
+│   └── performance.test.ts
+└── readers/                        # File Reader tests (NEW in v3.2.0)
+    ├── result.test.ts              # Result<T,E> pattern tests
+    ├── errors.test.ts              # Error class tests
+    ├── secure-file-reader.test.ts  # Core reader tests
+    ├── sensitive-file-patterns.test.ts # Security pattern tests
+    ├── factory.test.ts             # Factory tests
+    ├── integration.test.ts         # Integration tests
+    └── e2e.test.ts                 # End-to-end tests
 ```
 
 ---
@@ -662,6 +670,119 @@ describe('MyService', () => {
 
 ---
 
+## File Reader Tests ⭐ NEW in v3.2.0
+
+The File Reader module (`src/readers/`) has comprehensive test coverage with **150 tests** across 7 test files:
+
+### Test Files
+
+#### 1. `src/readers/__tests__/result.test.ts` (20 tests)
+
+**Purpose:** Tests the Result<T,E> pattern implementation
+
+**Coverage:**
+- `ok()` and `err()` constructors
+- `isOk()` and `isErr()` type guards
+- `unwrap()` and `unwrapOr()` extraction
+- `map()`, `mapErr()`, and `flatMap()` operations
+
+#### 2. `src/readers/__tests__/errors.test.ts` (25 tests)
+
+**Purpose:** Tests file reader error classes
+
+**Coverage:**
+- `FileReadError` - Base error with context
+- `FileTooLargeError` - Size limit violations
+- `PathValidationError` - Security check failures
+- `RateLimitError` - Throttling enforcement
+- `FileAccessDeniedError` - Permission denials
+- `FileNotFoundError` - Missing files
+- `FileReadAbortedError` - Cancellation handling
+
+#### 3. `src/readers/__tests__/secure-file-reader.test.ts` (40 tests)
+
+**Purpose:** Tests the core SecureFileReader implementation
+
+**Coverage:**
+- `read()` method with various encodings
+- `readStream()` for large files
+- `readBuffer()` for binary data
+- Path validation integration
+- Rate limiting enforcement
+- Size limit enforcement
+- SHA-256 checksum calculation
+- Error handling and conversion
+
+#### 4. `src/readers/__tests__/sensitive-file-patterns.test.ts` (15 tests)
+
+**Purpose:** Tests sensitive file detection
+
+**Coverage:**
+- 47+ file pattern matches (.env, .ssh/, etc.)
+- 15+ directory pattern matches
+- `isSensitiveFile()` boolean check
+- `checkSensitiveFile()` Result-based check
+- `getMatchedPattern()` for debugging
+- `sanitizePathForLogging()` for safe logging
+
+#### 5. `src/readers/__tests__/factory.test.ts` (20 tests)
+
+**Purpose:** Tests FileReaderFactory
+
+**Coverage:**
+- `createDefault()` with standard settings
+- `createWithOptions()` with custom configuration
+- Rate limiter injection
+- Audit logger injection
+- Path validator configuration
+
+#### 6. `src/readers/__tests__/integration.test.ts` (20 tests)
+
+**Purpose:** Integration tests with real file system
+
+**Coverage:**
+- End-to-end file reading workflows
+- Unicode file handling
+- Binary file reading
+- JSON file parsing
+- Large file streaming
+- Concurrent read operations
+
+#### 7. `src/readers/__tests__/e2e.test.ts` (10 tests)
+
+**Purpose:** End-to-end MCP tool integration
+
+**Coverage:**
+- `file_organizer_read_file` tool handler
+- Zod schema validation
+- Response formatting (JSON, markdown, text)
+- Error response formatting
+
+### Security Test Coverage
+
+The File Reader tests specifically verify:
+
+- **Path Traversal Protection:** All 161 fuzzing payloads blocked
+- **TOCTOU Mitigation:** O_NOFOLLOW prevents symlink attacks
+- **Sensitive File Blocking:** 144/144 patterns correctly identified
+- **Rate Limiting:** Throttling works correctly
+- **Size Limits:** Oversized files are rejected
+
+### Running File Reader Tests
+
+```bash
+# Run all reader tests
+npm test -- src/readers/__tests__
+
+# Run with coverage
+npm test -- --coverage src/readers
+
+# Run specific test file
+npm test -- src/readers/__tests__/secure-file-reader.test.ts
+```
+
+---
+
 ## Test Coverage Goals
 
 Current coverage targets:
@@ -669,6 +790,7 @@ Current coverage targets:
 - **Services**: 100% (critical paths)
 - **Tools**: 100% (core functionality)
 - **Utils**: >90% (helper functions)
+- **File Reader**: >85% (new in v3.2.0)
 
 Run `npm run test:coverage` to generate coverage report.
 

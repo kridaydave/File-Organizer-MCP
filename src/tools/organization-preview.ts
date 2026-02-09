@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.1.3
+ * File Organizer MCP Server v3.2.0
  * organization-preview Tool
  *
  * @module tools/organization-preview

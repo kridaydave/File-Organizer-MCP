@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.1.4
+ * File Organizer MCP Server v3.2.0
  * Utils Module Exports
  */
 
