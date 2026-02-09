@@ -39,8 +39,13 @@ jobs:
         run: npm ci
 
       - name: Setup test directories
+        shell: bash
         run: |
-          mkdir -p tests/temp
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            if [ ! -d "tests/temp" ]; then mkdir -p tests/temp; fi
+          else
+            mkdir -p tests/temp
+          fi
           echo "Test directories created"
 
       - name: Run linter

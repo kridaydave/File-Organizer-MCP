@@ -157,17 +157,15 @@ Run `npx file-organizer-mcp --setup` for guided configuration:
 - **📅 Schedule Setup** - Configure automatic organization schedules
 - **🤖 Claude Integration** - Auto-generates `claude_desktop_config.json`
 
-### What's New in v3.1.0
+### What's New in V3.2.0
 
 **New Features:**
 
-- **🧙 Interactive Setup Wizard** - Run `npx file-organizer-mcp --setup` for guided configuration
-- **📅 Smart Scheduling** - Cron-based watch mode with `file_organizer_watch_directory`
-- **⏱️ Age Filtering** - Skip recently modified files during auto-organization
-- **🎵 Smart Metadata** - Organize images by Year/Month and audio by Artist/Album
-- **🏷️ Batch Renaming** - Bulk renaming with patterns, regex, and numbering
-- **⚙️ Conflict Strategy** - Configurable default conflict resolution
-- **🛡️ Enhanced Security** - Improved symlink detection and path validation
+- **File-reader tool** - Read files with configurable encoding and line limits
+
+
+
+See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 See [CHANGELOG.md](CHANGELOG.md) for full details.
 
