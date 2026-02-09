@@ -43,8 +43,12 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
             if [ ! -d "tests/temp" ]; then mkdir -p tests/temp; fi
+            if [ ! -d "test-fixtures" ]; then mkdir -p test-fixtures; fi
+            if [ ! -d "test-fixtures-e2e" ]; then mkdir -p test-fixtures-e2e; fi
           else
             mkdir -p tests/temp
+            mkdir -p test-fixtures
+            mkdir -p test-fixtures-e2e
           fi
           echo "Test directories created"
 
@@ -54,8 +58,13 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Clean Jest cache
+        run: npx jest --clearCache
+
       - name: Run tests
         run: npm test
+        env:
+          CI: true
 
       - name: Upload coverage (Ubuntu + Node 20 only)
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
