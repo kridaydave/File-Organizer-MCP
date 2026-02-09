@@ -163,10 +163,6 @@ Run `npx file-organizer-mcp --setup` for guided configuration:
 
 - **File-reader tool** - Read files with configurable encoding and line limits
 
-
-
-See [CHANGELOG.md](CHANGELOG.md) for full details.
-
 See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ### Recent Fixes (v3.2.0)
