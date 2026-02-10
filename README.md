@@ -11,7 +11,7 @@
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-268%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-631%20passing-success.svg)](tests/)
 
 > **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
 
@@ -76,6 +76,26 @@ Try these commands in your AI client:
 - `"Organize my Downloads folder"`
 - `"Find duplicate files in my Documents"`
 - `"Show me my largest files"`
+
+### Installation Methods
+
+You have two options to run File Organizer MCP:
+
+| Method | Command | Best For |
+|--------|---------|----------|
+| **npx (no install)** | `npx file-organizer-mcp --setup` | Trying it out, occasional use |
+| **Global install** | `npm install -g file-organizer-mcp` | Regular use, faster startup |
+
+**Using npx:**
+- No installation needed - downloads on first run
+- Always gets the latest version
+- Slightly slower on first run
+
+**Using npm install -g:**
+- Install once: `npm install -g file-organizer-mcp`
+- Then run anytime: `file-organizer-mcp --setup` or `file-organizer-setup`
+- Faster startup, works offline
+- Update with: `npm update -g file-organizer-mcp`
 
 ### Supported AI Clients
 
