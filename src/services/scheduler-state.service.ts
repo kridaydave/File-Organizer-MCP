@@ -6,11 +6,12 @@
  * Tracks last successful run timestamps per watched directory.
  */
 
-import fs from 'fs';
-import fsPromises from 'fs/promises';
-import path from 'path';
-import os from 'os';
-import { logger } from '../utils/logger.js';
+import fs from "fs";
+import fsPromises from "fs/promises";
+import path from "path";
+import os from "os";
+import { logger } from "../utils/logger.js";
+import { validateStrictPath } from "./path-validator.service.js";
 
 const STATE_FILE_VERSION = 1;
 
@@ -59,22 +60,28 @@ export class SchedulerStateService {
     const platform = os.platform();
     const home = os.homedir();
 
-    if (platform === 'win32') {
+    if (platform === "win32") {
       // Windows: %APPDATA%\file-organizer-mcp\scheduler-state.json
-      const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-      return path.join(appData, 'file-organizer-mcp', 'scheduler-state.json');
-    } else if (platform === 'darwin') {
+      const appData =
+        process.env.APPDATA || path.join(home, "AppData", "Roaming");
+      return path.join(appData, "file-organizer-mcp", "scheduler-state.json");
+    } else if (platform === "darwin") {
       // macOS: ~/Library/Application Support/file-organizer-mcp/scheduler-state.json
       return path.join(
         home,
-        'Library',
-        'Application Support',
-        'file-organizer-mcp',
-        'scheduler-state.json'
+        "Library",
+        "Application Support",
+        "file-organizer-mcp",
+        "scheduler-state.json",
       );
     } else {
       // Linux: ~/.config/file-organizer-mcp/scheduler-state.json
-      return path.join(home, '.config', 'file-organizer-mcp', 'scheduler-state.json');
+      return path.join(
+        home,
+        ".config",
+        "file-organizer-mcp",
+        "scheduler-state.json",
+      );
     }
   }
 
@@ -98,10 +105,12 @@ export class SchedulerStateService {
     }
 
     try {
+      // Validate state file path to prevent directory traversal
+      this.stateFilePath = await validateStrictPath(this.stateFilePath);
       await this.loadState();
       this.initialized = true;
     } catch (error) {
-      logger.error('Failed to initialize scheduler state service:', error);
+      logger.error("Failed to initialize scheduler state service:", error);
       // Start with empty state on error
       this.state = this.createEmptyState();
       this.initialized = true;
@@ -113,7 +122,9 @@ export class SchedulerStateService {
    */
   private ensureInitialized(): void {
     if (!this.initialized) {
-      throw new Error('SchedulerStateService not initialized. Call initialize() first.');
+      throw new Error(
+        "SchedulerStateService not initialized. Call initialize() first.",
+      );
     }
   }
 
@@ -122,19 +133,24 @@ export class SchedulerStateService {
    */
   private async loadState(): Promise<void> {
     try {
+      // Validate path before file operations
+      const validatedPath = await validateStrictPath(this.stateFilePath);
+
       // Check if file exists
-      if (!fs.existsSync(this.stateFilePath)) {
-        logger.debug(`Scheduler state file not found at ${this.stateFilePath}, starting fresh`);
+      if (!fs.existsSync(validatedPath)) {
+        logger.debug(
+          `Scheduler state file not found at ${validatedPath}, starting fresh`,
+        );
         this.state = this.createEmptyState();
         return;
       }
 
       // Read and parse the file
-      const data = await fsPromises.readFile(this.stateFilePath, 'utf-8');
+      const data = await fsPromises.readFile(validatedPath, "utf-8");
 
       // Handle empty file
       if (!data.trim()) {
-        logger.warn('Scheduler state file is empty, starting fresh');
+        logger.warn("Scheduler state file is empty, starting fresh");
         this.state = this.createEmptyState();
         return;
       }
@@ -143,20 +159,23 @@ export class SchedulerStateService {
 
       // Validate structure
       if (!this.isValidState(parsed)) {
-        logger.warn('Scheduler state file is invalid, starting fresh');
+        logger.warn("Scheduler state file is invalid, starting fresh");
         this.state = this.createEmptyState();
         return;
       }
 
       // Migrate if needed
       this.state = this.migrateState(parsed);
-      logger.debug('Scheduler state loaded successfully');
+      logger.debug("Scheduler state loaded successfully");
     } catch (error) {
       // Handle JSON parse errors specifically
       if (error instanceof SyntaxError) {
-        logger.error('Scheduler state file is corrupted, starting fresh:', error);
+        logger.error(
+          "Scheduler state file is corrupted, starting fresh:",
+          error,
+        );
       } else {
-        logger.error('Error loading scheduler state:', error);
+        logger.error("Error loading scheduler state:", error);
       }
       this.state = this.createEmptyState();
     }
@@ -167,17 +186,24 @@ export class SchedulerStateService {
    */
   private async saveState(): Promise<void> {
     try {
+      // Validate path before any file operations to prevent directory traversal
+      const validatedPath = await validateStrictPath(this.stateFilePath);
+
       // Ensure directory exists
-      const dir = path.dirname(this.stateFilePath);
+      const dir = path.dirname(validatedPath);
       if (!fs.existsSync(dir)) {
         await fsPromises.mkdir(dir, { recursive: true });
       }
 
       // Write state to file
-      await fsPromises.writeFile(this.stateFilePath, JSON.stringify(this.state, null, 2), 'utf-8');
-      logger.debug('Scheduler state saved successfully');
+      await fsPromises.writeFile(
+        validatedPath,
+        JSON.stringify(this.state, null, 2),
+        "utf-8",
+      );
+      logger.debug("Scheduler state saved successfully");
     } catch (error) {
-      logger.error('Failed to save scheduler state:', error);
+      logger.error("Failed to save scheduler state:", error);
       // Don't throw - state persistence is best-effort
     }
   }
@@ -186,35 +212,35 @@ export class SchedulerStateService {
    * Validate the state object structure
    */
   private isValidState(state: unknown): state is SchedulerState {
-    if (typeof state !== 'object' || state === null) {
+    if (typeof state !== "object" || state === null) {
       return false;
     }
 
     const s = state as SchedulerState;
 
     // Check version
-    if (typeof s.version !== 'number') {
+    if (typeof s.version !== "number") {
       return false;
     }
 
     // Check directories
-    if (typeof s.directories !== 'object' || s.directories === null) {
+    if (typeof s.directories !== "object" || s.directories === null) {
       return false;
     }
 
     // Validate each directory entry
     for (const [key, value] of Object.entries(s.directories)) {
-      if (typeof key !== 'string') {
+      if (typeof key !== "string") {
         return false;
       }
-      if (typeof value !== 'object' || value === null) {
+      if (typeof value !== "object" || value === null) {
         return false;
       }
       const dirState = value as DirectoryState;
-      if (typeof dirState.lastRunTime !== 'string') {
+      if (typeof dirState.lastRunTime !== "string") {
         return false;
       }
-      if (typeof dirState.schedule !== 'string') {
+      if (typeof dirState.schedule !== "string") {
         return false;
       }
       // Validate ISO date format
@@ -237,7 +263,9 @@ export class SchedulerStateService {
     }
 
     // Future migrations would go here
-    logger.warn(`Migrating scheduler state from version ${state.version} to ${STATE_FILE_VERSION}`);
+    logger.warn(
+      `Migrating scheduler state from version ${state.version} to ${STATE_FILE_VERSION}`,
+    );
     return {
       ...state,
       version: STATE_FILE_VERSION,
@@ -251,7 +279,7 @@ export class SchedulerStateService {
     // Use absolute path
     const absolute = path.resolve(directory);
     // Normalize slashes for cross-platform consistency
-    return absolute.replace(/\\/g, '/').toLowerCase();
+    return absolute.replace(/\\/g, "/").toLowerCase();
   }
 
   /**
@@ -283,7 +311,11 @@ export class SchedulerStateService {
    * @param timestamp - The run timestamp (defaults to now)
    * @param schedule - The cron schedule for this directory
    */
-  async setLastRunTime(directory: string, timestamp?: Date, schedule?: string): Promise<void> {
+  async setLastRunTime(
+    directory: string,
+    timestamp?: Date,
+    schedule?: string,
+  ): Promise<void> {
     this.ensureInitialized();
 
     const normalizedDir = this.normalizeDirectory(directory);
@@ -291,7 +323,8 @@ export class SchedulerStateService {
 
     this.state.directories[normalizedDir] = {
       lastRunTime: runTime.toISOString(),
-      schedule: schedule || this.state.directories[normalizedDir]?.schedule || '',
+      schedule:
+        schedule || this.state.directories[normalizedDir]?.schedule || "",
     };
 
     await this.saveState();
@@ -306,7 +339,7 @@ export class SchedulerStateService {
     this.ensureInitialized();
 
     const normalizedDir = this.normalizeDirectory(directory);
-    return this.state.directories[normalizedDir]?.schedule || '';
+    return this.state.directories[normalizedDir]?.schedule || "";
   }
 
   /**
@@ -329,7 +362,7 @@ export class SchedulerStateService {
 
     this.state = this.createEmptyState();
     await this.saveState();
-    logger.info('Scheduler state cleared');
+    logger.info("Scheduler state cleared");
   }
 
   /**

@@ -3,12 +3,12 @@
  * File Scanner Service
  */
 
-import fs from 'fs/promises';
-import path from 'path';
-import type { FileInfo, FileWithSize, ScanOptions } from '../types.js';
-import { CONFIG, SKIP_DIRECTORIES } from '../config.js';
-import { logger } from '../utils/logger.js';
-import { isErrnoException } from '../utils/error-handler.js';
+import fs from "fs/promises";
+import path from "path";
+import type { FileInfo, FileWithSize, ScanOptions } from "../types.js";
+import { CONFIG, SKIP_DIRECTORIES } from "../config.js";
+import { logger } from "../utils/logger.js";
+import { isErrnoException } from "../utils/error-handler.js";
 
 /**
  * File Scanner Service - core scanning logic
@@ -19,7 +19,7 @@ export class FileScannerService {
 
   constructor(
     maxFiles = CONFIG.security.maxFilesPerOperation,
-    maxDepth = CONFIG.security.maxScanDepth
+    maxDepth = CONFIG.security.maxScanDepth,
   ) {
     this.maxFiles = maxFiles;
     this.maxDepth = maxDepth;
@@ -28,21 +28,50 @@ export class FileScannerService {
   /**
    * Scan directory for files with full metadata
    */
-  async scanDirectory(directory: string, options: ScanOptions = {}): Promise<FileInfo[]> {
-    const { includeSubdirs = false, maxDepth = -1 } = options;
+  async scanDirectory(
+    directory: string,
+    options: ScanOptions & { timeoutMs?: number } = {},
+  ): Promise<FileInfo[]> {
+    const {
+      includeSubdirs = false,
+      maxDepth = -1,
+      timeoutMs = 30000,
+    } = options;
     const results: FileInfo[] = [];
 
-    await this.scanDir(directory, results, includeSubdirs, maxDepth, 0, new Set());
+    const scanPromise = this.scanDir(
+      directory,
+      results,
+      includeSubdirs,
+      maxDepth,
+      0,
+      new Set(),
+    );
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Scan timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    await Promise.race([scanPromise, timeoutPromise]);
     return results;
   }
 
   /**
    * Get all files with basic info (name, path, size)
    */
-  async getAllFiles(directory: string, includeSubdirs = false): Promise<FileWithSize[]> {
+  async getAllFiles(
+    directory: string,
+    includeSubdirs = false,
+  ): Promise<FileWithSize[]> {
     const results: FileWithSize[] = [];
 
-    const scanDir = async (dir: string, depth: number, visited: Set<string>): Promise<void> => {
+    const scanDir = async (
+      dir: string,
+      depth: number,
+      visited: Set<string>,
+    ): Promise<void> => {
       if (includeSubdirs && depth > this.maxDepth) {
         return;
       }
@@ -61,14 +90,24 @@ export class FileScannerService {
         items = await fs.readdir(dir, { withFileTypes: true });
       } catch (error) {
         if (isErrnoException(error)) {
-          if (error.code === 'EACCES' || error.code === 'EPERM' || error.code === 'ENOENT') return;
+          if (
+            error.code === "EACCES" ||
+            error.code === "EPERM" ||
+            error.code === "ENOENT"
+          )
+            return;
         }
         throw error;
       }
 
       for (const item of items) {
-        if (item.name.startsWith('.')) continue;
-        if (SKIP_DIRECTORIES.includes(item.name as (typeof SKIP_DIRECTORIES)[number])) continue;
+        if (item.name.startsWith(".")) continue;
+        if (
+          SKIP_DIRECTORIES.includes(
+            item.name as (typeof SKIP_DIRECTORIES)[number],
+          )
+        )
+          continue;
 
         const fullPath = path.join(dir, item.name);
 
@@ -84,7 +123,10 @@ export class FileScannerService {
             let statError: Error | undefined;
             try {
               // We use O_RDONLY | O_NOFOLLOW
-              handle = await fs.open(fullPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+              handle = await fs.open(
+                fullPath,
+                fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+              );
               const stats = await handle.stat();
 
               results.push({
@@ -97,17 +139,18 @@ export class FileScannerService {
               // BUG-003 FIX: Store error instead of throwing to ensure finally executes
               if (isErrnoException(error)) {
                 if (
-                  error.code === 'ELOOP' ||
-                  error.code === 'EACCES' ||
-                  error.code === 'EPERM' ||
-                  error.code === 'EBUSY'
+                  error.code === "ELOOP" ||
+                  error.code === "EACCES" ||
+                  error.code === "EPERM" ||
+                  error.code === "EBUSY"
                 ) {
                   // Skip file silently
                 } else {
                   statError = error;
                 }
               } else {
-                statError = error instanceof Error ? error : new Error(String(error));
+                statError =
+                  error instanceof Error ? error : new Error(String(error));
               }
             } finally {
               // BUG-003 FIX: Always close handle, wrapped in try-catch
@@ -128,10 +171,14 @@ export class FileScannerService {
             await scanDir(fullPath, depth + 1, visited);
           }
         } catch (error) {
-          if (error instanceof Error && error.message.includes('Maximum file limit')) throw error;
+          if (
+            error instanceof Error &&
+            error.message.includes("Maximum file limit")
+          )
+            throw error;
 
           if (isErrnoException(error)) {
-            if (error.code === 'EACCES' || error.code === 'ENOENT') continue;
+            if (error.code === "EACCES" || error.code === "ENOENT") continue;
           }
         }
       }
@@ -170,7 +217,7 @@ export class FileScannerService {
     includeSubdirs: boolean,
     maxDepth: number,
     currentDepth: number,
-    visited: Set<string>
+    visited: Set<string>,
   ): Promise<void> {
     // Enforce limits
     if (maxDepth !== -1 && currentDepth > maxDepth) return;
@@ -198,11 +245,11 @@ export class FileScannerService {
       items = await fs.readdir(dir, { withFileTypes: true });
     } catch (error) {
       if (isErrnoException(error)) {
-        if (error.code === 'EACCES' || error.code === 'EPERM') {
+        if (error.code === "EACCES" || error.code === "EPERM") {
           logger.warn(`Permission denied at ${dir}, skipping`);
           return;
         }
-        if (error.code === 'ENOENT') {
+        if (error.code === "ENOENT") {
           // Directory disappeared
           return;
         }
@@ -211,8 +258,13 @@ export class FileScannerService {
     }
 
     for (const item of items) {
-      if (item.name.startsWith('.')) continue;
-      if (SKIP_DIRECTORIES.includes(item.name as (typeof SKIP_DIRECTORIES)[number])) continue;
+      if (item.name.startsWith(".")) continue;
+      if (
+        SKIP_DIRECTORIES.includes(
+          item.name as (typeof SKIP_DIRECTORIES)[number],
+        )
+      )
+        continue;
 
       const fullPath = path.join(dir, item.name);
 
@@ -228,7 +280,10 @@ export class FileScannerService {
           let handle: fs.FileHandle | undefined;
           let statError: Error | undefined;
           try {
-            handle = await fs.open(fullPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+            handle = await fs.open(
+              fullPath,
+              fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+            );
             const stats = await handle.stat();
 
             results.push({
@@ -244,17 +299,18 @@ export class FileScannerService {
             // Skip if symlink or access denied
             if (isErrnoException(error)) {
               if (
-                error.code === 'ELOOP' ||
-                error.code === 'EACCES' ||
-                error.code === 'EPERM' ||
-                error.code === 'EBUSY'
+                error.code === "ELOOP" ||
+                error.code === "EACCES" ||
+                error.code === "EPERM" ||
+                error.code === "EBUSY"
               ) {
                 // Skip file silently
               } else {
                 statError = error;
               }
             } else {
-              statError = error instanceof Error ? error : new Error(String(error));
+              statError =
+                error instanceof Error ? error : new Error(String(error));
             }
           } finally {
             // BUG-003 FIX: Always close handle, wrapped in try-catch
@@ -278,25 +334,29 @@ export class FileScannerService {
             includeSubdirs,
             maxDepth,
             currentDepth + 1,
-            visited
+            visited,
           );
         }
       } catch (error) {
-        if (error instanceof Error && error.message.includes('Maximum file limit')) throw error;
+        if (
+          error instanceof Error &&
+          error.message.includes("Maximum file limit")
+        )
+          throw error;
 
         // Ignore individual file access errors (race condition or permission)
         if (isErrnoException(error)) {
           if (
-            error.code === 'EACCES' ||
-            error.code === 'EPERM' ||
-            error.code === 'ENOENT' ||
-            error.code === 'EINVAL'
+            error.code === "EACCES" ||
+            error.code === "EPERM" ||
+            error.code === "ENOENT" ||
+            error.code === "EINVAL"
           ) {
             continue;
           }
         }
         logger.error(
-          `Error processing ${fullPath}: ${error instanceof Error ? error.message : String(error)}`
+          `Error processing ${fullPath}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }

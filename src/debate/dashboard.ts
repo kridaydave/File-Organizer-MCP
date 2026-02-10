@@ -692,7 +692,7 @@ export class WebDashboardServer {
   private wss: WebSocketServer | null = null;
   private clients: Set<WebSocket> = new Set();
   private port: number;
-  private updateInterval: number | null = null;
+  private updateInterval: NodeJS.Timeout | null = null;
 
   /**
    * Creates a new WebDashboardServer.
@@ -752,11 +752,14 @@ export class WebDashboardServer {
       this.clients.size,
     );
 
-    ws.addEventListener("message", (event: { data: unknown }) => {
+    const messageHandler = (event: { data: unknown }) => {
       this.handleClientMessage(ws, event.data);
-    });
+    };
+
+    ws.addEventListener("message", messageHandler);
 
     ws.addEventListener("close", () => {
+      ws.removeEventListener("message", messageHandler);
       this.clients.delete(ws);
       console.log(
         "Dashboard client disconnected. Total clients:",
@@ -832,7 +835,7 @@ export class WebDashboardServer {
       clearInterval(this.updateInterval);
     }
 
-    this.updateInterval = window.setInterval(() => {
+    this.updateInterval = setInterval(() => {
       const dashboard = getDashboard();
       this.broadcastUpdate(dashboard);
     }, interval);
@@ -843,7 +846,7 @@ export class WebDashboardServer {
    */
   stopUpdates(): void {
     if (this.updateInterval !== null) {
-      clearInterval(this.updateInterval as unknown as number);
+      clearInterval(this.updateInterval);
       this.updateInterval = null;
     }
   }

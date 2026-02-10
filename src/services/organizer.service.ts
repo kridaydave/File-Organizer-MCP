@@ -3,25 +3,29 @@
  * Organizer Service
  */
 
-import fs from 'fs/promises';
-import { constants } from 'fs';
-import path from 'path';
+import fs from "fs/promises";
+import { constants } from "fs";
+import path from "path";
 import type {
   FileWithSize,
   OrganizeAction,
   CategoryName,
   OrganizationPlan,
   RollbackAction,
-} from '../types.js';
-import { CATEGORIES } from '../constants.js';
-import { fileExists } from '../utils/file-utils.js';
-import { logger } from '../utils/logger.js';
-import { CategorizerService } from './categorizer.service.js';
-import { RollbackService } from './rollback.service.js';
-import { PathValidatorService } from './path-validator.service.js';
-import { MetadataService } from './metadata.service.js';
+} from "../types.js";
+import { CATEGORIES } from "../constants.js";
+import { fileExists } from "../utils/file-utils.js";
+import { logger } from "../utils/logger.js";
+import { CategorizerService } from "./categorizer.service.js";
+import { RollbackService } from "./rollback.service.js";
+import { PathValidatorService } from "./path-validator.service.js";
+import { MetadataService } from "./metadata.service.js";
 
-export type ConflictStrategy = 'rename' | 'skip' | 'overwrite' | 'overwrite_if_newer';
+export type ConflictStrategy =
+  | "rename"
+  | "skip"
+  | "overwrite"
+  | "overwrite_if_newer";
 
 export interface OrganizeOptions {
   dryRun?: boolean;
@@ -40,7 +44,7 @@ export interface OrganizeResult {
 export class OrganizerService {
   constructor(
     private categorizer: CategorizerService = new CategorizerService(),
-    private metadataService: MetadataService = new MetadataService()
+    private metadataService: MetadataService = new MetadataService(),
   ) {}
 
   /**
@@ -65,9 +69,9 @@ export class OrganizerService {
   async generateOrganizationPlan(
     directory: string,
     files: FileWithSize[],
-    conflictStrategy: ConflictStrategy = 'rename'
+    conflictStrategy: ConflictStrategy = "rename",
   ): Promise<OrganizationPlan> {
-    const moves: OrganizationPlan['moves'] = [];
+    const moves: OrganizationPlan["moves"] = [];
     const categoryCounts: Record<string, number> = {};
     const skippedFiles: { path: string; reason: string }[] = [];
     const warnings: string[] = [];
@@ -85,7 +89,10 @@ export class OrganizerService {
         categoryCounts[category]++;
 
         // Get metadata-based subpath (e.g., "2024/02" for images or "Artist/Album" for audio)
-        const metadataSubpath = await this.metadataService.getMetadataSubpath(file.path, category);
+        const metadataSubpath = await this.metadataService.getMetadataSubpath(
+          file.path,
+          category,
+        );
 
         // Build destination path with optional metadata subdirectories
         const destFolder = metadataSubpath
@@ -93,17 +100,17 @@ export class OrganizerService {
           : path.join(directory, category);
         let destPath = path.join(destFolder, file.name);
         let hasConflict = false;
-        let conflictResolution: 'rename' | 'skip' | 'overwrite' | undefined;
+        let conflictResolution: "rename" | "skip" | "overwrite" | undefined;
 
         // Check conflict with Disk OR Previous Planned Move
         if ((await fileExists(destPath)) || plannedDestinations.has(destPath)) {
           hasConflict = true;
 
-          if (conflictStrategy === 'skip') {
-            conflictResolution = 'skip';
-          } else if (conflictStrategy === 'overwrite') {
-            conflictResolution = 'overwrite';
-          } else if (conflictStrategy === 'overwrite_if_newer') {
+          if (conflictStrategy === "skip") {
+            conflictResolution = "skip";
+          } else if (conflictStrategy === "overwrite") {
+            conflictResolution = "overwrite";
+          } else if (conflictStrategy === "overwrite_if_newer") {
             // Note: We can only check disk timestamp, not "planned" file timestamp easily if batch collision.
             // For simplicity, we assume disk check.
             // usage: if file exists on disk, check time.
@@ -113,33 +120,39 @@ export class OrganizerService {
               const srcStat = await fs.stat(file.path);
               const destStat = await fs.stat(destPath);
               if (srcStat.mtime > destStat.mtime) {
-                conflictResolution = 'overwrite';
+                conflictResolution = "overwrite";
               } else {
-                conflictResolution = 'skip';
+                conflictResolution = "skip";
               }
             } else {
               // Collision with another file in this batch -> Default to rename to avoid data loss
-              conflictResolution = 'rename';
+              conflictResolution = "rename";
             }
           } else {
-            conflictResolution = 'rename';
+            conflictResolution = "rename";
           }
 
           // Perform Rename Simulation if needed
-          if (conflictResolution === 'rename') {
+          if (conflictResolution === "rename") {
             const ext = path.extname(destPath);
             const base = path.basename(destPath, ext);
             let counter = 1;
             const originalBase = base;
             // Check against Disk AND Plan
-            while ((await fileExists(destPath)) || plannedDestinations.has(destPath)) {
-              destPath = path.join(destFolder, `${originalBase}_${counter}${ext}`);
+            while (
+              (await fileExists(destPath)) ||
+              plannedDestinations.has(destPath)
+            ) {
+              destPath = path.join(
+                destFolder,
+                `${originalBase}_${counter}${ext}`,
+              );
               counter++;
             }
           }
         }
 
-        if (conflictResolution !== 'skip') {
+        if (conflictResolution !== "skip") {
           plannedDestinations.add(destPath);
         }
 
@@ -174,12 +187,16 @@ export class OrganizerService {
   async organize(
     directory: string,
     files: FileWithSize[],
-    options: OrganizeOptions = {}
+    options: OrganizeOptions = {},
   ): Promise<OrganizeResult> {
-    const { dryRun = false, conflictStrategy = 'rename' } = options;
+    const { dryRun = false, conflictStrategy = "rename" } = options;
 
     // 1. Generate Plan (Now includes resolved paths)
-    const plan = await this.generateOrganizationPlan(directory, files, conflictStrategy);
+    const plan = await this.generateOrganizationPlan(
+      directory,
+      files,
+      conflictStrategy,
+    );
 
     if (dryRun) {
       return {
@@ -205,13 +222,15 @@ export class OrganizerService {
     const rollbackService = new RollbackService();
 
     // 2. Prepare Backup Directory for Overwrites
-    const backupDir = path.join(process.cwd(), '.file-organizer-backups');
+    const backupDir = path.join(process.cwd(), ".file-organizer-backups");
     let hasOverwrites = false;
 
     // Check if any move needs overwrite backup
     if (
       plan.moves.some(
-        (m) => m.conflictResolution === 'overwrite' || m.conflictResolution === 'overwrite_if_newer'
+        (m) =>
+          m.conflictResolution === "overwrite" ||
+          m.conflictResolution === "overwrite_if_newer",
       )
     ) {
       await fs.mkdir(backupDir, { recursive: true });
@@ -219,12 +238,13 @@ export class OrganizerService {
     }
 
     for (const move of plan.moves) {
-      if (move.hasConflict && move.conflictResolution === 'skip') {
+      if (move.hasConflict && move.conflictResolution === "skip") {
         continue;
       }
 
       // Check for Windows reserved names to avoid security errors on non-Windows platforms (or hard errors on Windows)
-      const windowsReservedRegex = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
+      const windowsReservedRegex =
+        /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
 
       // Check source filename (with extension - "CON.txt" is also invalid)
       const sourceBase = path.basename(move.source);
@@ -253,8 +273,8 @@ export class OrganizerService {
 
         // --- Handle Overwrites ---
         if (
-          move.conflictResolution === 'overwrite' ||
-          move.conflictResolution === 'overwrite_if_newer'
+          move.conflictResolution === "overwrite" ||
+          move.conflictResolution === "overwrite_if_newer"
         ) {
           let backupCreated = false;
           if (await fileExists(targetPath)) {
@@ -289,7 +309,7 @@ export class OrganizerService {
           //    But race condition might mean someone took it.
           // 2. We use atomic COPYFILE_EXCL to ensure we don't clobber.
 
-          if (move.conflictResolution === 'rename') {
+          if (move.conflictResolution === "rename") {
             // Extract the original filename from the source file
             const sourceExt = path.extname(sourcePath);
             const sourceBaseName = path.basename(sourcePath, sourceExt);
@@ -298,7 +318,10 @@ export class OrganizerService {
             // Extract the counter from the planned targetPath to continue from there
             // e.g., if plan gave us "test_1.txt", start retrying from counter=2
             let startCounter = 1;
-            const plannedBaseName = path.basename(targetPath, path.extname(targetPath));
+            const plannedBaseName = path.basename(
+              targetPath,
+              path.extname(targetPath),
+            );
             const counterMatch = plannedBaseName.match(/_(\d+)$/);
             if (counterMatch && counterMatch[1]) {
               startCounter = parseInt(counterMatch[1], 10) + 1;
@@ -310,85 +333,131 @@ export class OrganizerService {
 
             while (!success && retryCount < 100) {
               try {
-                // Atomic COPY with COPYFILE_EXCL to prevent overwrites
-                await fs.copyFile(sourcePath, effectivePath, constants.COPYFILE_EXCL);
-
-                // BUG-005 FIX: Delete Source after successful copy (with robust cleanup)
-                try {
-                  await fs.unlink(sourcePath);
-                  success = true;
-                  finalDest = effectivePath;
-                } catch (unlinkErr) {
-                  // BUG-005 COMPLETE: If unlink fails, remove the copied file to maintain atomicity
-                  const cleanupMsg = `Failed to unlink source ${sourcePath} after copy. Attempting cleanup.`;
-                  logger.error(cleanupMsg);
-
+                // Try atomic rename first (atomic operation on same filesystem)
+                await fs.rename(sourcePath, effectivePath);
+                success = true;
+                finalDest = effectivePath;
+              } catch (renameErr: any) {
+                if (renameErr.code === "EXDEV") {
+                  // Cross-device move required - use copy-unlink with rollback on failure
                   try {
-                    await fs.unlink(effectivePath);
-                    logger.info(`Successfully cleaned up copied file ${effectivePath}`);
-                  } catch (cleanupErr) {
-                    // Cleanup failed - log critical error with both file paths
-                    const criticalMsg = `CRITICAL: Failed to cleanup copied file ${effectivePath} after failed source unlink. Manual intervention may be required.`;
-                    logger.error(criticalMsg);
-                    errors.push(criticalMsg);
+                    await fs.copyFile(
+                      sourcePath,
+                      effectivePath,
+                      constants.COPYFILE_EXCL,
+                    );
+                    // Copy succeeded - now unlink source (if this fails, rollback the copy)
+                    try {
+                      await fs.unlink(sourcePath);
+                      success = true;
+                      finalDest = effectivePath;
+                    } catch (unlinkErr) {
+                      // CRITICAL: Unlink failed - rollback by deleting the copied file
+                      logger.error(
+                        `Failed to unlink source ${sourcePath} after cross-device copy. Rolling back.`,
+                      );
+                      try {
+                        await fs.unlink(effectivePath);
+                        logger.info(
+                          `Successfully rolled back copied file ${effectivePath}`,
+                        );
+                      } catch (rollbackErr) {
+                        const criticalMsg = `CRITICAL: Failed to rollback ${effectivePath} after failed source unlink. Both files may exist.`;
+                        logger.error(criticalMsg);
+                        errors.push(criticalMsg);
+                      }
+                      throw unlinkErr;
+                    }
+                  } catch (copyErr: any) {
+                    if (copyErr.code === "EEXIST") {
+                      // Race condition - file appeared during rename/copy
+                      retryCount++;
+                      effectivePath = path.join(
+                        destDir,
+                        `${sourceBaseName}_${retryCount}${sourceExt}`,
+                      );
+                      logger.debug(
+                        `Race condition for ${sourcePath}, retrying as ${effectivePath}`,
+                      );
+                    } else {
+                      throw copyErr;
+                    }
                   }
-                  throw unlinkErr;
-                }
-              } catch (err: any) {
-                if (err.code === 'EEXIST') {
-                  // Race condition hit! Increment counter and try again
+                } else if (renameErr.code === "EEXIST") {
+                  // Race condition - file appeared during rename
                   retryCount++;
-                  // Use consistent naming: originalname_1.ext, originalname_2.ext, etc.
-                  effectivePath = path.join(destDir, `${sourceBaseName}_${retryCount}${sourceExt}`);
+                  effectivePath = path.join(
+                    destDir,
+                    `${sourceBaseName}_${retryCount}${sourceExt}`,
+                  );
                   logger.debug(
-                    `Race condition detected for ${sourcePath}, retrying as ${effectivePath}`
+                    `Race condition for ${sourcePath}, retrying as ${effectivePath}`,
                   );
                 } else {
-                  // Unexpected error - log and rethrow
+                  // Unexpected error during rename
                   logger.error(
-                    `Unexpected error during atomic move of ${sourcePath}: ${err.message}`
+                    `Unexpected error during atomic move of ${sourcePath}: ${renameErr.message}`,
                   );
-                  throw err;
+                  throw renameErr;
                 }
               }
             }
 
             if (!success) {
               throw new Error(
-                `Failed to move ${sourcePath} after 100 retries due to race conditions.`
+                `Failed to move ${sourcePath} after 100 retries due to race conditions.`,
               );
             }
           } else {
-            // BUG-005 COMPLETE: Make standard move more robust with atomic operations
-            // Use COPYFILE_EXCL even for "standard" moves to prevent race conditions
+            // RACE CONDITION FIX: Use atomic rename instead of copy-unlink
+            // If EXDEV (cross-device), use copy-unlink with rollback on failure
             try {
-              // Try atomic copy first
-              await fs.copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL);
-
-              // Delete source after successful copy
-              try {
-                await fs.unlink(sourcePath);
-                finalDest = targetPath;
-              } catch (unlinkErr) {
-                // Cleanup copied file if unlink fails
-                logger.error(`Failed to unlink source ${sourcePath}. Cleaning up copy.`);
+              // Try atomic rename first (truly atomic on same filesystem)
+              await fs.rename(sourcePath, targetPath);
+              finalDest = targetPath;
+            } catch (renameErr: any) {
+              if (renameErr.code === "EXDEV") {
+                // Cross-device move - fallback to copy-unlink with rollback
                 try {
-                  await fs.unlink(targetPath);
-                } catch (cleanupErr) {
-                  errors.push(
-                    `CRITICAL: Failed to cleanup ${targetPath} after failed source unlink`
+                  await fs.copyFile(
+                    sourcePath,
+                    targetPath,
+                    constants.COPYFILE_EXCL,
                   );
+                  // Copy succeeded - attempt to unlink source with rollback on failure
+                  try {
+                    await fs.unlink(sourcePath);
+                    finalDest = targetPath;
+                  } catch (unlinkErr) {
+                    // CRITICAL: Rollback the copy if unlink fails to prevent data duplication
+                    logger.error(
+                      `Failed to unlink source ${sourcePath} after cross-device copy. Rolling back.`,
+                    );
+                    try {
+                      await fs.unlink(targetPath);
+                      logger.info(`Successfully rolled back ${targetPath}`);
+                    } catch (rollbackErr) {
+                      errors.push(
+                        `CRITICAL: Failed to rollback ${targetPath}. Both files may exist.`,
+                      );
+                    }
+                    throw unlinkErr;
+                  }
+                } catch (copyErr: any) {
+                  if (copyErr.code === "EEXIST") {
+                    throw new Error(
+                      `Destination ${targetPath} unexpectedly exists (Race Condition).`,
+                    );
+                  }
+                  throw copyErr;
                 }
-                throw unlinkErr;
-              }
-            } catch (err: any) {
-              if (err.code === 'EEXIST') {
-                // Unexpected conflict in standard move path
+              } else if (renameErr.code === "EEXIST") {
                 throw new Error(
-                  `Destination ${targetPath} unexpectedly exists (Race Condition). This should not happen in standard move path.`
+                  `Destination ${targetPath} unexpectedly exists (Race Condition).`,
                 );
+              } else {
+                throw renameErr;
               }
-              throw err;
             }
           }
         }
@@ -401,7 +470,7 @@ export class OrganizerService {
         });
 
         rollbackActions.push({
-          type: 'move',
+          type: "move",
           originalPath: sourcePath,
           currentPath: finalDest,
           overwrittenBackupPath: overwrittenBackupPath,
@@ -419,7 +488,7 @@ export class OrganizerService {
       try {
         await rollbackService.createManifest(
           `Organization of ${directory} (${rollbackActions.length} files)`,
-          rollbackActions
+          rollbackActions,
         );
       } catch (manifestErr) {
         const msg = `Failed to create rollback manifest: ${(manifestErr as Error).message}`;
@@ -437,7 +506,7 @@ export class OrganizerService {
 
   private async cleanupEmptyFolders(
     directory: string,
-    stats: Record<string, number>
+    stats: Record<string, number>,
   ): Promise<void> {
     // Implementation kept for compatibility
   }

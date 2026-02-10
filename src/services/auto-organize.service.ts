@@ -7,16 +7,20 @@
  * Includes smart catchup for missed schedules.
  */
 
-import cron from 'node-cron';
-import fs, { existsSync } from 'fs';
-import fsPromises from 'fs/promises';
-import path from 'path';
-import { FileScannerService } from './file-scanner.service.js';
-import { OrganizerService } from './organizer.service.js';
-import { loadUserConfig, type UserConfig, type WatchConfig } from '../config.js';
-import { logger } from '../utils/logger.js';
-import { SchedulerStateService } from './scheduler-state.service.js';
-import { shouldCatchup } from '../utils/cron-utils.js';
+import cron from "node-cron";
+import fs, { existsSync } from "fs";
+import fsPromises from "fs/promises";
+import path from "path";
+import { FileScannerService } from "./file-scanner.service.js";
+import { OrganizerService } from "./organizer.service.js";
+import {
+  loadUserConfig,
+  type UserConfig,
+  type WatchConfig,
+} from "../config.js";
+import { logger } from "../utils/logger.js";
+import { SchedulerStateService } from "./scheduler-state.service.js";
+import { shouldCatchup } from "../utils/cron-utils.js";
 
 export type ConfigLoader = () => UserConfig;
 
@@ -27,7 +31,7 @@ export type ConfigLoader = () => UserConfig;
 export class AutoOrganizeService {
   private tasks: Map<string, cron.ScheduledTask> = new Map();
   private isRunning = false;
-  private runningDirectories: Set<string> = new Set();
+  private runningDirectories: Map<string, symbol> = new Map();
   private stateService: SchedulerStateService | null = null;
   private missedSchedulesLock = false;
 
@@ -35,7 +39,7 @@ export class AutoOrganizeService {
     private scanner = new FileScannerService(),
     private organizer = new OrganizerService(),
     private configLoader: () => UserConfig = () => loadUserConfig(),
-    stateService?: SchedulerStateService
+    stateService?: SchedulerStateService,
   ) {
     this.stateService = stateService || null;
   }
@@ -46,7 +50,8 @@ export class AutoOrganizeService {
    */
   async initialize(): Promise<void> {
     if (!this.stateService) {
-      const { getSchedulerStateService } = await import('./scheduler-state.service.js');
+      const { getSchedulerStateService } =
+        await import("./scheduler-state.service.js");
       this.stateService = await getSchedulerStateService();
     }
   }
@@ -60,18 +65,18 @@ export class AutoOrganizeService {
     const errors: string[] = [];
 
     if (this.tasks.size > 0) {
-      const msg = 'Auto-organize scheduler already running';
+      const msg = "Auto-organize scheduler already running";
       logger.warn(msg);
       return { success: true, taskCount: this.tasks.size, errors: [msg] };
     }
 
-    logger.info('Starting smart auto-organize scheduler...');
+    logger.info("Starting smart auto-organize scheduler...");
 
     const result = this.reloadTasks();
     errors.push(...result.errors);
 
     if (result.taskCount === 0 && result.errors.length === 0) {
-      const noTasksMsg = 'No directories configured for auto-organize';
+      const noTasksMsg = "No directories configured for auto-organize";
       logger.info(noTasksMsg);
       errors.push(noTasksMsg);
     }
@@ -79,7 +84,7 @@ export class AutoOrganizeService {
     if (result.taskCount > 0) {
       logger.info(`Started ${result.taskCount} scheduled task(s)`);
       this.runMissedSchedules().catch((error) => {
-        logger.error('Initial catchup failed:', error.message);
+        logger.error("Initial catchup failed:", error.message);
       });
     }
 
@@ -100,11 +105,11 @@ export class AutoOrganizeService {
         logger.debug(`Stopped task for: ${directory}`);
       }
     } catch (error) {
-      logger.error('Error stopping auto-organize tasks:', error);
+      logger.error("Error stopping auto-organize tasks:", error);
     } finally {
       this.tasks.clear();
       this.runningDirectories.clear();
-      logger.info('Auto-organize scheduler stopped');
+      logger.info("Auto-organize scheduler stopped");
     }
   }
 
@@ -129,7 +134,9 @@ export class AutoOrganizeService {
     // Also support legacy autoOrganize config for backward compatibility
     if (userConfig.autoOrganize?.enabled && userConfig.autoOrganize.schedule) {
       const legacyFolders = userConfig.customAllowedDirectories ?? [];
-      const legacyCron = this.legacyScheduleToCron(userConfig.autoOrganize.schedule);
+      const legacyCron = this.legacyScheduleToCron(
+        userConfig.autoOrganize.schedule,
+      );
 
       for (const folder of legacyFolders) {
         // Skip if already in watch list
@@ -176,7 +183,9 @@ export class AutoOrganizeService {
         });
 
         this.tasks.set(watch.directory, task);
-        logger.info(`Scheduled "${watch.directory}" with cron: ${watch.schedule}`);
+        logger.info(
+          `Scheduled "${watch.directory}" with cron: ${watch.schedule}`,
+        );
       } catch (error) {
         const errorMsg = `Failed to schedule task for ${watch.directory}: ${error}`;
         logger.error(errorMsg);
@@ -220,12 +229,22 @@ export class AutoOrganizeService {
   private async runOrganization(watch: WatchConfig): Promise<void> {
     const { directory, rules } = watch;
 
-    // Check-and-set to prevent concurrent runs for the same directory
+    // Atomic check-and-set to prevent concurrent runs for the same directory
+    const runToken = Symbol("runToken");
     if (this.runningDirectories.has(directory)) {
-      logger.warn(`Previous run still active for ${directory}, skipping this cycle`);
+      logger.warn(
+        `Previous run still active for ${directory}, skipping this cycle`,
+      );
       return;
     }
-    this.runningDirectories.add(directory);
+    this.runningDirectories.set(directory, runToken);
+    // Double-check we won the race (in case of interleaved async operations)
+    if (this.runningDirectories.get(directory) !== runToken) {
+      logger.warn(
+        `Race condition detected for ${directory}, skipping this cycle`,
+      );
+      return;
+    }
     logger.info(`[${directory}] Starting scheduled organization`);
 
     try {
@@ -243,7 +262,7 @@ export class AutoOrganizeService {
       if (rules.min_file_age_minutes && rules.min_file_age_minutes > 0) {
         files = await this.filterByAge(files, rules.min_file_age_minutes);
         logger.info(
-          `[${directory}] ${files.length} files meet age requirement (${rules.min_file_age_minutes} min)`
+          `[${directory}] ${files.length} files meet age requirement (${rules.min_file_age_minutes} min)`,
         );
       }
 
@@ -261,13 +280,13 @@ export class AutoOrganizeService {
       ) {
         files = files.slice(0, rules.max_files_per_run);
         logger.info(
-          `[${directory}] Limited to ${files.length} files (from ${originalCount}) due to max_files_per_run`
+          `[${directory}] Limited to ${files.length} files (from ${originalCount}) due to max_files_per_run`,
         );
       }
 
       // Get conflict strategy from config
       const userConfig = this.configLoader();
-      const conflictStrategy = userConfig.conflictStrategy ?? 'rename';
+      const conflictStrategy = userConfig.conflictStrategy ?? "rename";
 
       // Run organization
       const result = await this.organizer.organize(directory, files, {
@@ -275,23 +294,35 @@ export class AutoOrganizeService {
         conflictStrategy,
       });
 
-      const totalMoved = Object.values(result.statistics).reduce((a, b) => a + b, 0);
+      const totalMoved = Object.values(result.statistics).reduce(
+        (a, b) => a + b,
+        0,
+      );
       logger.info(`[${directory}] Organized ${totalMoved} files`, {
         statistics: result.statistics,
         errors: result.errors.length,
       });
 
       if (result.errors.length > 0) {
-        logger.warn(`[${directory}] Had ${result.errors.length} errors`, result.errors);
+        logger.warn(
+          `[${directory}] Had ${result.errors.length} errors`,
+          result.errors,
+        );
       }
 
       // Record successful run time for smart catchup
       if (this.stateService) {
         try {
-          await this.stateService.setLastRunTime(directory, new Date(), watch.schedule);
+          await this.stateService.setLastRunTime(
+            directory,
+            new Date(),
+            watch.schedule,
+          );
           logger.debug(`[${directory}] Recorded successful run time`);
         } catch (error) {
-          logger.warn(`[${directory}] Failed to record run time:`, { error: String(error) });
+          logger.warn(`[${directory}] Failed to record run time:`, {
+            error: String(error),
+          });
         }
       }
     } catch (error) {
@@ -307,7 +338,7 @@ export class AutoOrganizeService {
    */
   private async filterByAge(
     files: Array<{ path: string; name: string; size: number }>,
-    minAgeMinutes: number
+    minAgeMinutes: number,
   ): Promise<Array<{ path: string; name: string; size: number }>> {
     const now = Date.now();
     const minAgeMs = minAgeMinutes * 60 * 1000;
@@ -322,7 +353,9 @@ export class AutoOrganizeService {
           filtered.push(file);
         }
       } catch (error) {
-        logger.warn(`Could not stat file ${file.path}`, { error: String(error) });
+        logger.warn(`Could not stat file ${file.path}`, {
+          error: String(error),
+        });
         // Include file if we can't determine age (safer to process it)
         filtered.push(file);
       }
@@ -334,16 +367,18 @@ export class AutoOrganizeService {
   /**
    * Convert legacy schedule ('hourly' | 'daily' | 'weekly') to cron expression
    */
-  private legacyScheduleToCron(schedule: 'hourly' | 'daily' | 'weekly'): string {
+  private legacyScheduleToCron(
+    schedule: "hourly" | "daily" | "weekly",
+  ): string {
     switch (schedule) {
-      case 'hourly':
-        return '0 * * * *'; // At minute 0 of every hour
-      case 'daily':
-        return '0 9 * * *'; // At 9:00 AM every day
-      case 'weekly':
-        return '0 9 * * 0'; // At 9:00 AM every Sunday
+      case "hourly":
+        return "0 * * * *"; // At minute 0 of every hour
+      case "daily":
+        return "0 9 * * *"; // At 9:00 AM every day
+      case "weekly":
+        return "0 9 * * 0"; // At 9:00 AM every Sunday
       default:
-        return '0 9 * * *';
+        return "0 9 * * *";
     }
   }
 
@@ -360,7 +395,7 @@ export class AutoOrganizeService {
       active: this.isActive(),
       taskCount: this.getTaskCount(),
       watchedDirectories: this.getWatchedDirectories(),
-      runningDirectories: Array.from(this.runningDirectories),
+      runningDirectories: Array.from(this.runningDirectories.keys()),
     };
   }
 
@@ -378,7 +413,9 @@ export class AutoOrganizeService {
 
     // Prevent concurrent runs
     if (this.runningDirectories.has(directory)) {
-      logger.warn(`Previous run still active for ${directory}, skipping triggerNow`);
+      logger.warn(
+        `Previous run still active for ${directory}, skipping triggerNow`,
+      );
       return false;
     }
 
@@ -400,17 +437,20 @@ export class AutoOrganizeService {
    * @param lastRunTime - The last successful run time (null if never ran)
    * @returns true if catchup should run
    */
-  private async shouldRunOnStartup(watch: WatchConfig, lastRunTime: Date | null): Promise<boolean> {
-    const catchupMode = watch.rules?.catchup_mode ?? 'smart';
+  private async shouldRunOnStartup(
+    watch: WatchConfig,
+    lastRunTime: Date | null,
+  ): Promise<boolean> {
+    const catchupMode = watch.rules?.catchup_mode ?? "smart";
 
     // 'never' mode: never run catchup
-    if (catchupMode === 'never') {
+    if (catchupMode === "never") {
       logger.debug(`[${watch.directory}] Catchup mode is 'never', skipping`);
       return false;
     }
 
     // 'always' mode: always run on startup
-    if (catchupMode === 'always') {
+    if (catchupMode === "always") {
       logger.debug(`[${watch.directory}] Catchup mode is 'always', running`);
       return true;
     }
@@ -418,7 +458,7 @@ export class AutoOrganizeService {
     // 'smart' mode: only run if schedule was missed
     const needsCatchup = shouldCatchup(watch.schedule, lastRunTime, new Date());
     logger.debug(
-      `[${watch.directory}] Smart catchup check: lastRun=${lastRunTime?.toISOString() ?? 'never'}, needsCatchup=${needsCatchup}`
+      `[${watch.directory}] Smart catchup check: lastRun=${lastRunTime?.toISOString() ?? "never"}, needsCatchup=${needsCatchup}`,
     );
     return needsCatchup;
   }
@@ -431,7 +471,7 @@ export class AutoOrganizeService {
   async runMissedSchedules(): Promise<void> {
     // Prevent overlapping executions of runMissedSchedules
     if (this.missedSchedulesLock) {
-      logger.debug('Missed schedules check already running, skipping');
+      logger.debug("Missed schedules check already running, skipping");
       return;
     }
     this.missedSchedulesLock = true;
@@ -449,9 +489,14 @@ export class AutoOrganizeService {
       try {
         await this.initialize();
       } catch (error) {
-        logger.error('Failed to initialize state service for smart catchup:', error);
+        logger.error(
+          "Failed to initialize state service for smart catchup:",
+          error,
+        );
         // Fall back to legacy behavior - run all watches
-        logger.warn('Falling back to legacy catchup behavior (running all watches)');
+        logger.warn(
+          "Falling back to legacy catchup behavior (running all watches)",
+        );
       }
     }
 
@@ -459,14 +504,18 @@ export class AutoOrganizeService {
     const watchList = userConfig.watchList ?? [];
 
     // Filter watches that should be considered for catchup
-    const watchesToCheck = watchList.filter((watch) => this.shouldIncludeInCatchupCheck(watch));
+    const watchesToCheck = watchList.filter((watch) =>
+      this.shouldIncludeInCatchupCheck(watch),
+    );
 
     if (watchesToCheck.length === 0) {
-      logger.debug('No watches configured for auto-organize');
+      logger.debug("No watches configured for auto-organize");
       return;
     }
 
-    logger.info(`Checking missed schedules for ${watchesToCheck.length} directory(ies)...`);
+    logger.info(
+      `Checking missed schedules for ${watchesToCheck.length} directory(ies)...`,
+    );
 
     // Determine which watches actually need to run
     const watchesToRun: WatchConfig[] = [];
@@ -477,12 +526,15 @@ export class AutoOrganizeService {
       try {
         // Check if directory exists
         if (!existsSync(directory)) {
-          logger.warn(`[${directory}] Directory does not exist, skipping catchup`);
+          logger.warn(
+            `[${directory}] Directory does not exist, skipping catchup`,
+          );
           continue;
         }
 
         // Get last run time from state
-        const lastRunTime = this.stateService?.getLastRunTime(directory) ?? null;
+        const lastRunTime =
+          this.stateService?.getLastRunTime(directory) ?? null;
 
         // Check if catchup is needed
         const shouldRun = await this.shouldRunOnStartup(watch, lastRunTime);
@@ -500,7 +552,7 @@ export class AutoOrganizeService {
     }
 
     if (watchesToRun.length === 0) {
-      logger.info('No directories need catchup');
+      logger.info("No directories need catchup");
       return;
     }
 
