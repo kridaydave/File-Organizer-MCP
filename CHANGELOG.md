@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.2.8] - 2026-02-10
+
+### 🚨 CRITICAL FIX: MCP Protocol Compatibility
+
+**FINAL FIX - v3.2.8**
+- Removed old local node_modules version conflict
+- npx now correctly resolves to global installation
+
 ## [3.2.7] - 2026-02-10
 
 ### 🚨 CRITICAL FIX: MCP Protocol Compatibility
