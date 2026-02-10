@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const DIST_FILE = path.join(__dirname, '..', 'dist', 'index.js');
+const DIST_FILE = path.join(__dirname, '..', 'dist', 'src', 'index.js');
 
 // Check if dist already exists and is valid
 function distExists() {

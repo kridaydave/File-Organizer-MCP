@@ -168,7 +168,7 @@ async function checkPackageInstallation(): Promise<DiagnosticResult> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     const distPath = path.resolve(__dirname, '..', '..', 'dist');
-    const indexPath = path.join(distPath, 'index.js');
+    const indexPath = path.join(distPath, 'src', 'index.js');
 
     if (!fs.existsSync(distPath)) {
       return {
@@ -192,11 +192,11 @@ async function checkPackageInstallation(): Promise<DiagnosticResult> {
 
     // Check key files exist
     const requiredFiles = [
-      'index.js',
-      'server.js',
-      'config.js',
-      'utils/logger.js',
-      'tui/setup-wizard.js',
+      'src/index.js',
+      'src/server.js',
+      'src/config.js',
+      'src/utils/logger.js',
+      'src/tui/setup-wizard.js',
     ];
 
     const missingFiles = requiredFiles.filter((file) => {
