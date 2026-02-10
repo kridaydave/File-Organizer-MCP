@@ -44,8 +44,7 @@ test-*/
 test_*.txt
 *_test_output.txt
 *.test.log
-test-fixtures-reader/
-test-fixtures/
+test-fixtures*/
 coverage/
 .hidden_test/
 lint_output.txt

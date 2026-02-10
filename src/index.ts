@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.2.1
  *
  * A powerful, security-hardened Model Context Protocol server for intelligent file organization.
  * Features 7-layer path validation, file categorization, duplicate detection, and more.
@@ -12,7 +12,7 @@
  *   npx file-organizer-mcp --version    - Show version
  *   npx file-organizer-mcp --help       - Show help
  *
- * @version 3.2.0
+ * @version 3.2.1
  * @license MIT
  */
 
@@ -22,7 +22,7 @@
 // Node.js version check
 const MIN_NODE_VERSION = 18;
 const currentNodeVersion = process.versions.node;
-const majorVersion = parseInt(currentNodeVersion.split('.')[0] || '0', 10);
+const majorVersion = parseInt(currentNodeVersion.split(".")[0] || "0", 10);
 
 if (majorVersion < MIN_NODE_VERSION) {
   console.error(
@@ -38,26 +38,26 @@ if (majorVersion < MIN_NODE_VERSION) {
 ║      - nvm (Linux/Mac): nvm install ${MIN_NODE_VERSION} && nvm use ${MIN_NODE_VERSION}                   ║
 ║      - nvm-windows: nvm install ${MIN_NODE_VERSION}.0.0 && nvm use ${MIN_NODE_VERSION}.0.0            ║
 ╚══════════════════════════════════════════════════════════════════╝
-  `.trim()
+  `.trim(),
   );
   process.exit(1);
 }
 
 // Installation integrity check
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Check if dist files exist
-const distPath = path.resolve(__dirname, '..', 'dist');
-const distIndexPath = path.join(distPath, 'index.js');
-const distServerPath = path.join(distPath, 'server.js');
+const distPath = path.resolve(__dirname, "..", "dist");
+const distIndexPath = path.join(distPath, "index.js");
+const distServerPath = path.join(distPath, "server.js");
 
 if (!fs.existsSync(distIndexPath) || !fs.existsSync(distServerPath)) {
-  const packageRoot = path.resolve(__dirname, '..');
+  const packageRoot = path.resolve(__dirname, "..");
   console.error(
     `
 ╔══════════════════════════════════════════════════════════════════╗
@@ -81,14 +81,14 @@ if (!fs.existsSync(distIndexPath) || !fs.existsSync(distServerPath)) {
 ║    cd "${packageRoot}"                                           ║
 ║    npm install && npm run build                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
-  `.trim()
+  `.trim(),
   );
   process.exit(1);
 }
 
 // Verify critical dependencies
-const nodeModulesPath = path.resolve(__dirname, '..', 'node_modules');
-const criticalDeps = ['@modelcontextprotocol/sdk', 'chalk', 'node-cron', 'zod'];
+const nodeModulesPath = path.resolve(__dirname, "..", "node_modules");
+const criticalDeps = ["@modelcontextprotocol/sdk", "chalk", "node-cron", "zod"];
 const missingDeps: string[] = [];
 
 for (const dep of criticalDeps) {
@@ -106,7 +106,7 @@ if (missingDeps.length > 0) {
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Required packages failed to install:                            ║
 ║                                                                  ║
-${missingDeps.map((d) => `║    • ${d.padEnd(59)}║`).join('\n')}
+${missingDeps.map((d) => `║    • ${d.padEnd(59)}║`).join("\n")}
 ║                                                                  ║
 ║  Common causes:                                                  ║
 ║    • npm install --production (skipped dependencies)             ║
@@ -124,22 +124,22 @@ ${missingDeps.map((d) => `║    • ${d.padEnd(59)}║`).join('\n')}
 ║    npm cache clean --force                                       ║
 ║    npm install -g file-organizer-mcp                             ║
 ╚══════════════════════════════════════════════════════════════════╝
-  `.trim()
+  `.trim(),
   );
   process.exit(1);
 }
 
 // ==================== MAIN IMPORTS ====================
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { createServer } from './server.js';
-import { CONFIG } from './config.js';
-import { logger } from './utils/logger.js';
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createServer } from "./server.js";
+import { CONFIG } from "./config.js";
+import { logger } from "./utils/logger.js";
 import {
   startAutoOrganizeScheduler,
   stopAutoOrganizeScheduler,
   getAutoOrganizeScheduler,
-} from './services/auto-organize.service.js';
+} from "./services/auto-organize.service.js";
 
 // ==================== MAIN FUNCTION ====================
 
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   // --help flag
-  if (args.includes('--help') || args.includes('-h')) {
+  if (args.includes("--help") || args.includes("-h")) {
     console.log(`
 File Organizer MCP Server v${CONFIG.VERSION}
 
@@ -166,14 +166,14 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
   }
 
   // --version flag
-  if (args.includes('--version') || args.includes('-v')) {
+  if (args.includes("--version") || args.includes("-v")) {
     console.log(`File Organizer MCP Server v${CONFIG.VERSION}`);
     process.exit(0);
   }
 
   // --setup flag - Run the setup wizard
-  if (args.includes('--setup') || args.includes('-s')) {
-    const { startSetupWizard } = await import('./tui/setup-wizard.js');
+  if (args.includes("--setup") || args.includes("-s")) {
+    const { startSetupWizard } = await import("./tui/setup-wizard.js");
     await startSetupWizard();
     process.exit(0);
     return;
@@ -185,12 +185,17 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
   logger.info(`Working Directory: ${process.cwd()}`);
 
   // Log allowed directories
-  const allowedDirs = [...CONFIG.paths.defaultAllowed, ...CONFIG.paths.customAllowed];
+  const allowedDirs = [
+    ...CONFIG.paths.defaultAllowed,
+    ...CONFIG.paths.customAllowed,
+  ];
   logger.info(`Allowed directories (${allowedDirs.length}):`);
   allowedDirs.forEach((dir) => logger.info(`  - ${dir}`));
 
   if (CONFIG.paths.customAllowed.length > 0) {
-    logger.info(`Custom allowed directories: ${CONFIG.paths.customAllowed.length}`);
+    logger.info(
+      `Custom allowed directories: ${CONFIG.paths.customAllowed.length}`,
+    );
   }
 
   // Start auto-organize scheduler if enabled
@@ -202,48 +207,57 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
     const status = scheduler.getStatus();
     logger.info(`Auto-organize monitoring ${status.taskCount} task(s)`);
     if (status.watchedDirectories.length > 0) {
-      logger.info(`Watched directories: ${status.watchedDirectories.join(', ')}`);
+      logger.info(
+        `Watched directories: ${status.watchedDirectories.join(", ")}`,
+      );
     }
   } else {
-    logger.info('Auto-organize scheduler inactive');
+    logger.info("Auto-organize scheduler inactive");
   }
 
   // Run missed schedule catch-up in background without blocking server readiness
   if (scheduler?.isActive()) {
-    logger.info('Running missed schedule catch-up...');
+    logger.info("Running missed schedule catch-up...");
     scheduler.runMissedSchedules().catch((error) => {
-      logger.error('Missed schedule catch-up failed:', error.message);
+      logger.error("Missed schedule catch-up failed:", error.message);
     });
   }
 
   // Report scheduler errors to user
   if (schedulerResult.errors.length > 0) {
     const hasRealErrors = schedulerResult.errors.some(
-      (e) => !e.includes('already running') && !e.includes('No directories configured')
+      (e) =>
+        !e.includes("already running") &&
+        !e.includes("No directories configured"),
     );
 
     if (hasRealErrors) {
-      console.error('\n⚠️  Auto-Organize Scheduler Issues:');
+      console.error("\n⚠️  Auto-Organize Scheduler Issues:");
       schedulerResult.errors.forEach((error) => {
-        if (!error.includes('already running') && !error.includes('No directories configured')) {
+        if (
+          !error.includes("already running") &&
+          !error.includes("No directories configured")
+        ) {
           console.error(`   • ${error}`);
         }
       });
-      console.error('\n   To fix configuration:');
-      console.error('   npx file-organizer-mcp --setup\n');
+      console.error("\n   To fix configuration:");
+      console.error("   npx file-organizer-mcp --setup\n");
     }
   }
 
   // Warn if auto-organize is enabled but no tasks are running
   if (schedulerResult.taskCount === 0 && schedulerResult.errors.length > 0) {
     const hasConfigErrors = schedulerResult.errors.some(
-      (e) => e.includes('Invalid cron') || e.includes('does not exist')
+      (e) => e.includes("Invalid cron") || e.includes("does not exist"),
     );
 
     if (hasConfigErrors) {
-      console.log('\nℹ️  Auto-organize is not monitoring any directories.');
-      console.log('   Run the setup wizard to configure scheduled organization:\n');
-      console.log('   npx file-organizer-mcp --setup\n');
+      console.error("\nℹ️  Auto-organize is not monitoring any directories.");
+      console.error(
+        "   Run the setup wizard to configure scheduled organization:\n",
+      );
+      console.error("   npx file-organizer-mcp --setup\n");
     }
   }
 
@@ -252,24 +266,27 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
 
   // Handle transport-level errors
   transport.onerror = (error: Error) => {
-    logger.error('Transport error:', error.message);
+    logger.error("Transport error:", error.message);
   };
 
   transport.onclose = () => {
-    logger.info('Transport connection closed');
+    logger.info("Transport connection closed");
     stopAutoOrganizeScheduler();
     process.exit(0);
   };
 
   try {
     await server.connect(transport);
-    logger.info('File Organizer MCP Server running on stdio');
+    logger.info("File Organizer MCP Server running on stdio");
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error('Failed to connect to MCP transport:', errorMessage);
+    logger.error("Failed to connect to MCP transport:", errorMessage);
 
     // Provide helpful error messages for common issues
-    if (errorMessage.includes('EPIPE') || errorMessage.includes('broken pipe')) {
+    if (
+      errorMessage.includes("EPIPE") ||
+      errorMessage.includes("broken pipe")
+    ) {
       console.error(
         `
 ╔══════════════════════════════════════════════════════════════════╗
@@ -287,9 +304,9 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
 ║    2. Check for duplicate MCP server entries in config           ║
 ║    3. Wait a few seconds before restarting                       ║
 ╚══════════════════════════════════════════════════════════════════╝
-      `.trim()
+      `.trim(),
       );
-    } else if (errorMessage.includes('ECONNREFUSED')) {
+    } else if (errorMessage.includes("ECONNREFUSED")) {
       console.error(
         `
 ╔══════════════════════════════════════════════════════════════════╗
@@ -300,7 +317,7 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
 ║  This usually means Claude Desktop is not running or             ║
 ║  the MCP configuration is incorrect.                             ║
 ╚══════════════════════════════════════════════════════════════════╝
-      `.trim()
+      `.trim(),
       );
     }
 
@@ -321,33 +338,33 @@ function setupGracefulShutdown(): void {
     // Stop the auto-organize scheduler
     stopAutoOrganizeScheduler();
 
-    logger.info('Cleanup complete, exiting...');
+    logger.info("Cleanup complete, exiting...");
     process.exit(0);
   };
 
   // Handle common termination signals
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 
   // Handle Windows specific signals
-  if (process.platform === 'win32') {
-    process.on('SIGBREAK', () => shutdown('SIGBREAK'));
+  if (process.platform === "win32") {
+    process.on("SIGBREAK", () => shutdown("SIGBREAK"));
   }
 
   // Handle uncaught exceptions
-  process.on('uncaughtException', (error) => {
-    logger.error('Uncaught exception:', error);
-    shutdown('uncaughtException');
+  process.on("uncaughtException", (error) => {
+    logger.error("Uncaught exception:", error);
+    shutdown("uncaughtException");
   });
 
   // Handle unhandled rejections
-  process.on('unhandledRejection', (reason) => {
-    logger.error('Unhandled rejection:', reason);
-    shutdown('unhandledRejection');
+  process.on("unhandledRejection", (reason) => {
+    logger.error("Unhandled rejection:", reason);
+    shutdown("unhandledRejection");
   });
 }
 
 main().catch((error) => {
-  logger.error('Fatal error:', error);
+  logger.error("Fatal error:", error);
   process.exit(1);
 });

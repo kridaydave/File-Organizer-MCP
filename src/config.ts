@@ -3,12 +3,12 @@
  * Secure defaults with platform-aware directory access
  */
 
-import os from 'os';
-import path from 'path';
-import fs from 'fs';
+import os from "os";
+import path from "path";
+import fs from "fs";
 
 export const CONFIG = {
-  VERSION: '3.2.0',
+  VERSION: "3.2.1",
 
   // Security Settings
   security: {
@@ -34,11 +34,11 @@ export interface UserConfig {
   /** Custom directories allowed for file operations */
   customAllowedDirectories?: string[];
   /** Conflict resolution strategy */
-  conflictStrategy?: 'rename' | 'skip' | 'overwrite';
+  conflictStrategy?: "rename" | "skip" | "overwrite";
   /** Auto-organize schedule settings */
   autoOrganize?: {
     enabled: boolean;
-    schedule?: 'hourly' | 'daily' | 'weekly';
+    schedule?: "hourly" | "daily" | "weekly";
   };
   /** Security settings */
   settings?: {
@@ -74,7 +74,7 @@ export interface WatchConfig {
     /** Maximum files to process per run (0 or undefined = unlimited) */
     max_files_per_run?: number;
     /** Catchup behavior when server starts */
-    catchup_mode?: 'smart' | 'always' | 'never';
+    catchup_mode?: "smart" | "always" | "never";
   };
 }
 
@@ -86,44 +86,50 @@ function getDefaultAllowedDirs(): string[] {
   const home = os.homedir();
 
   let commonDirs = [
-    path.join(home, 'Desktop'),
-    path.join(home, 'Documents'),
-    path.join(home, 'Downloads'),
-    path.join(home, 'Pictures'),
-    path.join(home, 'Videos'),
-    path.join(home, 'Music'),
+    path.join(home, "Desktop"),
+    path.join(home, "Documents"),
+    path.join(home, "Downloads"),
+    path.join(home, "Pictures"),
+    path.join(home, "Videos"),
+    path.join(home, "Music"),
   ];
 
   // Add common project directories if they exist
   const projectDirs = [
-    path.join(home, 'Projects'),
-    path.join(home, 'Workspace'),
-    path.join(home, 'workspace'),
-    path.join(home, 'Development'),
-    path.join(home, 'Code'),
+    path.join(home, "Projects"),
+    path.join(home, "Workspace"),
+    path.join(home, "workspace"),
+    path.join(home, "Development"),
+    path.join(home, "Code"),
   ];
 
   commonDirs = [...commonDirs, ...projectDirs];
 
   // Platform-specific additions
-  if (platform === 'win32') {
+  if (platform === "win32") {
     // Windows: Add OneDrive if it exists
     const oneDrive = process.env.OneDrive || process.env.OneDriveConsumer;
     if (oneDrive) commonDirs.push(oneDrive);
-  } else if (platform === 'darwin') {
+  } else if (platform === "darwin") {
     // macOS: Add iCloud Drive if it exists
-    const iCloudDrive = path.join(home, 'Library', 'Mobile Documents', 'com~apple~CloudDocs');
+    const iCloudDrive = path.join(
+      home,
+      "Library",
+      "Mobile Documents",
+      "com~apple~CloudDocs",
+    );
     commonDirs.push(iCloudDrive);
 
     // Add common macOS locations
-    commonDirs.push(path.join(home, 'Movies'));
-  } else if (platform === 'linux') {
+    commonDirs.push(path.join(home, "Movies"));
+  } else if (platform === "linux") {
     // Linux: Add common development directories
-    commonDirs.push(path.join(home, 'dev'));
+    commonDirs.push(path.join(home, "dev"));
   }
 
   // Add project directory when running tests
-  const isTestMode = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
+  const isTestMode =
+    process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID !== undefined;
   if (isTestMode) {
     const projectDir = process.cwd();
     if (!commonDirs.includes(projectDir)) {
@@ -145,7 +151,10 @@ function getDefaultAllowedDirs(): string[] {
 /**
  * Deep merge two objects
  */
-function deepMerge(target: UserConfig, source: Partial<UserConfig>): UserConfig {
+function deepMerge(
+  target: UserConfig,
+  source: Partial<UserConfig>,
+): UserConfig {
   const result: UserConfig = { ...target };
 
   for (const key in source) {
@@ -153,16 +162,16 @@ function deepMerge(target: UserConfig, source: Partial<UserConfig>): UserConfig 
     if (sourceValue !== undefined) {
       const targetValue = result[key as keyof UserConfig];
       if (
-        typeof sourceValue === 'object' &&
+        typeof sourceValue === "object" &&
         sourceValue !== null &&
         !Array.isArray(sourceValue) &&
-        typeof targetValue === 'object' &&
+        typeof targetValue === "object" &&
         targetValue !== null &&
         !Array.isArray(targetValue)
       ) {
         (result as Record<string, unknown>)[key] = deepMerge(
           targetValue as UserConfig,
-          sourceValue as Partial<UserConfig>
+          sourceValue as Partial<UserConfig>,
         );
       } else {
         (result as Record<string, unknown>)[key] = sourceValue;
@@ -184,7 +193,7 @@ export function loadUserConfig(): UserConfig {
   }
 
   try {
-    const configData = fs.readFileSync(configPath, 'utf-8');
+    const configData = fs.readFileSync(configPath, "utf-8");
 
     // Handle empty file
     if (!configData.trim()) {
@@ -195,8 +204,12 @@ export function loadUserConfig(): UserConfig {
     const parsed = JSON.parse(configData) as UserConfig;
 
     // Validate that parsed result is an object
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new Error('Config file does not contain a valid JSON object');
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error("Config file does not contain a valid JSON object");
     }
 
     return parsed;
@@ -204,7 +217,10 @@ export function loadUserConfig(): UserConfig {
     const errorMessage = (error as Error).message;
 
     // Handle specific JSON parse errors
-    if (errorMessage.includes('JSON') || errorMessage.includes('Unexpected token')) {
+    if (
+      errorMessage.includes("JSON") ||
+      errorMessage.includes("Unexpected token")
+    ) {
       console.error(
         `
 ⚠️  CONFIG FILE CORRUPTED ⚠️
@@ -221,10 +237,10 @@ To fix this:
   3. Re-run the setup wizard: npx file-organizer-mcp --setup
 
 Your file organization settings will be reset, but your actual files are safe.
-      `.trim()
+      `.trim(),
       );
     } else {
-      console.error('Error loading user config:', errorMessage);
+      console.error("Error loading user config:", errorMessage);
     }
 
     return {};
@@ -261,7 +277,7 @@ export function updateUserConfig(updates: Partial<UserConfig>): void {
     // Write merged config back to disk
     fs.writeFileSync(configPath, JSON.stringify(mergedConfig, null, 2));
   } catch (error) {
-    console.error('Error saving config:', (error as Error).message);
+    console.error("Error saving config:", (error as Error).message);
   }
 }
 
@@ -278,7 +294,9 @@ function loadCustomAllowedDirs(): string[] {
 
           // Reject symlinks immediately
           if (stats.isSymbolicLink()) {
-            console.error(`Warning: Custom directory blocked (symlink): ${dir}`);
+            console.error(
+              `Warning: Custom directory blocked (symlink): ${dir}`,
+            );
             return false;
           }
 
@@ -293,13 +311,17 @@ function loadCustomAllowedDirs(): string[] {
 
           // Block path traversal outside of home directory
           if (!resolvedDir.startsWith(home)) {
-            console.error(`Warning: Custom directory blocked (outside home): ${dir}`);
+            console.error(
+              `Warning: Custom directory blocked (outside home): ${dir}`,
+            );
             return false;
           }
 
           // Block relative path traversal patterns
-          if (dir.includes('..') || dir.includes('~')) {
-            console.error(`Warning: Custom directory blocked (path traversal): ${dir}`);
+          if (dir.includes("..") || dir.includes("~")) {
+            console.error(
+              `Warning: Custom directory blocked (path traversal): ${dir}`,
+            );
             return false;
           }
 
@@ -311,7 +333,7 @@ function loadCustomAllowedDirs(): string[] {
       });
     }
   } catch (error) {
-    console.error('Error loading custom config:', (error as Error).message);
+    console.error("Error loading custom config:", (error as Error).message);
   }
 
   return [];
@@ -324,16 +346,23 @@ export function getUserConfigPath(): string {
   const platform = os.platform();
   const home = os.homedir();
 
-  if (platform === 'win32') {
+  if (platform === "win32") {
     // Windows: %APPDATA%\file-organizer-mcp\config.json
-    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    return path.join(appData, 'file-organizer-mcp', 'config.json');
-  } else if (platform === 'darwin') {
+    const appData =
+      process.env.APPDATA || path.join(home, "AppData", "Roaming");
+    return path.join(appData, "file-organizer-mcp", "config.json");
+  } else if (platform === "darwin") {
     // macOS: ~/Library/Application Support/file-organizer-mcp/config.json
-    return path.join(home, 'Library', 'Application Support', 'file-organizer-mcp', 'config.json');
+    return path.join(
+      home,
+      "Library",
+      "Application Support",
+      "file-organizer-mcp",
+      "config.json",
+    );
   } else {
     // Linux: ~/.config/file-organizer-mcp/config.json
-    return path.join(home, '.config', 'file-organizer-mcp', 'config.json');
+    return path.join(home, ".config", "file-organizer-mcp", "config.json");
   }
 }
 
@@ -354,7 +383,7 @@ function getAlwaysBlockedPatterns(): RegExp[] {
     /build[\/\\]/i,
   ];
 
-  if (platform === 'win32') {
+  if (platform === "win32") {
     return [
       ...common,
       /^[A-Z]:[\/\\]Windows[\/\\]/i,
@@ -365,7 +394,7 @@ function getAlwaysBlockedPatterns(): RegExp[] {
       /^[A-Z]:[\/\\]\$Recycle\.Bin[\/\\]/i,
       /^[A-Z]:[\/\\]System Volume Information[\/\\]/i,
     ];
-  } else if (platform === 'darwin') {
+  } else if (platform === "darwin") {
     return [
       ...common,
       /^\/System[\/]/,
@@ -412,7 +441,7 @@ export function initializeUserConfig(): void {
     if (!fs.existsSync(configPath)) {
       const defaultConfig: UserConfig = {
         customAllowedDirectories: [],
-        conflictStrategy: 'rename',
+        conflictStrategy: "rename",
         autoOrganize: {
           enabled: false,
         },
@@ -426,7 +455,7 @@ export function initializeUserConfig(): void {
       console.error(`Created default config file at: ${configPath}`);
     }
   } catch (error) {
-    console.error('Error initializing user config:', (error as Error).message);
+    console.error("Error initializing user config:", (error as Error).message);
   }
 }
 
@@ -438,7 +467,12 @@ export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 export const MAX_FILES = CONFIG.security.maxFilesPerOperation;
 export const MAX_DEPTH = CONFIG.security.maxScanDepth;
 
-export const SKIP_DIRECTORIES = ['node_modules', '.git', '__pycache__', '.venv'] as const;
+export const SKIP_DIRECTORIES = [
+  "node_modules",
+  ".git",
+  "__pycache__",
+  ".venv",
+] as const;
 
 export const SKIP_PATTERNS = {
   HIDDEN_FILES: /^\./,
