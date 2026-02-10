@@ -156,9 +156,10 @@ describe('cron-utils', () => {
     });
 
     it('should return false when recently ran (daily)', () => {
-      // Last run was 1 hour ago
-      const lastRunTime = new Date(Date.now() - 60 * 60 * 1000);
-      const currentTime = new Date();
+      // Use fixed times for consistent testing
+      // Current time: 10:00 AM, last run at 9:30 AM (after today's 9 AM schedule)
+      const currentTime = new Date('2026-02-08T10:00:00.000Z');
+      const lastRunTime = new Date('2026-02-08T09:30:00.000Z');
 
       const result = shouldCatchup('0 9 * * *', lastRunTime, currentTime);
       expect(result).toBe(false);

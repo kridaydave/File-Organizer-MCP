@@ -778,10 +778,12 @@ When changing TypeScript rootDir:
 **The v3.2.0-3.2.4 Incident:**
 
 **What Changed:**
+
 - Modified `tsconfig.json` to include both `src/` and `scripts/`
 - Changed `rootDir` from `./src` to `.`
 
 **Expected Output:**
+
 ```
 dist/
 ├── index.js          ← Old expectation
@@ -790,24 +792,25 @@ dist/
 ```
 
 **Actual Output:**
+
 ```
 dist/
 ├── src/              ← NEW: src/ subfolder created
 │   ├── index.js
 │   ├── server.js
 │   └── tools/
-└── scripts/          
+└── scripts/
     └── security-gates/
 ```
 
 **Broken References (Fixed Over 4 Releases):**
 
-| Release | File | Broken Path | Fixed Path |
-|---------|------|-------------|------------|
-| 3.2.1 | package.json:6 | `dist/index.js` | `dist/src/index.js` |
-| 3.2.2 | bin/file-organizer-mcp.mjs:25 | `dist/index.js` | `dist/src/index.js` |
-| 3.2.3 | bin/file-organizer-mcp.mjs:131 | `../dist/index.js` | `../dist/src/index.js` |
-| 3.2.4 | package.json:21 | `dist/tui/index.js` | `dist/src/tui/index.js` |
+| Release | File                           | Broken Path         | Fixed Path              |
+| ------- | ------------------------------ | ------------------- | ----------------------- |
+| 3.2.1   | package.json:6                 | `dist/index.js`     | `dist/src/index.js`     |
+| 3.2.2   | bin/file-organizer-mcp.mjs:25  | `dist/index.js`     | `dist/src/index.js`     |
+| 3.2.3   | bin/file-organizer-mcp.mjs:131 | `../dist/index.js`  | `../dist/src/index.js`  |
+| 3.2.4   | package.json:21                | `dist/tui/index.js` | `dist/src/tui/index.js` |
 
 **Impact:**
 
@@ -876,6 +879,132 @@ ESM dynamic imports (`import()`) and `fs.existsSync()` checks failed because the
 
 ---
 
-**Document Version:** 1.1
+---
+
+## NEW ENTRY: Setup Wizard SOTA Debate (February 2026)
+
+### Debate Context
+
+Multi-shepherd debate on whether to implement SOTA improvements to setup wizard including:
+
+- Spin-lock → mutex refactor
+- execSync → async exec conversion
+- 8-layer path validation addition
+- Comprehensive unit tests
+- Progress indicators
+- Feature flags
+
+### Key Findings
+
+#### 1. Verify Before Proposing
+
+**Pattern:** Security shepherd proposed 8-layer validation that already existed in `path-validator.service.ts`
+
+**Lesson:** Always audit existing code before proposing new solutions. Proposed redundant work wastes team review time and undermines credibility.
+
+**Implementation:** Pre-debate code audit checklist added to workflow
+
+---
+
+#### 2. Context-Dependent Solutions
+
+**Pattern:** Performance shepherd claimed mutex is always better than spin-lock
+
+**Counter-evidence:** Spin-lock outperforms mutex for:
+
+- Critical sections < 1μs duration
+- Low contention scenarios
+- Single-threaded async code
+
+**Lesson:** Technical solutions are context-dependent. No universal "best" solution exists.
+
+**Resolution:** Decision matrix created for sync primitive selection
+
+---
+
+#### 3. Tests ≠ Silver Bullet
+
+**Pattern:** Maintainability shepherd insisted TDD before any refactoring
+
+**Counter-evidence:** Tests catch regressions, not:
+
+- Security vulnerabilities
+- Performance degradation
+- Integration failures
+- Architectural debt
+
+**Lesson:** Tests are one tool in the quality toolbox, not a replacement for other quality measures.
+
+**Resolution:** Tests AND features in parallel tracks
+
+---
+
+#### 4. Feature Flag Debt
+
+**Pattern:** Delivery shepherd advocated feature flags for all changes
+
+**Counter-evidence:** Feature flags create:
+
+- Conditional branch complexity
+- Technical debt if not removed
+- Cognitive load for new engineers
+
+**Resolution:** Timeboxed feature flags with removal roadmap (within 2 sprints)
+
+---
+
+### Consensus Framework Applied
+
+| Phase | Activity            | Participants                        |
+| ----- | ------------------- | ----------------------------------- |
+| 1     | Idea Generation     | All 5 specialists                   |
+| 2     | Cross-Validation    | Each specialist critiques one other |
+| 3     | Conflict Resolution | Shepherd mediates                   |
+| 4     | Consensus           | All vote with conditions            |
+
+### Cross-Critique Pattern Validated
+
+**Structure:**
+
+1. Each specialist critiques ONE other specialist's proposal
+2. Rebuttal format: Claim → Counter → Evidence
+3. Revised positions after critique
+4. Final consensus with conditions
+
+**Outcome:**
+
+- 5 specialists revised their priority scores after critique
+- 4 conflicts resolved through debate
+- 1 unresolved (Architecture vs Delivery on feature flags) - timeboxed
+
+### Revised Priority Scores (Post-Critique)
+
+| Specialist      | Original | Revised | Reason                             |
+| --------------- | -------- | ------- | ---------------------------------- |
+| Performance     | 4/5      | 3/5     | Spin-lock legitimate for short ops |
+| Security        | 5/5      | 4/5     | 8-layer already exists             |
+| Maintainability | 4/5      | 3/5     | Tests not silver bullet            |
+| Delivery        | 4/5      | 5/5     | Unchanged                          |
+| Architect       | 4/5      | 4/5     | Acknowledged costs                 |
+
+### Lessons Added to Patterns
+
+1. **Pre-Proposal Audit**: Verify existing solutions before proposing new ones
+2. **Context-Driven Decisions**: No universal "best" technical solution
+3. **Test Scope**: Tests catch regressions, not all quality issues
+4. **Feature Flag Lifecycle**: Timebox removal to prevent technical debt
+
+### Anti-Patterns Identified
+
+| Anti-Pattern         | Description                    | Solution                       |
+| -------------------- | ------------------------------ | ------------------------------ |
+| Redundant Proposal   | Proposing existing solutions   | Pre-debate code audit          |
+| Single-Tool Thinking | Tests as only quality measure  | Multi-layered quality approach |
+| Unbounded Flags      | Flags without removal timeline | Timeboxed removal              |
+| Universal Claims     | "X is always better than Y"    | Context-dependent analysis     |
+
+---
+
+**Document Version:** 1.2
 **Last Updated:** February 10, 2026
 **Maintained By:** Borzoi (Intelligence Shepherd)

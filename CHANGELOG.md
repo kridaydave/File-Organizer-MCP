@@ -1,5 +1,32 @@
 # Changelog
 
+## [3.2.6] - 2026-02-10
+
+### 🐛 Bug Fixes
+
+- **Setup Wizard**: Fixed 14 critical bugs from security audit
+  - Added robust path resolution with `findPackageRoot()` and `getPackageRoot()`
+  - Added try/catch around all filesystem operations
+  - Added validation for user input paths
+  - Fixed async/await consistency issues
+  - Added graceful handling for prompt cancellations
+  
+- **Client Detector**: Fixed 14 critical bugs from security audit
+  - Added config write locking to prevent concurrent access
+  - Added atomic file writes (temp file + rename pattern)
+  - Fixed LOCALAPPDATA undefined checks for Windows
+  - Added null checks for config paths
+  - Fixed Continue client config format
+  - Added deep merge for server configurations
+  - Added JSON.parse validation and error handling
+
+### 🧪 Testing
+
+- Fixed flaky `cron-utils.test.ts` with fixed time values
+- All 48 test suites passing (630 tests)
+
+---
+
 ## [3.2.0] - 2026-02-10
 
 ### ✨ New Features

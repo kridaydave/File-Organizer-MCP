@@ -8,7 +8,7 @@ import path from "path";
 import fs from "fs";
 
 export const CONFIG = {
-  VERSION: "3.2.5",
+  VERSION: "3.2.6",
 
   // Security Settings
   security: {
@@ -257,8 +257,9 @@ export function saveConfig(config: Partial<UserConfig>): void {
 
 /**
  * Update user config with deep merge (preserves existing settings)
+ * @returns true if successful, false otherwise
  */
-export function updateUserConfig(updates: Partial<UserConfig>): void {
+export function updateUserConfig(updates: Partial<UserConfig>): boolean {
   try {
     const configPath = getUserConfigPath();
 
@@ -276,8 +277,10 @@ export function updateUserConfig(updates: Partial<UserConfig>): void {
 
     // Write merged config back to disk
     fs.writeFileSync(configPath, JSON.stringify(mergedConfig, null, 2));
+    return true;
   } catch (error) {
     console.error("Error saving config:", (error as Error).message);
+    return false;
   }
 }
 
