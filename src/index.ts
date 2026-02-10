@@ -52,9 +52,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Check if dist files exist
-const distPath = path.resolve(__dirname, "..", "dist");
-const distIndexPath = path.join(distPath, "index.js");
-const distServerPath = path.join(distPath, "server.js");
+const distPath = path.resolve(__dirname, "..");
+const distIndexPath = path.join(__dirname, "index.js");
+const distServerPath = path.join(__dirname, "server.js");
 
 if (!fs.existsSync(distIndexPath) || !fs.existsSync(distServerPath)) {
   const packageRoot = path.resolve(__dirname, "..");
@@ -87,7 +87,7 @@ if (!fs.existsSync(distIndexPath) || !fs.existsSync(distServerPath)) {
 }
 
 // Verify critical dependencies
-const nodeModulesPath = path.resolve(__dirname, "..", "node_modules");
+const nodeModulesPath = path.resolve(__dirname, "..", "..", "node_modules");
 const criticalDeps = ["@modelcontextprotocol/sdk", "chalk", "node-cron", "zod"];
 const missingDeps: string[] = [];
 
