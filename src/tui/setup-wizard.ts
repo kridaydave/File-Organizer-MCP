@@ -30,6 +30,9 @@ import {
 } from "./client-detector.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 
+// Helper to output to stderr (preserves stdout for MCP JSON-RPC)
+const out = (msg?: string) => process.stderr.write((msg ?? "") + "\n");
+
 /**
  * Robustly find the package root by searching upward for package.json
  * Uses import.meta.dirname if available (Node 20.11+), falls back to fileURLToPath
@@ -97,73 +100,73 @@ const colors = {
  */
 function printWelcomeBanner(): void {
   console.clear();
-  console.log(
+  out(
     colors.primary.bold(
       "╔════════════════════════════════════════════════════════════════╗",
     ),
   );
-  console.log(
+  out(
     colors.primary.bold(
       "║                                                                ║",
     ),
   );
-  console.log(
+  out(
     colors.primary.bold(
       "║              🗂️  File Organizer MCP Server                    ║",
     ),
   );
-  console.log(
+  out(
     colors.primary.bold(
       "║                                                                ║",
     ),
   );
-  console.log(
+  out(
     colors.primary.bold(
       "║     Organize your files automatically with AI assistance       ║",
     ),
   );
-  console.log(
+  out(
     colors.primary.bold(
       "║                                                                ║",
     ),
   );
-  console.log(
+  out(
     colors.primary.bold(
       "╚════════════════════════════════════════════════════════════════╝",
     ),
   );
-  console.log();
+  out();
 }
 
 /**
  * Print a section header
  */
 function printSection(title: string, icon: string = ""): void {
-  console.log();
-  console.log(colors.warning.bold(`${icon} ${title}`));
-  console.log(colors.muted("─".repeat(60)));
+  out();
+  out(colors.warning.bold(`${icon} ${title}`));
+  out(colors.muted("─".repeat(60)));
 }
 
 /**
  * Print a success message
  */
 function printSuccess(message: string): void {
-  console.log(colors.success(`  ✓ ${message}`));
+  out(colors.success(`  ✓ ${message}`));
 }
 
 /**
  * Print an info message
  */
 function printInfo(message: string): void {
-  console.log(colors.info(`  ℹ ${message}`));
+  out(colors.info(`  ℹ ${message}`));
 }
 
 /**
  * Print a step indicator
  */
 function printStep(step: number, total: number, message: string): void {
-  console.log();
-  console.log(colors.primary.bold(`Step ${step}/${total}: ${message}`));
+  out();
+  out(colors.primary.bold(`Step ${step}/${total}: ${message}`));
 }
 
 /**
@@ -230,7 +233,7 @@ async function installDependencies(): Promise<boolean> {
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.log(colors.error(`  ✗ Install failed: ${errorMessage}`));
+    out(colors.error(`  ✗ Install failed: ${errorMessage}`));
     return false;
   }
 }
@@ -261,13 +264,13 @@ async function ensureBuild(): Promise<boolean> {
     return fs.existsSync(distPath);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.log(colors.error(`  ✗ Build failed: ${errorMessage}`));
-    console.log();
-    console.log(colors.info("Please try running manually:"));
-    console.log(colors.primary("  npm run build"));
-    console.log();
-    console.log(colors.info("Or install dependencies first:"));
-    console.log(colors.primary("  npm install"));
+    out(colors.error(`  ✗ Build failed: ${errorMessage}`));
+    out();
+    out(colors.info("Please try running manually:"));
+    out(colors.primary("  npm run build"));
+    out();
+    out(colors.info("Or install dependencies first:"));
+    out(colors.primary("  npm install"));
     return false;
   }
 }
@@ -285,10 +288,10 @@ export async function startSetupWizard(): Promise<void> {
     printInfo("Some dependencies are missing. Installing now...");
     const depsInstalled = await installDependencies();
     if (!depsInstalled) {
-      console.log(
+      out(
         colors.error("\n✗ Failed to install dependencies. Please try:"),
       );
-      console.log(colors.info("  npm install"));
+      out(colors.info("  npm install"));
       process.exit(1);
     }
     printSuccess("Dependencies installed!");
@@ -305,20 +308,20 @@ export async function startSetupWizard(): Promise<void> {
     await applyConfiguration(answers);
 
     printWelcomeBanner();
-    console.log(colors.success.bold("🎉 Setup Complete!"));
-    console.log();
-    console.log(colors.muted("Your file organizer is ready to use. You can:"));
-    console.log();
-    console.log(colors.info("  1. Open your AI client (Claude, Cursor, etc.)"));
-    console.log(colors.info('  2. Try saying: "Organize my Downloads folder"'));
-    console.log(colors.info('  3. Or: "Find duplicate files in my Documents"'));
-    console.log();
-    console.log(colors.muted("To re-run this setup anytime:"));
-    console.log(colors.primary("  npx file-organizer-mcp --setup"));
-    console.log();
+    out(colors.success.bold("🎉 Setup Complete!"));
+    out();
+    out(colors.muted("Your file organizer is ready to use. You can:"));
+    out();
+    out(colors.info("  1. Open your AI client (Claude, Cursor, etc.)"));
+    out(colors.info('  2. Try saying: "Organize my Downloads folder"'));
+    out(colors.info('  3. Or: "Find duplicate files in my Documents"'));
+    out();
+    out(colors.muted("To re-run this setup anytime:"));
+    out(colors.primary("  npx file-organizer-mcp --setup"));
+    out();
   } catch (error) {
     if ((error as Error).message.includes("User force closed")) {
-      console.log(
+      out(
         colors.muted("\n\nSetup cancelled. You can re-run it anytime."),
       );
       process.exit(0);
@@ -341,27 +344,27 @@ async function detectAndSelectClients(): Promise<string[]> {
   const availableClients = detection.clients.filter((c) => !c.installed);
 
   if (installedClients.length === 0) {
-    console.log(colors.warning("\n  No MCP clients detected on your system."));
-    console.log(
+    out(colors.warning("\n  No MCP clients detected on your system."));
+    out(
       colors.muted("\n  Don't worry! You can still use the file organizer."),
     );
-    console.log(colors.muted("  Popular options:"));
-    console.log(
+    out(colors.muted("  Popular options:"));
+    out(
       colors.info("    • Claude Desktop - https://claude.ai/download"),
     );
-    console.log(colors.info("    • Cursor - https://cursor.com"));
-    console.log(colors.info("    • Cline (VS Code extension)"));
+    out(colors.info("    • Cursor - https://cursor.com"));
+    out(colors.info("    • Cline (VS Code extension)"));
     return [];
   }
 
-  console.log();
-  console.log(colors.success(`  Found ${installedClients.length} client(s):`));
+  out();
+  out(colors.success(`  Found ${installedClients.length} client(s):`));
 
   for (const client of installedClients) {
-    console.log(colors.success(`    ${client.icon} ${client.name}`));
+    out(colors.success(`    ${client.icon} ${client.name}`));
   }
 
-  console.log();
+  out();
   try {
     const selectedClients = await checkbox({
       message:
@@ -415,7 +418,7 @@ async function promptUser(): Promise<SetupAnswers> {
   }
 
   if (folderOptions.length === 0) {
-    console.log(
+    out(
       colors.warning(
         "  No standard folders found. You can add custom folders.",
       ),
@@ -470,8 +473,8 @@ async function promptUser(): Promise<SetupAnswers> {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Security validation failed";
-      console.log(colors.error(`  ✗ Security check failed: ${message}`));
-      console.log(
+      out(colors.error(`  ✗ Security check failed: ${message}`));
+      out(
         colors.warning("  This path is not allowed for security reasons."),
       );
       continue;
@@ -484,7 +487,7 @@ async function promptUser(): Promise<SetupAnswers> {
   // Step 2: Conflict strategy (simplified)
   printStep(2, 4, "Choose how to handle duplicate files");
 
-  console.log(
+  out(
     colors.muted("\n  What happens when a file with the same name exists?"),
   );
 
@@ -518,28 +521,28 @@ async function promptUser(): Promise<SetupAnswers> {
 
   const allFolders = [...selectedFolders, ...customFolders];
 
-  console.log();
-  console.log(colors.muted("Folders to organize:"));
+  out();
+  out(colors.muted("Folders to organize:"));
   if (allFolders.length > 0) {
-    allFolders.forEach((f) => console.log(colors.info(`  • ${f}`)));
+    allFolders.forEach((f) => out(colors.info(`  • ${f}`)));
   } else {
-    console.log(colors.warning("  (none selected - will use defaults)"));
+    out(colors.warning("  (none selected - will use defaults)"));
   }
 
-  console.log();
-  console.log(colors.muted("Conflict strategy:"));
-  console.log(
+  out();
+  out(colors.muted("Conflict strategy:"));
+  out(
     colors.info(
       `  ${conflictStrategy === "rename" ? "✨ Rename new files" : conflictStrategy === "skip" ? "⏭️ Skip duplicates" : "📝 Overwrite existing"}`,
     ),
   );
 
-  console.log();
-  console.log(colors.muted("AI clients to configure:"));
+  out();
+  out(colors.muted("AI clients to configure:"));
   if (selectedClients.length > 0) {
-    selectedClients.forEach((c) => console.log(colors.info(`  • ${c}`)));
+    selectedClients.forEach((c) => out(colors.info(`  • ${c}`)));
   } else {
-    console.log(colors.warning("  (none selected)"));
+    out(colors.warning("  (none selected)"));
   }
 
   const confirmed = await confirm({
@@ -563,7 +566,7 @@ async function promptUser(): Promise<SetupAnswers> {
  * Apply the configuration based on user answers
  */
 async function applyConfiguration(answers: SetupAnswers): Promise<void> {
-  console.log();
+  out();
   printSection("Saving configuration...", "💾");
 
   // Merge all folders
@@ -594,7 +597,7 @@ async function applyConfiguration(answers: SetupAnswers): Promise<void> {
         if (result.success) {
           printSuccess(`${client.icon} ${client.name} configured`);
         } else {
-          console.log(colors.error(`  ✗ ${client.name}: ${result.message}`));
+          out(colors.error(`  ✗ ${client.name}: ${result.message}`));
         }
       }
     }

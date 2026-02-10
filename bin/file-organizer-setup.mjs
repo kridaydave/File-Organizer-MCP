@@ -37,7 +37,7 @@ if (majorVersion < MIN_NODE_VERSION) {
 
 // Check if dist exists, try to build if not
 if (!fs.existsSync(distTuiPath)) {
-  console.log(`${YELLOW}⚠️  Setup files not found. Attempting to build...${RESET}\n`);
+  console.error(`${YELLOW}⚠️  Setup files not found. Attempting to build...${RESET}\n`);
 
   if (!fs.existsSync(srcTuiPath)) {
     console.error(`${RED}ERROR:${RESET} Source files not found.`);

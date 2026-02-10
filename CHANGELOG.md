@@ -1,8 +1,19 @@
 # Changelog
 
-## [3.2.6] - 2026-02-10
+## [3.2.7] - 2026-02-10
 
-### 🐛 Bug Fixes
+### 🚨 CRITICAL FIX: MCP Protocol Compatibility
+
+**Fixed stdout pollution breaking Claude connection**
+
+- **prepare.cjs**: Changed all `console.log` → `console.error`
+- **postinstall.cjs**: Changed all `console.log` → `console.error`  
+- **file-organizer-mcp.mjs**: Changed `log()` to use `console.error`
+- **setup-wizard.ts**: All output now routed to stderr
+
+**Root Cause:** Installation scripts were outputting colored text to stdout, which Claude's MCP client tried to parse as JSON-RPC, causing "Unexpected token" errors.
+
+### 🐛 Bug Fixes (from v3.2.6)
 
 - **Setup Wizard**: Fixed 14 critical bugs from security audit
   - Added robust path resolution with `findPackageRoot()` and `getPackageRoot()`

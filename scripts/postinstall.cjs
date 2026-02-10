@@ -19,37 +19,37 @@ if (process.env.CI || process.env.NODE_ENV === 'test') {
   process.exit(0);
 }
 
-console.log('');
-console.log(`${CYAN}${BOLD}╔════════════════════════════════════════════════════════════╗${RESET}`);
-console.log(`${CYAN}${BOLD}║                                                            ║${RESET}`);
-console.log(`${CYAN}${BOLD}║   🗂️  File Organizer MCP Server                           ║${RESET}`);
-console.log(`${CYAN}${BOLD}║                                                            ║${RESET}`);
-console.log(`${CYAN}${BOLD}║   Let AI organize your files automatically!               ║${RESET}`);
-console.log(`${CYAN}${BOLD}║                                                            ║${RESET}`);
-console.log(`${CYAN}${BOLD}╚════════════════════════════════════════════════════════════╝${RESET}`);
-console.log('');
-console.log(`${WHITE}✨ Installation complete!${RESET}`);
-console.log('');
+console.error('');
+console.error(`${CYAN}${BOLD}╔════════════════════════════════════════════════════════════╗${RESET}`);
+console.error(`${CYAN}${BOLD}║                                                            ║${RESET}`);
+console.error(`${CYAN}${BOLD}║   🗂️  File Organizer MCP Server                           ║${RESET}`);
+console.error(`${CYAN}${BOLD}║                                                            ║${RESET}`);
+console.error(`${CYAN}${BOLD}║   Let AI organize your files automatically!               ║${RESET}`);
+console.error(`${CYAN}${BOLD}║                                                            ║${RESET}`);
+console.error(`${CYAN}${BOLD}╚════════════════════════════════════════════════════════════╝${RESET}`);
+console.error('');
+console.error(`${WHITE}✨ Installation complete!${RESET}`);
+console.error('');
 
-console.log(`${YELLOW}🚀 Quick Start (just one command):${RESET}`);
-console.log('');
-console.log(`${MAGENTA}${BOLD}   npx file-organizer-mcp --setup${RESET}`);
-console.log('');
-console.log(`${GRAY}   This interactive wizard will:${RESET}`);
-console.log(`${GRAY}   • Detect your installed AI clients (Claude, Cursor, etc.)${RESET}`);
-console.log(`${GRAY}   • Configure everything automatically${RESET}`);
-console.log(`${GRAY}   • Set up folders you want to organize${RESET}`);
-console.log('');
+console.error(`${YELLOW}🚀 Quick Start (just one command):${RESET}`);
+console.error('');
+console.error(`${MAGENTA}${BOLD}   npx file-organizer-mcp --setup${RESET}`);
+console.error('');
+console.error(`${GRAY}   This interactive wizard will:${RESET}`);
+console.error(`${GRAY}   • Detect your installed AI clients (Claude, Cursor, etc.)${RESET}`);
+console.error(`${GRAY}   • Configure everything automatically${RESET}`);
+console.error(`${GRAY}   • Set up folders you want to organize${RESET}`);
+console.error('');
 
-console.log(`${YELLOW}🎯 What you can do after setup:${RESET}`);
-console.log(`${GRAY}   • "Organize my Downloads folder"${RESET}`);
-console.log(`${GRAY}   • "Find and remove duplicate files"${RESET}`);
-console.log(`${GRAY}   • "Show my largest files"${RESET}`);
-console.log('');
+console.error(`${YELLOW}🎯 What you can do after setup:${RESET}`);
+console.error(`${GRAY}   • "Organize my Downloads folder"${RESET}`);
+console.error(`${GRAY}   • "Find and remove duplicate files"${RESET}`);
+console.error(`${GRAY}   • "Show my largest files"${RESET}`);
+console.error('');
 
-console.log(`${YELLOW}📚 Need help?${RESET}`);
-console.log(`${GRAY}   GitHub: https://github.com/kridaydave/File-Organizer-MCP${RESET}`);
-console.log('');
+console.error(`${YELLOW}📚 Need help?${RESET}`);
+console.error(`${GRAY}   GitHub: https://github.com/kridaydave/File-Organizer-MCP${RESET}`);
+console.error('');
 
-console.log(`${GREEN}Happy organizing! 🎉${RESET}`);
-console.log('');
+console.error(`${GREEN}Happy organizing! 🎉${RESET}`);
+console.error('');
