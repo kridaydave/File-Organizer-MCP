@@ -406,8 +406,8 @@ function detectContinue(): MCPClient | null {
     name: 'Continue (VS Code)',
     description: 'Open-source AI code assistant with MCP',
     icon: '⏩',
-    installed: installed || fs.existsSync(path.dirname(configPath || '')),
-    configPath: path.dirname(configPath || ''),
+    installed: installed || !!(configPath && fs.existsSync(path.dirname(configPath))),
+    configPath: configPath ? path.dirname(configPath) : '',
     configFormat: 'json',
     website: 'https://continue.dev',
   };

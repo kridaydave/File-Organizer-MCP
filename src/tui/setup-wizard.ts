@@ -19,6 +19,7 @@ import fs from 'fs';
 import { execSync } from 'child_process';
 import { updateUserConfig, getUserConfigPath, loadUserConfig, type UserConfig } from '../config.js';
 import { detectMCPClients, writeClientConfig, type MCPClient } from './client-detector.js';
+import { validateStrictPath } from '../services/path-validator.service.js';
 
 interface SetupAnswers {
   folders: string[];
@@ -125,6 +126,8 @@ async function installDependencies(): Promise<boolean> {
     });
     return true;
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.log(colors.error(`  ✗ Install failed: ${errorMessage}`));
     return false;
   }
 }
@@ -303,6 +306,16 @@ async function promptUser(): Promise<SetupAnswers> {
         return true;
       },
     });
+
+    // Security validation for custom paths
+    try {
+      await validateStrictPath(customPath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Security validation failed';
+      console.log(colors.error(`  ✗ Security check failed: ${message}`));
+      console.log(colors.warning('  This path is not allowed for security reasons.'));
+      continue;
+    }
 
     customFolders.push(customPath);
     printSuccess(`Added: ${customPath}`);

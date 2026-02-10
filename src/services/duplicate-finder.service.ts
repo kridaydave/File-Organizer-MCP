@@ -199,7 +199,9 @@ export class DuplicateFinderService {
         if (handle) {
           try {
             await handle.close();
-          } catch (e) {}
+          } catch (e) {
+            logger.debug('Failed to close file handle', e as Error);
+          }
         }
       }
     }
@@ -308,7 +310,9 @@ export class DuplicateFinderService {
             if (handle) {
               try {
                 await handle.close();
-              } catch (e) {}
+              } catch (e) {
+                logger.debug('Failed to close file handle during verification', e as Error);
+              }
             }
           }
         }
@@ -341,7 +345,9 @@ export class DuplicateFinderService {
             if (handle) {
               try {
                 await handle.close();
-              } catch (e) {}
+              } catch (e) {
+                logger.debug('Failed to close file handle during verification', e as Error);
+              }
             }
           }
         }

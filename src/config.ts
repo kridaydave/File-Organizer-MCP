@@ -459,8 +459,14 @@ export function initializeUserConfig(): void {
   }
 }
 
-// Initialize config on module load
-initializeUserConfig();
+// Config is initialized lazily on first access to avoid side effects
+let configInitialized = false;
+function ensureConfigInitialized() {
+  if (!configInitialized) {
+    initializeUserConfig();
+    configInitialized = true;
+  }
+}
 
 // Backward compatibility exports
 export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
