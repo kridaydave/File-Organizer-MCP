@@ -44,51 +44,51 @@ A collaborative decision-making system where specialized shepherds debate soluti
 export type ShepherdId = string;
 export type DebateId = string;
 export type PhaseType =
-  | 'idea-generation'
-  | 'cross-validation'
-  | 'conflict-resolution'
-  | 'consensus';
+  | "idea-generation"
+  | "cross-validation"
+  | "conflict-resolution"
+  | "consensus";
 
 export enum MessageType {
   // Help/Correction Messages
-  HELP_REQUEST = 'HELP_REQUEST',
-  HELP_RESPONSE = 'HELP_RESPONSE',
-  CORRECTION = 'CORRECTION',
-  CLARIFICATION = 'CLARIFICATION',
+  HELP_REQUEST = "HELP_REQUEST",
+  HELP_RESPONSE = "HELP_RESPONSE",
+  CORRECTION = "CORRECTION",
+  CLARIFICATION = "CLARIFICATION",
 
   // Debate Messages
-  ARGUMENT = 'ARGUMENT',
-  COUNTER_ARGUMENT = 'COUNTER_ARGUMENT',
-  SUPPORT = 'SUPPORT',
-  OBJECTION = 'OBJECTION',
-  QUESTION = 'QUESTION',
-  ANSWER = 'ANSWER',
+  ARGUMENT = "ARGUMENT",
+  COUNTER_ARGUMENT = "COUNTER_ARGUMENT",
+  SUPPORT = "SUPPORT",
+  OBJECTION = "OBJECTION",
+  QUESTION = "QUESTION",
+  ANSWER = "ANSWER",
 
   // Phase Messages
-  PHASE_START = 'PHASE_START',
-  PHASE_COMPLETE = 'PHASE_COMPLETE',
-  PHASE_VOTE = 'PHASE_VOTE',
+  PHASE_START = "PHASE_START",
+  PHASE_COMPLETE = "PHASE_COMPLETE",
+  PHASE_VOTE = "PHASE_VOTE",
 
   // System Messages
-  QUALITY_GATE_CHECK = 'QUALITY_GATE_CHECK',
-  QUALITY_GATE_RESULT = 'QUALITY_GATE_RESULT',
-  CONSENSUS_REACHED = 'CONSENSUS_REACHED',
-  USER_APPROVAL_REQUIRED = 'USER_APPROVAL_REQUIRED',
+  QUALITY_GATE_CHECK = "QUALITY_GATE_CHECK",
+  QUALITY_GATE_RESULT = "QUALITY_GATE_RESULT",
+  CONSENSUS_REACHED = "CONSENSUS_REACHED",
+  USER_APPROVAL_REQUIRED = "USER_APPROVAL_REQUIRED",
 }
 
 export enum ShepherdSpecialty {
-  ARCHITECT = 'architect',
-  PERFORMANCE = 'performance',
-  SECURITY = 'security',
-  MAINTAINABILITY = 'maintainability',
-  DELIVERY = 'delivery',
+  ARCHITECT = "architect",
+  PERFORMANCE = "performance",
+  SECURITY = "security",
+  MAINTAINABILITY = "maintainability",
+  DELIVERY = "delivery",
 }
 
 export enum VoteType {
-  APPROVE = 'approve',
-  REJECT = 'reject',
-  ABSTAIN = 'abstain',
-  CONDITIONAL = 'conditional',
+  APPROVE = "approve",
+  REJECT = "reject",
+  ABSTAIN = "abstain",
+  CONDITIONAL = "conditional",
 }
 
 export interface BaseMessage {
@@ -98,7 +98,7 @@ export interface BaseMessage {
   recipientId?: ShepherdId;
   timestamp: Date;
   type: MessageType;
-  priority: 'low' | 'medium' | 'high' | 'critical';
+  priority: "low" | "medium" | "high" | "critical";
   correlationId?: string;
 }
 
@@ -107,7 +107,7 @@ export interface HelpMessage extends BaseMessage {
   content: string;
   relatedTaskId: string;
   specialty?: ShepherdSpecialty;
-  urgency: 'low' | 'medium' | 'high';
+  urgency: "low" | "medium" | "high";
 }
 
 export interface CorrectionMessage extends BaseMessage {
@@ -115,7 +115,7 @@ export interface CorrectionMessage extends BaseMessage {
   originalStatement: string;
   correctedStatement: string;
   reasoning: string;
-  impact: 'low' | 'medium' | 'high' | 'critical';
+  impact: "low" | "medium" | "high" | "critical";
 }
 
 export interface DebateMessage extends BaseMessage {
@@ -132,12 +132,12 @@ export interface DebateMessage extends BaseMessage {
 
 export interface Evidence {
   type:
-    | 'code'
-    | 'documentation'
-    | 'benchmark'
-    | 'security-scan'
-    | 'test-result'
-    | 'external-reference';
+    | "code"
+    | "documentation"
+    | "benchmark"
+    | "security-scan"
+    | "test-result"
+    | "external-reference";
   content: string | object;
   source: string;
   confidence: number;
@@ -190,7 +190,7 @@ export interface Proposal {
   id: string;
   authorId: ShepherdId;
   content: string;
-  type: 'solution' | 'approach' | 'alternative' | 'modification';
+  type: "solution" | "approach" | "alternative" | "modification";
   votes: Map<ShepherdId, VoteType>;
   qualityAssessment: QualityScores;
   supportCount: number;
@@ -223,14 +223,22 @@ export interface UserApprovalStatus {
   approvedAt?: Date;
   rejectedAt?: Date;
   feedback?: string;
-  approvalType: 'full' | 'conditional' | 'deferred';
+  approvalType: "full" | "conditional" | "deferred";
 }
 
 // Message Router Interface
 export interface MessageRouter {
   route(message: BaseMessage): Promise<void>;
-  sendDirect(from: ShepherdId, to: ShepherdId, message: BaseMessage): Promise<void>;
-  broadcast(from: ShepherdId, message: BaseMessage, recipients?: ShepherdId[]): Promise<void>;
+  sendDirect(
+    from: ShepherdId,
+    to: ShepherdId,
+    message: BaseMessage,
+  ): Promise<void>;
+  broadcast(
+    from: ShepherdId,
+    message: BaseMessage,
+    recipients?: ShepherdId[],
+  ): Promise<void>;
   subscribe(shepherdId: ShepherdId, handler: MessageHandler): void;
   unsubscribe(shepherdId: ShepherdId): void;
 }
@@ -267,7 +275,11 @@ export interface QualityGate {
 export interface VotingSystem {
   openVoting(phase: PhaseType): Promise<void>;
   closeVoting(): Promise<VotingResult>;
-  castVote(shepherdId: ShepherdId, vote: VoteType, comments?: string): Promise<void>;
+  castVote(
+    shepherdId: ShepherdId,
+    vote: VoteType,
+    comments?: string,
+  ): Promise<void>;
   getResults(): VotingResult;
   isConsensusReached(): boolean;
 }
@@ -306,7 +318,7 @@ export interface UserApprovalRequest {
 ## Message Passing System
 
 ```typescript
-import { EventEmitter } from 'events';
+import { EventEmitter } from "events";
 
 export class MessageRouterImpl implements MessageRouter {
   private messageQueue: BaseMessage[] = [];
@@ -314,13 +326,16 @@ export class MessageRouterImpl implements MessageRouter {
   private routerEmitter = new EventEmitter();
 
   constructor(
-    private readonly deliveryGuarantee: 'at-least-once' | 'exactly-once' = 'at-least-once'
+    private readonly deliveryGuarantee:
+      | "at-least-once"
+      | "exactly-once" = "at-least-once",
   ) {
     this.routerEmitter.setMaxListeners(100);
   }
 
   async route(message: BaseMessage): Promise<void> {
-    message.correlationId = message.correlationId || this.generateCorrelationId();
+    message.correlationId =
+      message.correlationId || this.generateCorrelationId();
 
     switch (message.type) {
       case MessageType.HELP_REQUEST:
@@ -350,7 +365,7 @@ export class MessageRouterImpl implements MessageRouter {
       await this.sendDirect(message.senderId, shepherd.id, message);
     }
 
-    this.routerEmitter.emit('priority-route', message);
+    this.routerEmitter.emit("priority-route", message);
   }
 
   private async routeDebateMessage(message: BaseMessage): Promise<void> {
@@ -375,12 +390,16 @@ export class MessageRouterImpl implements MessageRouter {
       await this.broadcast(
         message.senderId,
         message,
-        debate.participants.map((p) => p.id)
+        debate.participants.map((p) => p.id),
       );
     }
   }
 
-  async sendDirect(from: ShepherdId, to: ShepherdId, message: BaseMessage): Promise<void> {
+  async sendDirect(
+    from: ShepherdId,
+    to: ShepherdId,
+    message: BaseMessage,
+  ): Promise<void> {
     const handlers = this.subscriptions.get(to) || [];
     for (const handler of handlers) {
       try {
@@ -395,7 +414,7 @@ export class MessageRouterImpl implements MessageRouter {
   async broadcast(
     from: ShepherdId,
     message: BaseMessage,
-    recipients?: ShepherdId[]
+    recipients?: ShepherdId[],
   ): Promise<void> {
     const targets = recipients || this.getAllActiveShepherds();
 
@@ -436,7 +455,7 @@ export class MessageRouterImpl implements MessageRouter {
       type: MessageType.ANSWER,
       timestamp: new Date(),
     };
-    await this.sendDirect('system', message.senderId, ackMessage);
+    await this.sendDirect("system", message.senderId, ackMessage);
   }
 
   private findRelevantSpecialists(message: BaseMessage): Shepherd[] {
@@ -446,8 +465,8 @@ export class MessageRouterImpl implements MessageRouter {
   private getDebateContext(debateId: DebateId): Promise<Debate> {
     return Promise.resolve({
       id: debateId,
-      topic: '',
-      description: '',
+      topic: "",
+      description: "",
       createdAt: new Date(),
       currentPhase: PhaseType.IDEA_GENERATION,
       participants: [],
@@ -461,7 +480,7 @@ export class MessageRouterImpl implements MessageRouter {
         concerns: [],
         requiredAgreementLevel: 0.7,
       },
-      userApprovalStatus: { required: false, approvalType: 'full' },
+      userApprovalStatus: { required: false, approvalType: "full" },
     });
   }
 
@@ -477,7 +496,10 @@ export class MessageRouterImpl implements MessageRouter {
     return `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  private async scheduleRetry(message: BaseMessage, recipientId: ShepherdId): Promise<void> {
+  private async scheduleRetry(
+    message: BaseMessage,
+    recipientId: ShepherdId,
+  ): Promise<void> {
     setTimeout(() => {
       this.sendDirect(message.senderId, recipientId, message);
     }, 5000);
@@ -488,14 +510,14 @@ export class MessageBuilder {
   private message: Partial<BaseMessage> = {
     id: this.generateId(),
     timestamp: new Date(),
-    priority: 'medium',
+    priority: "medium",
   };
 
   helpRequest(
     debateId: DebateId,
     senderId: ShepherdId,
     content: string,
-    specialty?: ShepherdSpecialty
+    specialty?: ShepherdSpecialty,
   ): HelpMessage {
     return {
       ...this.message,
@@ -503,9 +525,9 @@ export class MessageBuilder {
       debateId,
       senderId,
       content,
-      relatedTaskId: '',
+      relatedTaskId: "",
       specialty,
-      urgency: 'medium',
+      urgency: "medium",
     } as HelpMessage;
   }
 
@@ -514,7 +536,7 @@ export class MessageBuilder {
     senderId: ShepherdId,
     original: string,
     corrected: string,
-    reasoning: string
+    reasoning: string,
   ): CorrectionMessage {
     return {
       ...this.message,
@@ -524,7 +546,7 @@ export class MessageBuilder {
       originalStatement: original,
       correctedStatement: corrected,
       reasoning,
-      impact: 'medium',
+      impact: "medium",
     } as CorrectionMessage;
   }
 
@@ -533,7 +555,7 @@ export class MessageBuilder {
     senderId: ShepherdId,
     topicId: string,
     content: string,
-    evidence: Evidence[]
+    evidence: Evidence[],
   ): DebateMessage {
     return {
       ...this.message,
@@ -543,7 +565,7 @@ export class MessageBuilder {
       topicId,
       content,
       evidence,
-      reasoning链条: '',
+      reasoning链条: "",
     } as DebateMessage;
   }
 
@@ -551,7 +573,7 @@ export class MessageBuilder {
     debateId: DebateId,
     senderId: ShepherdId,
     targetMessageId: string,
-    content: string
+    content: string,
   ): DebateMessage {
     return {
       ...this.message,
@@ -561,7 +583,7 @@ export class MessageBuilder {
       topicId: targetMessageId,
       content,
       evidence: [],
-      reasoning链条: '',
+      reasoning链条: "",
     } as DebateMessage;
   }
 
@@ -570,7 +592,7 @@ export class MessageBuilder {
     senderId: ShepherdId,
     targetMessageId: string,
     content: string,
-    evidence: Evidence[]
+    evidence: Evidence[],
   ): DebateMessage {
     return {
       ...this.message,
@@ -580,7 +602,7 @@ export class MessageBuilder {
       topicId: targetMessageId,
       content,
       evidence,
-      reasoning链条: '',
+      reasoning链条: "",
     } as DebateMessage;
   }
 
@@ -589,7 +611,7 @@ export class MessageBuilder {
     senderId: ShepherdId,
     phase: PhaseType,
     vote: VoteType,
-    scores: QualityScores
+    scores: QualityScores,
   ): PhaseVote {
     return {
       ...this.message,
@@ -621,7 +643,7 @@ export class DebatePhaseManager implements PhaseManager {
     private readonly debate: Debate,
     private readonly router: MessageRouter,
     private readonly votingSystem: VotingSystem,
-    private readonly qualityGates: QualityGate[]
+    private readonly qualityGates: QualityGate[],
   ) {}
 
   async startPhase(phase: PhaseType): Promise<void> {
@@ -632,17 +654,17 @@ export class DebatePhaseManager implements PhaseManager {
     const phaseStartMessage: BaseMessage = {
       id: this.generateId(),
       debateId: this.debate.id,
-      senderId: 'system',
+      senderId: "system",
       timestamp: new Date(),
       type: MessageType.PHASE_START,
-      priority: 'high',
+      priority: "high",
       correlationId: this.generateCorrelationId(),
     };
 
     await this.router.broadcast(
-      'system',
+      "system",
       phaseStartMessage,
-      this.debate.participants.map((p) => p.id)
+      this.debate.participants.map((p) => p.id),
     );
 
     switch (phase) {
@@ -665,13 +687,13 @@ export class DebatePhaseManager implements PhaseManager {
     const phaseCompleteMessage: BaseMessage = {
       id: this.generateId(),
       debateId: this.debate.id,
-      senderId: 'system',
+      senderId: "system",
       timestamp: new Date(),
       type: MessageType.PHASE_COMPLETE,
-      priority: 'high',
+      priority: "high",
     };
 
-    await this.router.broadcast('system', phaseCompleteMessage);
+    await this.router.broadcast("system", phaseCompleteMessage);
     this.completedPhases.push(phase);
 
     return true;
@@ -712,7 +734,9 @@ export class DebatePhaseManager implements PhaseManager {
     return {
       currentPhase: this.currentPhaseType,
       completedPhases: this.completedPhases,
-      remainingPhases: phaseOrder.filter((p) => !this.completedPhases.includes(p)),
+      remainingPhases: phaseOrder.filter(
+        (p) => !this.completedPhases.includes(p),
+      ),
       duration: Date.now() - this.phaseStartTime.getTime(),
       messageCount: this.messageCount,
     };
@@ -759,7 +783,10 @@ export class DebatePhaseManager implements PhaseManager {
     let conflictIterations = 0;
     const maxIterations = 3;
 
-    while (Date.now() - startTime < timeout && conflictIterations < maxIterations) {
+    while (
+      Date.now() - startTime < timeout &&
+      conflictIterations < maxIterations
+    ) {
       await this.processConflictResolutionMessages();
 
       if (await this.conflictsResolved()) {
@@ -792,7 +819,7 @@ export class DebatePhaseManager implements PhaseManager {
 
   private async processIdeaGenerationMessages(): Promise<void> {
     const ideaMessages = this.debate.messages.filter(
-      (m) => m.type === MessageType.ARGUMENT && m.topicId === 'idea'
+      (m) => m.type === MessageType.ARGUMENT && m.topicId === "idea",
     );
 
     this.messageCount = ideaMessages.length;
@@ -804,7 +831,8 @@ export class DebatePhaseManager implements PhaseManager {
 
   private async processCrossValidationMessages(): Promise<void> {
     const validationMessages = this.debate.messages.filter(
-      (m) => m.type === MessageType.ARGUMENT || m.type === MessageType.OBJECTION
+      (m) =>
+        m.type === MessageType.ARGUMENT || m.type === MessageType.OBJECTION,
     );
 
     this.messageCount = validationMessages.length;
@@ -816,7 +844,9 @@ export class DebatePhaseManager implements PhaseManager {
 
   private async processConflictResolutionMessages(): Promise<void> {
     const conflictMessages = this.debate.messages.filter(
-      (m) => m.type === MessageType.COUNTER_ARGUMENT || m.type === MessageType.CORRECTION
+      (m) =>
+        m.type === MessageType.COUNTER_ARGUMENT ||
+        m.type === MessageType.CORRECTION,
     );
 
     this.messageCount = conflictMessages.length;
@@ -824,14 +854,16 @@ export class DebatePhaseManager implements PhaseManager {
 
   private async conflictsResolved(): Promise<boolean> {
     const openObjections = this.debate.messages.filter(
-      (m) => m.type === MessageType.OBJECTION
+      (m) => m.type === MessageType.OBJECTION,
     ).length;
 
     return openObjections === 0;
   }
 
   private async processConsensusMessages(): Promise<void> {
-    const consensusMessages = this.debate.messages.filter((m) => m.type === MessageType.PHASE_VOTE);
+    const consensusMessages = this.debate.messages.filter(
+      (m) => m.type === MessageType.PHASE_VOTE,
+    );
 
     this.messageCount = consensusMessages.length;
   }
@@ -852,7 +884,7 @@ export class DebatePhaseManager implements PhaseManager {
 export class IdeaGenerationPhase {
   constructor(
     private readonly debate: Debate,
-    private readonly router: MessageRouter
+    private readonly router: MessageRouter,
   ) {}
 
   async generateIdeas(context: string): Promise<Proposal[]> {
@@ -874,14 +906,17 @@ export class IdeaGenerationPhase {
     return proposals;
   }
 
-  private async solicitIdeas(shepherd: Shepherd, context: string): Promise<string[]> {
+  private async solicitIdeas(
+    shepherd: Shepherd,
+    context: string,
+  ): Promise<string[]> {
     const ideaRequest: BaseMessage = {
       id: this.generateId(),
       debateId: this.debate.id,
-      senderId: 'system',
+      senderId: "system",
       timestamp: new Date(),
       type: MessageType.HELP_REQUEST,
-      priority: 'high',
+      priority: "high",
       content: `Please generate ideas for: ${context}`,
     };
 
@@ -889,12 +924,15 @@ export class IdeaGenerationPhase {
     return ideas;
   }
 
-  private async createProposal(idea: string, specialty: ShepherdSpecialty): Promise<Proposal> {
+  private async createProposal(
+    idea: string,
+    specialty: ShepherdSpecialty,
+  ): Promise<Proposal> {
     return {
       id: this.generateId(),
-      authorId: '',
+      authorId: "",
       content: idea,
-      type: 'solution',
+      type: "solution",
       votes: new Map(),
       qualityAssessment: {
         architecturalSoundness: 0,
@@ -918,7 +956,7 @@ export class CrossValidationPhase {
   constructor(
     private readonly debate: Debate,
     private readonly router: MessageRouter,
-    private readonly specialistShepherds: SpecialistShepherd[]
+    private readonly specialistShepherds: SpecialistShepherd[],
   ) {}
 
   async validateProposals(): Promise<Map<string, ValidationResult>> {
@@ -932,13 +970,18 @@ export class CrossValidationPhase {
     return results;
   }
 
-  private async validateProposal(proposal: Proposal): Promise<ValidationResult> {
+  private async validateProposal(
+    proposal: Proposal,
+  ): Promise<ValidationResult> {
     const specialistValidations = await Promise.all(
-      this.specialistShepherds.map((shepherd) => shepherd.validateProposal(proposal))
+      this.specialistShepherds.map((shepherd) =>
+        shepherd.validateProposal(proposal),
+      ),
     );
 
     const overallScore =
-      specialistValidations.reduce((acc, v) => acc + v.score, 0) / specialistValidations.length;
+      specialistValidations.reduce((acc, v) => acc + v.score, 0) /
+      specialistValidations.length;
 
     return {
       proposalId: proposal.id,
@@ -956,7 +999,7 @@ export class CrossValidationPhase {
 export class ConflictResolutionPhase {
   constructor(
     private readonly debate: Debate,
-    private readonly router: MessageRouter
+    private readonly router: MessageRouter,
   ) {}
 
   async resolveConflicts(): Promise<ConflictResolutionResult> {
@@ -993,24 +1036,26 @@ export class ConflictResolutionPhase {
     return conflicts;
   }
 
-  private async resolveConflict(conflict: Conflict): Promise<ConflictResolution> {
+  private async resolveConflict(
+    conflict: Conflict,
+  ): Promise<ConflictResolution> {
     const resolutionMessage: BaseMessage = {
       id: this.generateId(),
       debateId: this.debate.id,
-      senderId: 'system',
+      senderId: "system",
       timestamp: new Date(),
       type: MessageType.CORRECTION,
-      priority: 'high',
+      priority: "high",
       content: `Resolving conflict: ${conflict.topic}`,
     };
 
-    await this.router.broadcast('system', resolutionMessage);
+    await this.router.broadcast("system", resolutionMessage);
 
     return {
       conflictId: conflict.id,
       resolved: true,
-      resolution: 'Conflict addressed through consensus',
-      updatedProposalId: '',
+      resolution: "Conflict addressed through consensus",
+      updatedProposalId: "",
     };
   }
 
@@ -1065,7 +1110,7 @@ export abstract class SpecialistShepherd {
     public readonly name: string,
     public readonly specialty: ShepherdSpecialty,
     public readonly expertise: string[],
-    public readonly weight: number = 1.0
+    public readonly weight: number = 1.0,
   ) {}
 
   abstract validateProposal(proposal: Proposal): Promise<SpecialistValidation>;
@@ -1077,7 +1122,12 @@ export class ArchitectShepherd extends SpecialistShepherd {
   constructor(
     id: ShepherdId,
     name: string,
-    expertise: string[] = ['system-design', 'patterns', 'interfaces', 'data-flow']
+    expertise: string[] = [
+      "system-design",
+      "patterns",
+      "interfaces",
+      "data-flow",
+    ],
   ) {
     super(id, name, ShepherdSpecialty.ARCHITECT, expertise, 1.2);
   }
@@ -1088,17 +1138,17 @@ export class ArchitectShepherd extends SpecialistShepherd {
     let score = 1.0;
 
     if (!this.hasClearInterfaces(proposal)) {
-      concerns.push('Missing clear interface definitions');
+      concerns.push("Missing clear interface definitions");
       score -= 0.2;
     }
 
     if (!this.hasScalableDesign(proposal)) {
-      concerns.push('Design may not scale appropriately');
+      concerns.push("Design may not scale appropriately");
       score -= 0.15;
     }
 
     if (!this.hasProperAbstraction(proposal)) {
-      concerns.push('Insufficient abstraction layers');
+      concerns.push("Insufficient abstraction layers");
       score -= 0.1;
     }
 
@@ -1120,9 +1170,9 @@ export class ArchitectShepherd extends SpecialistShepherd {
       senderId: this.id,
       timestamp: new Date(),
       type: MessageType.ARGUMENT,
-      priority: validation.passed ? 'medium' : 'high',
+      priority: validation.passed ? "medium" : "high",
       topicId: proposal.id,
-      content: `Architecture review: ${validation.concerns.join('; ')}`,
+      content: `Architecture review: ${validation.concerns.join("; ")}`,
       evidence: [],
       reasoning链条: this.buildReasoningChain(proposal),
     };
@@ -1182,7 +1232,12 @@ export class PerformanceShepherd extends SpecialistShepherd {
   constructor(
     id: ShepherdId,
     name: string,
-    expertise: string[] = ['optimization', 'benchmarking', 'profiling', 'caching']
+    expertise: string[] = [
+      "optimization",
+      "benchmarking",
+      "profiling",
+      "caching",
+    ],
   ) {
     super(id, name, ShepherdSpecialty.PERFORMANCE, expertise, 1.1);
   }
@@ -1193,17 +1248,17 @@ export class PerformanceShepherd extends SpecialistShepherd {
     let score = 1.0;
 
     if (!this.hasPerformanceTargets(proposal)) {
-      concerns.push('No performance targets defined');
+      concerns.push("No performance targets defined");
       score -= 0.2;
     }
 
     if (!this.hasEfficientAlgorithm(proposal)) {
-      concerns.push('Algorithm complexity may be suboptimal');
+      concerns.push("Algorithm complexity may be suboptimal");
       score -= 0.15;
     }
 
     if (!this.hasResourceManagement(proposal)) {
-      concerns.push('Resource management not addressed');
+      concerns.push("Resource management not addressed");
       score -= 0.1;
     }
 
@@ -1223,11 +1278,11 @@ export class PerformanceShepherd extends SpecialistShepherd {
       senderId: this.id,
       timestamp: new Date(),
       type: MessageType.ARGUMENT,
-      priority: 'medium',
+      priority: "medium",
       topicId: proposal.id,
-      content: 'Performance analysis',
+      content: "Performance analysis",
       evidence: [],
-      reasoning链条: '',
+      reasoning链条: "",
     };
   }
 
@@ -1263,7 +1318,12 @@ export class SecurityShepherd extends SpecialistShepherd {
   constructor(
     id: ShepherdId,
     name: string,
-    expertise: string[] = ['auth', 'encryption', 'vulnerabilities', 'compliance']
+    expertise: string[] = [
+      "auth",
+      "encryption",
+      "vulnerabilities",
+      "compliance",
+    ],
   ) {
     super(id, name, ShepherdSpecialty.SECURITY, expertise, 1.3);
   }
@@ -1274,22 +1334,22 @@ export class SecurityShepherd extends SpecialistShepherd {
     let score = 1.0;
 
     if (!this.hasAuthentication(proposal)) {
-      concerns.push('Authentication mechanism not specified');
+      concerns.push("Authentication mechanism not specified");
       score -= 0.25;
     }
 
     if (!this.hasAuthorization(proposal)) {
-      concerns.push('Authorization model not defined');
+      concerns.push("Authorization model not defined");
       score -= 0.2;
     }
 
     if (!this.hasDataProtection(proposal)) {
-      concerns.push('Data protection measures not described');
+      concerns.push("Data protection measures not described");
       score -= 0.15;
     }
 
     if (!this.hasVulnerabilityMitigation(proposal)) {
-      concerns.push('No vulnerability mitigation strategy');
+      concerns.push("No vulnerability mitigation strategy");
       score -= 0.15;
     }
 
@@ -1309,11 +1369,11 @@ export class SecurityShepherd extends SpecialistShepherd {
       senderId: this.id,
       timestamp: new Date(),
       type: MessageType.ARGUMENT,
-      priority: 'high',
+      priority: "high",
       topicId: proposal.id,
-      content: 'Security review',
+      content: "Security review",
       evidence: [],
-      reasoning链条: '',
+      reasoning链条: "",
     };
   }
 
@@ -1353,7 +1413,12 @@ export class MaintainabilityShepherd extends SpecialistShepherd {
   constructor(
     id: ShepherdId,
     name: string,
-    expertise: string[] = ['documentation', 'testing', 'refactoring', 'code-quality']
+    expertise: string[] = [
+      "documentation",
+      "testing",
+      "refactoring",
+      "code-quality",
+    ],
   ) {
     super(id, name, ShepherdSpecialty.MAINTAINABILITY, expertise, 1.0);
   }
@@ -1364,17 +1429,17 @@ export class MaintainabilityShepherd extends SpecialistShepherd {
     let score = 1.0;
 
     if (!this.hasTests(proposal)) {
-      concerns.push('Test coverage not specified');
+      concerns.push("Test coverage not specified");
       score -= 0.2;
     }
 
     if (!this.hasDocumentation(proposal)) {
-      concerns.push('Documentation requirements not met');
+      concerns.push("Documentation requirements not met");
       score -= 0.15;
     }
 
     if (!this.hasCodeStandards(proposal)) {
-      concerns.push('Code standards not defined');
+      concerns.push("Code standards not defined");
       score -= 0.1;
     }
 
@@ -1394,11 +1459,11 @@ export class MaintainabilityShepherd extends SpecialistShepherd {
       senderId: this.id,
       timestamp: new Date(),
       type: MessageType.ARGUMENT,
-      priority: 'medium',
+      priority: "medium",
       topicId: proposal.id,
-      content: 'Maintainability review',
+      content: "Maintainability review",
       evidence: [],
-      reasoning链条: '',
+      reasoning链条: "",
     };
   }
 
@@ -1434,7 +1499,12 @@ export class DeliveryShepherd extends SpecialistShepherd {
   constructor(
     id: ShepherdId,
     name: string,
-    expertise: string[] = ['planning', 'risk-management', 'deployment', 'milestones']
+    expertise: string[] = [
+      "planning",
+      "risk-management",
+      "deployment",
+      "milestones",
+    ],
   ) {
     super(id, name, ShepherdSpecialty.DELIVERY, expertise, 1.0);
   }
@@ -1445,17 +1515,17 @@ export class DeliveryShepherd extends SpecialistShepherd {
     let score = 1.0;
 
     if (!this.hasTimeline(proposal)) {
-      concerns.push('No timeline defined');
+      concerns.push("No timeline defined");
       score -= 0.2;
     }
 
     if (!this.hasMilestones(proposal)) {
-      concerns.push('Milestones not specified');
+      concerns.push("Milestones not specified");
       score -= 0.15;
     }
 
     if (!this.hasRiskPlan(proposal)) {
-      concerns.push('Risk mitigation plan missing');
+      concerns.push("Risk mitigation plan missing");
       score -= 0.15;
     }
 
@@ -1475,11 +1545,11 @@ export class DeliveryShepherd extends SpecialistShepherd {
       senderId: this.id,
       timestamp: new Date(),
       type: MessageType.ARGUMENT,
-      priority: 'medium',
+      priority: "medium",
       topicId: proposal.id,
-      content: 'Delivery assessment',
+      content: "Delivery assessment",
       evidence: [],
-      reasoning链条: '',
+      reasoning链条: "",
     };
   }
 
@@ -1515,7 +1585,7 @@ export class SpecialistShepherdFactory {
   static createShepherd(
     specialty: ShepherdSpecialty,
     id: ShepherdId,
-    name: string
+    name: string,
   ): SpecialistShepherd {
     switch (specialty) {
       case ShepherdSpecialty.ARCHITECT:
@@ -1568,8 +1638,8 @@ export class QualityGateEngine {
           passed: false,
           score: 0,
           threshold: gate.getThreshold(),
-          details: `Evaluation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          checkedBy: 'system',
+          details: `Evaluation error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          checkedBy: "system",
           checkedAt: new Date(),
         });
       }
@@ -1599,9 +1669,9 @@ export class QualityGateEngine {
 }
 
 export class ArchitecturalSoundnessGate implements QualityGate {
-  id = 'gate-architectural';
-  name = 'Architectural Soundness';
-  description = 'Ensures the proposal has a sound architectural design';
+  id = "gate-architectural";
+  name = "Architectural Soundness";
+  description = "Ensures the proposal has a sound architectural design";
 
   async evaluate(debate: Debate): Promise<QualityGateResult> {
     const proposals = debate.proposals;
@@ -1612,15 +1682,17 @@ export class ArchitecturalSoundnessGate implements QualityGate {
         passed: false,
         score: 0,
         threshold: this.getThreshold(),
-        details: 'No proposals to evaluate',
-        checkedBy: 'system',
+        details: "No proposals to evaluate",
+        checkedBy: "system",
         checkedAt: new Date(),
       };
     }
 
     const avgArchitecturalScore =
-      proposals.reduce((sum, p) => sum + p.qualityAssessment.architecturalSoundness, 0) /
-      proposals.length;
+      proposals.reduce(
+        (sum, p) => sum + p.qualityAssessment.architecturalSoundness,
+        0,
+      ) / proposals.length;
 
     return {
       gateId: this.id,
@@ -1629,7 +1701,7 @@ export class ArchitecturalSoundnessGate implements QualityGate {
       score: avgArchitecturalScore,
       threshold: this.getThreshold(),
       details: `Average architectural score: ${avgArchitecturalScore.toFixed(2)}`,
-      checkedBy: 'architect-shepherd',
+      checkedBy: "architect-shepherd",
       checkedAt: new Date(),
     };
   }
@@ -1640,15 +1712,17 @@ export class ArchitecturalSoundnessGate implements QualityGate {
 }
 
 export class PerformanceGate implements QualityGate {
-  id = 'gate-performance';
-  name = 'Performance Requirements';
-  description = 'Ensures the solution meets performance criteria';
+  id = "gate-performance";
+  name = "Performance Requirements";
+  description = "Ensures the solution meets performance criteria";
 
   async evaluate(debate: Debate): Promise<QualityGateResult> {
     const proposals = debate.proposals;
     const avgPerformanceScore =
-      proposals.reduce((sum, p) => sum + p.qualityAssessment.performanceImpact, 0) /
-      (proposals.length || 1);
+      proposals.reduce(
+        (sum, p) => sum + p.qualityAssessment.performanceImpact,
+        0,
+      ) / (proposals.length || 1);
 
     return {
       gateId: this.id,
@@ -1657,7 +1731,7 @@ export class PerformanceGate implements QualityGate {
       score: avgPerformanceScore,
       threshold: this.getThreshold(),
       details: `Average performance score: ${avgPerformanceScore.toFixed(2)}`,
-      checkedBy: 'performance-shepherd',
+      checkedBy: "performance-shepherd",
       checkedAt: new Date(),
     };
   }
@@ -1668,15 +1742,17 @@ export class PerformanceGate implements QualityGate {
 }
 
 export class SecurityGate implements QualityGate {
-  id = 'gate-security';
-  name = 'Security Posture';
-  description = 'Ensures the solution meets security requirements';
+  id = "gate-security";
+  name = "Security Posture";
+  description = "Ensures the solution meets security requirements";
 
   async evaluate(debate: Debate): Promise<QualityGateResult> {
     const proposals = debate.proposals;
     const avgSecurityScore =
-      proposals.reduce((sum, p) => sum + p.qualityAssessment.securityPosture, 0) /
-      (proposals.length || 1);
+      proposals.reduce(
+        (sum, p) => sum + p.qualityAssessment.securityPosture,
+        0,
+      ) / (proposals.length || 1);
 
     return {
       gateId: this.id,
@@ -1685,7 +1761,7 @@ export class SecurityGate implements QualityGate {
       score: avgSecurityScore,
       threshold: this.getThreshold(),
       details: `Average security score: ${avgSecurityScore.toFixed(2)}`,
-      checkedBy: 'security-shepherd',
+      checkedBy: "security-shepherd",
       checkedAt: new Date(),
     };
   }
@@ -1696,15 +1772,17 @@ export class SecurityGate implements QualityGate {
 }
 
 export class MaintainabilityGate implements QualityGate {
-  id = 'gate-maintainability';
-  name = 'Maintainability Score';
-  description = 'Ensures the solution is maintainable';
+  id = "gate-maintainability";
+  name = "Maintainability Score";
+  description = "Ensures the solution is maintainable";
 
   async evaluate(debate: Debate): Promise<QualityGateResult> {
     const proposals = debate.proposals;
     const avgMaintainabilityScore =
-      proposals.reduce((sum, p) => sum + p.qualityAssessment.maintainabilityScore, 0) /
-      (proposals.length || 1);
+      proposals.reduce(
+        (sum, p) => sum + p.qualityAssessment.maintainabilityScore,
+        0,
+      ) / (proposals.length || 1);
 
     return {
       gateId: this.id,
@@ -1713,7 +1791,7 @@ export class MaintainabilityGate implements QualityGate {
       score: avgMaintainabilityScore,
       threshold: this.getThreshold(),
       details: `Average maintainability score: ${avgMaintainabilityScore.toFixed(2)}`,
-      checkedBy: 'maintainability-shepherd',
+      checkedBy: "maintainability-shepherd",
       checkedAt: new Date(),
     };
   }
@@ -1724,9 +1802,9 @@ export class MaintainabilityGate implements QualityGate {
 }
 
 export class DeliveryRiskGate implements QualityGate {
-  id = 'gate-delivery';
-  name = 'Delivery Risk Assessment';
-  description = 'Ensures delivery risk is within acceptable limits';
+  id = "gate-delivery";
+  name = "Delivery Risk Assessment";
+  description = "Ensures delivery risk is within acceptable limits";
 
   async evaluate(debate: Debate): Promise<QualityGateResult> {
     const proposals = debate.proposals;
@@ -1743,7 +1821,7 @@ export class DeliveryRiskGate implements QualityGate {
       score: 1 - avgDeliveryRisk,
       threshold: this.getThreshold(),
       details: `Average delivery risk: ${avgDeliveryRisk.toFixed(2)} (inverted score)`,
-      checkedBy: 'delivery-shepherd',
+      checkedBy: "delivery-shepherd",
       checkedAt: new Date(),
     };
   }
@@ -1754,9 +1832,9 @@ export class DeliveryRiskGate implements QualityGate {
 }
 
 export class ConsensusGate implements QualityGate {
-  id = 'gate-consensus';
-  name = 'Consensus Reached';
-  description = 'Ensures shepherds have reached consensus';
+  id = "gate-consensus";
+  name = "Consensus Reached";
+  description = "Ensures shepherds have reached consensus";
 
   async evaluate(debate: Debate): Promise<QualityGateResult> {
     return {
@@ -1766,7 +1844,7 @@ export class ConsensusGate implements QualityGate {
       score: debate.consensusStatus.agreementLevel,
       threshold: this.getThreshold(),
       details: `Agreement level: ${(debate.consensusStatus.agreementLevel * 100).toFixed(1)}%`,
-      checkedBy: 'system',
+      checkedBy: "system",
       checkedAt: new Date(),
     };
   }
@@ -1792,10 +1870,10 @@ export class VotingSystemImpl implements VotingSystem {
     const voteRequest: BaseMessage = {
       id: this.generateId(),
       debateId: this.debate.id,
-      senderId: 'system',
+      senderId: "system",
       timestamp: new Date(),
       type: MessageType.HELP_REQUEST,
-      priority: 'high',
+      priority: "high",
       content: `Voting opened for ${phase} phase`,
     };
 
@@ -1823,9 +1901,13 @@ export class VotingSystemImpl implements VotingSystem {
     return result;
   }
 
-  async castVote(shepherdId: ShepherdId, vote: VoteType, comments?: string): Promise<void> {
+  async castVote(
+    shepherdId: ShepherdId,
+    vote: VoteType,
+    comments?: string,
+  ): Promise<void> {
     if (!this.votingOpen) {
-      throw new Error('Voting is not currently open');
+      throw new Error("Voting is not currently open");
     }
 
     const existingVote = this.votes.get(shepherdId);
@@ -1841,7 +1923,7 @@ export class VotingSystemImpl implements VotingSystem {
       senderId: shepherdId,
       timestamp: new Date(),
       type: MessageType.PHASE_VOTE,
-      priority: 'medium',
+      priority: "medium",
       phaseType: this.currentPhase!,
       vote,
       comments,
@@ -1853,10 +1935,10 @@ export class VotingSystemImpl implements VotingSystem {
     const voteConfirmation: BaseMessage = {
       id: this.generateId(),
       debateId: this.debate.id,
-      senderId: 'system',
+      senderId: "system",
       timestamp: new Date(),
       type: MessageType.ANSWER,
-      priority: 'low',
+      priority: "low",
       content: `Vote recorded for shepherd ${shepherdId}`,
     };
 
@@ -1869,10 +1951,13 @@ export class VotingSystemImpl implements VotingSystem {
     const approve = allVotes.filter((v) => v.vote === VoteType.APPROVE).length;
     const reject = allVotes.filter((v) => v.vote === VoteType.REJECT).length;
     const abstain = allVotes.filter((v) => v.vote === VoteType.ABSTAIN).length;
-    const conditional = allVotes.filter((v) => v.vote === VoteType.CONDITIONAL).length;
+    const conditional = allVotes.filter(
+      (v) => v.vote === VoteType.CONDITIONAL,
+    ).length;
 
     const totalVotes = allVotes.length;
-    const quorum = totalVotes / this.debate.participants.length >= this.requiredQuorum;
+    const quorum =
+      totalVotes / this.debate.participants.length >= this.requiredQuorum;
 
     const weightedScore =
       allVotes.reduce((sum, v) => {
@@ -1902,7 +1987,9 @@ export class VotingSystemImpl implements VotingSystem {
     return shepherd?.weight || 1.0;
   }
 
-  private async calculateQualityScores(shepherdId: ShepherdId): Promise<QualityScores> {
+  private async calculateQualityScores(
+    shepherdId: ShepherdId,
+  ): Promise<QualityScores> {
     return {
       architecturalSoundness: 0.8,
       performanceImpact: 0.8,
@@ -1914,11 +2001,13 @@ export class VotingSystemImpl implements VotingSystem {
   }
 
   private getAgreedProposalId(): string | undefined {
-    const approveVotes = Array.from(this.votes.values()).filter((v) => v.vote === VoteType.APPROVE);
+    const approveVotes = Array.from(this.votes.values()).filter(
+      (v) => v.vote === VoteType.APPROVE,
+    );
 
     if (approveVotes.length === 0) return undefined;
 
-    return '';
+    return "";
   }
 
   private getDissentingShepherds(): ShepherdId[] {
@@ -1928,9 +2017,11 @@ export class VotingSystemImpl implements VotingSystem {
   }
 
   private getConcerns(): string[] {
-    const rejectVotes = Array.from(this.votes.values()).filter((v) => v.vote === VoteType.REJECT);
+    const rejectVotes = Array.from(this.votes.values()).filter(
+      (v) => v.vote === VoteType.REJECT,
+    );
 
-    return rejectVotes.map((v) => v.comments || 'No reason provided');
+    return rejectVotes.map((v) => v.comments || "No reason provided");
   }
 
   private generateId(): string {
@@ -1948,7 +2039,7 @@ export class UserApprovalSystemImpl implements UserApprovalSystem {
 
   constructor(
     private readonly debate: Debate,
-    private readonly router: MessageRouter
+    private readonly router: MessageRouter,
   ) {}
 
   async requestApproval(debate: Debate): Promise<void> {
@@ -1968,20 +2059,20 @@ export class UserApprovalSystemImpl implements UserApprovalSystem {
     this.debate.userApprovalStatus = {
       required: true,
       requestedAt: new Date(),
-      approvalType: 'full',
+      approvalType: "full",
     };
 
     const approvalRequestMessage: BaseMessage = {
       id: this.generateId(),
       debateId: debate.id,
-      senderId: 'system',
+      senderId: "system",
       timestamp: new Date(),
       type: MessageType.USER_APPROVAL_REQUIRED,
-      priority: 'critical',
+      priority: "critical",
       content: `User approval required for debate: ${debate.topic}`,
     };
 
-    await this.router.broadcast('system', approvalRequestMessage);
+    await this.router.broadcast("system", approvalRequestMessage);
   }
 
   getApprovalRequest(): UserApprovalRequest | null {
@@ -1990,14 +2081,14 @@ export class UserApprovalSystemImpl implements UserApprovalSystem {
 
   async approve(feedback?: string): Promise<void> {
     if (!this.pendingRequest) {
-      throw new Error('No pending approval request');
+      throw new Error("No pending approval request");
     }
 
     this.debate.userApprovalStatus = {
       ...this.debate.userApprovalStatus,
       approvedAt: new Date(),
       feedback,
-      approvalType: 'full',
+      approvalType: "full",
     };
 
     this.pendingRequest = null;
@@ -2005,26 +2096,26 @@ export class UserApprovalSystemImpl implements UserApprovalSystem {
     const approvalMessage: BaseMessage = {
       id: this.generateId(),
       debateId: this.debate.id,
-      senderId: 'user',
+      senderId: "user",
       timestamp: new Date(),
       type: MessageType.PHASE_COMPLETE,
-      priority: 'critical',
-      content: `Approved: ${feedback || 'No feedback provided'}`,
+      priority: "critical",
+      content: `Approved: ${feedback || "No feedback provided"}`,
     };
 
-    await this.router.broadcast('user', approvalMessage);
+    await this.router.broadcast("user", approvalMessage);
   }
 
   async reject(feedback?: string): Promise<void> {
     if (!this.pendingRequest) {
-      throw new Error('No pending approval request');
+      throw new Error("No pending approval request");
     }
 
     this.debate.userApprovalStatus = {
       ...this.debate.userApprovalStatus,
       rejectedAt: new Date(),
       feedback,
-      approvalType: 'full',
+      approvalType: "full",
     };
 
     this.pendingRequest = null;
@@ -2032,37 +2123,37 @@ export class UserApprovalSystemImpl implements UserApprovalSystem {
     const rejectionMessage: BaseMessage = {
       id: this.generateId(),
       debateId: this.debate.id,
-      senderId: 'user',
+      senderId: "user",
       timestamp: new Date(),
       type: MessageType.PHASE_COMPLETE,
-      priority: 'critical',
-      content: `Rejected: ${feedback || 'No feedback provided'}`,
+      priority: "critical",
+      content: `Rejected: ${feedback || "No feedback provided"}`,
     };
 
-    await this.router.broadcast('user', rejectionMessage);
+    await this.router.broadcast("user", rejectionMessage);
   }
 
   async requestChanges(changes: string): Promise<void> {
     if (!this.pendingRequest) {
-      throw new Error('No pending approval request');
+      throw new Error("No pending approval request");
     }
 
     this.debate.userApprovalStatus = {
       ...this.debate.userApprovalStatus,
-      approvalType: 'conditional',
+      approvalType: "conditional",
     };
 
     const changesMessage: BaseMessage = {
       id: this.generateId(),
       debateId: this.debate.id,
-      senderId: 'user',
+      senderId: "user",
       timestamp: new Date(),
       type: MessageType.CORRECTION,
-      priority: 'high',
+      priority: "high",
       content: changes,
     };
 
-    await this.router.broadcast('user', changesMessage);
+    await this.router.broadcast("user", changesMessage);
   }
 
   private calculateAggregateQualityScores(debate: Debate): QualityScores {
@@ -2083,10 +2174,14 @@ export class UserApprovalSystemImpl implements UserApprovalSystem {
       proposals.reduce((sum, p) => sum + fn(p), 0) / proposals.length;
 
     return {
-      architecturalSoundness: avg((p) => p.qualityAssessment.architecturalSoundness),
+      architecturalSoundness: avg(
+        (p) => p.qualityAssessment.architecturalSoundness,
+      ),
       performanceImpact: avg((p) => p.qualityAssessment.performanceImpact),
       securityPosture: avg((p) => p.qualityAssessment.securityPosture),
-      maintainabilityScore: avg((p) => p.qualityAssessment.maintainabilityScore),
+      maintainabilityScore: avg(
+        (p) => p.qualityAssessment.maintainabilityScore,
+      ),
       deliveryRisk: avg((p) => p.qualityAssessment.deliveryRisk),
       overallQuality: avg((p) => p.qualityAssessment.overallQuality),
     };
@@ -2094,7 +2189,9 @@ export class UserApprovalSystemImpl implements UserApprovalSystem {
 
   private gatherDissentingOpinions(debate: Debate): string[] {
     const dissentingMessages = debate.messages.filter(
-      (m) => m.type === MessageType.OBJECTION || m.type === MessageType.COUNTER_ARGUMENT
+      (m) =>
+        m.type === MessageType.OBJECTION ||
+        m.type === MessageType.COUNTER_ARGUMENT,
     );
 
     return dissentingMessages.map((m) => m.content);
@@ -2134,13 +2231,13 @@ ${this.request.summary}
 | **Overall Quality** | ${(scores.overallQuality * 100).toFixed(0)}% |
 
 ## Proposals (${this.request.proposals.length})
-${this.request.proposals.map((p, i) => `### ${i + 1}. ${p.type}: ${p.content.substring(0, 100)}...`).join('\n')}
+${this.request.proposals.map((p, i) => `### ${i + 1}. ${p.type}: ${p.content.substring(0, 100)}...`).join("\n")}
 
 ## Dissenting Opinions
 ${
   this.request.dissentingOpinions.length > 0
-    ? this.request.dissentingOpinions.map((o) => `- ${o}`).join('\n')
-    : 'No dissenting opinions recorded.'
+    ? this.request.dissentingOpinions.map((o) => `- ${o}`).join("\n")
+    : "No dissenting opinions recorded."
 }
 
 ## Requested At
@@ -2179,7 +2276,7 @@ export class DebateOrchestrator {
       debate,
       this.router,
       this.votingSystem,
-      this.qualityGateEngine.gates
+      this.qualityGateEngine.gates,
     );
   }
 
@@ -2201,7 +2298,9 @@ export class DebateOrchestrator {
   }
 
   async completeDebate(): Promise<void> {
-    const qualityResults = await this.qualityGateEngine.evaluateAll(this.debate);
+    const qualityResults = await this.qualityGateEngine.evaluateAll(
+      this.debate,
+    );
     this.debate.qualityGates = qualityResults;
 
     const overallScore = this.qualityGateEngine.getOverallScore(qualityResults);
@@ -2224,8 +2323,8 @@ export class DebateOrchestrator {
       SpecialistShepherdFactory.createShepherd(
         specialty,
         `shepherd-${index + 1}`,
-        `${specialty.charAt(0).toUpperCase() + specialty.slice(1)} Shepherd`
-      )
+        `${specialty.charAt(0).toUpperCase() + specialty.slice(1)} Shepherd`,
+      ),
     );
   }
 
@@ -2245,7 +2344,7 @@ export class DebateOrchestrator {
 
   private async handleShepherdMessage(
     shepherd: SpecialistShepherd,
-    message: BaseMessage
+    message: BaseMessage,
   ): Promise<void> {
     switch (message.type) {
       case MessageType.HELP_REQUEST:
@@ -2265,7 +2364,7 @@ export class DebateOrchestrator {
 
   private async handleHelpRequest(
     shepherd: SpecialistShepherd,
-    message: BaseMessage
+    message: BaseMessage,
   ): Promise<void> {
     const helpResponse: BaseMessage = {
       id: this.generateId(),
@@ -2274,21 +2373,24 @@ export class DebateOrchestrator {
       recipientId: message.senderId,
       timestamp: new Date(),
       type: MessageType.HELP_RESPONSE,
-      priority: 'medium',
+      priority: "medium",
       content: `Assistance from ${shepherd.name} (${shepherd.specialty})`,
     };
 
     await this.router.sendDirect(shepherd.id, message.senderId!, helpResponse);
   }
 
-  private async handleArgument(shepherd: SpecialistShepherd, message: BaseMessage): Promise<void> {
+  private async handleArgument(
+    shepherd: SpecialistShepherd,
+    message: BaseMessage,
+  ): Promise<void> {
     if (message.senderId === shepherd.id) return;
 
     const critique = await shepherd.generateCritique({
       id: message.topicId,
       authorId: message.senderId,
       content: message.content,
-      type: 'solution',
+      type: "solution",
       votes: new Map(),
       qualityAssessment: {
         architecturalSoundness: 0,
@@ -2305,12 +2407,15 @@ export class DebateOrchestrator {
     await this.router.route(critique);
   }
 
-  private async handleObjection(shepherd: SpecialistShepherd, message: BaseMessage): Promise<void> {
+  private async handleObjection(
+    shepherd: SpecialistShepherd,
+    message: BaseMessage,
+  ): Promise<void> {
     const correction = await shepherd.assessQuality({
       id: message.topicId,
-      authorId: '',
-      content: '',
-      type: 'solution',
+      authorId: "",
+      content: "",
+      type: "solution",
       votes: new Map(),
       qualityAssessment: {
         architecturalSoundness: 0,
@@ -2324,10 +2429,15 @@ export class DebateOrchestrator {
       objectionCount: 0,
     });
 
-    console.log(`Shepherd ${shepherd.name} assessed objection from ${message.senderId}`);
+    console.log(
+      `Shepherd ${shepherd.name} assessed objection from ${message.senderId}`,
+    );
   }
 
-  private async handlePhaseVote(shepherd: SpecialistShepherd, message: BaseMessage): Promise<void> {
+  private async handlePhaseVote(
+    shepherd: SpecialistShepherd,
+    message: BaseMessage,
+  ): Promise<void> {
     console.log(`Vote from ${shepherd.name}: ${(message as PhaseVote).vote}`);
   }
 
@@ -2336,11 +2446,14 @@ export class DebateOrchestrator {
   }
 }
 
-export async function createAndRunDebate(topic: string, participants: Shepherd[]): Promise<Debate> {
+export async function createAndRunDebate(
+  topic: string,
+  participants: Shepherd[],
+): Promise<Debate> {
   const debate: Debate = {
     id: this.generateId(),
     topic,
-    description: '',
+    description: "",
     createdAt: new Date(),
     currentPhase: PhaseType.IDEA_GENERATION,
     participants,
@@ -2356,7 +2469,7 @@ export async function createAndRunDebate(topic: string, participants: Shepherd[]
     },
     userApprovalStatus: {
       required: false,
-      approvalType: 'full',
+      approvalType: "full",
     },
   };
 
@@ -2373,6 +2486,13 @@ export function generateId(): string {
 
 ## Usage Example
 
+> **Execution Mode:** The debate system supports two execution modes:
+>
+> - `parallel-agents`: Spawn multiple specialist shepherd agents for authentic multi-agent collaboration (default)
+> - `1-agent` or `single-agent`: Single agent simulates all shepherds with complete documentation and metrics
+>
+> To use, specify mode when invoking the debate. If no mode is specified, defaults to `parallel-agents`.
+
 ```typescript
 import {
   DebateOrchestrator,
@@ -2383,35 +2503,35 @@ import {
   generateId,
   MessageBuilder,
   QualityGateEngine,
-} from './multi-shepherd-debate';
+} from "./multi-shepherd-debate";
 
 async function main() {
   const participants = [
     {
-      id: 'architect-1',
-      name: 'Architect Shepherd',
+      id: "architect-1",
+      name: "Architect Shepherd",
       specialty: ShepherdSpecialty.ARCHITECT,
-      expertise: ['system-design'],
+      expertise: ["system-design"],
       weight: 1.2,
       availability: true,
       activeDebates: [],
       reputationScore: 0.9,
     },
     {
-      id: 'security-1',
-      name: 'Security Shepherd',
+      id: "security-1",
+      name: "Security Shepherd",
       specialty: ShepherdSpecialty.SECURITY,
-      expertise: ['auth', 'encryption'],
+      expertise: ["auth", "encryption"],
       weight: 1.3,
       availability: true,
       activeDebates: [],
       reputationScore: 0.95,
     },
     {
-      id: 'performance-1',
-      name: 'Performance Shepherd',
+      id: "performance-1",
+      name: "Performance Shepherd",
       specialty: ShepherdSpecialty.PERFORMANCE,
-      expertise: ['optimization'],
+      expertise: ["optimization"],
       weight: 1.1,
       availability: true,
       activeDebates: [],
@@ -2421,8 +2541,8 @@ async function main() {
 
   const debate: Debate = {
     id: generateId(),
-    topic: 'Design pattern for file organization system',
-    description: 'Evaluate and decide on the best architectural approach',
+    topic: "Design pattern for file organization system",
+    description: "Evaluate and decide on the best architectural approach",
     createdAt: new Date(),
     currentPhase: PhaseType.IDEA_GENERATION,
     participants: participants as any,
@@ -2438,14 +2558,17 @@ async function main() {
     },
     userApprovalStatus: {
       required: false,
-      approvalType: 'full',
+      approvalType: "full",
     },
   };
 
   const orchestrator = new DebateOrchestrator(debate);
   await orchestrator.initialize();
 
-  console.log('Debate system initialized with participants:', participants.length);
+  console.log(
+    "Debate system initialized with participants:",
+    participants.length,
+  );
 
   return orchestrator;
 }

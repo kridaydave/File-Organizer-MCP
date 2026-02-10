@@ -3,44 +3,46 @@
  * File Category Constants
  */
 
-import type { CategoryName } from './types.js';
+import type { CategoryName } from "./types.js";
 
 /**
  * File extension to category mappings
  */
 export const CATEGORIES: Record<CategoryName, readonly string[]> = {
-  Executables: ['.exe', '.msi', '.bat', '.cmd', '.sh'],
-  Videos: ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v'],
-  Documents: ['.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt', '.md', '.tex'],
-  Presentations: ['.ppt', '.pptx', '.odp', '.key'],
-  Spreadsheets: ['.xls', '.xlsx', '.csv', '.ods'],
-  Images: ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.ico', '.webp'],
-  Audio: ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a'],
-  Archives: ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz'],
+  Executables: [".exe", ".msi", ".bat", ".cmd", ".sh"],
+  Videos: [".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v"],
+  Documents: [".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt", ".md", ".tex"],
+  Presentations: [".ppt", ".pptx", ".odp", ".key"],
+  Spreadsheets: [".xls", ".xlsx", ".csv", ".ods"],
+  Images: [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".ico", ".webp"],
+  Audio: [".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a"],
+  Archives: [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"],
   Code: [
-    '.py',
-    '.js',
-    '.ts',
-    '.java',
-    '.cpp',
-    '.c',
-    '.html',
-    '.css',
-    '.php',
-    '.rb',
-    '.go',
-    '.json',
+    ".py",
+    ".js",
+    ".ts",
+    ".java",
+    ".cpp",
+    ".c",
+    ".html",
+    ".css",
+    ".php",
+    ".rb",
+    ".go",
+    ".json",
   ],
-  Installers: ['.dmg', '.pkg', '.deb', '.rpm', '.apk'],
-  Ebooks: ['.epub', '.mobi', '.azw', '.azw3'],
-  Fonts: ['.ttf', '.otf', '.woff', '.woff2'],
+  Installers: [".dmg", ".pkg", ".deb", ".rpm", ".apk"],
+  Ebooks: [".epub", ".mobi", ".azw", ".azw3"],
+  Fonts: [".ttf", ".otf", ".woff", ".woff2"],
   Others: [],
 } as const;
 
 /**
  * All category names as an array
  */
-export const CATEGORY_NAMES: readonly CategoryName[] = Object.keys(CATEGORIES) as CategoryName[];
+export const CATEGORY_NAMES: readonly CategoryName[] = Object.keys(
+  CATEGORIES,
+) as CategoryName[];
 
 /**
  * Get category for a file extension
@@ -54,5 +56,5 @@ export function getCategory(extension: string): CategoryName {
       return category as CategoryName;
     }
   }
-  return 'Others';
+  return "Others";
 }

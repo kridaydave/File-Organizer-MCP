@@ -1,14 +1,14 @@
-import { ToolResponse } from './types.js';
+import { ToolResponse } from "./types.js";
 
 export class FileOrganizerError extends Error {
   constructor(
     message: string,
     public code: string,
     public details?: Record<string, any>,
-    public suggestion?: string
+    public suggestion?: string,
   ) {
     super(message);
-    this.name = 'FileOrganizerError';
+    this.name = "FileOrganizerError";
   }
 
   toResponse(): ToolResponse {
@@ -24,7 +24,7 @@ export class FileOrganizerError extends Error {
 
     return {
       isError: true,
-      content: [{ type: 'text', text }],
+      content: [{ type: "text", text }],
     };
   }
 }
