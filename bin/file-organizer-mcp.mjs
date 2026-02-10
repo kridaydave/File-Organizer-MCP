@@ -34,11 +34,11 @@ const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
 
 function log(...args) {
-  console.log(...args);
+  console.error(...args);  // Use stderr to avoid breaking MCP protocol
 }
 
 function error(...args) {
-  console.error(...args);
+  console.error(...args);  // stderr for errors
 }
 
 // Check Node.js version first

@@ -34,30 +34,30 @@ function isDevEnvironment() {
 function main() {
   // Skip if dist already exists (pre-built package)
   if (distExists()) {
-    console.log('✓ dist/ already exists, skipping build');
+    console.error('✓ dist/ already exists, skipping build');
     process.exit(0);
   }
 
   // Check if we can build (TypeScript installed)
   if (!isDevEnvironment()) {
-    console.log('ℹ TypeScript not available, skipping build');
-    console.log('  To build manually, run: npm install && npm run build');
+    console.error('ℹ TypeScript not available, skipping build');
+    console.error('  To build manually, run: npm install && npm run build');
     process.exit(0);
   }
 
   // Try to build
-  console.log('🔨 Building project...');
+  console.error('🔨 Building project...');
   try {
     execSync('npm run build', { 
       stdio: 'inherit',
       cwd: path.join(__dirname, '..')
     });
-    console.log('✓ Build successful');
+    console.error('✓ Build successful');
     process.exit(0);
   } catch (error) {
     console.error('✗ Build failed');
     // Don't fail install if build fails - user can build manually later
-    console.log('  You can build manually later with: npm run build');
+    console.error('  You can build manually later with: npm run build');
     process.exit(0);
   }
 }
