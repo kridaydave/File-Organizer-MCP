@@ -134,7 +134,7 @@ async function installDependencies(): Promise<boolean> {
  */
 async function ensureBuild(): Promise<boolean> {
   const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
-  const distPath = path.join(packageRoot, 'dist', 'index.js');
+  const distPath = path.join(packageRoot, 'dist', 'src', 'index.js');
 
   if (fs.existsSync(distPath)) {
     return true;
