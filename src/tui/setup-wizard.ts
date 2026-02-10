@@ -103,7 +103,7 @@ function printStep(step: number, total: number, message: string): void {
  * Check if dependencies are installed
  */
 function checkDependencies(): boolean {
-  const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+  const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..', '..');
   const nodeModulesPath = path.join(packageRoot, 'node_modules');
 
   const criticalDeps = ['@modelcontextprotocol/sdk', 'chalk', 'node-cron'];
@@ -114,7 +114,7 @@ function checkDependencies(): boolean {
  * Install dependencies
  */
 async function installDependencies(): Promise<boolean> {
-  const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+  const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..', '..');
 
   printInfo('Installing dependencies (this may take a minute)...');
 
@@ -136,7 +136,7 @@ async function installDependencies(): Promise<boolean> {
  * Check and install if TypeScript build is needed
  */
 async function ensureBuild(): Promise<boolean> {
-  const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+  const packageRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..', '..');
   const distPath = path.join(packageRoot, 'dist', 'src', 'index.js');
 
   if (fs.existsSync(distPath)) {
@@ -154,7 +154,15 @@ async function ensureBuild(): Promise<boolean> {
     printSuccess('Build complete!');
     return true;
   } catch (error) {
-    console.log(colors.error('  ✗ Build failed. Please run "npm run build" manually.'));
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    // Also check if build actually succeeded but file check will confirm
+    if (fs.existsSync(distPath)) {
+      printSuccess('Build complete!');
+      return true;
+    }
+    console.log(colors.error(`  ✗ Build failed: ${errorMessage}`));
+    console.log(colors.info(`  Working directory: ${packageRoot}`));
+    console.log(colors.info('  Please run "npm run build" manually in the package directory.'));
     return false;
   }
 }
