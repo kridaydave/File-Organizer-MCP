@@ -1,6 +1,6 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.2.0 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.2.4 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
 [Why Us](#why-specialized-tools) • [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 

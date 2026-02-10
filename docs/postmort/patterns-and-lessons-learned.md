@@ -758,6 +758,86 @@ ArchiveError (base)
 
 ---
 
+## Build & Deployment Patterns
+
+### 21. TypeScript rootDir Change Cascade
+
+**Pattern:**
+
+```
+When changing TypeScript rootDir:
+1. Audit ALL downstream file references
+2. Update package.json main/bin paths
+3. Update runtime path resolution code
+4. Update npm scripts
+5. Test with clean npm install
+```
+
+**Use Case:** When modifying TypeScript compiler options that affect output structure
+
+**The v3.2.0-3.2.4 Incident:**
+
+**What Changed:**
+- Modified `tsconfig.json` to include both `src/` and `scripts/`
+- Changed `rootDir` from `./src` to `.`
+
+**Expected Output:**
+```
+dist/
+├── index.js          ← Old expectation
+├── server.js
+└── tools/
+```
+
+**Actual Output:**
+```
+dist/
+├── src/              ← NEW: src/ subfolder created
+│   ├── index.js
+│   ├── server.js
+│   └── tools/
+└── scripts/          
+    └── security-gates/
+```
+
+**Broken References (Fixed Over 4 Releases):**
+
+| Release | File | Broken Path | Fixed Path |
+|---------|------|-------------|------------|
+| 3.2.1 | package.json:6 | `dist/index.js` | `dist/src/index.js` |
+| 3.2.2 | bin/file-organizer-mcp.mjs:25 | `dist/index.js` | `dist/src/index.js` |
+| 3.2.3 | bin/file-organizer-mcp.mjs:131 | `../dist/index.js` | `../dist/src/index.js` |
+| 3.2.4 | package.json:21 | `dist/tui/index.js` | `dist/src/tui/index.js` |
+
+**Impact:**
+
+- Users couldn't install or run the package
+- 4 patch releases required to fully fix
+- Global installs failed with "Cannot find module" errors
+- npx installs failed with "Server files not found"
+
+**Root Cause:**
+
+ESM dynamic imports (`import()`) and `fs.existsSync()` checks failed because they looked in the wrong directory. The bin wrapper's fallback build logic also failed because it couldn't find source files in the installed package.
+
+**Prevention Checklist:**
+
+```
+□ Search for all hardcoded paths containing "dist/"
+□ Check package.json: main, bin, scripts
+□ Check bin wrapper files for relative imports
+□ Check runtime path resolution code
+□ Run npm pack --dry-run and verify structure
+□ Test with npm install -g ./package.tgz
+□ Verify all entry points work (main, bin, scripts)
+```
+
+**Lesson:**
+
+> When TypeScript's `rootDir` changes, every single reference to compiled output must be audited. The build system doesn't warn you about broken runtime paths.
+
+---
+
 ## Quick Reference
 
 ### Pattern Selection Guide
@@ -776,6 +856,7 @@ ArchiveError (base)
 | Setting test coverage          | Coverage Tiers by Test Type        | 10   |
 | Bit-perfect recovery           | Round-Trip Integrity Tests         | 11   |
 | Multiple failure modes         | Error Hierarchy by Domain          | 12   |
+| TypeScript config changes      | rootDir Change Cascade             | 21   |
 
 ### Anti-Pattern Quick Reference
 
@@ -791,9 +872,10 @@ ArchiveError (base)
 | Adding complex feature             | Ignoring Integration Complexity       | Full decomposition          |
 | Service architecture planning      | Service Count Underestimation         | Complete enumeration        |
 | Performance requirements           | Performance Targets Without Baselines | Full hardware specification |
+| TypeScript config changes          | Not auditing downstream references    | Full path audit checklist   |
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** February 9, 2026
+**Document Version:** 1.1
+**Last Updated:** February 10, 2026
 **Maintained By:** Borzoi (Intelligence Shepherd)
