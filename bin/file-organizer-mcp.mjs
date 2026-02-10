@@ -128,7 +128,7 @@ if (missingDeps.length > 0) {
 
 // All checks passed, run the actual server
 // Use relative path for more reliable module resolution
-const serverRelativePath = '../dist/index.js';
+const serverRelativePath = '../dist/src/index.js';
 
 import(serverRelativePath).catch(err => {
   error(`${RED}Failed to start server:${RESET}`, err.message);
