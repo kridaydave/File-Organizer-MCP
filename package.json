@@ -1,6 +1,6 @@
 {
   "name": "file-organizer-mcp",
-  "version": "3.2.3",
+  "version": "3.2.4",
   "description": "Intelligent file organization MCP server for Claude with security-hardened operations, auto-categorization, and duplicate detection",
   "type": "module",
   "main": "dist/src/index.js",
