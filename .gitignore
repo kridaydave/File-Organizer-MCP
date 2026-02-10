@@ -4,6 +4,12 @@ node_modules/
 # Build outputs
 dist/
 
+# Compiled scripts (should be in dist/)
+scripts/**/*.js
+scripts/**/*.d.ts
+scripts/**/*.js.map
+scripts/**/*.d.ts.map
+
 # Environment variables
 .env
 .env.*

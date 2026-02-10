@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const packageRoot = path.resolve(__dirname, '..');
-const distTuiPath = path.join(packageRoot, 'dist', 'tui', 'index.js');
+const distTuiPath = path.join(packageRoot, 'dist', 'src', 'tui', 'index.js');
 const srcTuiPath = path.join(packageRoot, 'src', 'tui', 'index.ts');
 
 const RED = '\x1b[31m';
@@ -68,7 +68,7 @@ if (!fs.existsSync(distTuiPath)) {
 
 // Run the setup wizard
 // Use relative path for more reliable module resolution
-const setupRelativePath = '../dist/tui/index.js';
+const setupRelativePath = '../dist/src/tui/index.js';
 
 import(setupRelativePath).catch(err => {
   console.error(`${RED}Failed to start setup:${RESET}`, err.message);

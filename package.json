@@ -3,7 +3,7 @@
   "version": "3.2.1",
   "description": "Intelligent file organization MCP server for Claude with security-hardened operations, auto-categorization, and duplicate detection",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "bin": {
     "file-organizer-mcp": "./bin/file-organizer-mcp.mjs",
     "file-organizer": "./bin/file-organizer-mcp.mjs",
@@ -12,12 +12,12 @@
   "scripts": {
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "start": "node dist/index.js",
+    "start": "node dist/src/index.js",
     "dev": "npm run build && npm run start",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
-    "test:security": "node dist/tests/test-security.js",
+    "test:security": "node dist/src/tests/test-security.js",
     "setup": "node dist/tui/index.js",
     "postinstall": "node scripts/postinstall.cjs",
     "prepare": "node scripts/prepare.cjs",

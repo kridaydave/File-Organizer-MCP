@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
@@ -18,11 +18,10 @@
     "noUncheckedIndexedAccess": true,
     "isolatedModules": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "scripts/**/*"],
   "exclude": [
     "node_modules",
     "dist",
-    "src/readers/__tests__",
     "scripts/benchmark.ts",
     "**/*.test.ts",
     "**/*.spec.ts"

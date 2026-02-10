@@ -22,7 +22,7 @@ const __dirname = path.dirname(__filename);
 // Find the package root
 const packageRoot = path.resolve(__dirname, '..');
 const distPath = path.join(packageRoot, 'dist');
-const distIndexPath = path.join(distPath, 'index.js');
+const distIndexPath = path.join(distPath, 'src', 'index.js');
 const srcIndexPath = path.join(packageRoot, 'src', 'index.ts');
 
 // ANSI colors for terminal output
