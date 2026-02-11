@@ -107,7 +107,9 @@ export type CategoryName =
   | "Presentations"
   | "Spreadsheets"
   | "Images"
+  | "Photos" // NEW: For photo organization
   | "Audio"
+  | "Music" // NEW: For music organization
   | "Archives"
   | "Code"
   | "Installers"
@@ -348,4 +350,133 @@ export interface FileSignature {
   category: ContentCategory;
   description: string;
   isExecutable: boolean;
+}
+
+// ==================== Metadata Extraction Types ====================
+
+// Audio Metadata Types
+export interface AudioMetadata {
+  filePath: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  albumArtist?: string;
+  composer?: string;
+  genre?: string;
+  year?: number;
+  trackNumber?: number;
+  totalTracks?: number;
+  discNumber?: number;
+  totalDiscs?: number;
+  duration?: number;
+  bitrate?: number;
+  sampleRate?: number;
+  channels?: number;
+  format: string;
+  hasEmbeddedArtwork: boolean;
+  extractedAt: Date;
+}
+
+export interface AudioMetadataOptions {
+  extractArtwork?: boolean;
+  extractLyrics?: boolean;
+  cacheResults?: boolean;
+}
+
+export interface MusicOrganizationConfig {
+  sourceDir: string;
+  targetDir: string;
+  structure: "artist/album" | "album" | "genre/artist" | "flat";
+  filenamePattern: "{track} - {title}" | "{artist} - {title}" | "{title}";
+  copyInsteadOfMove?: boolean;
+  skipIfMissingMetadata?: boolean;
+  variousArtistsAlbumName?: string;
+}
+
+// Image Metadata Types
+export interface ImageMetadata {
+  filePath: string;
+  format: string;
+  cameraMake?: string;
+  cameraModel?: string;
+  lensModel?: string;
+  dateTaken?: Date;
+  iso?: number;
+  focalLength?: number;
+  aperture?: number;
+  shutterSpeed?: string;
+  exposureCompensation?: number;
+  flash?: boolean;
+  orientation?: number;
+  width?: number;
+  height?: number;
+  resolution?: number;
+  colorSpace?: string;
+  hasGPS: boolean;
+  latitude?: number;
+  longitude?: number;
+  altitude?: number;
+  gpsTimestamp?: Date;
+  software?: string;
+  dateModified?: Date;
+  dateCreated?: Date;
+  extractedAt: Date;
+}
+
+export interface ImageMetadataOptions {
+  extractGPS?: boolean;
+  stripGPS?: boolean;
+  extractThumbnail?: boolean;
+}
+
+export interface PhotoOrganizationConfig {
+  sourceDir: string;
+  targetDir: string;
+  dateFormat: "YYYY/MM/DD" | "YYYY-MM-DD" | "YYYY/MM" | "YYYY";
+  useDateCreated?: boolean;
+  groupByCamera?: boolean;
+  copyInsteadOfMove?: boolean;
+  stripGPS?: boolean;
+  unknownDateFolder?: string;
+}
+
+// Metadata Cache Types
+export interface MetadataCache {
+  version: string;
+  createdAt: Date;
+  updatedAt: Date;
+  entries: MetadataCacheEntry[];
+}
+
+export interface MetadataCacheEntry {
+  filePath: string;
+  fileHash: string; // For cache invalidation
+  lastModified: number;
+  audioMetadata?: AudioMetadata;
+  imageMetadata?: ImageMetadata;
+  cachedAt: Date;
+}
+
+export interface MetadataCacheOptions {
+  cacheDir?: string;
+  maxAge?: number; // milliseconds
+  maxEntries?: number;
+}
+
+// Organization Result Types
+export interface MusicOrganizationResult {
+  success: boolean;
+  organizedFiles: number;
+  skippedFiles: number;
+  errors: Array<{ file: string; error: string }>;
+  structure: Record<string, string[]>;
+}
+
+export interface PhotoOrganizationResult {
+  success: boolean;
+  organizedFiles: number;
+  skippedFiles: number;
+  strippedGPSFiles: number;
+  errors: Array<{ file: string; error: string }>;
+  structure: Record<string, number>;
 }

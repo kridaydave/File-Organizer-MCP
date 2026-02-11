@@ -172,9 +172,8 @@ describe("CategorizerService with Content Analysis", () => {
       const categorizerWithoutAnalyzer = new CategorizerService();
       const filePath = await createFile("test.txt", "content");
 
-      const result = await categorizerWithoutAnalyzer.getCategoryByContent(
-        filePath,
-      );
+      const result =
+        await categorizerWithoutAnalyzer.getCategoryByContent(filePath);
 
       expect(result.warnings.some((w) => w.includes("not available"))).toBe(
         true,
@@ -193,9 +192,7 @@ describe("CategorizerService with Content Analysis", () => {
 
       const result = await categorizer.getCategoryByContent(filePath);
 
-      expect(
-        result.warnings.some((w) => w.includes("mismatch")),
-      ).toBe(true);
+      expect(result.warnings.some((w) => w.includes("mismatch"))).toBe(true);
     });
 
     it("should categorize based on content when extension mismatches", async () => {
@@ -220,9 +217,7 @@ describe("CategorizerService with Content Analysis", () => {
 
       expect(result.category).toBe("Suspicious");
       expect(result.confidence).toBeGreaterThan(0.9);
-      expect(
-        result.warnings.some((w) => w.includes("CRITICAL")),
-      ).toBe(true);
+      expect(result.warnings.some((w) => w.includes("CRITICAL"))).toBe(true);
     });
 
     it("should detect executable disguised as image", async () => {
@@ -251,9 +246,9 @@ describe("CategorizerService with Content Analysis", () => {
 
       const result = await categorizer.getCategoryByContent(filePath);
 
-      expect(
-        result.warnings.some((w) => w.includes("Double extension")),
-      ).toBe(true);
+      expect(result.warnings.some((w) => w.includes("Double extension"))).toBe(
+        true,
+      );
     });
 
     it("should detect suspicious double extensions", async () => {
@@ -295,9 +290,8 @@ describe("CategorizerService with Content Analysis", () => {
       const categorizerWithoutAnalyzer = new CategorizerService();
       const filePath = await createFile("test.txt", "content");
 
-      const result = await categorizerWithoutAnalyzer.validateFileType(
-        filePath,
-      );
+      const result =
+        await categorizerWithoutAnalyzer.validateFileType(filePath);
 
       expect(result.valid).toBe(true);
     });
@@ -395,9 +389,9 @@ describe("CategorizerService with Content Analysis", () => {
       const result = await categorizer.getCategoryByContent(filePath);
 
       if (result.confidence < 0.7) {
-        expect(
-          result.warnings.some((w) => w.includes("Low content")),
-        ).toBe(true);
+        expect(result.warnings.some((w) => w.includes("Low content"))).toBe(
+          true,
+        );
       }
     });
   });
@@ -418,13 +412,13 @@ describe("CategorizerService with Content Analysis", () => {
     });
 
     it("should fall back to extension-based when content confidence is low", async () => {
-      // Content that doesn't match any specific signature
-      const content = "Some random content xyz123";
-      const filePath = await createFile("data.json", content);
+      // Binary content that won't match any specific signature
+      const content = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]);
+      const filePath = await createFile("data.bin", content);
 
       const result = await categorizer.getCategoryByContent(filePath);
 
-      // Should warn about low confidence
+      // Unknown binary files have low confidence and should trigger warnings
       expect(result.warnings.length).toBeGreaterThan(0);
     });
   });
@@ -449,9 +443,7 @@ describe("CategorizerService with Content Analysis", () => {
     });
 
     it("should handle binary files", async () => {
-      const binaryContent = Buffer.from([
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05,
-      ]);
+      const binaryContent = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]);
       const filePath = await createFile("binary.dat", binaryContent);
 
       const result = await categorizer.getCategoryByContent(filePath);

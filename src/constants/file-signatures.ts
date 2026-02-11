@@ -7,6 +7,8 @@
  * @module file-signatures
  */
 
+import path from "path";
+
 /**
  * Represents a file signature entry with all metadata needed for detection
  */
@@ -993,7 +995,6 @@ export function detectExtensionMismatch(
   filePath: string,
   buffer: Buffer,
 ): { detectedType: string; expectedTypes: string[] } | null {
-  const path = require("path");
   const ext = path.extname(filePath).toLowerCase();
 
   if (!ext) {

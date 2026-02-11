@@ -111,17 +111,18 @@ const FILE_SIGNATURES: FileSignature[] = [
     type: "Microsoft Office (old)",
     category: "document",
   },
+  // ZIP-based formats (ZIP comes first as base format)
   {
     magic: [0x50, 0x4b, 0x03, 0x04],
-    extension: ".docx",
-    type: "Office Open XML",
-    category: "document",
+    extension: ".zip",
+    type: "ZIP Archive",
+    category: "archive",
   },
   {
     magic: [0x50, 0x4b, 0x05, 0x06],
-    extension: ".docx",
-    type: "Office Open XML (empty)",
-    category: "document",
+    extension: ".zip",
+    type: "ZIP Archive (empty)",
+    category: "archive",
   },
 
   // Images
@@ -553,15 +554,13 @@ export class ContentScreeningService {
 
     // Case 1: Document/Image extension but executable content
     if (detected.category === "executable") {
-      const dangerousInDoc =
-        SUSPICIOUS_PATTERNS.dangerousInDocument.includes(declared);
-      const dangerousInImg =
-        SUSPICIOUS_PATTERNS.dangerousInImage.includes(declared);
+      // Only flag if the declared extension is a document or image type
+      // Legitimate executables (.exe, .dll, etc.) should not be flagged
+      const isDocumentExt =
+        SUSPICIOUS_PATTERNS.documentExtensions.includes(declared);
+      const isImageExt = SUSPICIOUS_PATTERNS.imageExtensions.includes(declared);
 
-      if (
-        SUSPICIOUS_PATTERNS.documentExtensions.includes(declared) ||
-        dangerousInDoc
-      ) {
+      if (isDocumentExt) {
         result.issues.push({
           type: "executable_disguised",
           severity: "error",
@@ -573,10 +572,7 @@ export class ContentScreeningService {
           },
         });
         result.passed = false;
-      } else if (
-        SUSPICIOUS_PATTERNS.imageExtensions.includes(declared) ||
-        dangerousInImg
-      ) {
+      } else if (isImageExt) {
         result.issues.push({
           type: "executable_disguised",
           severity: "error",

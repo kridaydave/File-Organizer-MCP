@@ -141,7 +141,7 @@ const FILE_SIGNATURES: FileTypeDetection[] = [
   {
     type: "SVG",
     mimeType: "image/svg+xml",
-    signatures: [Buffer.from("<?xml")],
+    signatures: [], // Use validator for complex detection
     extensions: [".svg"],
     category: "image",
     isExecutable: false,
@@ -166,25 +166,6 @@ const FILE_SIGNATURES: FileTypeDetection[] = [
     category: "document",
     isExecutable: false,
     description: "Microsoft Office Document (OLE2)",
-  },
-  {
-    type: "DOCX",
-    mimeType:
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    signatures: [Buffer.from([0x50, 0x4b, 0x03, 0x04])], // ZIP-based
-    extensions: [".docx", ".xlsx", ".pptx"],
-    category: "document",
-    isExecutable: false,
-    description: "Microsoft Office Open XML",
-  },
-  {
-    type: "ODT",
-    mimeType: "application/vnd.oasis.opendocument.text",
-    signatures: [Buffer.from([0x50, 0x4b, 0x03, 0x04])], // ZIP-based
-    extensions: [".odt", ".ods", ".odp"],
-    category: "document",
-    isExecutable: false,
-    description: "OpenDocument Format",
   },
   {
     type: "RTF",
@@ -305,15 +286,6 @@ const FILE_SIGNATURES: FileTypeDetection[] = [
     isExecutable: true,
     description: "Mach-O Binary (64-bit, macOS)",
   },
-  {
-    type: "MACHO_SWAP",
-    mimeType: "application/x-mach-binary",
-    signatures: [Buffer.from([0xca, 0xfe, 0xba, 0xbe])],
-    extensions: [".macho", ".dylib", ""],
-    category: "executable",
-    isExecutable: true,
-    description: "Mach-O Binary (Universal/FAT)",
-  },
 
   // Scripts
   {
@@ -373,24 +345,6 @@ const FILE_SIGNATURES: FileTypeDetection[] = [
 
   // Code
   {
-    type: "CLASS",
-    mimeType: "application/java-vm",
-    signatures: [Buffer.from([0xca, 0xfe, 0xba, 0xbe])],
-    extensions: [".class"],
-    category: "code",
-    isExecutable: true,
-    description: "Java Bytecode",
-  },
-  {
-    type: "JAR",
-    mimeType: "application/java-archive",
-    signatures: [Buffer.from([0x50, 0x4b, 0x03, 0x04])], // ZIP-based
-    extensions: [".jar"],
-    category: "code",
-    isExecutable: true,
-    description: "Java Archive",
-  },
-  {
     type: "WASM",
     mimeType: "application/wasm",
     signatures: [Buffer.from([0x00, 0x61, 0x73, 0x6d])], // \0asm
@@ -411,6 +365,15 @@ const FILE_SIGNATURES: FileTypeDetection[] = [
     category: "code",
     isExecutable: true,
     description: "Adobe Flash (Security Risk)",
+  },
+  {
+    type: "CLASS",
+    mimeType: "application/java-vm",
+    signatures: [Buffer.from([0xca, 0xfe, 0xba, 0xbe])],
+    extensions: [".class"],
+    category: "code",
+    isExecutable: true,
+    description: "Java Bytecode",
   },
 
   // Video
@@ -907,6 +870,10 @@ export class ContentAnalyzerService {
    * Check if a buffer represents a text file
    */
   private isTextFile(buffer: Buffer): boolean {
+    if (buffer.length === 0) {
+      return true; // Empty files are treated as text
+    }
+
     // Check for null bytes (binary files typically have them)
     for (let i = 0; i < Math.min(buffer.length, 512); i++) {
       if (buffer[i] === 0x00) {
@@ -1024,6 +991,19 @@ export class ContentAnalyzerService {
       };
     }
 
+    // SVG detection - check before XML since SVGs may have XML declaration
+    if (header.includes("<svg")) {
+      return {
+        type: "SVG",
+        mimeType: "image/svg+xml",
+        signatures: [],
+        extensions: [".svg"],
+        category: "image",
+        isExecutable: false,
+        description: "SVG Document",
+      };
+    }
+
     // XML detection
     if (header.includes("<?xml")) {
       return {
@@ -1050,6 +1030,24 @@ export class ContentAnalyzerService {
         category: "code",
         isExecutable: false,
         description: "JSON Document",
+      };
+    }
+
+    // JavaScript detection
+    if (
+      /\b(const|let|var|function|class|import|export|async|await|return|if|for|while|switch|try|catch|console|document|window)\b/.test(
+        header,
+      ) ||
+      (header.includes(";") && header.includes("="))
+    ) {
+      return {
+        type: "JS",
+        mimeType: "application/javascript",
+        signatures: [],
+        extensions: [".js", ".mjs", ".cjs"],
+        category: "code",
+        isExecutable: false,
+        description: "JavaScript Source File",
       };
     }
 

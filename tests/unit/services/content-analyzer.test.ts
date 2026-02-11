@@ -73,9 +73,7 @@ describe("ContentAnalyzerService", () => {
     });
 
     it("should detect GIF87a files", async () => {
-      const gifHeader = Buffer.from([
-        0x47, 0x49, 0x46, 0x38, 0x37, 0x61,
-      ]);
+      const gifHeader = Buffer.from([0x47, 0x49, 0x46, 0x38, 0x37, 0x61]);
       const filePath = await createFile("test.gif", gifHeader);
 
       const result = await analyzer.analyze(filePath);
@@ -85,9 +83,7 @@ describe("ContentAnalyzerService", () => {
     });
 
     it("should detect GIF89a files", async () => {
-      const gifHeader = Buffer.from([
-        0x47, 0x49, 0x46, 0x38, 0x39, 0x61,
-      ]);
+      const gifHeader = Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
       const filePath = await createFile("test.gif", gifHeader);
 
       const result = await analyzer.analyze(filePath);
@@ -108,8 +104,7 @@ describe("ContentAnalyzerService", () => {
 
     it("should detect WebP files", async () => {
       const webpHeader = Buffer.from([
-        0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42,
-        0x50,
+        0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
       ]);
       const filePath = await createFile("test.webp", webpHeader);
 
@@ -120,7 +115,9 @@ describe("ContentAnalyzerService", () => {
     });
 
     it("should detect SVG files", async () => {
-      const svgContent = Buffer.from('<?xml version="1.0"?><svg></svg>');
+      const svgContent = Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+      );
       const filePath = await createFile("test.svg", svgContent);
 
       const result = await analyzer.analyze(filePath);
@@ -152,13 +149,13 @@ describe("ContentAnalyzerService", () => {
       expect(result.mimeType).toBe("application/msword");
     });
 
-    it("should detect Office Open XML documents (ZIP-based)", async () => {
+    it("should detect ZIP-based files", async () => {
       const zipHeader = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
-      const filePath = await createFile("test.docx", zipHeader);
+      const filePath = await createFile("test.zip", zipHeader);
 
       const result = await analyzer.analyze(filePath);
 
-      expect(result.detectedType).toBe("DOCX");
+      expect(result.detectedType).toBe("ZIP");
       expect(result.extensionMatch).toBe(true);
     });
 
@@ -196,9 +193,7 @@ describe("ContentAnalyzerService", () => {
     });
 
     it("should detect RAR files", async () => {
-      const rarHeader = Buffer.from([
-        0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00,
-      ]);
+      const rarHeader = Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00]);
       const filePath = await createFile("test.rar", rarHeader);
 
       const result = await analyzer.analyze(filePath);
@@ -207,9 +202,7 @@ describe("ContentAnalyzerService", () => {
     });
 
     it("should detect 7Z files", async () => {
-      const sevenZHeader = Buffer.from([
-        0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c,
-      ]);
+      const sevenZHeader = Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]);
       const filePath = await createFile("test.7z", sevenZHeader);
 
       const result = await analyzer.analyze(filePath);
@@ -236,7 +229,9 @@ describe("ContentAnalyzerService", () => {
       const result = await analyzer.analyze(filePath);
 
       expect(result.detectedType).toBe("PE");
-      expect(result.mimeType).toBe("application/vnd.microsoft.portable-executable");
+      expect(result.mimeType).toBe(
+        "application/vnd.microsoft.portable-executable",
+      );
     });
 
     it("should detect Mach-O 32-bit binaries", async () => {
@@ -566,15 +561,15 @@ describe("ContentAnalyzerService", () => {
         description: "PNG Image",
       };
 
-      const match = analyzer.checkExtensionMismatch("/path/to/image.png", "PNG");
+      const match = analyzer.checkExtensionMismatch(
+        "/path/to/image.png",
+        "PNG",
+      );
       expect(match).toBe(true);
     });
 
     it("should return false for non-matching extensions", () => {
-      const match = analyzer.checkExtensionMismatch(
-        "/path/to/file.jpg",
-        "PNG",
-      );
+      const match = analyzer.checkExtensionMismatch("/path/to/file.jpg", "PNG");
       expect(match).toBe(false);
     });
   });

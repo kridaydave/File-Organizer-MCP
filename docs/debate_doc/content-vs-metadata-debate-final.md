@@ -261,23 +261,50 @@ A two-phase hybrid approach that combines both methods strategically:
 - [ ] Build threat detection rules (executable masquerading, anomalies)
 - [ ] Log all content analysis results as extended metadata
 
-### Phase 3: Metadata Infrastructure (Weeks 5-6)
+### Phase 2.5 IMP :
+Music Metadata Extraction (THIS WEEK - for Reddit)
 
-- [ ] Deploy search index (Elasticsearch/Solr) for metadata
-- [ ] Configure extraction parsers for each file type
-- [ ] Implement automated tagging workflows
+ Install mutagen library (reads ID3 tags from audio files)
+ Extract artist, album, title from MP3/FLAC/etc.
+ Organize music into Artist/Album/ folder structure
+ Handle files with missing/incomplete metadata gracefully
+ Test with your own music collection
 
-### Phase 4: Integration (Weeks 7-8)
+Time estimate: 2-3 hours
+Dependencies: None (just mutagen)
+Hardware: Works fine on 8GB RAM
 
-- [ ] Unify content scan results with metadata store
-- [ ] Build query interface supporting both dimensions
-- [ ] Create policy engine (e.g., "Quarantine unscanned files")
+### Phase 3: Image Metadata 
 
-### Phase 5: Optimization (Ongoing)
+ Install exiftool wrapper or use a Python library
+ Extract date taken, camera model, GPS (if present)
+ Organize photos by date (YYYY/MM/DD folders)
+ Privacy: Strip GPS data if user wants
 
-- [ ] Cache content analysis results
-- [ ] Implement incremental metadata updates
-- [ ] Add machine learning for classification improvements
+Time estimate: 2-4 hours
+Dependencies: exiftool or Python pillow library
+Hardware: Fine on 8GB RAM
+
+### Phase 4: Integration & Polish (NEXT WEEK - post-Reddit)
+
+ Add metadata results to existing categorization
+ Cache metadata extractions (simple JSON file, not Elasticsearch lol)
+ Add logging for security scan results
+ Update README with new features
+
+Time estimate: 3-5 hours
+Dependencies: None
+Hardware: 8GB RAM is fine
+
+### Phase 5: Future Enhancements (LATER - when project is bigger)
+
+ Elasticsearch Maybe SQLite for searchable metadata index
+ Machine learning Better pattern matching rules
+ Policy engine Simple quarantine folder for suspicious files
+ Document metadata extraction (PDF author, creation date)
+
+Time estimate: Ongoing, low priority
+When: After IIT laptop upgrade, summer break, or if downloads hit 10k+
 
 ---
 

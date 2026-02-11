@@ -16,6 +16,8 @@ export const CATEGORIES: Record<CategoryName, readonly string[]> = {
   Spreadsheets: [".xls", ".xlsx", ".csv", ".ods"],
   Images: [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".ico", ".webp"],
   Audio: [".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a"],
+  Music: [".mp3", ".flac", ".wav", ".aac", ".m4a", ".ogg", ".wma"], // For music organization
+  Photos: [".jpg", ".jpeg", ".png", ".tiff", ".heic", ".webp"], // For photo organization
   Archives: [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"],
   Code: [
     ".py",
