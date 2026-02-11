@@ -6,6 +6,11 @@
 import fs from "fs/promises";
 import path from "path";
 import { MusicOrganizerService } from "../../../src/services/music-organizer.service.js";
+import {
+  setupLoggerMocks,
+  teardownLoggerMocks,
+  mockLogger,
+} from "../../utils/logger-mock.js";
 
 describe("MusicOrganizerService", () => {
   let service: MusicOrganizerService;
@@ -14,6 +19,9 @@ describe("MusicOrganizerService", () => {
   let targetDir: string;
 
   beforeEach(async () => {
+    // Setup logger mocks
+    setupLoggerMocks();
+
     service = new MusicOrganizerService();
     testDir = await fs.mkdtemp(
       path.join(process.cwd(), "tests", "temp", "music-org-"),
@@ -29,6 +37,9 @@ describe("MusicOrganizerService", () => {
       await fs.rm(testDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
+    } finally {
+      // Clean up logger mocks
+      teardownLoggerMocks();
     }
   });
 

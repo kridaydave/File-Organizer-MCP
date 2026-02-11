@@ -7,6 +7,11 @@ import fs from "fs/promises";
 import path from "path";
 import { ContentAnalyzerService } from "../../../src/services/content-analyzer.service.js";
 import { fileSignToBuffer } from "../../utils/test-helpers.js";
+import {
+  setupLoggerMocks,
+  teardownLoggerMocks,
+  mockLogger,
+} from "../../utils/logger-mock.js";
 
 describe("ContentAnalyzerService", () => {
   let analyzer: ContentAnalyzerService;
@@ -14,6 +19,9 @@ describe("ContentAnalyzerService", () => {
   let baseTempDir: string;
 
   beforeEach(async () => {
+    // Setup logger mocks
+    setupLoggerMocks();
+
     baseTempDir = path.join(process.cwd(), "tests", "temp");
     await fs.mkdir(baseTempDir, { recursive: true });
     testDir = await fs.mkdtemp(path.join(baseTempDir, "test-analyzer-"));
@@ -25,7 +33,11 @@ describe("ContentAnalyzerService", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
       await fs.rm(testDir, { recursive: true, force: true });
     } catch (error) {
-      // Ignore cleanup errors
+      // Use mock logger instead of ignoring errors
+      mockLogger.error("Cleanup error:", error);
+    } finally {
+      // Clean up logger mocks
+      teardownLoggerMocks();
     }
   });
 

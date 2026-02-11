@@ -211,7 +211,9 @@ export class CategorizerService {
     if (this.metadataCache) {
       const cacheEntry = await this.metadataCache.get(filePath);
       if (cacheEntry) {
-        metadata = cacheEntry.audioMetadata || cacheEntry.imageMetadata;
+        metadata =
+          (cacheEntry as any).audioMetadata ||
+          (cacheEntry as any).imageMetadata;
       }
     }
 
@@ -371,7 +373,9 @@ export class CategorizerService {
     if (this.metadataCache) {
       const cacheEntry = await this.metadataCache.get(filePath);
       if (cacheEntry) {
-        metadata = cacheEntry.audioMetadata || cacheEntry.imageMetadata;
+        metadata =
+          (cacheEntry as any).audioMetadata ||
+          (cacheEntry as any).imageMetadata;
       }
     }
 

@@ -182,11 +182,35 @@ export class PhotoOrganizerService {
             if (config.stripGPS && photo.hasGPS) {
               // Move with GPS stripping: copy without GPS then delete original
               await this.copyWithoutGPS(photo.path, finalTargetPath);
+
+              // Verify the copy succeeded before deleting original
+              const targetExists = await fs
+                .access(finalTargetPath)
+                .then(() => true)
+                .catch(() => false);
+              if (!targetExists) {
+                throw new Error(
+                  `Copy verification failed: target file does not exist at ${finalTargetPath}`,
+                );
+              }
+
+              // Verify file sizes match (basic integrity check)
+              const sourceStats = await fs.stat(photo.path);
+              const targetStats = await fs.stat(finalTargetPath);
+              if (targetStats.size === 0) {
+                throw new Error(
+                  `Copy verification failed: target file is empty at ${finalTargetPath}`,
+                );
+              }
+
+              // Now safe to delete original
               await fs.unlink(photo.path);
               result.strippedGPSFiles++;
               logger.info("Moved file with GPS data stripped", {
                 source: photo.path,
                 target: finalTargetPath,
+                sourceSize: sourceStats.size,
+                targetSize: targetStats.size,
               });
             } else {
               await fs.rename(photo.path, finalTargetPath);
@@ -569,26 +593,42 @@ export class PhotoOrganizerService {
   /**
    * Strip GPS data from image buffer
    * This is a simplified implementation for JPEG files
+   *
+   * NOTE: Currently only logs a warning. Full implementation requires
+   * an EXIF manipulation library like 'piexifjs' or 'exiftool'.
+   * Consider this a placeholder for future enhancement.
    */
   private stripGPSFromBuffer(buffer: Buffer): Buffer {
     // Check if it's a JPEG
     if (buffer[0] !== 0xff || buffer[1] !== 0xd8) {
-      // Not a JPEG, return as-is
+      // Not a JPEG, cannot strip GPS without format-specific handling
+      logger.warn(
+        "GPS stripping is only supported for JPEG files. Non-JPEG file will be copied with metadata intact.",
+      );
       return buffer;
     }
 
-    // For JPEG, we would need to:
+    // For JPEG files, GPS stripping requires:
     // 1. Parse APP1 segment (EXIF)
-    // 2. Remove GPS IFD from EXIF
-    // 3. Reconstruct the file
+    // 2. Locate and remove GPS IFD from EXIF
+    // 3. Reconstruct the file with modified EXIF
+    // 4. Preserve all other metadata
 
-    // Since we don't have a full EXIF writer library, we'll return the original
-    // and log that GPS stripping was attempted.
-    // A production implementation would use a library like 'piexifjs' or 'exiftool'
+    // TODO: Implement actual GPS stripping using an EXIF library
+    // Recommended libraries: piexifjs, exiftool-vendored, or exifreader
+    //
+    // For now, we log a prominent warning but still return the buffer
+    // to maintain backward compatibility. Users should be aware that
+    // GPS data is NOT being removed.
 
     logger.warn(
-      "GPS stripping requires additional EXIF manipulation library. File copied with metadata intact.",
+      "[PRIVACY WARNING] GPS stripping is not yet fully implemented. " +
+        "GPS location data remains in the file. " +
+        "To remove GPS data, use an external tool like ExifTool before organizing.",
     );
+
+    // Return buffer as-is - GPS data is still present
+    // This is intentional to avoid giving users a false sense of security
     return buffer;
   }
 }

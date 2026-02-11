@@ -5,11 +5,31 @@
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
+// Ensure LogLevel is available at runtime for type checking
+export const LogLevel = {
+  debug: "debug" as const,
+  info: "info" as const,
+  warn: "warn" as const,
+  error: "error" as const,
+};
+
 export class Logger {
   private logLevel: LogLevel;
+  private isTestEnvironment: boolean;
 
   constructor(level: LogLevel = "info") {
     this.logLevel = level;
+    this.isTestEnvironment = this.detectTestEnvironment();
+  }
+
+  private detectTestEnvironment(): boolean {
+    return (
+      process.env.NODE_ENV === "test" ||
+      process.env.JEST_WORKER_ID !== undefined ||
+      typeof jest !== "undefined" ||
+      // Check if we're running under a test runner
+      process.argv.some((arg) => arg.includes("jest") || arg.includes("test"))
+    );
   }
 
   private log(level: string, message: string, context?: Record<string, any>) {
@@ -22,7 +42,10 @@ export class Logger {
       ...context,
     };
 
-    console.error(JSON.stringify(entry)); // stderr for stdio servers
+    // Suppress console output during tests
+    if (!this.isTestEnvironment) {
+      console.error(JSON.stringify(entry)); // stderr for stdio servers
+    }
   }
 
   debug(message: string, context?: Record<string, any>) {
@@ -67,6 +90,13 @@ export class Logger {
       metadata,
       ...context,
     });
+  }
+
+  /**
+   * Control test mode for suppressing logs during tests
+   */
+  setTestMode(enabled: boolean): void {
+    this.isTestEnvironment = enabled;
   }
 
   /**

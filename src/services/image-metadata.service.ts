@@ -216,7 +216,12 @@ export class ImageMetadataService {
           ...baseMetadata,
           hasEXIF: false,
           camera: { make: undefined, model: undefined, lens: undefined },
-          gps: { hasGPS: false, latitude: undefined, longitude: undefined, altitude: undefined },
+          gps: {
+            hasGPS: false,
+            latitude: undefined,
+            longitude: undefined,
+            altitude: undefined,
+          },
         };
       }
 
@@ -240,7 +245,12 @@ export class ImageMetadataService {
         extractedAt,
         hasEXIF: false,
         camera: { make: undefined, model: undefined, lens: undefined },
-        gps: { hasGPS: false, latitude: undefined, longitude: undefined, altitude: undefined },
+        gps: {
+          hasGPS: false,
+          latitude: undefined,
+          longitude: undefined,
+          altitude: undefined,
+        },
       };
     }
   }
@@ -464,8 +474,17 @@ export class ImageMetadataService {
         }
         metadata.hasEXIF = false;
         // Add empty camera and gps objects for test compatibility
-        metadata.camera = { make: undefined, model: undefined, lens: undefined };
-        metadata.gps = { hasGPS: false, latitude: undefined, longitude: undefined, altitude: undefined };
+        metadata.camera = {
+          make: undefined,
+          model: undefined,
+          lens: undefined,
+        };
+        metadata.gps = {
+          hasGPS: false,
+          latitude: undefined,
+          longitude: undefined,
+          altitude: undefined,
+        };
         return metadata;
       }
 
@@ -672,7 +691,7 @@ export class ImageMetadataService {
         offset += 2 + length;
       } else if (marker === 0xd8 || marker === 0xd9) {
         break;
-      } else if (marker >= 0xd0 && marker <= 0xfe) {
+      } else if (marker && marker >= 0xd0 && marker <= 0xfe) {
         const length = buffer.readUInt16BE(offset + 2);
         offset += 2 + length;
       } else {

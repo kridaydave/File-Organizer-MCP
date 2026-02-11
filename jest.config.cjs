@@ -4,6 +4,7 @@ module.exports = {
   testTimeout: 60000,
   extensionsToTreatAsEsm: [".ts"],
   testMatch: ["**/tests/**/*.test.ts", "**/src/**/*.test.ts"],
+  setupFilesAfterEnv: ["<rootDir>/tests/setup.ts"],
   transform: {
     "^.+\\.tsx?$": ["ts-jest", { useESM: true }],
   },

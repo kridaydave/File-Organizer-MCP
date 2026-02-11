@@ -173,6 +173,39 @@ const DEFAULT_TIMEBOXES: Record<string, PhaseTimeBox> = {
     documentation: 15,
     final_review: 10,
   },
+  file_organization_strategy: {
+    initialization: 5,
+    proposal: 10,
+    discussion: 15,
+    clarification: 10,
+    critique: 15,
+    refinement: 10,
+    voting: 10,
+    consensus_check: 5,
+    final_review: 10,
+  },
+  duplicate_management: {
+    initialization: 5,
+    proposal: 8,
+    discussion: 12,
+    clarification: 8,
+    critique: 12,
+    refinement: 8,
+    voting: 8,
+    consensus_check: 5,
+    final_review: 8,
+  },
+  sensitive_file_handling: {
+    initialization: 5,
+    proposal: 10,
+    discussion: 15,
+    clarification: 10,
+    security_gate: 25,
+    refinement: 10,
+    voting: 10,
+    consensus_check: 5,
+    final_review: 10,
+  },
 };
 
 /**
@@ -314,6 +347,148 @@ const PERFORMANCE_OPTIMIZATION_TEMPLATE: DebateTemplate = {
 };
 
 /**
+ * Pre-defined file organization strategy review template.
+ */
+const FILE_ORGANIZATION_STRATEGY_TEMPLATE: DebateTemplate = {
+  id: "file_organization_strategy",
+  name: "File Organization Strategy",
+  description:
+    "Template for evaluating and designing file organization strategies with categorization rules and security considerations.",
+  phases: [
+    { type: PhaseType.INITIALIZATION, order: 1, duration: { min: 3, max: 5 } },
+    { type: PhaseType.PROPOSAL, order: 2, duration: { min: 8, max: 10 } },
+    { type: PhaseType.DISCUSSION, order: 3, duration: { min: 10, max: 15 } },
+    { type: PhaseType.CLARIFICATION, order: 4, duration: { min: 5, max: 10 } },
+    { type: PhaseType.CRITIQUE, order: 5, duration: { min: 10, max: 15 } },
+    { type: PhaseType.REFINEMENT, order: 6, duration: { min: 5, max: 10 } },
+    { type: PhaseType.VOTING, order: 7, duration: { min: 5, max: 10 } },
+    { type: PhaseType.CONSENSUS_CHECK, order: 8, duration: { min: 3, max: 5 } },
+    { type: PhaseType.FINAL_REVIEW, order: 9, duration: { min: 5, max: 10 } },
+  ],
+  requiredShepherds: [
+    ShepherdSpecialty.DOMAIN_EXPERT,
+    ShepherdSpecialty.PERFORMANCE,
+    ShepherdSpecialty.SECURITY,
+  ],
+  optionalShepherds: [
+    ShepherdSpecialty.ARCHITECTURE,
+    ShepherdSpecialty.UX,
+    ShepherdSpecialty.DOCUMENTATION,
+  ],
+  defaultTimeBoxes: DEFAULT_TIMEBOXES.file_organization_strategy!,
+  customRules: [
+    "Categorization rules must be clear and maintainable",
+    "Performance impact must be evaluated for large directories",
+    "Security protocols for sensitive files must be established",
+    "Minimum 3 shepherds must participate in voting phase",
+    "Categorization accuracy must be validated against test data",
+  ],
+  successCriteria: [
+    "Achieve consensus (≥80% approval) from required shepherds",
+    "Complete categorization rule validation",
+    "Security protocols for sensitive files approved",
+    "Performance impact analysis completed",
+    "Address all critical concerns raised during critique",
+  ],
+};
+
+/**
+ * Pre-defined duplicate management review template.
+ */
+const DUPLICATE_MANAGEMENT_TEMPLATE: DebateTemplate = {
+  id: "duplicate_management",
+  name: "Duplicate Management",
+  description:
+    "Template for evaluating duplicate detection and resolution strategies with accuracy and performance trade-offs.",
+  phases: [
+    { type: PhaseType.INITIALIZATION, order: 1, duration: { min: 3, max: 5 } },
+    { type: PhaseType.PROPOSAL, order: 2, duration: { min: 6, max: 8 } },
+    { type: PhaseType.DISCUSSION, order: 3, duration: { min: 8, max: 12 } },
+    { type: PhaseType.CLARIFICATION, order: 4, duration: { min: 5, max: 8 } },
+    { type: PhaseType.CRITIQUE, order: 5, duration: { min: 8, max: 12 } },
+    { type: PhaseType.REFINEMENT, order: 6, duration: { min: 5, max: 8 } },
+    { type: PhaseType.VOTING, order: 7, duration: { min: 5, max: 8 } },
+    { type: PhaseType.CONSENSUS_CHECK, order: 8, duration: { min: 3, max: 5 } },
+    { type: PhaseType.FINAL_REVIEW, order: 9, duration: { min: 5, max: 8 } },
+  ],
+  requiredShepherds: [
+    ShepherdSpecialty.PERFORMANCE,
+    ShepherdSpecialty.DOMAIN_EXPERT,
+    ShepherdSpecialty.TESTING,
+  ],
+  optionalShepherds: [
+    ShepherdSpecialty.ARCHITECTURE,
+    ShepherdSpecialty.SECURITY,
+    ShepherdSpecialty.DOCUMENTATION,
+  ],
+  defaultTimeBoxes: DEFAULT_TIMEBOXES.duplicate_management!,
+  customRules: [
+    "Duplicate detection accuracy must be ≥95%",
+    "False positive rate must be <2%",
+    "Performance impact must be evaluated for large file sets",
+    "Recovery options must be documented",
+    "Batch processing thresholds must be established",
+  ],
+  successCriteria: [
+    "Achieve consensus (≥80% approval) from required shepherds",
+    "Detection accuracy requirements met (≥95%)",
+    "False positive rate acceptable (<2%)",
+    "Performance testing plan approved",
+    "Recovery and rollback procedures documented",
+  ],
+};
+
+/**
+ * Pre-defined sensitive file handling template with security-gate phase.
+ */
+const SENSITIVE_FILE_HANDLING_TEMPLATE: DebateTemplate = {
+  id: "sensitive_file_handling",
+  name: "Sensitive File Handling",
+  description:
+    "Template designed for evaluating security protocols and handling procedures for sensitive files.",
+  phases: [
+    { type: PhaseType.INITIALIZATION, order: 1, duration: { min: 3, max: 5 } },
+    { type: PhaseType.PROPOSAL, order: 2, duration: { min: 8, max: 10 } },
+    { type: PhaseType.DISCUSSION, order: 3, duration: { min: 10, max: 15 } },
+    { type: PhaseType.CLARIFICATION, order: 4, duration: { min: 5, max: 10 } },
+    {
+      type: PhaseType.SECURITY_GATE,
+      order: 5,
+      duration: { min: 20, max: 25 },
+      participation: { required: true, minVotes: 3 },
+    },
+    { type: PhaseType.REFINEMENT, order: 6, duration: { min: 5, max: 10 } },
+    { type: PhaseType.VOTING, order: 7, duration: { min: 5, max: 10 } },
+    { type: PhaseType.CONSENSUS_CHECK, order: 8, duration: { min: 3, max: 5 } },
+    { type: PhaseType.FINAL_REVIEW, order: 9, duration: { min: 5, max: 10 } },
+  ],
+  requiredShepherds: [
+    ShepherdSpecialty.SECURITY,
+    ShepherdSpecialty.DOMAIN_EXPERT,
+    ShepherdSpecialty.ARCHITECTURE,
+  ],
+  optionalShepherds: [
+    ShepherdSpecialty.PERFORMANCE,
+    ShepherdSpecialty.DOCUMENTATION,
+  ],
+  defaultTimeBoxes: DEFAULT_TIMEBOXES.sensitive_file_handling!,
+  customRules: [
+    "Security specialist must be present during security gate phase",
+    "All sensitive content patterns must be documented",
+    "Security gate requires unanimous approval from security shepherds",
+    "Sensitive files must be encrypted at rest",
+    "Access controls must be implemented and tested",
+  ],
+  successCriteria: [
+    "Pass security gate with ≥90% approval from security shepherds",
+    "All sensitive file patterns identified and documented",
+    "Encryption and access control protocols approved",
+    "Security testing plan complete",
+    "No critical vulnerabilities remain unaddressed",
+  ],
+};
+
+/**
  * Pre-defined API design review template.
  */
 const API_DESIGN_TEMPLATE: DebateTemplate = {
@@ -392,6 +567,18 @@ export class TemplateManager {
       PERFORMANCE_OPTIMIZATION_TEMPLATE,
     );
     this.registry.templates.set(API_DESIGN_TEMPLATE.id, API_DESIGN_TEMPLATE);
+    this.registry.templates.set(
+      FILE_ORGANIZATION_STRATEGY_TEMPLATE.id,
+      FILE_ORGANIZATION_STRATEGY_TEMPLATE,
+    );
+    this.registry.templates.set(
+      DUPLICATE_MANAGEMENT_TEMPLATE.id,
+      DUPLICATE_MANAGEMENT_TEMPLATE,
+    );
+    this.registry.templates.set(
+      SENSITIVE_FILE_HANDLING_TEMPLATE.id,
+      SENSITIVE_FILE_HANDLING_TEMPLATE,
+    );
   }
 
   /**
@@ -1424,4 +1611,7 @@ export {
   SECURITY_REVIEW_TEMPLATE,
   PERFORMANCE_OPTIMIZATION_TEMPLATE,
   API_DESIGN_TEMPLATE,
+  FILE_ORGANIZATION_STRATEGY_TEMPLATE,
+  DUPLICATE_MANAGEMENT_TEMPLATE,
+  SENSITIVE_FILE_HANDLING_TEMPLATE,
 };

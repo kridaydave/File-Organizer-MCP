@@ -10,10 +10,16 @@ A comprehensive decision-making framework for architectural discussions with pat
 2. [The 5-Phase Debate Lifecycle](#the-5-phase-debate-lifecycle)
 3. [Agent Profiles](#agent-profiles)
 4. [Workflows](#workflows)
-5. [Technical Guidelines](#technical-guidelines)
-6. [Documentation Structure](#documentation-structure)
-7. [Usage Guide](#usage-guide)
-8. [Quick Reference](#quick-reference)
+5. [File Organizer MCP Integration](#file-organizer-mcp-integration)
+6. [File Organizer Workflows](#file-organizer-workflows)
+7. [File Organizer Agent Capabilities](#file-organizer-agent-capabilities)
+8. [Technical Implementation](#technical-implementation)
+9. [File Organizer Quality Gates](#file-organizer-quality-gates)
+10. [File Organizer Metrics](#file-organizer-metrics)
+11. [Technical Guidelines](#technical-guidelines)
+12. [Documentation Structure](#documentation-structure)
+13. [Usage Guide](#usage-guide)
+14. [Quick Reference](#quick-reference)
 
 ---
 
@@ -184,7 +190,7 @@ interface EnhancedVote {
 | **Bloodhound**       | The Keeper     | Backup, versioning, and restore        |
 | **Borzoi**           | The Advisor    | Pattern analysis & debate intelligence |
 
-### New Agent Capabilities
+### Agent Capabilities
 
 #### Retriever-Beagle
 
@@ -354,6 +360,171 @@ docs/
 
 ---
 
+## File Organizer MCP Integration
+
+The Multi-Shepherd Debate Framework is deeply integrated with the File Organizer MCP system, providing structured decision-making for file management operations.
+
+### File Organization-Specific Debates
+
+#### Template: File Organization Strategy
+
+```typescript
+import { TemplateManager } from "./src/debate/templates";
+
+const template = templateManager.getTemplate("file_organization_strategy");
+```
+
+**Key Decisions Addressed:**
+
+- File categorization rules
+- Duplicate detection algorithms
+- Renaming conventions
+- Security protocols for sensitive files
+- Performance optimization strategies
+
+#### Template: Duplicate Management
+
+```typescript
+const template = templateManager.getTemplate("duplicate_management");
+```
+
+**Key Decisions Addressed:**
+
+- Duplicate detection method (content hash vs metadata)
+- Duplicate resolution strategy (delete, move, ignore)
+- Batch processing thresholds
+- Recovery options
+
+---
+
+## File Organizer Workflows
+
+### File Categorization Debate
+
+**Purpose:** Determine optimal file categorization strategy
+
+**Participants:**
+
+- **Categorization Expert** (weight: 1.4) - Deep knowledge of file types and patterns
+- **Performance Shepherd** (weight: 1.1) - Concerned with processing speed
+- **Security Sentinel** (weight: 1.3) - Focus on sensitive file handling
+- **Maintainability Expert** (weight: 1.0) - Ease of configuration
+- **User Experience** (weight: 1.2) - Intuitive organization
+
+**Decision Criteria:**
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| Accuracy | 0.35 | How well files are categorized |
+| Speed | 0.25 | Processing throughput |
+| Security | 0.20 | Sensitive file protection |
+| Usability | 0.20 | Ease of configuration |
+
+### Duplicate Detection Debate
+
+**Purpose:** Select duplicate detection algorithm
+
+**Options:**
+
+1. **Content Hash (SHA-256)** - High accuracy, slower
+2. **Metadata Comparison** - Faster, less accurate
+3. **Hybrid Approach** - Balanced accuracy and speed
+
+**Decision Matrix:**
+| Algorithm | Accuracy | Speed | Resource Usage |
+|-----------|----------|-------|----------------|
+| SHA-256 | 99.9% | Slow | High |
+| Metadata | 85% | Fast | Low |
+| Hybrid | 95% | Medium | Medium |
+
+---
+
+## File Organizer Agent Capabilities
+
+### Categorization Agent
+
+**Primary Function:** Intelligent file classification
+
+**Capabilities:**
+
+- Analyzes file extensions, content, and metadata
+- Learns from user corrections
+- Handles ambiguous file types
+- Supports custom categorization rules
+- **Pattern Learning:** Improves accuracy with each file processed
+
+### Security Agent
+
+**Primary Function:** Sensitive file protection
+
+**Capabilities:**
+
+- Detects sensitive content patterns
+- Applies security labels to files
+- Prevents accidental exposure
+- Enforces access controls
+- **Real-time Monitoring:** Scans files as they're processed
+
+### Performance Agent
+
+**Primary Function:** Processing optimization
+
+**Capabilities:**
+
+- Monitors system resources
+- Optimizes batch processing
+- Balances speed and accuracy
+- Prevents system overload
+- **Adaptive Throttling:** Adjusts processing based on system load
+
+### Recovery Agent
+
+**Primary Function:** File recovery and rollback
+
+**Capabilities:**
+
+- Maintains operation history
+- Supports point-in-time recovery
+- Validates recovered files
+- Generates recovery reports
+- **Incremental Backups:** Efficient recovery mechanisms
+
+---
+
+## Technical Implementation
+
+### File System Integration
+
+```typescript
+import { FileSystemDebate } from "./src/debate/file-system";
+
+const debate = new FileSystemDebate({
+  rootDirectory: "/path/to/files",
+  includePatterns: ["**/*.{jpg,png,pdf}"],
+  excludePatterns: ["**/node_modules/**"],
+});
+
+const result = await debate.runCategorizationDebate();
+```
+
+### Real-time Feedback Loop
+
+```typescript
+import { PostMortemPhase } from "./src/debate/post-mortem";
+
+// Capture user correction
+const feedback = {
+  file: "/path/to/misclassified/file.txt",
+  actualCategory: "documents",
+  proposedCategory: "media",
+  confidence: 0.6,
+};
+
+const postMortem = new PostMortemPhase();
+await postMortem.processUserFeedback(feedback);
+```
+
+---
+
 ## Usage Guide
 
 ### Starting a New Debate
@@ -507,6 +678,49 @@ See: `NEW-AGENTS.md`
 
 ---
 
+## File Organizer Quality Gates
+
+### Categorization Quality Gates
+
+| Gate                     | Threshold       | Status |
+| ------------------------ | --------------- | ------ |
+| Categorization Accuracy  | ≥ 90%           | ✅/❌  |
+| Sensitive File Detection | 100%            | ✅/❌  |
+| Processing Speed         | > 500 files/min | ✅/❌  |
+| Memory Usage             | < 300MB         | ✅/❌  |
+
+### Duplicate Detection Quality Gates
+
+| Gate                     | Threshold       | Status |
+| ------------------------ | --------------- | ------ |
+| Duplicate Detection Rate | ≥ 95%           | ✅/❌  |
+| False Positive Rate      | < 2%            | ✅/❌  |
+| Processing Speed         | > 300 files/min | ✅/❌  |
+
+---
+
+## File Organizer Metrics
+
+### Performance Metrics
+
+| Metric                     | Target       | Description                 |
+| -------------------------- | ------------ | --------------------------- |
+| Files Processed per Minute | > 500        | Throughput                  |
+| Memory Usage               | < 300MB      | Peak consumption            |
+| Response Time              | < 50ms/file  | Average per-file processing |
+| Categorization Time        | < 100ms/file | Content analysis duration   |
+
+### Quality Metrics
+
+| Metric                       | Target | Description                  |
+| ---------------------------- | ------ | ---------------------------- |
+| Categorization Accuracy      | ≥ 90%  | Correct category assignments |
+| Duplicate Detection Accuracy | ≥ 95%  | True duplicates identified   |
+| False Positive Rate          | < 2%   | Incorrect duplicate matches  |
+| Sensitive File Detection     | 100%   | All sensitive files flagged  |
+
+---
+
 ## Framework Version
 
 | Version | Date       | Changes                              |
@@ -514,6 +728,7 @@ See: `NEW-AGENTS.md`
 | 1.0     | 2026-02-09 | Initial framework                    |
 | 1.1     | 2026-02-09 | Added Post-Mortem Phase 5            |
 | 1.2     | 2026-02-09 | Enhanced voting & weighted consensus |
+| 1.3     | 2026-02-11 | File Organizer MCP integration       |
 
 ---
 
