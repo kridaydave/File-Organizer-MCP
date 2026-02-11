@@ -9,6 +9,8 @@ import * as path from "path";
 // EXIF Tag Constants
 const EXIF_TAGS = {
   // IFD0 Tags
+  IMAGE_WIDTH: 0x0100,
+  IMAGE_LENGTH: 0x0101,
   MAKE: 0x010f,
   MODEL: 0x0110,
   ORIENTATION: 0x0112,
@@ -72,6 +74,13 @@ export interface ImageMetadata {
   cameraModel?: string;
   lensModel?: string;
 
+  // Camera info (nested format for tests)
+  camera?: {
+    make?: string;
+    model?: string;
+    lens?: string;
+  };
+
   // Photo settings
   dateTaken?: Date;
   iso?: number;
@@ -95,6 +104,18 @@ export interface ImageMetadata {
   altitude?: number;
   gpsTimestamp?: Date;
 
+  // GPS (nested format for tests)
+  gps?: {
+    hasGPS: boolean;
+    latitude?: number;
+    longitude?: number;
+    altitude?: number;
+  };
+
+  // EXIF
+  hasEXIF?: boolean;
+  hasThumbnail?: boolean;
+
   // Software
   software?: string;
   dateModified?: Date;
@@ -103,10 +124,23 @@ export interface ImageMetadata {
   extractedAt: Date;
 }
 
+export interface ProgressUpdate {
+  processed: number;
+  total: number;
+  currentFile?: string;
+  currentStage?: "reading" | "extracting" | "caching";
+  errors: number;
+  warnings: number;
+}
+
+export type ProgressCallback = (update: ProgressUpdate) => void;
+
 export interface ImageMetadataOptions {
   extractGPS?: boolean;
   stripGPS?: boolean;
   extractThumbnail?: boolean;
+  concurrency?: number;
+  onProgress?: ProgressCallback;
 }
 
 interface EXIFValue {
@@ -134,6 +168,22 @@ export class ImageMetadataService {
   ];
 
   /**
+   * Format the image format name to standard uppercase
+   */
+  private formatFormatName(format: string): string {
+    const formatMap: Record<string, string> = {
+      jpeg: "JPEG",
+      jpg: "JPEG",
+      png: "PNG",
+      tiff: "TIFF",
+      webp: "WEBP",
+      heic: "HEIC",
+      unknown: "UNKNOWN",
+    };
+    return formatMap[format.toLowerCase()] || format.toUpperCase();
+  }
+
+  /**
    * Get list of supported image formats
    */
   getSupportedFormats(): string[] {
@@ -156,13 +206,18 @@ export class ImageMetadataService {
 
       const baseMetadata: ImageMetadata = {
         filePath,
-        format,
+        format: this.formatFormatName(format),
         hasGPS: false,
         extractedAt,
       };
 
       if (!this.isFormatSupported(format)) {
-        return baseMetadata;
+        return {
+          ...baseMetadata,
+          hasEXIF: false,
+          camera: { make: undefined, model: undefined, lens: undefined },
+          gps: { hasGPS: false, latitude: undefined, longitude: undefined, altitude: undefined },
+        };
       }
 
       if (format === "jpeg" || format === "jpg") {
@@ -180,9 +235,12 @@ export class ImageMetadataService {
       // Return minimal metadata on error, never throw
       return {
         filePath,
-        format: this.getFormatFromExtension(filePath),
+        format: this.formatFormatName(this.getFormatFromExtension(filePath)),
         hasGPS: false,
         extractedAt,
+        hasEXIF: false,
+        camera: { make: undefined, model: undefined, lens: undefined },
+        gps: { hasGPS: false, latitude: undefined, longitude: undefined, altitude: undefined },
       };
     }
   }
@@ -194,11 +252,66 @@ export class ImageMetadataService {
     filePaths: string[],
     options: ImageMetadataOptions = {},
   ): Promise<ImageMetadata[]> {
+    const { concurrency = 4, onProgress } = options;
     const results: ImageMetadata[] = [];
+    let processed = 0;
+    let errors = 0;
+    let warnings = 0;
 
-    for (const filePath of filePaths) {
-      const metadata = await this.extract(filePath, options);
-      results.push(metadata);
+    // Process files in parallel with configurable concurrency
+    const batches = [];
+    for (let i = 0; i < filePaths.length; i += concurrency) {
+      batches.push(filePaths.slice(i, i + concurrency));
+    }
+
+    for (const batch of batches) {
+      const batchPromises = batch.map(async (filePath) => {
+        try {
+          onProgress?.({
+            processed,
+            total: filePaths.length,
+            currentFile: filePath,
+            currentStage: "reading",
+            errors,
+            warnings,
+          });
+
+          const metadata = await this.extract(filePath, options);
+
+          processed++;
+          onProgress?.({
+            processed,
+            total: filePaths.length,
+            currentFile: filePath,
+            currentStage: "extracting",
+            errors,
+            warnings,
+          });
+
+          return metadata;
+        } catch (error) {
+          processed++;
+          errors++;
+          onProgress?.({
+            processed,
+            total: filePaths.length,
+            currentFile: filePath,
+            currentStage: "extracting",
+            errors,
+            warnings,
+          });
+
+          return {
+            filePath,
+            format: this.getFormatFromExtension(filePath),
+            hasGPS: false,
+            extractedAt: new Date(),
+          };
+        }
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
     }
 
     return results;
@@ -336,15 +449,28 @@ export class ImageMetadataService {
     try {
       const exifData = this.findEXIFSegment(buffer);
 
+      // Build metadata
+      const metadata: ImageMetadata = { ...baseMetadata };
+
+      // Check for thumbnail in EXIF
+      metadata.hasThumbnail = this.hasThumbnailSegment(buffer);
+
       if (!exifData) {
         // No EXIF data, try to get file stats
         const stats = await fs.stat(filePath).catch(() => null);
         if (stats) {
-          baseMetadata.dateModified = stats.mtime;
-          baseMetadata.dateCreated = stats.birthtime;
+          metadata.dateModified = stats.mtime;
+          metadata.dateCreated = stats.birthtime;
         }
-        return baseMetadata;
+        metadata.hasEXIF = false;
+        // Add empty camera and gps objects for test compatibility
+        metadata.camera = { make: undefined, model: undefined, lens: undefined };
+        metadata.gps = { hasGPS: false, latitude: undefined, longitude: undefined, altitude: undefined };
+        return metadata;
       }
+
+      // Has EXIF data
+      metadata.hasEXIF = true;
 
       // Parse TIFF header
       const isLittleEndian = this.isLittleEndian(
@@ -360,10 +486,13 @@ export class ImageMetadataService {
         exifData.tiffHeaderOffset,
       );
 
-      // Build metadata
-      const metadata: ImageMetadata = { ...baseMetadata };
-
       // Extract basic tags from IFD0
+      metadata.width = this.getNumericValue(
+        ifd0.entries.get(EXIF_TAGS.IMAGE_WIDTH),
+      );
+      metadata.height = this.getNumericValue(
+        ifd0.entries.get(EXIF_TAGS.IMAGE_LENGTH),
+      );
       metadata.cameraMake = this.getStringValue(
         ifd0.entries.get(EXIF_TAGS.MAKE),
         buffer,
@@ -382,6 +511,13 @@ export class ImageMetadataService {
         buffer,
         isLittleEndian,
       );
+
+      // Build nested camera object (always present for test compatibility)
+      metadata.camera = {
+        make: metadata.cameraMake,
+        model: metadata.cameraModel,
+        lens: metadata.lensModel,
+      };
 
       // Parse DateTime
       const dateTimeStr = this.getStringValue(
@@ -457,6 +593,11 @@ export class ImageMetadataService {
         }
       }
 
+      // Update camera object with lens info if available
+      if (metadata.camera && metadata.lensModel) {
+        metadata.camera.lens = metadata.lensModel;
+      }
+
       // Parse GPS IFD (unless stripGPS is true)
       const gpsIFDPointer = ifd0.entries.get(EXIF_TAGS.GPS_IFD_POINTER);
       if (gpsIFDPointer && options.stripGPS !== true) {
@@ -484,6 +625,14 @@ export class ImageMetadataService {
         }
       }
 
+      // Build nested GPS object (always present for test compatibility)
+      metadata.gps = {
+        hasGPS: metadata.hasGPS,
+        latitude: metadata.latitude,
+        longitude: metadata.longitude,
+        altitude: metadata.altitude,
+      };
+
       // Get file stats for dates
       const stats = await fs.stat(filePath).catch(() => null);
       if (stats) {
@@ -496,6 +645,65 @@ export class ImageMetadataService {
       // Return base metadata on parsing error
       return baseMetadata;
     }
+  }
+
+  /**
+   * Check if JPEG has a thumbnail segment
+   */
+  private hasThumbnailSegment(buffer: Buffer): boolean {
+    let offset = 2; // Skip SOI marker (FF D8)
+
+    while (offset < buffer.length - 4) {
+      if (buffer[offset] !== 0xff) {
+        offset++;
+        continue;
+      }
+
+      const marker = buffer[offset + 1];
+
+      if (marker === 0xff) {
+        offset++;
+        continue;
+      }
+
+      // Check for thumbnail-related markers or IFD1 reference
+      if (marker === 0xe1) {
+        const length = buffer.readUInt16BE(offset + 2);
+        offset += 2 + length;
+      } else if (marker === 0xd8 || marker === 0xd9) {
+        break;
+      } else if (marker >= 0xd0 && marker <= 0xfe) {
+        const length = buffer.readUInt16BE(offset + 2);
+        offset += 2 + length;
+      } else {
+        offset += 2;
+      }
+    }
+
+    // Check for IFD1 (thumbnail IFD) by looking for multiple IFDs in EXIF
+    const exifData = this.findEXIFSegment(buffer);
+    if (exifData) {
+      try {
+        const isLittleEndian = this.isLittleEndian(
+          buffer,
+          exifData.tiffHeaderOffset,
+        );
+        const ifd0 = this.parseIFD(
+          buffer,
+          exifData.tiffHeaderOffset,
+          isLittleEndian,
+          exifData.tiffHeaderOffset,
+        );
+        // If there's a next IFD offset, it means there's IFD1 (thumbnail)
+        if (ifd0.nextIFDOffset && ifd0.nextIFDOffset > 0) {
+          return true;
+        }
+      } catch {
+        // Ignore errors in thumbnail detection
+      }
+    }
+
+    return false;
   }
 
   /**

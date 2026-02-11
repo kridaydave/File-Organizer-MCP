@@ -12,10 +12,10 @@ import { logger } from "../utils/logger.js";
 import { AudioMetadata, ImageMetadata } from "../types.js";
 
 export interface CacheStats {
-  totalEntries: number;
-  audioEntries: number;
-  imageEntries: number;
-  cacheSize: number;
+  entries: number;
+  size: number;
+  hits: number;
+  misses: number;
 }
 
 import {
@@ -23,6 +23,15 @@ import {
   MetadataCache,
   MetadataCacheEntry,
 } from "../types.js";
+
+// Extended cache entry for internal use with TTL support
+interface ExtendedCacheEntry {
+  value: unknown;
+  timestamp: number;
+  ttl: number | null; // null means no expiration
+  filePath?: string;
+  fileMtime?: number;
+}
 
 // ==================== Metadata Cache Service ====================
 
@@ -32,6 +41,9 @@ export class MetadataCacheService {
   private readonly maxEntries: number;
   private readonly cacheFilePath: string;
   private writeLock: Promise<void> = Promise.resolve();
+  private memoryCache: Map<string, ExtendedCacheEntry> = new Map();
+  private stats: { hits: number; misses: number } = { hits: 0, misses: 0 };
+  private initialized: boolean = false;
 
   constructor(options: MetadataCacheOptions = {}) {
     this.cacheDir = options.cacheDir || path.join(process.cwd(), ".cache");
@@ -50,8 +62,12 @@ export class MetadataCacheService {
    * Initialize the cache directory
    */
   async initialize(): Promise<void> {
+    if (this.initialized) return;
+    
     try {
       await fs.mkdir(this.cacheDir, { recursive: true });
+      await this.loadFromDisk();
+      this.initialized = true;
       logger.debug(`Cache directory ensured: ${this.cacheDir}`);
     } catch (error) {
       logger.error("Failed to create cache directory", error);
@@ -69,9 +85,343 @@ export class MetadataCacheService {
   }
 
   /**
-   * Read the cache file, returns empty cache if file doesn't exist
+   * Load cache from disk into memory
    */
-  private async readCache(): Promise<MetadataCache> {
+  private async loadFromDisk(): Promise<void> {
+    try {
+      const data = await fs.readFile(this.cacheFilePath, "utf-8");
+      const diskCache = JSON.parse(data) as {
+        entries?: Record<string, ExtendedCacheEntry>;
+        stats?: { hits: number; misses: number };
+      };
+
+      if (diskCache.entries) {
+        this.memoryCache = new Map(Object.entries(diskCache.entries));
+      }
+      if (diskCache.stats) {
+        this.stats = diskCache.stats;
+      }
+    } catch (error) {
+      // Silently handle ENOENT (file doesn't exist) and JSON parse errors
+      // by starting with an empty cache
+      this.memoryCache = new Map();
+    }
+  }
+
+  /**
+   * Save cache to disk
+   */
+  private async saveToDisk(): Promise<void> {
+    // Ensure directory exists before writing
+    try {
+      await fs.mkdir(this.cacheDir, { recursive: true });
+    } catch {
+      // Directory might already exist, continue
+    }
+
+    const cacheData = {
+      entries: Object.fromEntries(this.memoryCache),
+      stats: this.stats,
+      savedAt: new Date().toISOString(),
+    };
+
+    // On Windows, atomic rename can fail if the temp file doesn't exist yet.
+    // Write directly to the target file instead.
+    try {
+      await fs.writeFile(
+        this.cacheFilePath,
+        JSON.stringify(cacheData, null, 2),
+        "utf-8",
+      );
+    } catch (error) {
+      logger.error("Failed to save cache to disk", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Acquire write lock for atomic operations
+   */
+  private async acquireLock<T>(operation: () => Promise<T>): Promise<T> {
+    // Wait for previous lock to be released
+    await this.writeLock;
+    
+    // Create new lock that will be released when operation completes
+    let resolveLock: () => void;
+    const newLock = new Promise<void>((resolve) => {
+      resolveLock = resolve;
+    });
+    this.writeLock = newLock;
+
+    try {
+      return await operation();
+    } catch (error) {
+      // Re-throw error after releasing lock
+      throw error;
+    } finally {
+      resolveLock!();
+    }
+  }
+
+  /**
+   * Get cached value by key
+   */
+  async get(key: string): Promise<unknown | null> {
+    await this.initialize();
+
+    const entry = this.memoryCache.get(key);
+
+    if (!entry) {
+      this.stats.misses++;
+      return null;
+    }
+
+    // Check if expired
+    if (entry.ttl !== null && Date.now() - entry.timestamp > entry.ttl) {
+      this.memoryCache.delete(key);
+      this.stats.misses++;
+      return null;
+    }
+
+    // Check if file-based entry is stale
+    if (entry.filePath) {
+      const isStaleEntry = await this.isFileStale(entry);
+      if (isStaleEntry) {
+        this.memoryCache.delete(key);
+        this.stats.misses++;
+        return null;
+      }
+    }
+
+    this.stats.hits++;
+    return entry.value;
+  }
+
+  /**
+   * Set cached value with optional TTL
+   */
+  async set(
+    key: string,
+    value: unknown,
+    options?: { ttl?: number; filePath?: string }
+  ): Promise<void> {
+    await this.initialize();
+
+    await this.acquireLock(async () => {
+      let fileMtime: number | undefined;
+
+      // If filePath is provided, get the file's modification time
+      if (options?.filePath) {
+        try {
+          const stats = await fs.stat(options.filePath);
+          fileMtime = stats.mtimeMs;
+        } catch {
+          // File doesn't exist, store without file tracking
+        }
+      }
+
+      // Serialize/deserialize to match JSON behavior (converts Dates to strings)
+      // Also converts undefined to null since JSON.stringify(undefined) is undefined
+      const serializedValue = value === undefined 
+        ? null 
+        : JSON.parse(JSON.stringify(value));
+
+      const entry: ExtendedCacheEntry = {
+        value: serializedValue,
+        timestamp: Date.now(),
+        ttl: options?.ttl ?? this.maxAge,
+        filePath: options?.filePath,
+        fileMtime,
+      };
+
+      this.memoryCache.set(key, entry);
+
+      // Enforce max entries limit (FIFO)
+      if (this.memoryCache.size > this.maxEntries) {
+        const firstKey = this.memoryCache.keys().next().value;
+        if (firstKey !== undefined) {
+          this.memoryCache.delete(firstKey);
+        }
+      }
+
+      // Persist to disk
+      await this.saveToDisk();
+    });
+  }
+
+  /**
+   * Delete a cached entry
+   */
+  async delete(key: string): Promise<void> {
+    await this.initialize();
+
+    await this.acquireLock(async () => {
+      this.memoryCache.delete(key);
+      await this.saveToDisk();
+    });
+  }
+
+  /**
+   * Clear all cached entries
+   */
+  async clear(): Promise<void> {
+    await this.initialize();
+
+    await this.acquireLock(async () => {
+      this.memoryCache.clear();
+      this.stats = { hits: 0, misses: 0 };
+      await this.saveToDisk();
+    });
+  }
+
+  /**
+   * Check if a key exists in cache
+   */
+  async has(key: string): Promise<boolean> {
+    const value = await this.get(key);
+    return value !== null;
+  }
+
+  /**
+   * Check if a file-based cache entry is stale
+   */
+  private async isFileStale(entry: ExtendedCacheEntry): Promise<boolean> {
+    if (!entry.filePath) return false;
+
+    try {
+      const stats = await fs.stat(entry.filePath);
+      // If file has been modified since cache was created, it's stale
+      if (entry.fileMtime && stats.mtimeMs !== entry.fileMtime) {
+        return true;
+      }
+    } catch {
+      // File doesn't exist, treat as stale
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if a key is stale (for file-based caching)
+   */
+  async isStale(key: string): Promise<boolean> {
+    await this.initialize();
+
+    const entry = this.memoryCache.get(key);
+    if (!entry) return true;
+
+    return this.isFileStale(entry);
+  }
+
+  /**
+   * Prune expired entries
+   */
+  async prune(): Promise<void> {
+    await this.initialize();
+
+    await this.acquireLock(async () => {
+      const now = Date.now();
+      const keysToDelete: string[] = [];
+
+      for (const [key, entry] of this.memoryCache) {
+        if (entry.ttl !== null && now - entry.timestamp > entry.ttl) {
+          keysToDelete.push(key);
+        }
+      }
+
+      for (const key of keysToDelete) {
+        this.memoryCache.delete(key);
+      }
+
+      if (keysToDelete.length > 0) {
+        await this.saveToDisk();
+      }
+    });
+  }
+
+  /**
+   * Get cache statistics
+   */
+  async getStats(): Promise<CacheStats> {
+    await this.initialize();
+
+    let size = 0;
+    for (const entry of this.memoryCache.values()) {
+      size += JSON.stringify(entry).length;
+    }
+
+    return {
+      entries: this.memoryCache.size,
+      size,
+      hits: this.stats.hits,
+      misses: this.stats.misses,
+    };
+  }
+
+  // Legacy methods for backward compatibility with file-based caching
+
+  /**
+   * Get cached metadata for a file if valid
+   */
+  async getFileMetadata(filePath: string): Promise<MetadataCacheEntry | null> {
+    try {
+      // Get current file stats
+      let stats;
+      try {
+        stats = await fs.stat(filePath);
+      } catch (error) {
+        logger.debug(`File not accessible for cache check: ${filePath}`);
+        return null;
+      }
+
+      const cache = await this.readLegacyCache();
+      const entry = cache.entries.find((e) => e.filePath === filePath);
+
+      if (!entry) {
+        logger.debug(`Cache miss: ${filePath}`);
+        return null;
+      }
+
+      // Validate cache entry
+      const currentHash = this.generateFileHash(filePath, stats.mtimeMs);
+      const isExpired = Date.now() - entry.cachedAt.getTime() > this.maxAge;
+      const isHashValid = entry.fileHash === currentHash;
+
+      if (isExpired || !isHashValid) {
+        logger.debug(`Cache entry invalidated for: ${filePath}`, {
+          expired: isExpired,
+          hashValid: isHashValid,
+        });
+
+        // Remove invalid entry in background
+        this.invalidate(filePath).catch((err) => {
+          logger.warn(`Failed to invalidate stale entry for ${filePath}`, err);
+        });
+
+        return null;
+      }
+
+      logger.debug(`Cache hit: ${filePath}`, {
+        cachedAt: entry.cachedAt,
+        type: entry.audioMetadata
+          ? "audio"
+          : entry.imageMetadata
+            ? "image"
+            : "unknown",
+      });
+
+      return entry;
+    } catch (error) {
+      logger.error(`Error getting cache for ${filePath}`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Read the legacy cache file
+   */
+  private async readLegacyCache(): Promise<MetadataCache> {
     try {
       const data = await fs.readFile(this.cacheFilePath, "utf-8");
       const cache = JSON.parse(data) as MetadataCache;
@@ -143,87 +493,11 @@ export class MetadataCacheService {
   }
 
   /**
-   * Acquire write lock for atomic operations
-   */
-  private async acquireLock<T>(operation: () => Promise<T>): Promise<T> {
-    const release = await this.writeLock;
-    let resolveLock: () => void;
-
-    this.writeLock = new Promise((resolve) => {
-      resolveLock = resolve;
-    });
-
-    try {
-      const result = await operation();
-      return result;
-    } finally {
-      resolveLock!();
-    }
-  }
-
-  /**
-   * Get cached metadata for a file if valid
-   */
-  async get(filePath: string): Promise<MetadataCacheEntry | null> {
-    try {
-      // Get current file stats
-      let stats;
-      try {
-        stats = await fs.stat(filePath);
-      } catch (error) {
-        logger.debug(`File not accessible for cache check: ${filePath}`);
-        return null;
-      }
-
-      const cache = await this.readCache();
-      const entry = cache.entries.find((e) => e.filePath === filePath);
-
-      if (!entry) {
-        logger.debug(`Cache miss: ${filePath}`);
-        return null;
-      }
-
-      // Validate cache entry
-      const currentHash = this.generateFileHash(filePath, stats.mtimeMs);
-      const isExpired = Date.now() - entry.cachedAt.getTime() > this.maxAge;
-      const isHashValid = entry.fileHash === currentHash;
-
-      if (isExpired || !isHashValid) {
-        logger.debug(`Cache entry invalidated for: ${filePath}`, {
-          expired: isExpired,
-          hashValid: isHashValid,
-        });
-
-        // Remove invalid entry in background
-        this.invalidate(filePath).catch((err) => {
-          logger.warn(`Failed to invalidate stale entry for ${filePath}`, err);
-        });
-
-        return null;
-      }
-
-      logger.debug(`Cache hit: ${filePath}`, {
-        cachedAt: entry.cachedAt,
-        type: entry.audioMetadata
-          ? "audio"
-          : entry.imageMetadata
-            ? "image"
-            : "unknown",
-      });
-
-      return entry;
-    } catch (error) {
-      logger.error(`Error getting cache for ${filePath}`, error);
-      return null;
-    }
-  }
-
-  /**
    * Cache metadata for a file
    */
-  async set(
+  async setFileMetadata(
     filePath: string,
-    metadata: AudioMetadata | ImageMetadata,
+    metadata: AudioMetadata | ImageMetadata
   ): Promise<void> {
     await this.acquireLock(async () => {
       try {
@@ -232,7 +506,7 @@ export class MetadataCacheService {
         const fileHash = this.generateFileHash(filePath, stats.mtimeMs);
 
         // Read current cache
-        const cache = await this.readCache();
+        const cache = await this.readLegacyCache();
 
         // Determine metadata type
         const isAudioMetadata =
@@ -255,7 +529,7 @@ export class MetadataCacheService {
 
         // Remove existing entry if present
         const existingIndex = cache.entries.findIndex(
-          (e) => e.filePath === filePath,
+          (e) => e.filePath === filePath
         );
         if (existingIndex !== -1) {
           cache.entries.splice(existingIndex, 1);
@@ -268,10 +542,10 @@ export class MetadataCacheService {
         if (cache.entries.length > this.maxEntries) {
           const removed = cache.entries.splice(
             0,
-            cache.entries.length - this.maxEntries,
+            cache.entries.length - this.maxEntries
           );
           logger.debug(
-            `Removed ${removed.length} oldest cache entries due to maxEntries limit`,
+            `Removed ${removed.length} oldest cache entries due to maxEntries limit`
           );
         }
 
@@ -305,12 +579,110 @@ export class MetadataCacheService {
   }
 
   /**
+   * Cache metadata for multiple files in bulk
+   */
+  async setBatch(
+    metadataEntries: Array<{
+      filePath: string;
+      metadata: AudioMetadata | ImageMetadata;
+    }>
+  ): Promise<void> {
+    await this.acquireLock(async () => {
+      try {
+        // Read current cache
+        const cache = await this.readLegacyCache();
+
+        // Process each entry
+        for (const { filePath, metadata } of metadataEntries) {
+          try {
+            // Get current file stats
+            const stats = await fs.stat(filePath);
+            const fileHash = this.generateFileHash(filePath, stats.mtimeMs);
+
+            // Determine metadata type
+            const isAudioMetadata =
+              "format" in metadata && "hasEmbeddedArtwork" in metadata;
+            const isImageMetadata = "width" in metadata && "height" in metadata;
+
+            // Create or update entry
+            const newEntry: MetadataCacheEntry = {
+              filePath,
+              fileHash,
+              lastModified: stats.mtimeMs,
+              audioMetadata: isAudioMetadata
+                ? (metadata as AudioMetadata)
+                : undefined,
+              imageMetadata: isImageMetadata
+                ? (metadata as ImageMetadata)
+                : undefined,
+              cachedAt: new Date(),
+            };
+
+            // Remove existing entry if present
+            const existingIndex = cache.entries.findIndex(
+              (e) => e.filePath === filePath
+            );
+            if (existingIndex !== -1) {
+              cache.entries.splice(existingIndex, 1);
+            }
+
+            // Add new entry
+            cache.entries.push(newEntry);
+          } catch (error) {
+            logger.error(`Failed to cache metadata for ${filePath}`, error);
+          }
+        }
+
+        // Enforce max entries limit (FIFO)
+        if (cache.entries.length > this.maxEntries) {
+          const removed = cache.entries.splice(
+            0,
+            cache.entries.length - this.maxEntries
+          );
+          logger.debug(
+            `Removed ${removed.length} oldest cache entries due to maxEntries limit`
+          );
+        }
+
+        // Update metadata
+        cache.updatedAt = new Date();
+
+        // Write cache
+        await this.writeCache(cache);
+
+        logger.info(
+          `Cached ${metadataEntries.length} metadata entries in bulk`
+        );
+      } catch (error) {
+        logger.error(`Failed to cache metadata in bulk`, error);
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Get cached metadata for multiple files
+   */
+  async getBatch(filePaths: string[]): Promise<MetadataCacheEntry[]> {
+    const results: MetadataCacheEntry[] = [];
+
+    for (const filePath of filePaths) {
+      const entry = await this.getFileMetadata(filePath);
+      if (entry) {
+        results.push(entry);
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Remove a specific entry from the cache
    */
   async invalidate(filePath: string): Promise<void> {
     await this.acquireLock(async () => {
       try {
-        const cache = await this.readCache();
+        const cache = await this.readLegacyCache();
         const initialLength = cache.entries.length;
 
         cache.entries = cache.entries.filter((e) => e.filePath !== filePath);
@@ -350,11 +722,16 @@ export class MetadataCacheService {
   }
 
   /**
-   * Get cache statistics
+   * Get legacy cache statistics
    */
-  async getStats(): Promise<CacheStats> {
+  async getFileCacheStats(): Promise<{
+    totalEntries: number;
+    audioEntries: number;
+    imageEntries: number;
+    cacheSize: number;
+  }> {
     try {
-      const cache = await this.readCache();
+      const cache = await this.readLegacyCache();
 
       let audioEntries = 0;
       let imageEntries = 0;
@@ -390,7 +767,7 @@ export class MetadataCacheService {
   async cleanup(): Promise<void> {
     await this.acquireLock(async () => {
       try {
-        const cache = await this.readCache();
+        const cache = await this.readLegacyCache();
         const now = Date.now();
         const initialLength = cache.entries.length;
 
@@ -439,8 +816,8 @@ export class MetadataCacheService {
   /**
    * Check if a file has valid cached metadata
    */
-  async has(filePath: string): Promise<boolean> {
-    const entry = await this.get(filePath);
+  async hasFile(filePath: string): Promise<boolean> {
+    const entry = await this.getFileMetadata(filePath);
     return entry !== null;
   }
 
@@ -448,7 +825,7 @@ export class MetadataCacheService {
    * Get all cached entries (for debugging/admin purposes)
    */
   async getAllEntries(): Promise<MetadataCacheEntry[]> {
-    const cache = await this.readCache();
+    const cache = await this.readLegacyCache();
     return [...cache.entries];
   }
 }

@@ -2,6 +2,14 @@
 
 **Version:** 3.2.8 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
+**New Features in v3.2.8:**
+
+- Enhanced metadata extraction for music and photos
+- Music organization by Artist/Album/Title structure
+- Photo organization by date (YYYY/MM/DD) using EXIF data
+- Security screening with metadata-based threat detection
+- Metadata cache system for faster operations
+
 [Why Us](#why-specialized-tools) • [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
 ---
@@ -11,7 +19,7 @@
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-631%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-983%20passing-success.svg)](tests/)
 
 > **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
 
@@ -81,17 +89,19 @@ Try these commands in your AI client:
 
 You have two options to run File Organizer MCP:
 
-| Method | Command | Best For |
-|--------|---------|----------|
-| **npx (no install)** | `npx file-organizer-mcp --setup` | Trying it out, occasional use |
-| **Global install** | `npm install -g file-organizer-mcp` | Regular use, faster startup |
+| Method               | Command                             | Best For                      |
+| -------------------- | ----------------------------------- | ----------------------------- |
+| **npx (no install)** | `npx file-organizer-mcp --setup`    | Trying it out, occasional use |
+| **Global install**   | `npm install -g file-organizer-mcp` | Regular use, faster startup   |
 
 **Using npx:**
+
 - No installation needed - downloads on first run
 - Always gets the latest version
 - Slightly slower on first run
 
 **Using npm install -g:**
+
 - Install once: `npm install -g file-organizer-mcp`
 - Then run anytime: `file-organizer-mcp --setup` or `file-organizer-setup`
 - Faster startup, works offline
@@ -121,7 +131,9 @@ The setup wizard auto-detects and configures:
 - **🤖 Auto-categorization** - Intelligently organizes files into 12+ categories
 - **📅 Smart Scheduling** - Cron-based automatic organization with per-directory configuration
 - **🔍 Duplicate Detection** - Finds duplicate files using SHA-256 content hashing
-- **🏷️ Smart Metadata** - Extracts EXIF/ID3 tags for content-aware organization
+- **🏷️ Enhanced Metadata Extraction** - Extracts EXIF for photos, ID3 tags for music, and detailed metadata for documents for content-aware organization
+- **🎵 Music Organization** - Organizes music files by Artist/Album/Title structure using ID3 metadata
+- **📸 Photo Organization** - Organizes photos by date (YYYY/MM/DD) using EXIF metadata
 - **✏️ Batch Renaming** - Flexible renaming with patterns, regex, and case conversion
 - **🛡️ Smart Conflict Resolution** - Handles filename conflicts (rename/skip/overwrite)
 - **👁️ Dry Run Mode** - Preview changes before executing
@@ -136,6 +148,8 @@ The setup wizard auto-detects and configures:
 - **📜 Audit Trail** - Complete logging of all operations for transparency
 - **📖 Secure File Reading** - Read file contents with 8-layer security validation, encoding support (utf-8/base64/binary), partial reads, and SHA-256 integrity verification
 - **💻 Multi-Platform Support** - Native support for Windows, macOS, and Linux
+- **🔒 Security Screening** - Enhanced security with metadata-based threat detection
+- **📚 Metadata Cache System** - Efficient metadata caching for faster operations
 
 ### Security Features
 
@@ -154,6 +168,13 @@ This server implements a multi-layered security architecture designed to operate
 - **Strict Validation**:
   - Windows Reserved Names (CON, NUL, etc.) are blocked.
   - Symbolic links are strictly managed or blocked in critical paths.
+- **Enhanced Security Screening**:
+  - Metadata-based threat detection for sensitive information in files
+  - Malicious content detection using metadata signatures
+  - Security scan results with detailed metadata analysis
+- **Metadata Security**:
+  - Secure handling of sensitive metadata (EXIF GPS coordinates, ID3 personal information)
+  - Option to redact sensitive metadata during organization
 
 ### Limitations
 
@@ -177,10 +198,15 @@ Run `npx file-organizer-mcp --setup` for guided configuration:
 - **📅 Schedule Setup** - Configure automatic organization schedules
 - **🤖 Claude Integration** - Auto-generates `claude_desktop_config.json`
 
-### What's New in V3.2.0
+### What's New in V3.2.8
 
 **New Features:**
 
+- **Enhanced Metadata Extraction** - Extracts EXIF for photos, ID3 tags for music, and detailed metadata for documents
+- **Music Organization** - Organizes music files by Artist/Album/Title structure using ID3 metadata
+- **Photo Organization** - Organizes photos by date (YYYY/MM/DD) using EXIF metadata
+- **Security Screening** - Enhanced security with metadata-based threat detection
+- **Metadata Cache System** - Efficient metadata caching for faster operations
 - **File-reader tool** - Read files with configurable encoding and line limits
 
 See [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -269,13 +295,13 @@ Read file contents with comprehensive security checks. Supports text, binary, an
 ```typescript
 // Read a text file
 file_organizer_read_file({
-  path: "/home/user/documents/report.txt"
+  path: "/home/user/documents/report.txt",
 });
 
 // Read image as base64
 file_organizer_read_file({
   path: "/home/user/photos/avatar.png",
-  encoding: "base64"
+  encoding: "base64",
 });
 
 // Read partial content (first 1KB of log)
@@ -283,7 +309,7 @@ file_organizer_read_file({
   path: "/var/log/app.log",
   offset: 0,
   maxBytes: 1024,
-  response_format: "text"
+  response_format: "text",
 });
 ```
 
@@ -521,6 +547,49 @@ List all directories currently being watched with their schedules.
 
 ---
 
+### Metadata Tools
+
+#### `file_organizer_inspect_metadata`
+
+Inspects a file and returns comprehensive but privacy-safe metadata. For images, extracts EXIF data (date, camera, dimensions). For audio, extracts ID3 tags (artist, album, title). Excludes sensitive data like GPS coordinates by default.
+
+**Parameters:**
+
+- `file` (string, required) - Full path to the file to inspect
+- `response_format` ('json'|'markdown', optional) - Output format
+
+**Annotations:** ✅ Read-only • ⚡ Idempotent • 🔍 Metadata extraction
+
+**Example:**
+
+```typescript
+// Inspect a music file
+file_organizer_inspect_metadata({
+  file: "/Users/john/Music/song.mp3",
+});
+// Output:
+// Title: "Shape of You"
+// Artist: "Ed Sheeran"
+// Album: "÷ (Divide)"
+// Year: 2017
+// Format: "MP3"
+// Duration: 233 seconds
+
+// Inspect a photo
+file_organizer_inspect_metadata({
+  file: "/Users/john/Pictures/photo.jpg",
+});
+// Output:
+// Camera: "Canon EOS 5D Mark IV"
+// Date Taken: "2023-10-15 14:30:00"
+// Dimensions: 6000x4000
+// ISO: 400
+// Aperture: f/2.8
+// Shutter Speed: 1/200
+```
+
+---
+
 ### Utility Tools
 
 #### `file_organizer_get_categories`
@@ -682,7 +751,98 @@ Result: Clear visibility into space usage with actionable insights
 
 ---
 
-### Workflow 5: Set Up Automatic Organization
+### Workflow 5: Music Organization
+
+```
+User: "Claude, organize my music folder at C:/Users/[YOUR_USERNAME]/Music"
+
+Claude:
+1. Scans directory → Shows 456 music files, 2.3 GB
+2. Extracts metadata → Reads ID3 tags for artist, album, and title
+3. Previews organization → Shows planned structure: Artist/Album/Title.mp3
+4. Asks for confirmation
+5. Organizes files → ✅ Organized 456 music files into 32 artist folders
+
+Result: Music files organized by Artist/Album/Title structure using ID3 metadata
+
+Before:
+├── Downloads/
+│   ├── song1.mp3
+│   ├── track02.mp3
+│   └── music_file.mp3
+
+After:
+├── Music/
+│   ├── Coldplay/
+│   │   ├── A Rush of Blood to the Head/
+│   │   │   ├── Clocks.mp3
+│   │   │   └── The Scientist.mp3
+│   └── Radiohead/
+│       ├── OK Computer/
+│       │   ├── Paranoid Android.mp3
+│       │   └── Karma Police.mp3
+```
+
+---
+
+### Workflow 6: Photo Organization
+
+```
+User: "Claude, organize my photos at C:/Users/[YOUR_USERNAME]/Pictures"
+
+Claude:
+1. Scans directory → Shows 1,234 photos, 4.5 GB
+2. Extracts EXIF metadata → Reads date taken from EXIF tags
+3. Previews organization → Shows planned structure: YYYY/MM/DD
+4. Asks for confirmation
+5. Organizes files → ✅ Organized 1,234 photos into date-based folders
+
+Result: Photos organized by capture date (YYYY/MM/DD) using EXIF metadata
+
+Before:
+├── Pictures/
+│   ├── IMG_001.jpg
+│   ├── photo123.png
+│   └── DSC_4567.raw
+
+After:
+├── Pictures/
+│   ├── 2023/
+│   │   ├── 12/
+│   │   │   ├── 25/
+│   │   │   │   ├── IMG_001.jpg
+│   │   │   └── 31/
+│   │   │       └── photo123.png
+│   └── 2024/
+│       ├── 01/
+│       │   └── 15/
+│       │       └── DSC_4567.raw
+```
+
+---
+
+### Workflow 7: Security Screening with Metadata
+
+```
+User: "Claude, scan my Documents folder for security issues"
+
+Claude:
+1. Scans directory → Shows 567 documents, 1.2 GB
+2. Extracts metadata → Reads file metadata and content signatures
+3. Performs security screening →
+   - Found 3 files with sensitive metadata
+   - Found 1 file with potentially malicious content
+4. Shows detailed report →
+   - "report.pdf" contains EXIF GPS coordinates
+   - "resume.docx" contains personal identification information
+5. Suggests actions → Redact metadata, quarantine file
+
+Result: Comprehensive security scan with metadata-based threat detection
+```
+
+---
+
+### Workflow 8: Set Up Automatic Organization
 
 ```
 User: "Claude, automatically organize my Downloads folder every day at 9am"
@@ -830,6 +990,139 @@ For advanced cron-based scheduling, use the `file_organizer_watch_directory` too
 2. ✅ Check files aren't locked by other programs
 3. ✅ Ensure sufficient disk space
 4. ✅ Review error messages in operation summary
+
+## Technical Stack 🛠️
+
+File Organizer MCP is built with modern web technologies and follows strict security practices:
+
+### Core Dependencies
+
+- **MCP Server:** `@modelcontextprotocol/sdk` - Model Context Protocol implementation
+- **Security:** Zod schema validation, path traversal protection
+- **Metadata Extraction:**
+  - `music-metadata` - ID3 tag extraction for audio files
+  - `exif-parser` - EXIF metadata extraction for images
+- **Scheduling:** `node-cron` - Cron-based schedule management
+- **Interactive UI:** Ink + React - Terminal user interface
+- **Prompts:** `@inquirer/prompts` - Interactive CLI prompts
+- **Utilities:** Chalk (color), minimatch (glob patterns)
+
+### Security Features
+
+- **8-layer path validation** - Blocks traversal attacks and URI encoding tricks
+- **Sensitive file detection** - Blocks access to .env, .ssh, passwords, keys
+- **Rate limiting** - 120 requests/minute, 2000 requests/hour
+- **TOCTOU protection** - File descriptor-based operations
+- **Metadata security** - Redact sensitive metadata (GPS, personal info)
+
+### Performance Optimizations
+
+- **Metadata caching** - 7-day cache with file hash validation
+- **Parallel processing** - Configurable concurrency for batch operations
+- **Stream processing** - Handles large files without memory issues
+- **Memory limits** - Prevents excessive resource consumption
+
+---
+
+## Architecture 🏗️
+
+### Screen-Then-Enrich Architecture
+
+The File Organizer MCP server implements a "Screen-Then-Enrich" architecture for secure and efficient file operations:
+
+```
+┌───────────────────────────────────────────────────────────┐
+│                     MCP Client (LLM)                      │
+└─────────────────────────┬─────────────────────────────────┘
+                           │ JSON-RPC 2.0
+┌─────────────────────────▼─────────────────────────────────┐
+│                    MCP Server Layer                        │
+│  (server.ts - Protocol Handler)                            │
+└─────────────────────────┬─────────────────────────────────┘
+                           │
+┌─────────────────────────▼─────────────────────────────────┐
+│                     Security Screening                     │
+│  - Path validation & containment checks                    │
+│  - Sensitive file detection                                │
+│  - Rate limiting                                           │
+└─────────────────────────┬─────────────────────────────────┘
+                           │
+┌─────────────────────────▼─────────────────────────────────┐
+│                   Metadata Enrichment                      │
+│  - EXIF extraction for images (camera, date, GPS)          │
+│  - ID3 extraction for audio (artist, album, title)         │
+│  - Document metadata (PDF, DOCX properties)                │
+└─────────────────────────┬─────────────────────────────────┘
+                           │
+┌─────────────────────────▼─────────────────────────────────┐
+│                    Services Layer                           │
+│  ┌────────────┬──────────────┬─────────────┬──────────┐    │
+│  │ Path       │ Organizer    │ Hash        │ Scanner  │    │
+│  │ Validator  │ Service      │ Calculator  │ Service  │    │
+│  └────────────┴──────────────┴─────────────┴──────────┘    │
+└─────────────────────────┬─────────────────────────────────┘
+                           │
+┌─────────────────────────▼─────────────────────────────────┐
+│                    File System                               │
+└───────────────────────────────────────────────────────────┘
+```
+
+### Key Architecture Principles
+
+1. **Security First** - Multi-layer validation before any file operations
+2. **Metadata-Driven** - Content-aware organization using extracted metadata
+3. **Caching Strategy** - 7-day metadata cache with file hash validation
+4. **Batch Processing** - Configurable concurrency for large operations
+5. **Atomic Operations** - Safe file operations with rollback support
+
+---
+
+## API Documentation 📚
+
+### New Metadata APIs
+
+#### `file_organizer_inspect_metadata`
+
+**Description:** Extracts comprehensive metadata from files with privacy controls
+
+**Parameters:**
+
+- `file`: string (required) - Full path to the file
+- `response_format`: 'json' | 'markdown' (optional, default: 'markdown')
+
+**Returns:**
+
+- For images: EXIF data (camera, date, dimensions, ISO, aperture)
+- For audio: ID3 tags (artist, album, title, year, genre)
+- For documents: file properties
+
+#### Metadata Cache System
+
+**Configuration:**
+
+```json
+{
+  "metadataCache": {
+    "enabled": true,
+    "maxAge": 604800000, // 7 days in ms
+    "maxEntries": 10000,
+    "cacheDir": ".cache"
+  }
+}
+```
+
+**Cache Stats:**
+
+```typescript
+// Get cache statistics
+const stats = await getCacheStats();
+// {
+//   totalEntries: 1500,
+//   audioEntries: 800,
+//   imageEntries: 700,
+//   cacheSize: 256000
+// }
+```
 
 ---
 

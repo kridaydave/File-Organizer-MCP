@@ -305,13 +305,8 @@ export class ContentScreeningService {
         result.passed = false;
       }
 
-      // Log the screening result
-      logger.info("File screened", {
-        filePath,
-        threatLevel: result.threatLevel,
-        issues: result.issues.length,
-        passed: result.passed,
-      });
+      // Log the screening result with metadata
+      logger.logScanResult(filePath, result);
     } catch (error) {
       logger.error("Screening error", error, { filePath });
       result.issues.push({

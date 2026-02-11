@@ -24,10 +24,23 @@ export interface AudioMetadata {
   extractedAt: Date;
 }
 
+export interface ProgressUpdate {
+  processed: number;
+  total: number;
+  currentFile?: string;
+  currentStage?: "reading" | "extracting" | "caching";
+  errors: number;
+  warnings: number;
+}
+
+export type ProgressCallback = (update: ProgressUpdate) => void;
+
 export interface AudioMetadataOptions {
   extractArtwork?: boolean;
   extractLyrics?: boolean;
   cacheResults?: boolean;
+  concurrency?: number;
+  onProgress?: ProgressCallback;
 }
 
 interface ID3Frame {
@@ -117,23 +130,69 @@ export class AudioMetadataService {
     filePaths: string[],
     options: AudioMetadataOptions = {},
   ): Promise<AudioMetadata[]> {
-    logger.info(`Batch extracting metadata for ${filePaths.length} files`);
+    const { concurrency = 4, onProgress } = options;
+    logger.info(
+      `Batch extracting metadata for ${filePaths.length} files with concurrency ${concurrency}`,
+    );
 
     const results: AudioMetadata[] = [];
+    let processed = 0;
+    let errors = 0;
+    let warnings = 0;
 
-    for (const filePath of filePaths) {
-      try {
-        const metadata = await this.extract(filePath, options);
-        results.push(metadata);
-      } catch (error) {
-        logger.error(`Failed to extract metadata from ${filePath}:`, error);
-        results.push(
-          this.createEmptyMetadata(
+    // Process files in parallel with configurable concurrency
+    const batches = [];
+    for (let i = 0; i < filePaths.length; i += concurrency) {
+      batches.push(filePaths.slice(i, i + concurrency));
+    }
+
+    for (const batch of batches) {
+      const batchPromises = batch.map(async (filePath) => {
+        try {
+          onProgress?.({
+            processed,
+            total: filePaths.length,
+            currentFile: filePath,
+            currentStage: "reading",
+            errors,
+            warnings,
+          });
+
+          const metadata = await this.extract(filePath, options);
+
+          processed++;
+          onProgress?.({
+            processed,
+            total: filePaths.length,
+            currentFile: filePath,
+            currentStage: "extracting",
+            errors,
+            warnings,
+          });
+
+          return metadata;
+        } catch (error) {
+          logger.error(`Failed to extract metadata from ${filePath}:`, error);
+          processed++;
+          errors++;
+          onProgress?.({
+            processed,
+            total: filePaths.length,
+            currentFile: filePath,
+            currentStage: "extracting",
+            errors,
+            warnings,
+          });
+
+          return this.createEmptyMetadata(
             filePath,
             path.extname(filePath).toLowerCase().replace(".", ""),
-          ),
-        );
-      }
+          );
+        }
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
     }
 
     logger.info(`Batch extraction complete: ${results.length} files processed`);
@@ -193,12 +252,14 @@ export class AudioMetadataService {
       const revision: number = buffer[4]!;
       const flags: number = buffer[5]!;
 
-      // Calculate tag size (synchsafe integer)
+      // Calculate tag size (synchsafe integer for ID3v2.4, regular for ID3v2.2/2.3)
       const size: number =
-        ((buffer[6]! & 0x7f) << 21) |
-        ((buffer[7]! & 0x7f) << 14) |
-        ((buffer[8]! & 0x7f) << 7) |
-        (buffer[9]! & 0x7f);
+        version >= 4
+          ? ((buffer[6]! & 0x7f) << 21) |
+            ((buffer[7]! & 0x7f) << 14) |
+            ((buffer[8]! & 0x7f) << 7) |
+            (buffer[9]! & 0x7f)
+          : buffer.readUInt32BE(6);
 
       let offset = 10;
       const extendedHeader = (flags & 0x40) !== 0;
@@ -222,18 +283,16 @@ export class AudioMetadataService {
 
         if (frameId === "\x00\x00\x00\x00") break;
 
+        // Check for APIC frame (embedded artwork)
+        if (frameId === "APIC") {
+          metadata.hasEmbeddedArtwork = true;
+        }
+
         const frameData = buffer.subarray(offset + 10, offset + 10 + frameSize);
         this.parseID3Frame(frameId, frameData, metadata);
 
         offset += 10 + frameSize;
       }
-
-      // Check for embedded artwork
-      metadata.hasEmbeddedArtwork = this.hasEmbeddedArtworkInID3(
-        buffer,
-        offset,
-        endOfTags,
-      );
     }
 
     // Check for ID3v1 at end of file
@@ -427,10 +486,21 @@ export class AudioMetadataService {
           break;
         case 0: // STREAMINFO
           if (blockData.length >= 34) {
-            metadata.sampleRate = (blockData.readUInt32BE(10) >> 12) & 0xfffff;
-            metadata.channels = ((blockData.readUInt32BE(10) >> 4) & 0x07) + 1;
-            metadata.duration =
-              blockData.readUInt32BE(14) / metadata.sampleRate!;
+            // Sample rate is 20 bits starting at bit 80 (byte 10, bit 0)
+            const sampleRateChannelBits = blockData.readUInt32BE(10);
+            metadata.sampleRate = (sampleRateChannelBits >> 12) & 0xfffff;
+            metadata.channels = ((sampleRateChannelBits >> 4) & 0x07) + 1;
+            
+            // Total samples is 36 bits spanning bytes 13-17
+            // Upper 4 bits are in byte 13 (lower nibble), lower 32 bits in bytes 14-17
+            const totalSamplesHigh = blockData[13]! & 0x0f;
+            const totalSamplesLow = blockData.readUInt32BE(14);
+            const totalSamples = (totalSamplesHigh * Math.pow(2, 32)) + totalSamplesLow;
+            
+            // Calculate duration only if we have valid values
+            if (metadata.sampleRate > 0 && totalSamples > 0) {
+              metadata.duration = totalSamples / metadata.sampleRate;
+            }
           }
           break;
       }
@@ -447,15 +517,22 @@ export class AudioMetadataService {
   ): void {
     let offset = 0;
 
-    // Vendor string
+    // Vendor string length (little-endian uint32)
     const vendorLength = data.readUInt32LE(offset);
-    offset += 4 + vendorLength;
+    offset += 4;
+    
+    // Vendor string
+    offset += vendorLength;
 
-    // User comment list length
+    // User comment list length (little-endian uint32)
+    if (offset + 4 > data.length) return;
     const commentCount = data.readUInt32LE(offset);
     offset += 4;
 
-    for (let i = 0; i < commentCount && offset < data.length; i++) {
+    // Parse comments - also continue parsing if there's more data
+    // (some files have incorrect comment counts)
+    let i = 0;
+    while ((i < commentCount || offset < data.length) && offset + 4 <= data.length) {
       const commentLength = data.readUInt32LE(offset);
       offset += 4;
 
@@ -465,7 +542,10 @@ export class AudioMetadataService {
       offset += commentLength;
 
       const separatorIndex = comment.indexOf("=");
-      if (separatorIndex === -1) continue;
+      if (separatorIndex === -1) {
+        i++;
+        continue;
+      }
 
       const field = comment.substring(0, separatorIndex).toUpperCase();
       const value = comment.substring(separatorIndex + 1);
@@ -510,6 +590,7 @@ export class AudioMetadataService {
           }
           break;
       }
+      i++;
     }
   }
 

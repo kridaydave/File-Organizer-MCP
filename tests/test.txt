@@ -1,0 +1,20 @@
+  it("should organize photos by EXIF date", async () => {
+    const testDate = new Date("2023-06-15 14:30:00");
+    await createTestJPEG("photo1.jpg", { dateTaken: testDate });
+    await createTestJPEG("photo2.jpg", { dateTaken: new Date("2023-06-15 15:45:00") });
+    await createTestJPEG("photo3.jpg", { dateTaken: new Date("2023-06-16 10:00:00") });
+
+    const result = await photoOrganizer.organize({
+      sourceDir,
+      targetDir,
+      dateFormat: "YYYY/MM/DD",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.organizedFiles).toBe(3);
+
+    // Verify 2023/06/15 folder exists and contains 2 photos
+    const dateFolder = path.join(targetDir, "2023", "06", "15");
+    const folderContents = await fs.readdir(dateFolder);
+    expect(folderContents.length).toBe(2);
+  });

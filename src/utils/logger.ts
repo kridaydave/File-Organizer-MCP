@@ -3,10 +3,12 @@
  * Structured Logging Utility
  */
 
-export class Logger {
-  private logLevel: 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
-  constructor(level: 'debug' | 'info' | 'warn' | 'error' = 'info') {
+export class Logger {
+  private logLevel: LogLevel;
+
+  constructor(level: LogLevel = "info") {
     this.logLevel = level;
   }
 
@@ -24,19 +26,23 @@ export class Logger {
   }
 
   debug(message: string, context?: Record<string, any>) {
-    this.log('debug', message, context);
+    this.log("debug", message, context);
   }
 
   info(message: string, context?: Record<string, any>) {
-    this.log('info', message, context);
+    this.log("info", message, context);
   }
 
   warn(message: string, context?: Record<string, any>) {
-    this.log('warn', message, context);
+    this.log("warn", message, context);
   }
 
-  error(message: string, error?: Error | unknown, context?: Record<string, any>) {
-    this.log('error', message, {
+  error(
+    message: string,
+    error?: Error | unknown,
+    context?: Record<string, any>,
+  ) {
+    this.log("error", message, {
       ...context,
       error:
         error instanceof Error
@@ -48,12 +54,49 @@ export class Logger {
     });
   }
 
+  /**
+   * Log metadata extraction results
+   */
+  logMetadata(
+    level: LogLevel,
+    message: string,
+    metadata: any,
+    context?: Record<string, any>,
+  ): void {
+    this.log(level, message, {
+      metadata,
+      ...context,
+    });
+  }
+
+  /**
+   * Log security scan results with metadata
+   */
+  logScanResult(filePath: string, scanResult: any, metadata?: any): void {
+    const level =
+      scanResult.threatLevel === "high" || scanResult.threatLevel === "critical"
+        ? "error"
+        : scanResult.threatLevel === "medium"
+          ? "warn"
+          : "info";
+
+    this.log(level, "File analyzed", {
+      filePath,
+      detectedType: scanResult.detectedType,
+      metadata,
+      security: {
+        threatLevel: scanResult.threatLevel,
+        passed: scanResult.passed,
+        issues: scanResult.issues,
+      },
+      duration: scanResult.duration,
+    });
+  }
+
   private shouldLog(level: string): boolean {
-    const levels = ['debug', 'info', 'warn', 'error'];
+    const levels = ["debug", "info", "warn", "error"];
     return levels.indexOf(level) >= levels.indexOf(this.logLevel);
   }
 }
 
-export const logger = new Logger(
-  (process.env.LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error') || 'info'
-);
+export const logger = new Logger((process.env.LOG_LEVEL as LogLevel) || "info");

@@ -4,17 +4,21 @@
  */
 
 import path from "path";
+import { logger } from "../utils/logger.js";
 import type {
   FileWithSize,
   CategoryStats,
   CategoryName,
   CustomRule,
+  AudioMetadata,
+  ImageMetadata,
 } from "../types.js";
 import { CATEGORIES, getCategory } from "../constants.js";
 import { formatBytes } from "../utils/formatters.js";
 import { ContentAnalyzerService } from "./content-analyzer.service.js";
 import { isExecutableSignature } from "../constants/file-signatures.js";
 import { PathValidatorService } from "./path-validator.service.js";
+import { MetadataCacheService } from "./metadata-cache.service.js";
 
 /**
  * Categorizer Service - file categorization by type
@@ -24,7 +28,10 @@ export class CategorizerService {
   private customRules: CustomRule[] = [];
   private pathValidator: PathValidatorService;
 
-  constructor(private contentAnalyzer?: ContentAnalyzerService) {
+  constructor(
+    private contentAnalyzer?: ContentAnalyzerService,
+    private metadataCache?: MetadataCacheService,
+  ) {
     this.pathValidator = new PathValidatorService();
   }
 
@@ -190,20 +197,35 @@ export class CategorizerService {
     category: CategoryName;
     confidence: number;
     warnings: string[];
+    metadata?: AudioMetadata | ImageMetadata;
   }> {
     const warnings: string[] = [];
     let confidence = 0.5;
+    let metadata: AudioMetadata | ImageMetadata | undefined;
 
     // First get extension-based category as fallback
     const fileName = path.basename(filePath);
     const extensionCategory = this.getCategoryByExtension(fileName);
+
+    // Check metadata cache first if available
+    if (this.metadataCache) {
+      const cacheEntry = await this.metadataCache.get(filePath);
+      if (cacheEntry) {
+        metadata = cacheEntry.audioMetadata || cacheEntry.imageMetadata;
+      }
+    }
 
     // If content analyzer is not available, fall back to extension
     if (!this.contentAnalyzer) {
       warnings.push(
         "Content analyzer not available - using extension-based detection",
       );
-      return { category: extensionCategory, confidence: 0.5, warnings };
+      return {
+        category: extensionCategory,
+        confidence: 0.5,
+        warnings,
+        metadata,
+      };
     }
 
     try {
@@ -234,7 +256,12 @@ export class CategorizerService {
           warnings.push(
             "CRITICAL: Executable content disguised as document - potential security threat",
           );
-          return { category: "Suspicious", confidence: 0.95, warnings };
+          return {
+            category: "Suspicious",
+            confidence: 0.95,
+            warnings,
+            metadata,
+          };
         }
       }
 
@@ -248,20 +275,201 @@ export class CategorizerService {
 
       // Return content-detected category if high confidence, otherwise extension
       if (confidence >= 0.7) {
-        return { category: contentCategory, confidence, warnings };
+        logger.logMetadata("info", "File categorized by content", metadata, {
+          filePath,
+          category: contentCategory,
+          confidence,
+          detectedType: analysis.detectedType,
+          mimeType: analysis.mimeType,
+          warnings,
+        });
+        return { category: contentCategory, confidence, warnings, metadata };
       } else {
         warnings.push(
           "Low content confidence - falling back to extension-based categorization",
         );
-        return { category: extensionCategory, confidence: 0.6, warnings };
+        logger.logMetadata(
+          "warn",
+          "File categorized by extension (low content confidence)",
+          metadata,
+          {
+            filePath,
+            category: extensionCategory,
+            confidence: 0.6,
+            detectedType: analysis.detectedType,
+            mimeType: analysis.mimeType,
+            warnings,
+          },
+        );
+        return {
+          category: extensionCategory,
+          confidence: 0.6,
+          warnings,
+          metadata,
+        };
       }
     } catch (error) {
       // On error, fall back to extension-based
       warnings.push(
         `Content analysis failed: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return { category: extensionCategory, confidence: 0.4, warnings };
+      logger.logMetadata("error", "Content analysis failed", metadata, {
+        filePath,
+        category: extensionCategory,
+        confidence: 0.4,
+        warnings,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        category: extensionCategory,
+        confidence: 0.4,
+        warnings,
+        metadata,
+      };
     }
+  }
+
+  /**
+   * Get category with metadata for enhanced security detection
+   */
+  async getCategoryWithMetadata(filePath: string): Promise<{
+    category: CategoryName;
+    confidence: number;
+    warnings: string[];
+    metadata?: AudioMetadata | ImageMetadata;
+  }> {
+    return this.getCategoryByContent(filePath);
+  }
+
+  /**
+   * Check if file should be in quarantine based on metadata + security
+   */
+  async isQuarantined(filePath: string): Promise<boolean> {
+    const securityResult =
+      await this.getSecurityClassificationWithMetadata(filePath);
+    return (
+      securityResult.threatLevel === "high" ||
+      securityResult.threatLevel === "medium"
+    );
+  }
+
+  /**
+   * Get enhanced security classification with metadata context
+   */
+  async getSecurityClassificationWithMetadata(filePath: string): Promise<{
+    isExecutable: boolean;
+    isSuspicious: boolean;
+    threatLevel: "none" | "low" | "medium" | "high";
+    reason?: string;
+    metadata?: any;
+  }> {
+    const fileName = path.basename(filePath);
+    const extension = path.extname(fileName).toLowerCase();
+
+    // Get metadata from cache if available
+    let metadata: AudioMetadata | ImageMetadata | undefined;
+    if (this.metadataCache) {
+      const cacheEntry = await this.metadataCache.get(filePath);
+      if (cacheEntry) {
+        metadata = cacheEntry.audioMetadata || cacheEntry.imageMetadata;
+      }
+    }
+
+    // Default: no threat
+    let result: {
+      isExecutable: boolean;
+      isSuspicious: boolean;
+      threatLevel: "none" | "low" | "medium" | "high";
+      reason?: string;
+      metadata?: any;
+    } = {
+      isExecutable: false,
+      isSuspicious: false,
+      threatLevel: "none",
+      metadata,
+    };
+
+    // Check for double extensions
+    if (this.hasDoubleExtension(fileName)) {
+      result = {
+        isExecutable: this.isExecutableExtension(
+          this.getRealExtension(fileName),
+        ),
+        isSuspicious: true,
+        threatLevel: "high",
+        reason: "Double extension detected - possible spoofing attempt",
+        metadata,
+      };
+    }
+
+    // If content analyzer available, do deeper analysis
+    if (this.contentAnalyzer) {
+      try {
+        const validatedPath = await this.pathValidator.validatePath(filePath, {
+          requireExists: true,
+        });
+
+        const analysis = await this.contentAnalyzer.analyze(validatedPath);
+
+        // Check if executable disguised as document
+        if (
+          this.isExecutableDisguisedAsDocument(analysis.detectedType, fileName)
+        ) {
+          return {
+            isExecutable: true,
+            isSuspicious: true,
+            threatLevel: "high",
+            reason: `Executable content (${analysis.detectedType}) disguised as ${extension} document`,
+            metadata,
+          };
+        }
+
+        // Check for mismatch
+        if (!analysis.extensionMatch) {
+          const severity: "high" | "medium" | "low" = analysis.warnings.some(
+            (w) => w.includes("CRITICAL"),
+          )
+            ? "high"
+            : analysis.warnings.some((w) => w.includes("HIGH"))
+              ? "medium"
+              : "low";
+
+          return {
+            isExecutable: this.isExecutableType(analysis.detectedType),
+            isSuspicious: true,
+            threatLevel: severity,
+            reason: `Extension mismatch: declared ${extension}, actual ${analysis.detectedType}`,
+            metadata,
+          };
+        }
+
+        // Check if content is executable
+        if (this.isExecutableType(analysis.detectedType)) {
+          return {
+            isExecutable: true,
+            isSuspicious: false,
+            threatLevel: "low",
+            reason: `Executable file detected: ${analysis.detectedType}`,
+            metadata,
+          };
+        }
+      } catch (error) {
+        // Fall through to extension-based check
+      }
+    }
+
+    // Extension-based fallback
+    if (this.isExecutableExtension(extension) && !result.isSuspicious) {
+      result = {
+        isExecutable: true,
+        isSuspicious: false,
+        threatLevel: "low",
+        reason: `Executable extension: ${extension}`,
+        metadata,
+      };
+    }
+
+    return result;
   }
 
   /**

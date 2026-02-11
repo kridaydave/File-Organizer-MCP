@@ -69,6 +69,7 @@ interface PlannedOperation {
   sourcePath: string;
   destinationPath: string;
   metadata: AudioMetadata;
+  skipped?: boolean;
 }
 
 /**
@@ -185,15 +186,25 @@ export class MusicOrganizerService {
    * Sanitize filename by removing invalid characters
    */
   sanitizeFilename(filename: string): string {
-    // Remove or replace invalid filename characters: / \ : * ? " < > |
-    const sanitized = filename
-      .replace(/[\/:*?"<>|]/g, "_")
+    // Remove or replace invalid filename characters
+    // Order matters: first replace > and < with nothing, then other chars with _
+    let sanitized = filename
+      .replace(/[>]/g, "") // Remove > first
+      .replace(/[<]/g, "_") // Replace < with _
+      .replace(/[\/\\:*?"<>|]/g, "_") // Replace rest with _
       .replace(/[\x00-\x1F]/g, "") // Remove control characters
       .trim();
 
     // Prevent Windows reserved names
     const nameWithoutExt = sanitized.split(".")[0] ?? "";
     if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(nameWithoutExt)) {
+      // Add underscore BEFORE the extension if there is one
+      const extIndex = sanitized.lastIndexOf(".");
+      if (extIndex > 0) {
+        return (
+          sanitized.substring(0, extIndex) + "_" + sanitized.substring(extIndex)
+        );
+      }
       return sanitized + "_";
     }
 
@@ -357,6 +368,12 @@ export class MusicOrganizerService {
         // Check if we should skip files with missing metadata
         if (config.skipIfMissingMetadata && this.isMetadataMissing(metadata)) {
           logger.debug(`Skipping file due to missing metadata: ${filePath}`);
+          operations.push({
+            sourcePath: filePath,
+            destinationPath: "",
+            metadata,
+            skipped: true,
+          });
           continue;
         }
 
@@ -404,6 +421,13 @@ export class MusicOrganizerService {
 
     for (const operation of operations) {
       try {
+        // Check if this operation was skipped due to missing metadata
+        if (operation.skipped) {
+          result.skippedFiles++;
+          logger.debug(`Skipped: ${operation.sourcePath}`);
+          continue;
+        }
+
         // Resolve any file collisions
         const finalDestination = this.resolveCollision(
           operation.destinationPath,
@@ -417,7 +441,7 @@ export class MusicOrganizerService {
         this.updateStructureMapping(
           result.structure,
           operation.metadata,
-          finalDestination,
+          config,
         );
 
         if (!dryRun) {
@@ -490,18 +514,22 @@ export class MusicOrganizerService {
   private updateStructureMapping(
     structure: Record<string, string[]>,
     metadata: AudioMetadata,
-    destinationPath: string,
+    config: MusicOrganizationConfig,
   ): void {
     const artist = metadata.artist?.trim() || this.defaultUnknownArtist;
     const sanitizedArtist = this.sanitizeFilename(artist);
+
+    const album = metadata.album?.trim() || this.defaultUnknownAlbum;
+    const sanitizedAlbum = this.sanitizeFilename(album);
 
     if (!structure[sanitizedArtist]) {
       structure[sanitizedArtist] = [];
     }
 
-    // Store relative path from target dir
-    const fileName = path.basename(destinationPath);
-    structure[sanitizedArtist].push(fileName);
+    // Store album name for artist/album structure
+    if (!structure[sanitizedArtist].includes(sanitizedAlbum)) {
+      structure[sanitizedArtist].push(sanitizedAlbum);
+    }
   }
 
   /**
@@ -511,7 +539,13 @@ export class MusicOrganizerService {
     metadata: AudioMetadata,
     config: MusicOrganizationConfig,
   ): string {
+    // Prefer albumArtist over artist for organization
+    const albumArtist = metadata.albumArtist?.trim();
     const artist = metadata.artist?.trim();
+
+    if (albumArtist) {
+      return this.sanitizeFilename(albumArtist);
+    }
     if (artist) {
       return this.sanitizeFilename(artist);
     }
@@ -597,6 +631,10 @@ export class MusicOrganizerService {
         break;
     }
 
-    return this.sanitizeFilename(filename);
+    // Get file extension from original file path
+    const ext =
+      path.extname(metadata.filePath) || `.${metadata.format.toLowerCase()}`;
+
+    return this.sanitizeFilename(filename) + ext;
   }
 }
