@@ -34,6 +34,8 @@ export const CATEGORIES: Record<CategoryName, readonly string[]> = {
   Installers: [".dmg", ".pkg", ".deb", ".rpm", ".apk"],
   Ebooks: [".epub", ".mobi", ".azw", ".azw3"],
   Fonts: [".ttf", ".otf", ".woff", ".woff2"],
+  Suspicious: [], // For files flagged by security screening
+  Quarantine: [], // For files that failed security screening
   Others: [],
 } as const;
 

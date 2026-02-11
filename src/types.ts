@@ -85,10 +85,10 @@ export interface FileOrganizerConfig {
   organization: {
     defaultCategories: CategoryDefinition[];
     customRules: CustomRule[];
-    conflictResolution: 'rename' | 'skip' | 'error';
+    conflictResolution: "rename" | "skip" | "error";
   };
   output: {
-    defaultFormat: 'json' | 'markdown';
+    defaultFormat: "json" | "markdown";
     includeHiddenFiles: boolean;
     dateFormat: string;
   };
@@ -101,19 +101,21 @@ export interface ListResult extends PaginatedResult<BasicFileInfo> {
 // ==================== Category Types ====================
 
 export type CategoryName =
-  | 'Executables'
-  | 'Videos'
-  | 'Documents'
-  | 'Presentations'
-  | 'Spreadsheets'
-  | 'Images'
-  | 'Audio'
-  | 'Archives'
-  | 'Code'
-  | 'Installers'
-  | 'Ebooks'
-  | 'Fonts'
-  | 'Others';
+  | "Executables"
+  | "Videos"
+  | "Documents"
+  | "Presentations"
+  | "Spreadsheets"
+  | "Images"
+  | "Audio"
+  | "Archives"
+  | "Code"
+  | "Installers"
+  | "Ebooks"
+  | "Fonts"
+  | "Suspicious" // NEW: For flagged files
+  | "Quarantine" // NEW: For files that failed screening
+  | "Others";
 
 export interface CategoryStats {
   count: number;
@@ -150,7 +152,7 @@ export interface OrganizationPlan {
     destination: string;
     category: string;
     hasConflict: boolean;
-    conflictResolution?: 'rename' | 'skip' | 'overwrite' | 'overwrite_if_newer';
+    conflictResolution?: "rename" | "skip" | "overwrite" | "overwrite_if_newer";
   }[];
   categoryCounts: Record<string, number>;
   conflicts: any[];
@@ -201,7 +203,7 @@ export interface LargestFilesResult {
 // ==================== Rollback Types ====================
 
 export interface RollbackAction {
-  type: 'move' | 'copy' | 'delete' | 'rename';
+  type: "move" | "copy" | "delete" | "rename";
   originalPath: string;
   currentPath?: string; // For moves/copies
   backupPath?: string; // For deletions (where the file is temporarily stored)
@@ -220,7 +222,7 @@ export interface RollbackManifest {
 
 export interface ToolResponse {
   content: Array<{
-    type: 'text';
+    type: "text";
     text: string;
   }>;
   [key: string]: unknown;
@@ -230,7 +232,7 @@ export interface ToolDefinition {
   name: string;
   description: string;
   inputSchema: {
-    type: 'object';
+    type: "object";
     properties: Record<string, unknown>;
     required: string[];
   };
@@ -252,22 +254,98 @@ export interface ValidationErrorDetails {
 }
 
 export class AccessDeniedError extends Error {
-  readonly code = 'EACCES';
+  readonly code = "EACCES";
   constructor(
     public readonly requestedPath: string,
-    reason = 'Path is outside allowed directory'
+    reason = "Path is outside allowed directory",
   ) {
     super(`Access denied: ${reason}`);
-    this.name = 'AccessDeniedError';
+    this.name = "AccessDeniedError";
   }
 }
 
 export class ValidationError extends Error {
   constructor(
     message: string,
-    public readonly details: ValidationErrorDetails = {}
+    public readonly details: ValidationErrorDetails = {},
   ) {
     super(message);
-    this.name = 'ValidationError';
+    this.name = "ValidationError";
   }
+}
+
+// ==================== Content Analysis Types ====================
+
+export interface ContentAnalysisResult {
+  filePath: string;
+  detectedType: string;
+  mimeType: string;
+  confidence: number; // 0-1 score
+  extensionMatch: boolean;
+  warnings: string[];
+  scannedAt: Date;
+}
+
+export interface FileTypeDetection {
+  type: string;
+  mimeType: string;
+  signatures: Buffer[];
+  extensions: string[];
+  category: ContentCategory;
+}
+
+export type ContentCategory =
+  | "Document"
+  | "Image"
+  | "Executable"
+  | "Archive"
+  | "Audio"
+  | "Video"
+  | "Code"
+  | "Unknown";
+
+export interface ScreenResult {
+  filePath: string;
+  passed: boolean;
+  threatLevel: ThreatLevel;
+  detectedType: string;
+  declaredExtension: string;
+  issues: ScreenIssue[];
+  timestamp: Date;
+}
+
+export type ThreatLevel = "none" | "low" | "medium" | "high" | "critical";
+
+export interface ScreenIssue {
+  type: IssueType;
+  severity: "warning" | "error";
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export type IssueType =
+  | "extension_mismatch"
+  | "executable_disguised"
+  | "suspicious_pattern"
+  | "unknown_type"
+  | "malicious_content"
+  | "policy_violation";
+
+export interface ContentScreeningConfig {
+  checkExtensionMismatch: boolean;
+  checkExecutableContent: boolean;
+  checkSuspiciousPatterns: boolean;
+  strictMode: boolean;
+  allowedTypes?: string[];
+  blockedTypes?: string[];
+}
+
+export interface FileSignature {
+  type: string;
+  mimeType: string;
+  signatures: Buffer[];
+  extensions: string[];
+  category: ContentCategory;
+  description: string;
+  isExecutable: boolean;
 }
