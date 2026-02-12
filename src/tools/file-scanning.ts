@@ -5,27 +5,31 @@
  * @module tools/file-scanning
  */
 
-import { z } from 'zod';
-import fs from 'fs/promises';
-import type { ToolDefinition, ToolResponse, ScanResult } from '../types.js';
-import { validateStrictPath } from '../services/path-validator.service.js';
-import { FileScannerService } from '../services/file-scanner.service.js';
-import { createErrorResponse } from '../utils/error-handler.js';
-import { formatBytes } from '../utils/formatters.js';
-import { CommonParamsSchema, PaginationSchema } from '../schemas/common.schemas.js';
-import { ValidationError } from '../types.js';
+import { z } from "zod";
+import fs from "fs/promises";
+import type { ToolDefinition, ToolResponse, ScanResult } from "../types.js";
+import { validateStrictPath } from "../services/path-validator.service.js";
+import { FileScannerService } from "../services/file-scanner.service.js";
+import { contentScreeningService } from "../services/content-screening.service.js";
+import { createErrorResponse } from "../utils/error-handler.js";
+import { formatBytes } from "../utils/formatters.js";
+import {
+  CommonParamsSchema,
+  PaginationSchema,
+} from "../schemas/common.schemas.js";
+import { ValidationError } from "../types.js";
 
 export const ScanDirectoryInputSchema = z
   .object({
     directory: z
       .string()
-      .min(1, 'Directory path cannot be empty')
-      .describe('Full path to the directory to scan'),
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to scan"),
     include_subdirs: z
       .boolean()
       .optional()
       .default(false)
-      .describe('Include subdirectories in the scan'),
+      .describe("Include subdirectories in the scan"),
     max_depth: z
       .number()
       .int()
@@ -33,7 +37,16 @@ export const ScanDirectoryInputSchema = z
       .max(100)
       .optional()
       .default(-1)
-      .describe('Maximum depth to scan (0 = current directory only, -1 = unlimited, max 100)'),
+      .describe(
+        "Maximum depth to scan (0 = current directory only, -1 = unlimited, max 100)",
+      ),
+    screen_files: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Screen files for security threats (malware detection, extension mismatches)",
+      ),
   })
   .merge(CommonParamsSchema)
   .merge(PaginationSchema);
@@ -41,25 +54,45 @@ export const ScanDirectoryInputSchema = z
 export type ScanDirectoryInput = z.infer<typeof ScanDirectoryInputSchema>;
 
 export const scanDirectoryToolDefinition: ToolDefinition = {
-  name: 'file_organizer_scan_directory',
-  title: 'Scan Directory for Detailed Info',
+  name: "file_organizer_scan_directory",
+  title: "Scan Directory for Detailed Info",
   description:
-    'Scan directory and get detailed file information including size, dates, and extensions. Supports recursive scanning.',
+    "Scan directory and get detailed file information including size, dates, and extensions. Supports recursive scanning and security screening.",
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
-      directory: { type: 'string', description: 'Full path to the directory to scan' },
+      directory: {
+        type: "string",
+        description: "Full path to the directory to scan",
+      },
       include_subdirs: {
-        type: 'boolean',
-        description: 'Include subdirectories in the scan',
+        type: "boolean",
+        description: "Include subdirectories in the scan",
         default: false,
       },
-      max_depth: { type: 'number', description: 'Maximum depth to scan', default: -1 },
-      limit: { type: 'number', description: 'Max items to return', default: 100 },
-      offset: { type: 'number', description: 'Items to skip', default: 0 },
-      response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
+      max_depth: {
+        type: "number",
+        description: "Maximum depth to scan",
+        default: -1,
+      },
+      screen_files: {
+        type: "boolean",
+        description: "Screen files for security threats",
+        default: false,
+      },
+      limit: {
+        type: "number",
+        description: "Max items to return",
+        default: 100,
+      },
+      offset: { type: "number", description: "Items to skip", default: 0 },
+      response_format: {
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
+      },
     },
-    required: ['directory'],
+    required: ["directory"],
   },
   annotations: {
     readOnlyHint: true,
@@ -69,29 +102,42 @@ export const scanDirectoryToolDefinition: ToolDefinition = {
   },
 };
 
-export async function handleScanDirectory(args: Record<string, unknown>): Promise<ToolResponse> {
+export async function handleScanDirectory(
+  args: Record<string, unknown>,
+): Promise<ToolResponse> {
   try {
     const parsed = ScanDirectoryInputSchema.safeParse(args);
     if (!parsed.success) {
       return {
         content: [
-          { type: 'text', text: `Error: ${parsed.error.issues.map((i) => i.message).join(', ')}` },
+          {
+            type: "text",
+            text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
+          },
         ],
       };
     }
 
-    const { directory, include_subdirs, max_depth, response_format, limit, offset } = parsed.data;
+    const {
+      directory,
+      include_subdirs,
+      max_depth,
+      screen_files,
+      response_format,
+      limit,
+      offset,
+    } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
 
     // Check if directory exists
     try {
       const stats = await fs.stat(validatedPath);
       if (!stats.isDirectory()) {
-        throw new ValidationError('Path is not a directory');
+        throw new ValidationError("Path is not a directory");
       }
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
-      if (err.code === 'ENOENT') {
+      if (err.code === "ENOENT") {
         throw new ValidationError(`Directory does not exist: ${directory}`);
       }
       throw error;
@@ -102,6 +148,15 @@ export async function handleScanDirectory(args: Record<string, unknown>): Promis
       includeSubdirs: include_subdirs,
       maxDepth: max_depth,
     });
+
+    let screeningReport = null;
+    if (screen_files) {
+      const filePaths = allFiles.map((f) => f.path);
+      const screeningResults =
+        await contentScreeningService.screenBatch(filePaths);
+      screeningReport =
+        contentScreeningService.generateScreeningReport(screeningResults);
+    }
 
     const totalSize = allFiles.reduce((sum, file) => sum + file.size, 0);
 
@@ -122,11 +177,12 @@ export async function handleScanDirectory(args: Record<string, unknown>): Promis
       items: paginatedFiles,
       total_size: totalSize,
       total_size_readable: formatBytes(totalSize),
+      screening_report: screeningReport,
     };
 
-    if (response_format === 'json') {
+    if (response_format === "json") {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }
@@ -136,12 +192,14 @@ export async function handleScanDirectory(args: Record<string, unknown>): Promis
 **Total Size:** ${result.total_size_readable}
 **Showing:** ${result.offset + 1} - ${result.offset + result.returned_count}
 
-${result.items.map((f) => `- **${f.name}** (${formatBytes(f.size)}) - ${f.modified.toISOString().split('T')[0]}`).join('\n')}
+${result.items.map((f) => `- **${f.name}** (${formatBytes(f.size)}) - ${f.modified.toISOString().split("T")[0]}`).join("\n")}
 
-${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more files (use offset=${result.next_offset})*` : ''}`;
+${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more files (use offset=${result.next_offset})*` : ""}
+
+${screeningReport ? `### Security Screening Report\n${screeningReport}` : ""}`;
 
     return {
-      content: [{ type: 'text', text: markdown }],
+      content: [{ type: "text", text: markdown }],
     };
   } catch (error) {
     return createErrorResponse(error);

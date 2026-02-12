@@ -31,6 +31,7 @@ import {
   handleReadFile,
   handleOrganizeMusic,
   handleOrganizePhotos,
+  handleOrganizeByContent,
   handleBatchReadFiles,
 } from "./tools/index.js";
 import { sanitizeErrorMessage } from "./utils/error-handler.js";
@@ -208,6 +209,11 @@ async function handleToolCall(
         break;
       case "file_organizer_organize_photos":
         response = await handleOrganizePhotos(args as Record<string, unknown>);
+        break;
+      case "file_organizer_organize_by_content":
+        response = await handleOrganizeByContent(
+          args as Record<string, unknown>,
+        );
         break;
       case "file_organizer_batch_read_files":
         response = await handleBatchReadFiles(args as Record<string, unknown>);

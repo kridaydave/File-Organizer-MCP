@@ -266,7 +266,7 @@ export class ImageMetadataService {
     const results: ImageMetadata[] = [];
     let processed = 0;
     let errors = 0;
-    let warnings = 0;
+    const warnings = 0;
 
     // Process files in parallel with configurable concurrency
     const batches = [];

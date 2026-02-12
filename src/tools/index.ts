@@ -69,6 +69,15 @@ export {
 } from "./photo-organization.js";
 export type { OrganizePhotosInput } from "./photo-organization.js";
 
+// ==================== Content Organization ====================
+
+export {
+  organizeByContentToolDefinition,
+  handleOrganizeByContent,
+  OrganizeByContentInputSchema,
+} from "./content-organization.js";
+export type { OrganizeByContentInput } from "./content-organization.js";
+
 // ==================== Batch File Reader ====================
 
 export {
@@ -76,7 +85,10 @@ export {
   handleBatchReadFiles,
   BatchReadFilesInputSchema,
 } from "./batch-file-reader.js";
-export type { BatchReadFilesInput, FileReadResult } from "./batch-file-reader.js";
+export type {
+  BatchReadFilesInput,
+  FileReadResult,
+} from "./batch-file-reader.js";
 
 // ==================== Tool Registry ====================
 
@@ -100,6 +112,7 @@ import { batchRenameToolDefinition } from "./file-renaming.js";
 import { inspectMetadataToolDefinition } from "./metadata-inspection.js";
 import { organizeMusicToolDefinition } from "./music-organization.js";
 import { organizePhotosToolDefinition } from "./photo-organization.js";
+import { organizeByContentToolDefinition } from "./content-organization.js";
 import { batchReadFilesToolDefinition } from "./batch-file-reader.js";
 
 export {
@@ -192,6 +205,7 @@ export const TOOLS: ToolDefinition[] = [
   previewOrganizationToolDefinition,
   organizeMusicToolDefinition,
   organizePhotosToolDefinition,
+  organizeByContentToolDefinition,
   batchReadFilesToolDefinition,
   getCategoriesToolDefinition,
   setCustomRulesToolDefinition,

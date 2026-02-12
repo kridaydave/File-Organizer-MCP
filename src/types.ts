@@ -55,6 +55,7 @@ export interface ScanResult extends PaginatedResult<FileInfo> {
   directory: string;
   total_size: number;
   total_size_readable: string;
+  screening_report?: unknown;
 }
 
 export interface CustomRule {

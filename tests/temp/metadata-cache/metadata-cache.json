@@ -627,11 +627,135 @@
       },
       "timestamp": 1770823028511,
       "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-gveeF1\\cache-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-gveeF1\\cache-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T08:57:32.290Z",
+        "title": "Cached Song"
+      },
+      "timestamp": 1770886652291,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-uoRMIb\\change-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-uoRMIb\\change-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T08:57:32.298Z"
+      },
+      "timestamp": 1770886652298,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-5OyArY\\expire-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-5OyArY\\expire-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T08:57:32.331Z"
+      },
+      "timestamp": 1770886652331,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-coyWkV\\cache-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-coyWkV\\cache-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T09:03:18.041Z",
+        "title": "Cached Song"
+      },
+      "timestamp": 1770886998041,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-i9I3Wb\\change-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-i9I3Wb\\change-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T09:03:18.052Z"
+      },
+      "timestamp": 1770886998052,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-ZXiuqx\\expire-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-ZXiuqx\\expire-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T09:03:18.085Z"
+      },
+      "timestamp": 1770886998085,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-vzz2xu\\cache-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-vzz2xu\\cache-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T09:04:15.295Z",
+        "title": "Cached Song"
+      },
+      "timestamp": 1770887055295,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-6snBox\\change-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-6snBox\\change-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T09:04:15.306Z"
+      },
+      "timestamp": 1770887055306,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-zrRNrB\\expire-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-zrRNrB\\expire-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T09:04:15.337Z"
+      },
+      "timestamp": 1770887055337,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-hwax5w\\cache-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-hwax5w\\cache-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T09:12:38.960Z",
+        "title": "Cached Song"
+      },
+      "timestamp": 1770887558961,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-VQaUay\\change-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-VQaUay\\change-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T09:12:38.977Z"
+      },
+      "timestamp": 1770887558977,
+      "ttl": 3600000
+    },
+    "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-Wc5AnU\\expire-test.mp3": {
+      "value": {
+        "filePath": "C:\\Users\\NewAdmin\\Desktop\\File-Organizer-MCP\\tests\\temp\\cache-tests-Wc5AnU\\expire-test.mp3",
+        "format": "MP3",
+        "hasEmbeddedArtwork": false,
+        "extractedAt": "2026-02-12T09:12:39.011Z"
+      },
+      "timestamp": 1770887559011,
+      "ttl": 3600000
     }
   },
   "stats": {
     "hits": 0,
     "misses": 0
   },
-  "savedAt": "2026-02-11T15:17:08.512Z"
+  "savedAt": "2026-02-12T09:12:39.011Z"
 }

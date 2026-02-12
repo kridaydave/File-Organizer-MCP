@@ -138,7 +138,7 @@ export class AudioMetadataService {
     const results: AudioMetadata[] = [];
     let processed = 0;
     let errors = 0;
-    let warnings = 0;
+    const warnings = 0;
 
     // Process files in parallel with configurable concurrency
     const batches = [];

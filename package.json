@@ -60,9 +60,11 @@
     "exif-parser": "^0.1.12",
     "ink": "^5.2.1",
     "ink-text-input": "^6.0.0",
+    "mammoth": "^1.11.0",
     "minimatch": "^10.1.2",
     "music-metadata": "^11.11.2",
     "node-cron": "^4.2.1",
+    "pdf-parse": "^2.4.5",
     "react": "^19.2.4",
     "zod": "^4.3.6"
   },

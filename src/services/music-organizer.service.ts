@@ -188,7 +188,7 @@ export class MusicOrganizerService {
   sanitizeFilename(filename: string): string {
     // Remove or replace invalid filename characters
     // Order matters: first replace > and < with nothing, then other chars with _
-    let sanitized = filename
+    const sanitized = filename
       .replace(/[>]/g, "") // Remove > first
       .replace(/[<]/g, "_") // Replace < with _
       .replace(/[\/\\:*?"<>|]/g, "_") // Replace rest with _
