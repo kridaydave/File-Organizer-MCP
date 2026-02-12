@@ -13,11 +13,31 @@ export * from "./renaming.service.js";
 export * from "./scheduler-state.service.js";
 export * from "./metadata-cache.service.js";
 
+// Content Analysis Services (Phase 2.1)
+export * from "./content-analyzer.service.js";
+export * from "./content-screening.service.js";
+
+// Metadata Services (Phase 2.2)
+export { AudioMetadataService, type AudioMetadataOptions } from "./audio-metadata.service.js";
+export { ImageMetadataService, type ImageMetadataOptions } from "./image-metadata.service.js";
+export * from "./metadata.service.js";
+
+// Organizer Services (Phase 2.3)
+export { MusicOrganizerService, type MusicOrganizationConfig, type MusicOrganizationResult } from "./music-organizer.service.js";
+export { PhotoOrganizerService, type PhotoOrganizationConfig, type PhotoOrganizationResult } from "./photo-organizer.service.js";
+
 import { CategorizerService } from "./categorizer.service.js";
 import { OrganizerService } from "./organizer.service.js";
+import { ContentAnalyzerService } from "./content-analyzer.service.js";
+import { MetadataCacheService } from "./metadata-cache.service.js";
 
 // Global Instances for Session State
-export const globalCategorizerService = new CategorizerService();
+export const globalMetadataCache = new MetadataCacheService();
+export const globalContentAnalyzer = new ContentAnalyzerService();
+export const globalCategorizerService = new CategorizerService(
+  globalContentAnalyzer,
+  globalMetadataCache,
+);
 export const globalOrganizerService = new OrganizerService(
   globalCategorizerService,
 );

@@ -45,6 +45,10 @@ export class MetadataCacheService {
   private stats: { hits: number; misses: number } = { hits: 0, misses: 0 };
   private initialized: boolean = false;
 
+  // Cached stats calculation to avoid expensive JSON.stringify on every call
+  private statsCache: { data: CacheStats; timestamp: number } | null = null;
+  private lastModified: number = Date.now();
+
   constructor(options: MetadataCacheOptions = {}) {
     this.cacheDir = options.cacheDir || path.join(process.cwd(), ".cache");
     this.maxAge = options.maxAge || 604800000; // 7 days in milliseconds
@@ -63,7 +67,7 @@ export class MetadataCacheService {
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    
+
     try {
       await fs.mkdir(this.cacheDir, { recursive: true });
       await this.loadFromDisk();
@@ -145,7 +149,7 @@ export class MetadataCacheService {
   private async acquireLock<T>(operation: () => Promise<T>): Promise<T> {
     // Wait for previous lock to be released
     await this.writeLock;
-    
+
     // Create new lock that will be released when operation completes
     let resolveLock: () => void;
     const newLock = new Promise<void>((resolve) => {
@@ -203,7 +207,7 @@ export class MetadataCacheService {
   async set(
     key: string,
     value: unknown,
-    options?: { ttl?: number; filePath?: string }
+    options?: { ttl?: number; filePath?: string },
   ): Promise<void> {
     await this.initialize();
 
@@ -222,9 +226,8 @@ export class MetadataCacheService {
 
       // Serialize/deserialize to match JSON behavior (converts Dates to strings)
       // Also converts undefined to null since JSON.stringify(undefined) is undefined
-      const serializedValue = value === undefined 
-        ? null 
-        : JSON.parse(JSON.stringify(value));
+      const serializedValue =
+        value === undefined ? null : JSON.parse(JSON.stringify(value));
 
       const entry: ExtendedCacheEntry = {
         value: serializedValue,
@@ -235,6 +238,7 @@ export class MetadataCacheService {
       };
 
       this.memoryCache.set(key, entry);
+      this.lastModified = Date.now();
 
       // Enforce max entries limit (FIFO)
       if (this.memoryCache.size > this.maxEntries) {
@@ -257,6 +261,7 @@ export class MetadataCacheService {
 
     await this.acquireLock(async () => {
       this.memoryCache.delete(key);
+      this.lastModified = Date.now();
       await this.saveToDisk();
     });
   }
@@ -270,6 +275,7 @@ export class MetadataCacheService {
     await this.acquireLock(async () => {
       this.memoryCache.clear();
       this.stats = { hits: 0, misses: 0 };
+      this.lastModified = Date.now();
       await this.saveToDisk();
     });
   }
@@ -335,28 +341,47 @@ export class MetadataCacheService {
       }
 
       if (keysToDelete.length > 0) {
+        this.lastModified = Date.now();
         await this.saveToDisk();
       }
     });
   }
 
   /**
-   * Get cache statistics
+   * Get cache statistics with 5-second caching to avoid expensive recalculation
    */
   async getStats(): Promise<CacheStats> {
     await this.initialize();
 
+    const STATS_CACHE_TTL = 5000; // 5 seconds
+    const now = Date.now();
+
+    // Return cached stats if still valid (not expired and cache not modified)
+    if (
+      this.statsCache &&
+      now - this.statsCache.timestamp < STATS_CACHE_TTL &&
+      this.statsCache.timestamp >= this.lastModified
+    ) {
+      return this.statsCache.data;
+    }
+
+    // Recalculate stats
     let size = 0;
     for (const entry of this.memoryCache.values()) {
       size += JSON.stringify(entry).length;
     }
 
-    return {
+    const stats: CacheStats = {
       entries: this.memoryCache.size,
       size,
       hits: this.stats.hits,
       misses: this.stats.misses,
     };
+
+    // Cache the result
+    this.statsCache = { data: stats, timestamp: now };
+
+    return stats;
   }
 
   // Legacy methods for backward compatibility with file-based caching
@@ -497,7 +522,7 @@ export class MetadataCacheService {
    */
   async setFileMetadata(
     filePath: string,
-    metadata: AudioMetadata | ImageMetadata
+    metadata: AudioMetadata | ImageMetadata,
   ): Promise<void> {
     await this.acquireLock(async () => {
       try {
@@ -529,7 +554,7 @@ export class MetadataCacheService {
 
         // Remove existing entry if present
         const existingIndex = cache.entries.findIndex(
-          (e) => e.filePath === filePath
+          (e) => e.filePath === filePath,
         );
         if (existingIndex !== -1) {
           cache.entries.splice(existingIndex, 1);
@@ -542,10 +567,10 @@ export class MetadataCacheService {
         if (cache.entries.length > this.maxEntries) {
           const removed = cache.entries.splice(
             0,
-            cache.entries.length - this.maxEntries
+            cache.entries.length - this.maxEntries,
           );
           logger.debug(
-            `Removed ${removed.length} oldest cache entries due to maxEntries limit`
+            `Removed ${removed.length} oldest cache entries due to maxEntries limit`,
           );
         }
 
@@ -585,7 +610,7 @@ export class MetadataCacheService {
     metadataEntries: Array<{
       filePath: string;
       metadata: AudioMetadata | ImageMetadata;
-    }>
+    }>,
   ): Promise<void> {
     await this.acquireLock(async () => {
       try {
@@ -620,7 +645,7 @@ export class MetadataCacheService {
 
             // Remove existing entry if present
             const existingIndex = cache.entries.findIndex(
-              (e) => e.filePath === filePath
+              (e) => e.filePath === filePath,
             );
             if (existingIndex !== -1) {
               cache.entries.splice(existingIndex, 1);
@@ -637,10 +662,10 @@ export class MetadataCacheService {
         if (cache.entries.length > this.maxEntries) {
           const removed = cache.entries.splice(
             0,
-            cache.entries.length - this.maxEntries
+            cache.entries.length - this.maxEntries,
           );
           logger.debug(
-            `Removed ${removed.length} oldest cache entries due to maxEntries limit`
+            `Removed ${removed.length} oldest cache entries due to maxEntries limit`,
           );
         }
 
@@ -651,7 +676,7 @@ export class MetadataCacheService {
         await this.writeCache(cache);
 
         logger.info(
-          `Cached ${metadataEntries.length} metadata entries in bulk`
+          `Cached ${metadataEntries.length} metadata entries in bulk`,
         );
       } catch (error) {
         logger.error(`Failed to cache metadata in bulk`, error);

@@ -6,6 +6,8 @@ import * as ExifParser from 'exif-parser'; // Handle older CJS import style if n
 import { CategoryName } from '../types.js';
 import { PathValidatorService } from './path-validator.service.js';
 import { logger } from '../utils/logger.js';
+import { AudioMetadataService } from './audio-metadata.service.js';
+import { ImageMetadataService } from './image-metadata.service.js';
 
 export interface FileMetadata {
   date?: Date;
@@ -18,21 +20,26 @@ export interface FileMetadata {
 
 export class MetadataService {
   private pathValidator: PathValidatorService;
+  private audioMetadataService: AudioMetadataService;
+  private imageMetadataService: ImageMetadataService;
 
   constructor() {
     this.pathValidator = new PathValidatorService();
+    this.audioMetadataService = new AudioMetadataService();
+    this.imageMetadataService = new ImageMetadataService();
   }
 
   /**
    * Extract metadata from a file for organization purposes.
    * Guaranteed to NOT return sensitive location data.
+   * Uses specialized services for enhanced metadata extraction.
    */
   async getMetadata(filePath: string, category: CategoryName): Promise<FileMetadata> {
     try {
       if (category === 'Images' || category === 'Videos') {
-        return await this.getImageMetadata(filePath);
+        return await this.getImageMetadataEnhanced(filePath);
       } else if (category === 'Audio') {
-        return await this.getAudioMetadata(filePath);
+        return await this.getAudioMetadataEnhanced(filePath);
       }
     } catch (error) {
       logger.debug(`Failed to extract metadata for ${filePath}: ${(error as Error).message}`);
@@ -81,6 +88,48 @@ export class MetadataService {
     return subpath;
   }
 
+  /**
+   * Enhanced image metadata extraction using ImageMetadataService
+   */
+  private async getImageMetadataEnhanced(filePath: string): Promise<FileMetadata> {
+    try {
+      const imageMetadata = await this.imageMetadataService.extract(filePath);
+      if (imageMetadata) {
+        return {
+          date: imageMetadata.dateTaken,
+        };
+      }
+    } catch (error) {
+      logger.debug(`Enhanced image metadata extraction failed, falling back: ${(error as Error).message}`);
+    }
+    // Fallback to basic extraction
+    return this.getImageMetadata(filePath);
+  }
+
+  /**
+   * Enhanced audio metadata extraction using AudioMetadataService
+   */
+  private async getAudioMetadataEnhanced(filePath: string): Promise<FileMetadata> {
+    try {
+      const audioMetadata = await this.audioMetadataService.extract(filePath);
+      if (audioMetadata) {
+        return {
+          artist: audioMetadata.artist,
+          album: audioMetadata.album,
+          title: audioMetadata.title,
+          year: audioMetadata.year,
+        };
+      }
+    } catch (error) {
+      logger.debug(`Enhanced audio metadata extraction failed, falling back: ${(error as Error).message}`);
+    }
+    // Fallback to basic extraction
+    return this.getAudioMetadata(filePath);
+  }
+
+  /**
+   * Legacy image metadata extraction using exif-parser
+   */
   private async getImageMetadata(filePath: string): Promise<FileMetadata> {
     // exif-parser works on buffers.
     // For large files, we should only read the beginning.
@@ -119,6 +168,9 @@ export class MetadataService {
     }
   }
 
+  /**
+   * Legacy audio metadata extraction using music-metadata
+   */
   private async getAudioMetadata(filePath: string): Promise<FileMetadata> {
     try {
       const metadata = await parseFile(filePath);
@@ -158,88 +210,138 @@ export class MetadataService {
 
   /**
    * Extract detailed metadata for the inspection tool
-   * Returns structured metadata with more detailed fields than getMetadata
+   * Uses specialized services for enhanced extraction
    */
   async extractMetadata(filePath: string, ext: string): Promise<Record<string, any> | null> {
-    try {
-      const isImage = ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.heic', '.heif'].includes(ext);
-      const isAudio = ['.mp3', '.flac', '.ogg', '.wav', '.m4a', '.aac'].includes(ext);
+    const isImage = ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.heic', '.heif'].includes(ext);
+    const isAudio = ['.mp3', '.flac', '.ogg', '.wav', '.m4a', '.aac'].includes(ext);
 
-      // Handle image files
-      if (isImage) {
-        const buffer = Buffer.alloc(65536);
-        let handle: fs.FileHandle | undefined;
-
-        try {
-          handle = await fs.open(filePath, 'r');
-          const { bytesRead } = await handle.read(buffer, 0, 65536, 0);
-
-          if (bytesRead < 4) return null;
-
-          const parser = (ExifParser as any).create(buffer.subarray(0, bytesRead));
-          const result = parser.parse();
-
-          const metadata: Record<string, any> = {};
-
-          // Extract date taken
-          if (result.tags?.DateTimeOriginal) {
-            metadata.dateTaken = new Date(result.tags.DateTimeOriginal * 1000).toISOString();
-          } else if (result.tags?.CreateDate) {
-            metadata.dateTaken = new Date(result.tags.CreateDate * 1000).toISOString();
-          }
-
-          // Extract camera info
-          if (result.tags?.Make || result.tags?.Model) {
-            metadata.camera = [result.tags?.Make, result.tags?.Model]
-              .filter(Boolean)
-              .join(' ')
-              .trim();
-          }
-
-          // Extract dimensions
-          if (result.imageSize) {
-            metadata.width = result.imageSize.width;
-            metadata.height = result.imageSize.height;
-          }
-
-          return Object.keys(metadata).length > 0 ? metadata : null;
-        } finally {
-          await handle?.close();
+    // Handle image files
+    if (isImage) {
+      try {
+        const imageMetadata = await this.imageMetadataService.extract(filePath);
+        if (imageMetadata) {
+          return {
+            dateTaken: imageMetadata.dateTaken?.toISOString(),
+            camera: imageMetadata.cameraMake && imageMetadata.cameraModel 
+              ? `${imageMetadata.cameraMake} ${imageMetadata.cameraModel}`.trim()
+              : undefined,
+            width: imageMetadata.width,
+            height: imageMetadata.height,
+          };
         }
+      } catch (error) {
+        logger.debug(`Image metadata extraction failed for ${filePath}: ${(error as Error).message}`);
       }
+      // Fallback to legacy extraction
+      return this.extractImageMetadataLegacy(filePath);
+    }
 
-      // Handle audio files
-      if (isAudio) {
-        const result = await parseFile(filePath);
+    // Handle audio files
+    if (isAudio) {
+      try {
+        const audioMetadata = await this.audioMetadataService.extract(filePath);
+        if (audioMetadata) {
+          return {
+            artist: audioMetadata.artist,
+            album: audioMetadata.album,
+            title: audioMetadata.title,
+            year: audioMetadata.year,
+            duration: audioMetadata.duration,
+          };
+        }
+      } catch (error) {
+        logger.debug(`Audio metadata extraction failed for ${filePath}: ${(error as Error).message}`);
+      }
+      // Fallback to legacy extraction
+      return this.extractAudioMetadataLegacy(filePath);
+    }
+
+    return null;
+  }
+
+  /**
+   * Legacy image metadata extraction for inspection tool
+   */
+  private async extractImageMetadataLegacy(filePath: string): Promise<Record<string, any> | null> {
+    try {
+      const buffer = Buffer.alloc(65536);
+      let handle: fs.FileHandle | undefined;
+
+      try {
+        handle = await fs.open(filePath, 'r');
+        const { bytesRead } = await handle.read(buffer, 0, 65536, 0);
+
+        if (bytesRead < 4) return null;
+
+        const parser = (ExifParser as any).create(buffer.subarray(0, bytesRead));
+        const result = parser.parse();
 
         const metadata: Record<string, any> = {};
 
-        if (result.common?.artist) {
-          metadata.artist = result.common.artist;
+        // Extract date taken
+        if (result.tags?.DateTimeOriginal) {
+          metadata.dateTaken = new Date(result.tags.DateTimeOriginal * 1000).toISOString();
+        } else if (result.tags?.CreateDate) {
+          metadata.dateTaken = new Date(result.tags.CreateDate * 1000).toISOString();
         }
 
-        if (result.common?.album) {
-          metadata.album = result.common.album;
+        // Extract camera info
+        if (result.tags?.Make || result.tags?.Model) {
+          metadata.camera = [result.tags?.Make, result.tags?.Model]
+            .filter(Boolean)
+            .join(' ')
+            .trim();
         }
 
-        if (result.common?.title) {
-          metadata.title = result.common.title;
-        }
-
-        if (result.common?.year) {
-          metadata.year = result.common.year;
-        }
-
-        if (result.format?.duration) {
-          metadata.duration = result.format.duration;
+        // Extract dimensions
+        if (result.imageSize) {
+          metadata.width = result.imageSize.width;
+          metadata.height = result.imageSize.height;
         }
 
         return Object.keys(metadata).length > 0 ? metadata : null;
+      } finally {
+        await handle?.close();
+      }
+    } catch (error) {
+      logger.debug(`Legacy image metadata extraction failed for ${filePath}: ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Legacy audio metadata extraction for inspection tool
+   */
+  private async extractAudioMetadataLegacy(filePath: string): Promise<Record<string, any> | null> {
+    try {
+      const result = await parseFile(filePath);
+
+      const metadata: Record<string, any> = {};
+
+      if (result.common?.artist) {
+        metadata.artist = result.common.artist;
       }
 
-      return null;
+      if (result.common?.album) {
+        metadata.album = result.common.album;
+      }
+
+      if (result.common?.title) {
+        metadata.title = result.common.title;
+      }
+
+      if (result.common?.year) {
+        metadata.year = result.common.year;
+      }
+
+      if (result.format?.duration) {
+        metadata.duration = result.format.duration;
+      }
+
+      return Object.keys(metadata).length > 0 ? metadata : null;
     } catch (error) {
-      logger.debug(`Metadata extraction failed for ${filePath}: ${(error as Error).message}`);
+      logger.debug(`Legacy audio metadata extraction failed for ${filePath}: ${(error as Error).message}`);
       return null;
     }
   }

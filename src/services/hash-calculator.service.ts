@@ -3,13 +3,13 @@
  * Hash Calculator Service
  */
 
-import fs from 'fs/promises';
-import { createReadStream } from 'fs';
-import crypto from 'crypto';
-import type { FileWithSize, DuplicateGroup } from '../types.js';
-import { CONFIG } from '../config.js';
-import { formatBytes } from '../utils/formatters.js';
-import { logger } from '../utils/logger.js';
+import fs from "fs/promises";
+import { createReadStream, type ReadStream } from "fs";
+import crypto from "crypto";
+import type { FileWithSize, DuplicateGroup } from "../types.js";
+import { CONFIG } from "../config.js";
+import { formatBytes } from "../utils/formatters.js";
+import { logger } from "../utils/logger.js";
 
 /**
  * Hash Calculator Service - file hashing and duplicate detection
@@ -31,11 +31,11 @@ export class HashCalculatorService {
    */
   async calculateHash(fileInput: string | fs.FileHandle): Promise<string> {
     let size: number;
-    let stream: NodeJS.ReadableStream;
+    let stream: ReadStream;
     let handleToClose: fs.FileHandle | undefined;
 
     try {
-      if (typeof fileInput === 'string') {
+      if (typeof fileInput === "string") {
         const stats = await fs.stat(fileInput);
         size = stats.size;
         stream = createReadStream(fileInput, { highWaterMark: 64 * 1024 });
@@ -52,14 +52,24 @@ export class HashCalculatorService {
       }
 
       if (size > this.maxFileSize) {
-        throw new Error(`File exceeds maximum size for hashing (${formatBytes(this.maxFileSize)})`);
+        throw new Error(
+          `File exceeds maximum size for hashing (${formatBytes(this.maxFileSize)})`,
+        );
       }
 
       return new Promise((resolve, reject) => {
-        const hash = crypto.createHash('sha256');
-        stream.on('data', (chunk) => hash.update(chunk));
-        stream.on('end', () => resolve(hash.digest('hex')));
-        stream.on('error', reject);
+        const hash = crypto.createHash("sha256");
+
+        stream.on("data", (chunk: string | Buffer) => {
+          hash.update(chunk);
+        });
+
+        stream.on("end", () => resolve(hash.digest("hex")));
+
+        stream.on("error", (error: Error) => {
+          stream.destroy();
+          reject(error);
+        });
       });
     } finally {
       // If we opened the file internally (string input), stream auto-closes fd?
@@ -75,7 +85,7 @@ export class HashCalculatorService {
    */
   async findDuplicates(
     files: FileWithSize[],
-    options: { timeoutMs?: number } = {}
+    options: { timeoutMs?: number } = {},
   ): Promise<DuplicateGroup[]> {
     const hashMap: Record<string, FileWithSize[]> = {};
     const startTime = Date.now();
@@ -85,13 +95,15 @@ export class HashCalculatorService {
       // Check timeout
       if (Date.now() - startTime > timeoutMs) {
         throw new Error(
-          `Duplicate analysis timed out after ${timeoutMs}ms. Processed ${Object.keys(hashMap).length} files.`
+          `Duplicate analysis timed out after ${timeoutMs}ms. Processed ${Object.keys(hashMap).length} files.`,
         );
       }
 
       try {
         if (file.size > this.maxFileSize) {
-          logger.warn(`Skipping large file: ${file.name} (${formatBytes(file.size)})`);
+          logger.warn(
+            `Skipping large file: ${file.name} (${formatBytes(file.size)})`,
+          );
           continue;
         }
 

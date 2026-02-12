@@ -13,13 +13,13 @@
  * 7. Access permissions
  */
 
-import fs from 'fs/promises'; // for promise-based methods
-import { constants } from 'fs'; // for constants (O_NOFOLLOW, etc)
-import path from 'path';
-import { AccessDeniedError, ValidationError } from '../types.js';
-import { normalizePath, isSubPath } from '../utils/file-utils.js';
-import { PathSchema } from '../schemas/security.schemas.js';
-import { CONFIG } from '../config.js';
+import fs from "fs/promises"; // for promise-based methods
+import { constants } from "fs"; // for constants (O_NOFOLLOW, etc)
+import path from "path";
+import { AccessDeniedError, ValidationError } from "../types.js";
+import { normalizePath, isSubPath } from "../utils/file-utils.js";
+import { PathSchema } from "../schemas/security.schemas.js";
+import { CONFIG } from "../config.js";
 
 /**
  * Layer 1: Type validation
@@ -27,7 +27,9 @@ import { CONFIG } from '../config.js';
 function validateType(inputPath: unknown): string {
   const result = PathSchema.safeParse(inputPath);
   if (!result.success) {
-    throw new ValidationError(result.error.issues[0]?.message ?? 'Invalid path');
+    throw new ValidationError(
+      result.error.issues[0]?.message ?? "Invalid path",
+    );
   }
   return result.data;
 }
@@ -36,17 +38,17 @@ function validateType(inputPath: unknown): string {
  * Layer 5: Resolve symlinks to get real path
  */
 async function resolveSymlinks(
-  absolutePath: string
+  absolutePath: string,
 ): Promise<{ realPath: string; exists: boolean }> {
   try {
     const realPath = await fs.realpath(absolutePath);
     return { realPath, exists: true };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ELOOP') {
+    if ((error as NodeJS.ErrnoException).code === "ELOOP") {
       // Intercept symlink loops specifically
-      throw new AccessDeniedError(absolutePath, 'Circular symlink detected');
+      throw new AccessDeniedError(absolutePath, "Circular symlink detected");
     }
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       // Try to resolve the parent of the non-existent path
       const parentDir = path.dirname(absolutePath);
       try {
@@ -55,8 +57,11 @@ async function resolveSymlinks(
         const realPath = path.join(realParent, path.basename(absolutePath));
         return { realPath, exists: false };
       } catch (parentError) {
-        if ((parentError as NodeJS.ErrnoException).code === 'ELOOP') {
-          throw new AccessDeniedError(absolutePath, 'Circular symlink detected in parent path');
+        if ((parentError as NodeJS.ErrnoException).code === "ELOOP") {
+          throw new AccessDeniedError(
+            absolutePath,
+            "Circular symlink detected in parent path",
+          );
         }
         // If the parent also doesn't exist or has issues, return the original path
         return { realPath: absolutePath, exists: false };
@@ -70,7 +75,10 @@ async function resolveSymlinks(
 /**
  * Layer 6: Containment check
  */
-function checkContainment(realPath: string, allowedPaths: string | string[]): boolean {
+function checkContainment(
+  realPath: string,
+  allowedPaths: string | string[],
+): boolean {
   const paths = Array.isArray(allowedPaths) ? allowedPaths : [allowedPaths];
   return paths.some((allowed) => isSubPath(allowed, realPath));
 }
@@ -87,16 +95,18 @@ function checkContainment(realPath: string, allowedPaths: string | string[]): bo
  */
 export async function checkAccess(
   realPath: string,
-  options: { requireExists?: boolean; checkWrite?: boolean }
+  options: { requireExists?: boolean; checkWrite?: boolean },
 ): Promise<boolean> {
   const { requireExists = false, checkWrite = false } = options;
 
   try {
-    const mode = checkWrite ? fs.constants.R_OK | fs.constants.W_OK : fs.constants.R_OK;
+    const mode = checkWrite
+      ? fs.constants.R_OK | fs.constants.W_OK
+      : fs.constants.R_OK;
     await fs.access(realPath, mode);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       if (requireExists) {
         return false;
       }
@@ -109,7 +119,7 @@ export async function checkAccess(
           // Found a writable parent directory
           return true;
         } catch (parentError) {
-          if ((parentError as NodeJS.ErrnoException).code === 'ENOENT') {
+          if ((parentError as NodeJS.ErrnoException).code === "ENOENT") {
             // Parent doesn't exist, so try the grandparent
             parentDir = path.dirname(parentDir);
           } else {
@@ -137,7 +147,7 @@ export interface ValidatePathOptions {
  */
 export async function validatePathBase(
   inputPath: unknown,
-  options: ValidatePathOptions = {}
+  options: ValidatePathOptions = {},
 ): Promise<string> {
   const {
     basePath = process.cwd(),
@@ -155,18 +165,22 @@ export async function validatePathBase(
 
   // Layer 3: Suspicious character check & Length check on the *expanded* path
   if (/[<>"|?*\x00-\x1f]/.test(expandedPath)) {
-    throw new ValidationError('Path contains invalid characters after variable expansion');
+    throw new ValidationError(
+      "Path contains invalid characters after variable expansion",
+    );
   }
   if (expandedPath.length > 4096) {
-    throw new ValidationError('Path exceeds maximum length (4096)');
+    throw new ValidationError("Path exceeds maximum length (4096)");
   }
 
   // Layer 3.5: Block Windows Reserved Names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
   const baseName = path.basename(expandedPath).toUpperCase();
   // Check exact match or name with extension (e.g. CON.txt is also invalid on Windows)
-  const nameWithoutExt = baseName.split('.')[0] ?? '';
+  const nameWithoutExt = baseName.split(".")[0] ?? "";
   if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(nameWithoutExt)) {
-    throw new ValidationError(`Path contains Windows reserved name: ${baseName}`);
+    throw new ValidationError(
+      `Path contains Windows reserved name: ${baseName}`,
+    );
   }
 
   // Layer 4: Resolve to an absolute path
@@ -174,7 +188,8 @@ export async function validatePathBase(
 
   // Layer 4.5: Security check (whitelist/blacklist)
   if (CONFIG.security.enablePathValidation) {
-    const { isPathAllowed, formatAccessDeniedMessage } = await import('../utils/path-security.js');
+    const { isPathAllowed, formatAccessDeniedMessage } =
+      await import("../utils/path-security.js");
     const validation = isPathAllowed(absolutePath);
     if (!validation.allowed) {
       const message = formatAccessDeniedMessage(rawValidatedPath, validation);
@@ -187,10 +202,12 @@ export async function validatePathBase(
     try {
       const stats = await fs.lstat(absolutePath);
       if (stats.isSymbolicLink()) {
-        throw new ValidationError('Symlink traversal detected (Symlinks are not allowed)');
+        throw new ValidationError(
+          "Symlink traversal detected (Symlinks are not allowed)",
+        );
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         // Does not exist, proceed to resolution failing or handling it later
       } else {
         throw error;
@@ -212,15 +229,21 @@ export async function validatePathBase(
     const isContained = checkContainment(realPath, allowedPaths);
     if (!isContained) {
       // Use the original raw path in the error for clarity
-      throw new AccessDeniedError(rawValidatedPath, 'Path is outside the allowed directory');
+      throw new AccessDeniedError(
+        rawValidatedPath,
+        "Path is outside the allowed directory",
+      );
     }
   }
 
   // Layer 7: Access check
   if (requireExists || checkWrite) {
-    const accessible = await checkAccess(realPath, { requireExists, checkWrite });
+    const accessible = await checkAccess(realPath, {
+      requireExists,
+      checkWrite,
+    });
     if (!accessible) {
-      throw new AccessDeniedError(rawValidatedPath, 'Path is not accessible');
+      throw new AccessDeniedError(rawValidatedPath, "Path is not accessible");
     }
   }
 
@@ -259,13 +282,15 @@ export class PathValidatorService {
       // If secure validation is enabled, we rely on the whitelist (Layer 4.5)
       // and disable the implicit CWD restriction (Layer 6) by setting allowedPaths to null.
       // If disabled, we fallback to legacy CWD restriction.
-      this.allowedPaths = CONFIG.security.enablePathValidation ? null : [this.basePath];
+      this.allowedPaths = CONFIG.security.enablePathValidation
+        ? null
+        : [this.basePath];
     }
   }
 
   async validatePath(
     inputPath: unknown,
-    options: Omit<ValidatePathOptions, 'basePath' | 'allowedPaths'> = {}
+    options: Omit<ValidatePathOptions, "basePath" | "allowedPaths"> = {},
   ): Promise<string> {
     return validatePathBase(inputPath, {
       ...options,
@@ -276,7 +301,10 @@ export class PathValidatorService {
 
   isPathAllowed(inputPath: string): boolean {
     try {
-      const absolutePath = path.resolve(this.basePath, normalizePath(inputPath));
+      const absolutePath = path.resolve(
+        this.basePath,
+        normalizePath(inputPath),
+      );
       // If allowedPaths is null (whitelist mode), this checking is skipped here
       // because strict validation happens in validatePath via Layer 4.5
       if (this.allowedPaths === null) return true;
@@ -302,21 +330,42 @@ export class PathValidatorService {
     try {
       // Use constants directly from 'fs' import
       // constants.O_RDONLY | constants.O_NOFOLLOW
-      const handle = await fs.open(absolutePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+      const handle = await fs.open(
+        absolutePath,
+        constants.O_RDONLY | constants.O_NOFOLLOW,
+      );
 
       try {
         const stats = await handle.stat();
         if (!stats.isFile()) {
-          throw new ValidationError('Path is not a file');
+          throw new ValidationError("Path is not a file");
         }
+
+        // SECURITY FIX: TOCTOU mitigation - verify the opened file is still within bounds
+        // After opening, resolve the real path and ensure it's still in allowed directories
+        // This prevents race conditions where the file is swapped between validation and open
+        const realPath = await fs.realpath(absolutePath);
+        if (
+          this.allowedPaths !== null &&
+          !checkContainment(realPath, this.allowedPaths)
+        ) {
+          await handle.close();
+          throw new AccessDeniedError(
+            inputPath,
+            "File resolved outside allowed directory after opening",
+          );
+        }
+
         return handle;
       } catch (statError) {
         await handle.close();
         throw statError;
       }
     } catch (error) {
-      if ((error as any).code === 'ELOOP') {
-        throw new ValidationError('Symlink traversal detected (O_NOFOLLOW blocked)');
+      if ((error as any).code === "ELOOP") {
+        throw new ValidationError(
+          "Symlink traversal detected (O_NOFOLLOW blocked)",
+        );
       }
       throw error;
     }

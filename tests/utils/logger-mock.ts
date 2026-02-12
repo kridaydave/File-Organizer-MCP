@@ -16,6 +16,10 @@ const originalConsole = {
 
 // Mock console methods to suppress output
 const mockConsoleMethods = () => {
+  // Check if jest is available (may not be in some test environments)
+  if (typeof jest === 'undefined') {
+    return;
+  }
   console.log = jest.fn();
   console.error = jest.fn();
   console.warn = jest.fn();
@@ -171,18 +175,6 @@ export function setupLoggerMocks() {
   // Mock console methods
   mockConsoleMethods();
 
-  // Mock the logger export
-  jest.mock("../../src/utils/logger.js", () => ({
-    Logger: MockLogger,
-    logger: mockLogger,
-    LogLevel: {
-      DEBUG: "debug",
-      INFO: "info",
-      WARN: "warn",
-      ERROR: "error",
-    } as const,
-  }));
-
   return {
     mockLogger,
     restoreConsoleMethods,
@@ -193,7 +185,9 @@ export function setupLoggerMocks() {
 export function teardownLoggerMocks() {
   restoreConsoleMethods();
   mockLogger.clearLogs();
-  jest.clearAllMocks();
+  if (typeof jest !== 'undefined') {
+    jest.clearAllMocks();
+  }
 }
 
 // Test helper function to run tests with mocked logger
@@ -225,7 +219,9 @@ export function globalLoggerSetup() {
   // Clear logs between tests
   beforeEach(() => {
     mockLogger.clearLogs();
-    jest.clearAllMocks();
+    if (typeof jest !== 'undefined') {
+      jest.clearAllMocks();
+    }
   });
 }
 

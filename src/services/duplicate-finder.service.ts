@@ -5,18 +5,26 @@
  * Advanced duplicate detection, scoring, and safe deletion.
  */
 
-import fs from 'fs/promises';
-import { HashCalculatorService } from './hash-calculator.service.js';
-import type { FileWithSize, DuplicateGroup } from '../types.js';
-import { fileExists } from '../utils/file-utils.js';
-import { logger } from '../utils/logger.js';
-import path from 'path';
-import { RollbackService } from './rollback.service.js';
-import type { RollbackAction } from '../types.js';
-import { validateStrictPath, PathValidatorService } from './path-validator.service.js';
-import { FileScannerService } from './file-scanner.service.js';
+import fs from "fs/promises";
+import crypto from "crypto";
+import { HashCalculatorService } from "./hash-calculator.service.js";
+import type { FileWithSize, DuplicateGroup } from "../types.js";
+import { fileExists } from "../utils/file-utils.js";
+import { logger } from "../utils/logger.js";
+import path from "path";
+import { RollbackService } from "./rollback.service.js";
+import type { RollbackAction } from "../types.js";
+import {
+  validateStrictPath,
+  PathValidatorService,
+} from "./path-validator.service.js";
+import { FileScannerService } from "./file-scanner.service.js";
 
-export type RecommendationStrategy = 'newest' | 'oldest' | 'best_location' | 'best_name';
+export type RecommendationStrategy =
+  | "newest"
+  | "oldest"
+  | "best_location"
+  | "best_name";
 
 export interface ScoredFile {
   path: string;
@@ -54,13 +62,15 @@ export class DuplicateFinderService {
    */
   async findWithScoring(
     files: FileWithSize[],
-    strategy: RecommendationStrategy = 'best_location',
-    options: { timeoutMs?: number } = {}
+    strategy: RecommendationStrategy = "best_location",
+    options: { timeoutMs?: number } = {},
   ): Promise<AnalyzedDuplicateGroup[]> {
     const duplicates = await this.hashCalculator.findDuplicates(files, options);
 
     return duplicates.map((group) => {
-      const scoredFiles = group.files.map((file) => this.scoreFile(file, strategy));
+      const scoredFiles = group.files.map((file) =>
+        this.scoreFile(file, strategy),
+      );
 
       // Sort by score descending (Highest score first)
       scoredFiles.sort((a, b) => b.score - a.score);
@@ -72,7 +82,7 @@ export class DuplicateFinderService {
           size_bytes: group.size_bytes,
           file_count: 0,
           files: [],
-          recommended_keep: '',
+          recommended_keep: "",
           recommended_delete: [],
           wasted_space_bytes: 0,
         };
@@ -83,7 +93,7 @@ export class DuplicateFinderService {
         size_bytes: group.size_bytes,
         file_count: group.files.length,
         files: scoredFiles,
-        recommended_keep: scoredFiles[0]?.path ?? '',
+        recommended_keep: scoredFiles[0]?.path ?? "",
         recommended_delete: scoredFiles.slice(1).map((f) => f.path),
         wasted_space_bytes: group.size_bytes * (group.files.length - 1),
       };
@@ -94,7 +104,10 @@ export class DuplicateFinderService {
    * Score a file based on strategy
    * Higher score = Better to KEEP
    */
-  private scoreFile(file: FileWithSize, strategy: RecommendationStrategy): ScoredFile {
+  private scoreFile(
+    file: FileWithSize,
+    strategy: RecommendationStrategy,
+  ): ScoredFile {
     let score = 0;
     const reasons: string[] = [];
 
@@ -108,37 +121,37 @@ export class DuplicateFinderService {
     // Prefer "Documents", "Projects", "Pictures" over "Downloads", "Temp"
     const lowerPath = file.path.toLowerCase();
     if (
-      lowerPath.includes('downloads') ||
-      lowerPath.includes('temp') ||
-      lowerPath.includes('tmp')
+      lowerPath.includes("downloads") ||
+      lowerPath.includes("temp") ||
+      lowerPath.includes("tmp")
     ) {
       score -= 50;
-      reasons.push('Location penalty (Downloads/Temp)');
+      reasons.push("Location penalty (Downloads/Temp)");
     }
     if (
-      lowerPath.includes('documents') ||
-      lowerPath.includes('projects') ||
-      lowerPath.includes('pictures')
+      lowerPath.includes("documents") ||
+      lowerPath.includes("projects") ||
+      lowerPath.includes("pictures")
     ) {
       score += 20;
-      reasons.push('Location bonus (Organized folder)');
+      reasons.push("Location bonus (Organized folder)");
     }
 
     // 3. Filename Quality
     // Penalty for "Copy", "(1)", etc.
     if (/copy| \(\d+\)|_\d+$/.test(file.name)) {
       score -= 30;
-      reasons.push('Filename penalty (Copy/Duplicate marker)');
+      reasons.push("Filename penalty (Copy/Duplicate marker)");
     }
 
     // 4. Time-based (Strategy specific)
     const age = file.modified ? file.modified.getTime() : 0;
-    if (strategy === 'newest') {
+    if (strategy === "newest") {
       score += age / 1000000000; // Normalizing somewhat
-      reasons.push('Newest bonus');
-    } else if (strategy === 'oldest') {
+      reasons.push("Newest bonus");
+    } else if (strategy === "oldest") {
       score -= age / 1000000000;
-      reasons.push('Oldest bonus');
+      reasons.push("Oldest bonus");
     }
 
     return {
@@ -158,7 +171,7 @@ export class DuplicateFinderService {
    */
   async deleteFiles(
     filesToDelete: string[],
-    options: { createBackupManifest?: boolean; autoVerify?: boolean } = {}
+    options: { createBackupManifest?: boolean; autoVerify?: boolean } = {},
   ): Promise<DeletionResult> {
     const { createBackupManifest = true, autoVerify = false } = options;
     const result: DeletionResult = {
@@ -167,7 +180,7 @@ export class DuplicateFinderService {
     };
 
     // 1. Prepare Backup Directory
-    const backupDir = path.join(process.cwd(), '.file-organizer-backups');
+    const backupDir = path.join(process.cwd(), ".file-organizer-backups");
     if (createBackupManifest) {
       await fs.mkdir(backupDir, { recursive: true });
     }
@@ -182,7 +195,7 @@ export class DuplicateFinderService {
       let handle: fs.FileHandle | undefined;
       try {
         if (!(await fileExists(filePath))) {
-          result.failed.push({ path: filePath, error: 'File not found' });
+          result.failed.push({ path: filePath, error: "File not found" });
           continue;
         }
 
@@ -200,7 +213,7 @@ export class DuplicateFinderService {
           try {
             await handle.close();
           } catch (e) {
-            logger.debug('Failed to close file handle', e as Error);
+            logger.debug("Failed to close file handle", e as Error);
           }
         }
       }
@@ -222,13 +235,14 @@ export class DuplicateFinderService {
       try {
         if (createBackupManifest) {
           // Move to backup
-          const backupName = `${Date.now()}_${Math.random().toString(36).slice(2, 11)}_${path.basename(filePath)}`;
+          // BUG-001 FIX: Use cryptographically secure UUID for collision-safe backup names
+          const backupName = `${crypto.randomUUID()}_${Date.now()}_${path.basename(filePath)}`;
           const backupPath = path.join(backupDir, backupName);
 
           await fs.rename(filePath, backupPath);
 
           rollbackActions.push({
-            type: 'delete',
+            type: "delete",
             originalPath: filePath,
             backupPath: backupPath,
             timestamp: Date.now(),
@@ -249,7 +263,7 @@ export class DuplicateFinderService {
     if (createBackupManifest && rollbackActions.length > 0) {
       const manifestId = await this.rollbackService.createManifest(
         `Deletion of ${rollbackActions.length} duplicates`,
-        rollbackActions
+        rollbackActions,
       );
       result.manifestPath = manifestId;
     }
@@ -265,7 +279,7 @@ export class DuplicateFinderService {
    * @returns Object with valid files (have duplicates) and invalid files (no duplicates)
    */
   private async verifyDuplicatesExist(
-    filesToDelete: string[]
+    filesToDelete: string[],
   ): Promise<{ valid: string[]; invalid: { path: string; error: string }[] }> {
     const valid: string[] = [];
     const invalid: { path: string; error: string }[] = [];
@@ -311,7 +325,10 @@ export class DuplicateFinderService {
               try {
                 await handle.close();
               } catch (e) {
-                logger.debug('Failed to close file handle during verification', e as Error);
+                logger.debug(
+                  "Failed to close file handle during verification",
+                  e as Error,
+                );
               }
             }
           }
@@ -332,7 +349,7 @@ export class DuplicateFinderService {
               invalid.push({
                 path: filePath,
                 error:
-                  'Cannot delete: This is the last copy of this file (no duplicates found in directory)',
+                  "Cannot delete: This is the last copy of this file (no duplicates found in directory)",
               });
             } else {
               valid.push(filePath);
@@ -346,7 +363,10 @@ export class DuplicateFinderService {
               try {
                 await handle.close();
               } catch (e) {
-                logger.debug('Failed to close file handle during verification', e as Error);
+                logger.debug(
+                  "Failed to close file handle during verification",
+                  e as Error,
+                );
               }
             }
           }

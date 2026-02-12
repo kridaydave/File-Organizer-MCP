@@ -9,7 +9,7 @@ import { z } from 'zod';
 import type { ToolDefinition, ToolResponse, CategorizedResult } from '../types.js';
 import { validateStrictPath } from '../services/path-validator.service.js';
 import { FileScannerService } from '../services/file-scanner.service.js';
-import { CategorizerService } from '../services/categorizer.service.js';
+import { globalCategorizerService } from '../services/index.js';
 import { createErrorResponse } from '../utils/error-handler.js';
 import { CommonParamsSchema } from '../schemas/common.schemas.js';
 
@@ -24,6 +24,11 @@ export const CategorizeByTypeInputSchema = z
       .optional()
       .default(false)
       .describe('Include subdirectories in categorization'),
+    use_content_analysis: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Analyze file content for accurate type detection (slower but more secure)'),
   })
   .merge(CommonParamsSchema);
 
@@ -33,12 +38,17 @@ export const categorizeByTypeToolDefinition: ToolDefinition = {
   name: 'file_organizer_categorize_by_type',
   title: 'Categorize Files by Type',
   description:
-    'Categorize files by their type (Executables, Videos, Documents, etc.) and show statistics for each category.',
+    'Categorize files by their type (Executables, Videos, Documents, etc.) and show statistics for each category. Enable use_content_analysis to detect file type mismatches and security threats.',
   inputSchema: {
     type: 'object',
     properties: {
       directory: { type: 'string', description: 'Full path to the directory to categorize' },
       include_subdirs: { type: 'boolean', description: 'Include subdirectories', default: false },
+      use_content_analysis: { 
+        type: 'boolean', 
+        description: 'Analyze file content for accurate type detection (slower but detects mismatches and threats)',
+        default: false 
+      },
       response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
     },
     required: ['directory'],
@@ -62,18 +72,60 @@ export async function handleCategorizeByType(args: Record<string, unknown>): Pro
       };
     }
 
-    const { directory, include_subdirs, response_format } = parsed.data;
+    const { directory, include_subdirs, use_content_analysis, response_format } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
     const scanner = new FileScannerService();
-    const categorizer = new CategorizerService();
+    // Use global categorizer which has content analyzer and metadata cache
+    const categorizer = globalCategorizerService;
 
     const files = await scanner.getAllFiles(validatedPath, include_subdirs);
-    const categories = categorizer.categorizeFiles(files);
+    
+    // Track content analysis warnings
+    const contentWarnings: Array<{ file: string; warnings: string[]; category: string }> = [];
+    
+    let categories: CategorizedResult['categories'];
+    
+    if (use_content_analysis) {
+      // Perform content-based categorization for each file
+      // Build a map of file paths to their content-analyzed categories
+      const fileCategoryMap = new Map<string, string>();
+      for (const file of files) {
+        const result = await categorizer.getCategoryByContent(file.path);
+        fileCategoryMap.set(file.path, result.category);
+        if (result.warnings.length > 0) {
+          contentWarnings.push({
+            file: file.path,
+            warnings: result.warnings,
+            category: result.category,
+          });
+        }
+      }
+      // Create a modified categorizer that uses our content-based categories
+      const originalGetCategory = categorizer.getCategory.bind(categorizer);
+      categorizer.getCategory = (name: string) => {
+        // Find the file in our map
+        for (const [path, cat] of fileCategoryMap.entries()) {
+          if (path.endsWith(name)) {
+            return cat as any;
+          }
+        }
+        return originalGetCategory(name);
+      };
+      categories = categorizer.categorizeFiles(files);
+      // Restore original method
+      categorizer.getCategory = originalGetCategory;
+    } else {
+      categories = categorizer.categorizeFiles(files);
+    }
 
-    const result: CategorizedResult = {
+    const result: CategorizedResult & { content_warnings?: typeof contentWarnings } = {
       directory: validatedPath,
       categories,
     };
+    
+    if (contentWarnings.length > 0) {
+      result.content_warnings = contentWarnings;
+    }
 
     if (response_format === 'json') {
       return {
@@ -82,17 +134,30 @@ export async function handleCategorizeByType(args: Record<string, unknown>): Pro
       };
     }
 
-    const markdown = `### File Categories in \`${result.directory}\`
+    let markdown = `### File Categories in \`${result.directory}\``;
+    
+    if (use_content_analysis) {
+      markdown += '\n*(Content analysis enabled)*';
+    }
+    
+    markdown += '\n\n';
 
-${Object.entries(result.categories)
-  .map(
-    ([cat, stats]) =>
-      `#### ${cat} (${stats?.count} files, ${stats?.total_size_readable})\n${stats?.files
-        .slice(0, 5)
-        .map((f) => `- ${f}`)
-        .join('\n')}${stats && stats.count > 5 ? `\n- ...and ${stats.count - 5} more` : ''}`
-  )
-  .join('\n\n')}`;
+    markdown += Object.entries(result.categories)
+      .map(
+        ([cat, stats]) =>
+          `#### ${cat} (${stats?.count} files, ${stats?.total_size_readable})\n${stats?.files
+            .slice(0, 5)
+            .map((f) => `- ${f}`)
+            .join('\n')}${stats && stats.count > 5 ? `\n- ...and ${stats.count - 5} more` : ''}`
+      )
+      .join('\n\n');
+
+    if (contentWarnings.length > 0) {
+      markdown += '\n\n#### ⚠️ Content Analysis Warnings\n\n';
+      markdown += contentWarnings
+        .map(w => `- \`${w.file}\`: ${w.warnings.join(', ')}`)
+        .join('\n');
+    }
 
     return {
       content: [{ type: 'text', text: markdown }],

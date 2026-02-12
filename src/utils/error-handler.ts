@@ -3,10 +3,14 @@
  * Centralized Error Handling
  */
 
-import crypto from 'crypto';
-import { AccessDeniedError, ValidationError, type ToolResponse } from '../types.js';
-import { FileOrganizerError } from '../errors.js';
-import { logger } from './logger.js';
+import crypto from "crypto";
+import {
+  AccessDeniedError,
+  ValidationError,
+  type ToolResponse,
+} from "../types.js";
+import { FileOrganizerError } from "../errors.js";
+import { logger } from "./logger.js";
 
 /**
  * Sanitize error message to prevent path disclosure
@@ -16,10 +20,19 @@ export function sanitizeErrorMessage(error: Error | string): string {
   const message = error instanceof Error ? error.message : String(error);
 
   // Replace Windows paths (Look for drive letter, colon, backslash, then chars including spaces until end or distinct break)
-  let sanitized = message.replace(/[a-zA-Z]:\\[\w\s\-\.\(\)\\$]+/g, '[PATH]');
+  let sanitized = message.replace(/[a-zA-Z]:\\[\w\s\-\.\(\)\\$]+/g, "[PATH]");
+
+  // Replace forward-slash Windows paths (e.g., C:/Users)
+  sanitized = sanitized.replace(/[a-zA-Z]:\/[\w\s\-\.\/]+/g, "[PATH]");
+
+  // Replace UNC paths (e.g., \\server\share)
+  sanitized = sanitized.replace(/\\\\[\w\-\.]+\\[\w\s\-\.\\$]+/g, "[PATH]");
+
+  // Replace relative paths (e.g., ./foo, ../bar)
+  sanitized = sanitized.replace(/(?:^|\s)\.\.?\/[\w\s\-\.\/]+/g, "$1[PATH]");
 
   // Replace Unix paths (start with / and contain path chars)
-  sanitized = sanitized.replace(/(^|\s)\/[\w\s\-\.\/]+/g, '$1[PATH]');
+  sanitized = sanitized.replace(/(^|\s)\/[\w\s\-\.\/]+/g, "$1[PATH]");
 
   return sanitized;
 }
@@ -32,7 +45,8 @@ export function createErrorResponse(error: unknown): ToolResponse {
   let clientMessage: string;
 
   // Log full details server-side
-  const fullMessage = error instanceof Error ? error.stack || error.message : String(error);
+  const fullMessage =
+    error instanceof Error ? error.stack || error.message : String(error);
   logger.error(`Error ID ${errorId}: ${fullMessage}`);
 
   if (error instanceof FileOrganizerError) {
@@ -50,7 +64,7 @@ export function createErrorResponse(error: unknown): ToolResponse {
   return {
     content: [
       {
-        type: 'text',
+        type: "text",
         text: `Error: ${clientMessage}`,
       },
     ],
@@ -81,11 +95,13 @@ Learn more: https://github.com/kridaydave/File-Organizer-MCP#security-modes`;
 /**
  * Type guard to check if an error is a NodeJS.ErrnoException
  */
-export function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+export function isErrnoException(
+  error: unknown,
+): error is NodeJS.ErrnoException {
   return (
-    typeof error === 'object' &&
+    typeof error === "object" &&
     error !== null &&
-    'code' in error &&
-    typeof (error as Record<string, unknown>).code === 'string'
+    "code" in error &&
+    typeof (error as Record<string, unknown>).code === "string"
   );
 }

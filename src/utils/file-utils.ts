@@ -3,9 +3,9 @@
  * File System Utilities
  */
 
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
+import fs from "fs/promises";
+import path from "path";
+import os from "os";
 
 /**
  * Check if a file exists
@@ -35,15 +35,15 @@ export async function ensureDir(dirPath: string): Promise<void> {
  * @returns Path with ~ expanded
  */
 export function expandHomePath(inputPath: string): string {
-  if (!inputPath || typeof inputPath !== 'string') {
+  if (!inputPath || typeof inputPath !== "string") {
     return inputPath;
   }
 
-  if (inputPath === '~') {
+  if (inputPath === "~") {
     return os.homedir();
   }
 
-  if (inputPath.startsWith('~/') || inputPath.startsWith('~\\')) {
+  if (inputPath.startsWith("~/") || inputPath.startsWith("~\\")) {
     return path.join(os.homedir(), inputPath.slice(2));
   }
 
@@ -57,19 +57,25 @@ export function expandHomePath(inputPath: string): string {
  * @returns Path with env vars expanded
  */
 export function expandEnvVars(inputPath: string): string {
-  if (!inputPath || typeof inputPath !== 'string') {
+  if (!inputPath || typeof inputPath !== "string") {
     return inputPath;
   }
 
   // Unix style: $VAR or ${VAR}
-  let result = inputPath.replace(/\$\{([^}]+)\}/g, (_, name: string) => process.env[name] ?? '');
+  let result = inputPath.replace(
+    /\$\{([^}]+)\}/g,
+    (_, name: string) => process.env[name] ?? "",
+  );
   result = result.replace(
     /\$([A-Za-z_][A-Za-z0-9_]*)/g,
-    (_, name: string) => process.env[name] ?? ''
+    (_, name: string) => process.env[name] ?? "",
   );
 
   // Windows style: %VAR%
-  result = result.replace(/%([^%]+)%/g, (_, name: string) => process.env[name] ?? '');
+  result = result.replace(
+    /%([^%]+)%/g,
+    (_, name: string) => process.env[name] ?? "",
+  );
 
   return result;
 }
@@ -80,23 +86,36 @@ export function expandEnvVars(inputPath: string): string {
  * @returns Normalized path
  */
 export function normalizePath(inputPath: string): string {
-  if (!inputPath || typeof inputPath !== 'string') {
+  if (!inputPath || typeof inputPath !== "string") {
     return inputPath;
   }
 
   // 1. Decode URI components (e.g. %2e%2e -> ..) to prevent bypasses
+  // SECURITY FIX: Iterative decoding to prevent double-encoding bypass (%252e -> %2e -> .)
+  // Example attack: %252e%252e%252f -> %2e%2e%2f -> ../
   try {
-    inputPath = decodeURIComponent(inputPath);
+    let decoded = inputPath;
+    let previous: string;
+    let iterations = 0;
+    const MAX_ITERATIONS = 3; // Prevent ReDoS attacks
+
+    do {
+      previous = decoded;
+      decoded = decodeURIComponent(decoded);
+      iterations++;
+    } while (decoded !== previous && iterations < MAX_ITERATIONS);
+
+    inputPath = decoded;
   } catch {
     // Continue with original if malformed
   }
 
   // 2. Unicode Normalization (NFC)
   // Ensures consistent representation of characters
-  inputPath = inputPath.normalize('NFC');
+  inputPath = inputPath.normalize("NFC");
 
   // 3. Strip Null Bytes (prevent truncation attacks)
-  inputPath = inputPath.replace(/\0/g, '');
+  inputPath = inputPath.replace(/\0/g, "");
 
   let normalized = expandHomePath(inputPath);
   normalized = expandEnvVars(normalized);
@@ -119,11 +138,20 @@ export function isSubPath(parentPath: string, childPath: string): boolean {
   const normalizedParent = path.resolve(parentPath);
   const normalizedChild = path.resolve(childPath);
 
-  if (process.platform === 'win32') {
-    const relative = path.relative(normalizedParent.toLowerCase(), normalizedChild.toLowerCase());
-    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  if (process.platform === "win32") {
+    const relative = path.relative(
+      normalizedParent.toLowerCase(),
+      normalizedChild.toLowerCase(),
+    );
+    return (
+      relative === "" ||
+      (!relative.startsWith("..") && !path.isAbsolute(relative))
+    );
   }
 
   const relative = path.relative(normalizedParent, normalizedChild);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
 }

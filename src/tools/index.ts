@@ -53,6 +53,31 @@ export {
 } from "./file-organization.js";
 export type { OrganizeFilesInput } from "./file-organization.js";
 
+// ==================== Music & Photo Organization ====================
+
+export {
+  organizeMusicToolDefinition,
+  handleOrganizeMusic,
+  OrganizeMusicInputSchema,
+} from "./music-organization.js";
+export type { OrganizeMusicInput } from "./music-organization.js";
+
+export {
+  organizePhotosToolDefinition,
+  handleOrganizePhotos,
+  OrganizePhotosInputSchema,
+} from "./photo-organization.js";
+export type { OrganizePhotosInput } from "./photo-organization.js";
+
+// ==================== Batch File Reader ====================
+
+export {
+  batchReadFilesToolDefinition,
+  handleBatchReadFiles,
+  BatchReadFilesInputSchema,
+} from "./batch-file-reader.js";
+export type { BatchReadFilesInput, FileReadResult } from "./batch-file-reader.js";
+
 // ==================== Tool Registry ====================
 
 import { listFilesToolDefinition } from "./file-listing.js";
@@ -73,6 +98,9 @@ import {
 import { undoLastOperationToolDefinition } from "./rollback.js";
 import { batchRenameToolDefinition } from "./file-renaming.js";
 import { inspectMetadataToolDefinition } from "./metadata-inspection.js";
+import { organizeMusicToolDefinition } from "./music-organization.js";
+import { organizePhotosToolDefinition } from "./photo-organization.js";
+import { batchReadFilesToolDefinition } from "./batch-file-reader.js";
 
 export {
   undoLastOperationToolDefinition,
@@ -162,6 +190,9 @@ export const TOOLS: ToolDefinition[] = [
   findDuplicateFilesToolDefinition,
   organizeFilesToolDefinition,
   previewOrganizationToolDefinition,
+  organizeMusicToolDefinition,
+  organizePhotosToolDefinition,
+  batchReadFilesToolDefinition,
   getCategoriesToolDefinition,
   setCustomRulesToolDefinition,
   analyzeDuplicatesToolDefinition,

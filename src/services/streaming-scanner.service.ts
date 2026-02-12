@@ -3,14 +3,14 @@
  * Streaming Scanner Service
  */
 
-import fs from 'fs/promises';
-import path from 'path';
-import { FileInfo } from '../types.js';
+import fs from "fs/promises";
+import path from "path";
+import { FileInfo } from "../types.js";
 
 export class StreamingScanner {
   async *scanLarge(
     directory: string,
-    options: { batchSize: number } = { batchSize: 100 }
+    options: { batchSize: number } = { batchSize: 100 },
   ): AsyncGenerator<FileInfo[], void, unknown> {
     // Note: fs.readdir(withFileTypes) loads all entries into memory.
     // For TRULY massive dirs, opendir is better.
@@ -43,8 +43,14 @@ export class StreamingScanner {
         }
       }
     } finally {
-      // opendir iterator handles closing, but explicit close is good practice if needed?
-      // The iterator close matches docs.
+      // BUG-002 FIX: Explicitly close directory handle to prevent resource leaks
+      // if generator is abandoned mid-iteration
+      try {
+        await dirHandle.close();
+      } catch (closeErr) {
+        // Log but don't throw - we want to preserve original error if any
+        console.error("Failed to close directory handle:", closeErr);
+      }
     }
 
     if (batch.length > 0) {
@@ -54,7 +60,7 @@ export class StreamingScanner {
 
   async scanWithProgress(
     directory: string,
-    onProgress: (current: number, total: number) => void
+    onProgress: (current: number, total: number) => void,
   ): Promise<FileInfo[]> {
     // Note: To get 'total' we usually need to read all dirents first.
     // So this is trade-off.

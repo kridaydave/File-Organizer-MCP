@@ -29,6 +29,9 @@ import {
   handleUnwatchDirectory,
   handleListWatches,
   handleReadFile,
+  handleOrganizeMusic,
+  handleOrganizePhotos,
+  handleBatchReadFiles,
 } from "./tools/index.js";
 import { sanitizeErrorMessage } from "./utils/error-handler.js";
 import { logger } from "./utils/logger.js";
@@ -199,6 +202,15 @@ async function handleToolCall(
         break;
       case "file_organizer_read_file":
         response = await handleReadFile(args as Record<string, unknown>);
+        break;
+      case "file_organizer_organize_music":
+        response = await handleOrganizeMusic(args as Record<string, unknown>);
+        break;
+      case "file_organizer_organize_photos":
+        response = await handleOrganizePhotos(args as Record<string, unknown>);
+        break;
+      case "file_organizer_batch_read_files":
+        response = await handleBatchReadFiles(args as Record<string, unknown>);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
