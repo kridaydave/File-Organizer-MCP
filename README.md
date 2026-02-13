@@ -17,7 +17,7 @@
 
 ---
 
-[![npm version](https://img.shields.io/badge/npm-v3.2.8-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v3.3.1-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
@@ -204,27 +204,11 @@ Run `npx file-organizer-mcp --setup` for guided configuration:
 - **📅 Schedule Setup** - Configure automatic organization schedules
 - **🤖 Claude Integration** - Auto-generates `claude_desktop_config.json`
 
-### What's New in V3.2.8
-
-**New Features:**
-
-- **Enhanced Metadata Extraction** - Extracts EXIF for photos, ID3 tags for music, and detailed metadata for documents
-- **Music Organization** - Organizes music files by Artist/Album/Title structure using ID3 metadata
-- **Photo Organization** - Organizes photos by date (YYYY/MM/DD) using EXIF metadata
-- **Security Screening** - Enhanced security with metadata-based threat detection
-- **Metadata Cache System** - Efficient metadata caching for faster operations
-- **File-reader tool** - Read files with configurable encoding and line limits
-
+### What's Next ?
+- **Automatic Compression of unsed/old files**
+- **Server Code migration to TypeScript**
+- **Added Security and performance**
 See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-### Recent Fixes (v3.2.0)
-
-- Fixed test coverage and added 57 new test cases
-- Improved duplicate detection accuracy
-- Enhanced file categorization logic
-- Better handling of special characters in filenames
-- Improved error messages for permission denied scenarios
-
 ---
 
 ## <a id="tools-reference"></a>Tools Reference 🛠️
