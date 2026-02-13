@@ -7,6 +7,7 @@ import fs from "fs/promises";
 import path from "path";
 import { createReadStream, createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
+import * as piexif from "piexifjs";
 import { MetadataService } from "./metadata.service.js";
 import { PathValidatorService } from "./path-validator.service.js";
 import { logger } from "../utils/logger.js";
@@ -570,8 +571,7 @@ export class PhotoOrganizerService {
 
   /**
    * Copy file without GPS data
-   * Note: This is a simplified implementation that copies the file.
-   * Full GPS stripping would require an EXIF manipulation library.
+   * Uses piexifjs to strip GPS EXIF data while preserving other metadata
    */
   private async copyWithoutGPS(source: string, target: string): Promise<void> {
     // Read the file
@@ -592,11 +592,10 @@ export class PhotoOrganizerService {
 
   /**
    * Strip GPS data from image buffer
-   * This is a simplified implementation for JPEG files
+   * Uses piexifjs to remove GPS EXIF data while preserving other metadata
    *
-   * NOTE: Currently only logs a warning. Full implementation requires
-   * an EXIF manipulation library like 'piexifjs' or 'exiftool'.
-   * Consider this a placeholder for future enhancement.
+   * @param buffer - JPEG file buffer
+   * @returns Buffer with GPS data stripped
    */
   private stripGPSFromBuffer(buffer: Buffer): Buffer {
     // Check if it's a JPEG
@@ -608,27 +607,56 @@ export class PhotoOrganizerService {
       return buffer;
     }
 
-    // For JPEG files, GPS stripping requires:
-    // 1. Parse APP1 segment (EXIF)
-    // 2. Locate and remove GPS IFD from EXIF
-    // 3. Reconstruct the file with modified EXIF
-    // 4. Preserve all other metadata
+    try {
+      // Convert buffer to base64 for piexifjs
+      const jpegBase64 = buffer.toString("base64");
 
-    // TODO: Implement actual GPS stripping using an EXIF library
-    // Recommended libraries: piexifjs, exiftool-vendored, or exifreader
-    //
-    // For now, we log a prominent warning but still return the buffer
-    // to maintain backward compatibility. Users should be aware that
-    // GPS data is NOT being removed.
+      // Load EXIF data
+      const exifObj = piexif.load(jpegBase64);
 
-    logger.warn(
-      "[PRIVACY WARNING] GPS stripping is not yet fully implemented. " +
-        "GPS location data remains in the file. " +
-        "To remove GPS data, use an external tool like ExifTool before organizing.",
-    );
+      // Check if GPS data exists (GPS IFD is tag 0x8825)
+      const hasGPS = piexif.GPSIFD && Object.keys(exifObj.GPS || {}).length > 0;
 
-    // Return buffer as-is - GPS data is still present
-    // This is intentional to avoid giving users a false sense of security
-    return buffer;
+      if (!hasGPS) {
+        // No GPS data to strip
+        return buffer;
+      }
+
+      // Remove GPS IFD entirely
+      delete exifObj.GPS;
+
+      // Also remove GPS-related tags from other IFDs if they exist
+      if (exifObj["0th"] && piexif.ImageIFD.GPSTag !== undefined) {
+        delete exifObj["0th"][piexif.ImageIFD.GPSTag];
+      }
+
+      // Dump the modified EXIF back to binary
+      const exifBytes = piexif.dump(exifObj);
+
+      // Remove old EXIF and insert new one
+      const newJpegBase64 = piexif.remove(jpegBase64);
+      const finalJpegBase64 = piexif.insert(exifBytes, newJpegBase64);
+
+      // Convert back to buffer
+      const resultBuffer = Buffer.from(finalJpegBase64, "base64");
+
+      logger.debug("GPS data successfully stripped from JPEG", {
+        originalSize: buffer.length,
+        newSize: resultBuffer.length,
+      });
+
+      return resultBuffer;
+    } catch (error) {
+      // If EXIF manipulation fails, log error but return original buffer
+      // to prevent data loss
+      logger.error(
+        `Failed to strip GPS data: ${error instanceof Error ? error.message : String(error)}`,
+        { error },
+      );
+      logger.warn(
+        "GPS stripping failed - file will be copied with GPS data intact",
+      );
+      return buffer;
+    }
   }
 }

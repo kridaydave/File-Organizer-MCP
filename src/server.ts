@@ -68,7 +68,7 @@ export function createServer(): Server {
     const { name, arguments: args } = request.params;
 
     try {
-      const typedArgs = (args ?? {}) as Record<string, unknown>;
+      const typedArgs = args && typeof args === "object" ? args : {};
       return await handleToolCall(name, typedArgs);
     } catch (error) {
       const message =
@@ -135,88 +135,70 @@ async function handleToolCall(
     let response: MCPToolResponse;
     switch (name) {
       case "file_organizer_list_files":
-        response = await handleListFiles(args as Record<string, unknown>);
+        response = await handleListFiles(args);
         break;
       case "file_organizer_scan_directory":
-        response = await handleScanDirectory(args as Record<string, unknown>);
+        response = await handleScanDirectory(args);
         break;
       case "file_organizer_categorize_by_type":
-        response = await handleCategorizeByType(
-          args as Record<string, unknown>,
-        );
+        response = await handleCategorizeByType(args);
         break;
       case "file_organizer_find_largest_files":
-        response = await handleFindLargestFiles(
-          args as Record<string, unknown>,
-        );
+        response = await handleFindLargestFiles(args);
         break;
       case "file_organizer_find_duplicate_files":
-        response = await handleFindDuplicateFiles(
-          args as Record<string, unknown>,
-        );
+        response = await handleFindDuplicateFiles(args);
         break;
       case "file_organizer_organize_files":
-        response = await handleOrganizeFiles(args as Record<string, unknown>);
+        response = await handleOrganizeFiles(args);
         break;
       case "file_organizer_preview_organization":
-        response = await handlePreviewOrganization(
-          args as Record<string, unknown>,
-        );
+        response = await handlePreviewOrganization(args);
         break;
       case "file_organizer_get_categories":
-        response = await handleGetCategories(args as Record<string, unknown>);
+        response = await handleGetCategories(args);
         break;
       case "file_organizer_set_custom_rules":
-        response = await handleSetCustomRules(args as Record<string, unknown>);
+        response = await handleSetCustomRules(args);
         break;
       case "file_organizer_analyze_duplicates":
-        response = await handleAnalyzeDuplicates(
-          args as Record<string, unknown>,
-        );
+        response = await handleAnalyzeDuplicates(args);
         break;
       case "file_organizer_delete_duplicates":
-        response = await handleDeleteDuplicates(
-          args as Record<string, unknown>,
-        );
+        response = await handleDeleteDuplicates(args);
         break;
       case "file_organizer_undo_last_operation":
-        response = await handleUndoLastOperation(
-          args as Record<string, unknown>,
-        );
+        response = await handleUndoLastOperation(args);
         break;
       case "file_organizer_batch_rename":
-        response = await handleBatchRename(args as Record<string, unknown>);
+        response = await handleBatchRename(args);
         break;
       case "file_organizer_inspect_metadata":
-        response = await handleInspectMetadata(args as Record<string, unknown>);
+        response = await handleInspectMetadata(args);
         break;
       case "file_organizer_watch_directory":
-        response = await handleWatchDirectory(args as Record<string, unknown>);
+        response = await handleWatchDirectory(args);
         break;
       case "file_organizer_unwatch_directory":
-        response = await handleUnwatchDirectory(
-          args as Record<string, unknown>,
-        );
+        response = await handleUnwatchDirectory(args);
         break;
       case "file_organizer_list_watches":
-        response = await handleListWatches(args as Record<string, unknown>);
+        response = await handleListWatches(args);
         break;
       case "file_organizer_read_file":
-        response = await handleReadFile(args as Record<string, unknown>);
+        response = await handleReadFile(args);
         break;
       case "file_organizer_organize_music":
-        response = await handleOrganizeMusic(args as Record<string, unknown>);
+        response = await handleOrganizeMusic(args);
         break;
       case "file_organizer_organize_photos":
-        response = await handleOrganizePhotos(args as Record<string, unknown>);
+        response = await handleOrganizePhotos(args);
         break;
       case "file_organizer_organize_by_content":
-        response = await handleOrganizeByContent(
-          args as Record<string, unknown>,
-        );
+        response = await handleOrganizeByContent(args);
         break;
       case "file_organizer_batch_read_files":
-        response = await handleBatchReadFiles(args as Record<string, unknown>);
+        response = await handleBatchReadFiles(args);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);

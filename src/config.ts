@@ -6,6 +6,7 @@
 import os from "os";
 import path from "path";
 import fs from "fs";
+import { logger } from "./utils/logger.js";
 
 export const CONFIG = {
   VERSION: "3.2.8",
@@ -197,7 +198,7 @@ export function loadUserConfig(): UserConfig {
 
     // Handle empty file
     if (!configData.trim()) {
-      console.warn(`Warning: Config file is empty: ${configPath}`);
+      logger.warn(`Warning: Config file is empty: ${configPath}`);
       return {};
     }
 
@@ -221,7 +222,7 @@ export function loadUserConfig(): UserConfig {
       errorMessage.includes("JSON") ||
       errorMessage.includes("Unexpected token")
     ) {
-      console.error(
+      logger.error(
         `
 ⚠️  CONFIG FILE CORRUPTED ⚠️
 
@@ -240,7 +241,7 @@ Your file organization settings will be reset, but your actual files are safe.
       `.trim(),
       );
     } else {
-      console.error("Error loading user config:", errorMessage);
+      logger.error("Error loading user config:", errorMessage);
     }
 
     return {};
@@ -279,7 +280,7 @@ export function updateUserConfig(updates: Partial<UserConfig>): boolean {
     fs.writeFileSync(configPath, JSON.stringify(mergedConfig, null, 2));
     return true;
   } catch (error) {
-    console.error("Error saving config:", (error as Error).message);
+    logger.error("Error saving config:", (error as Error).message);
     return false;
   }
 }
@@ -297,9 +298,7 @@ function loadCustomAllowedDirs(): string[] {
 
           // Reject symlinks immediately
           if (stats.isSymbolicLink()) {
-            console.error(
-              `Warning: Custom directory blocked (symlink): ${dir}`,
-            );
+            logger.error(`Warning: Custom directory blocked (symlink): ${dir}`);
             return false;
           }
 
@@ -314,7 +313,7 @@ function loadCustomAllowedDirs(): string[] {
 
           // Block path traversal outside of home directory
           if (!resolvedDir.startsWith(home)) {
-            console.error(
+            logger.error(
               `Warning: Custom directory blocked (outside home): ${dir}`,
             );
             return false;
@@ -322,7 +321,7 @@ function loadCustomAllowedDirs(): string[] {
 
           // Block relative path traversal patterns
           if (dir.includes("..") || dir.includes("~")) {
-            console.error(
+            logger.error(
               `Warning: Custom directory blocked (path traversal): ${dir}`,
             );
             return false;
@@ -330,13 +329,13 @@ function loadCustomAllowedDirs(): string[] {
 
           return true;
         } catch {
-          console.error(`Warning: Custom directory does not exist: ${dir}`);
+          logger.error(`Warning: Custom directory does not exist: ${dir}`);
           return false;
         }
       });
     }
   } catch (error) {
-    console.error("Error loading custom config:", (error as Error).message);
+    logger.error("Error loading custom config:", (error as Error).message);
   }
 
   return [];
@@ -455,10 +454,10 @@ export function initializeUserConfig(): void {
       };
 
       fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
-      console.error(`Created default config file at: ${configPath}`);
+      logger.error(`Created default config file at: ${configPath}`);
     }
   } catch (error) {
-    console.error("Error initializing user config:", (error as Error).message);
+    logger.error("Error initializing user config:", (error as Error).message);
   }
 }
 

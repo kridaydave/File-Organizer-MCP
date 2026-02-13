@@ -10,7 +10,7 @@ import fs from "fs/promises";
 import path from "path";
 import zlib from "zlib";
 import { promisify } from "util";
-import pdfParse from "pdf-parse";
+import * as pdfParse from "pdf-parse";
 import mammoth from "mammoth";
 import { logger } from "../utils/logger.js";
 
@@ -117,7 +117,7 @@ export class TextExtractionService {
   ): Promise<{ text: string; method: string }> {
     try {
       const buffer = await fs.readFile(filePath);
-      const data = await pdfParse(buffer);
+      const data = await pdfParse.default(buffer);
       return { text: data.text, method: "pdf-parse" };
     } catch (error) {
       logger.warn(`Failed to extract PDF text from ${filePath}`, { error });

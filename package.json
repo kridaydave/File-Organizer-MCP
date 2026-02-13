@@ -65,6 +65,7 @@
     "music-metadata": "^11.11.2",
     "node-cron": "^4.2.1",
     "pdf-parse": "^2.4.5",
+    "piexifjs": "^1.0.6",
     "react": "^19.2.4",
     "zod": "^4.3.6"
   },

@@ -6,6 +6,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { FileInfo } from "../types.js";
+import { logger } from "../utils/logger.js";
 
 export class StreamingScanner {
   async *scanLarge(
@@ -49,7 +50,7 @@ export class StreamingScanner {
         await dirHandle.close();
       } catch (closeErr) {
         // Log but don't throw - we want to preserve original error if any
-        console.error("Failed to close directory handle:", closeErr);
+        logger.error("Failed to close directory handle:", closeErr);
       }
     }
 

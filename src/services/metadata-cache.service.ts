@@ -24,6 +24,12 @@ import {
   MetadataCacheEntry,
 } from "../types.js";
 
+function isMetadataCache(obj: unknown): obj is MetadataCache {
+  if (typeof obj !== "object" || obj === null) return false;
+  const cache = obj as Record<string, unknown>;
+  return typeof cache.version === "string" && Array.isArray(cache.entries);
+}
+
 // Extended cache entry for internal use with TTL support
 interface ExtendedCacheEntry {
   value: unknown;
@@ -485,7 +491,11 @@ export class MetadataCacheService {
   private async readLegacyCache(): Promise<MetadataCache> {
     try {
       const data = await fs.readFile(this.cacheFilePath, "utf-8");
-      const cache = JSON.parse(data) as MetadataCache;
+      const parsed = JSON.parse(data);
+      if (!isMetadataCache(parsed)) {
+        throw new Error("Invalid cache file format");
+      }
+      const cache = parsed;
 
       // Revive Date objects from JSON
       return {
@@ -510,7 +520,11 @@ export class MetadataCacheService {
         })),
       };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
         // Cache file doesn't exist, return empty cache
         return {
           version: "1.0",

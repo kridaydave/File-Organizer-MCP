@@ -16,6 +16,8 @@
  * @license MIT
  */
 
+import { logger } from "./utils/logger.js";
+
 // ==================== PRE-FLIGHT CHECKS ====================
 // These run before any imports to catch installation issues early
 
@@ -25,7 +27,7 @@ const currentNodeVersion = process.versions.node;
 const majorVersion = parseInt(currentNodeVersion.split(".")[0] || "0", 10);
 
 if (majorVersion < MIN_NODE_VERSION) {
-  console.error(
+  logger.error(
     `
 ╔══════════════════════════════════════════════════════════════════╗
 ║  ERROR: Node.js version ${currentNodeVersion.padEnd(8)} is not supported                ║
@@ -58,7 +60,7 @@ const distServerPath = path.join(__dirname, "server.js");
 
 if (!fs.existsSync(distIndexPath) || !fs.existsSync(distServerPath)) {
   const packageRoot = path.resolve(__dirname, "..");
-  console.error(
+  logger.error(
     `
 ╔══════════════════════════════════════════════════════════════════╗
 ║  INSTALLATION INCOMPLETE                                         ║
@@ -99,7 +101,7 @@ for (const dep of criticalDeps) {
 }
 
 if (missingDeps.length > 0) {
-  console.error(
+  logger.error(
     `
 ╔══════════════════════════════════════════════════════════════════╗
 ║  INCOMPLETE DEPENDENCIES                                         ║
@@ -134,7 +136,6 @@ ${missingDeps.map((d) => `║    • ${d.padEnd(59)}║`).join("\n")}
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server.js";
 import { CONFIG } from "./config.js";
-import { logger } from "./utils/logger.js";
 import {
   startAutoOrganizeScheduler,
   stopAutoOrganizeScheduler,
@@ -149,7 +150,7 @@ async function main(): Promise<void> {
 
   // --help flag
   if (args.includes("--help") || args.includes("-h")) {
-    console.log(`
+    logger.info(`
 File Organizer MCP Server v${CONFIG.VERSION}
 
 Usage:
@@ -167,7 +168,7 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
 
   // --version flag
   if (args.includes("--version") || args.includes("-v")) {
-    console.log(`File Organizer MCP Server v${CONFIG.VERSION}`);
+    logger.info(`File Organizer MCP Server v${CONFIG.VERSION}`);
     process.exit(0);
   }
 
@@ -232,17 +233,17 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
     );
 
     if (hasRealErrors) {
-      console.error("\n⚠️  Auto-Organize Scheduler Issues:");
+      logger.error("\n⚠️  Auto-Organize Scheduler Issues:");
       schedulerResult.errors.forEach((error) => {
         if (
           !error.includes("already running") &&
           !error.includes("No directories configured")
         ) {
-          console.error(`   • ${error}`);
+          logger.error(`   • ${error}`);
         }
       });
-      console.error("\n   To fix configuration:");
-      console.error("   npx file-organizer-mcp --setup\n");
+      logger.error("\n   To fix configuration:");
+      logger.error("   npx file-organizer-mcp --setup\n");
     }
   }
 
@@ -253,11 +254,11 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
     );
 
     if (hasConfigErrors) {
-      console.error("\nℹ️  Auto-organize is not monitoring any directories.");
-      console.error(
+      logger.error("\nℹ️  Auto-organize is not monitoring any directories.");
+      logger.error(
         "   Run the setup wizard to configure scheduled organization:\n",
       );
-      console.error("   npx file-organizer-mcp --setup\n");
+      logger.error("   npx file-organizer-mcp --setup\n");
     }
   }
 
@@ -287,7 +288,7 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
       errorMessage.includes("EPIPE") ||
       errorMessage.includes("broken pipe")
     ) {
-      console.error(
+      logger.error(
         `
 ╔══════════════════════════════════════════════════════════════════╗
 ║  CONNECTION ERROR                                                ║
@@ -307,7 +308,7 @@ For more information, visit: https://github.com/kridaydave/File-Organizer-MCP
       `.trim(),
       );
     } else if (errorMessage.includes("ECONNREFUSED")) {
-      console.error(
+      logger.error(
         `
 ╔══════════════════════════════════════════════════════════════════╗
 ║  CONNECTION REFUSED                                              ║

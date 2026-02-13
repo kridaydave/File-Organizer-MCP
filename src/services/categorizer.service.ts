@@ -55,7 +55,7 @@ export class CategorizerService {
 
         validRules.push(rule);
       } catch (error) {
-        console.error(
+        logger.error(
           `Skipping invalid rule for category '${rule.category}': ${error instanceof Error ? error.message : String(error)}`,
         );
       }
