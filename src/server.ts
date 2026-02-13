@@ -32,6 +32,7 @@ import {
   handleOrganizeMusic,
   handleOrganizePhotos,
   handleOrganizeByContent,
+  handleOrganizeSmart,
   handleBatchReadFiles,
 } from "./tools/index.js";
 import { sanitizeErrorMessage } from "./utils/error-handler.js";
@@ -196,6 +197,9 @@ async function handleToolCall(
         break;
       case "file_organizer_organize_by_content":
         response = await handleOrganizeByContent(args);
+        break;
+      case "file_organizer_organize_smart":
+        response = await handleOrganizeSmart(args);
         break;
       case "file_organizer_batch_read_files":
         response = await handleBatchReadFiles(args);

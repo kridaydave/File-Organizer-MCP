@@ -78,6 +78,15 @@ export {
 } from "./content-organization.js";
 export type { OrganizeByContentInput } from "./content-organization.js";
 
+// ==================== Smart Organization ====================
+
+export {
+  organizeSmartToolDefinition,
+  handleOrganizeSmart,
+  OrganizeSmartInputSchema,
+} from "./smart-organization.js";
+export type { OrganizeSmartInput } from "./smart-organization.js";
+
 // ==================== Batch File Reader ====================
 
 export {
@@ -113,6 +122,7 @@ import { inspectMetadataToolDefinition } from "./metadata-inspection.js";
 import { organizeMusicToolDefinition } from "./music-organization.js";
 import { organizePhotosToolDefinition } from "./photo-organization.js";
 import { organizeByContentToolDefinition } from "./content-organization.js";
+import { organizeSmartToolDefinition } from "./smart-organization.js";
 import { batchReadFilesToolDefinition } from "./batch-file-reader.js";
 
 export {
@@ -206,6 +216,7 @@ export const TOOLS: ToolDefinition[] = [
   organizeMusicToolDefinition,
   organizePhotosToolDefinition,
   organizeByContentToolDefinition,
+  organizeSmartToolDefinition,
   batchReadFilesToolDefinition,
   getCategoriesToolDefinition,
   setCustomRulesToolDefinition,
