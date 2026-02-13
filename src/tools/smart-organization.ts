@@ -433,8 +433,8 @@ class SmartOrganizerService {
           await fs.copyFile(file.path, targetPath);
 
           // Create shortcuts for additional topics if enabled
-          if (options.createShortcuts && topics.length > 1) {
-            for (const topic of topics.slice(1)) {
+          if (options.createShortcuts && topics.topics.length > 1) {
+            for (const topic of topics.topics.slice(1)) {
               if (!topic) continue;
               const shortcutDir = path.join(
                 targetDir,
