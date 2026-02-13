@@ -10,7 +10,7 @@ import fs from "fs/promises";
 import path from "path";
 import zlib from "zlib";
 import { promisify } from "util";
-import * as pdfParse from "pdf-parse";
+import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
 import { logger } from "../utils/logger.js";
 

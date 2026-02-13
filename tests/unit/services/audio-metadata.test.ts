@@ -13,7 +13,9 @@ describe("AudioMetadataService", () => {
 
   beforeEach(async () => {
     service = new AudioMetadataService();
-    testDir = await fs.mkdtemp(path.join(process.cwd(), "tests", "temp", "audio-test-"));
+    testDir = await fs.mkdtemp(
+      path.join(process.cwd(), "tests", "temp", "audio-test-"),
+    );
   });
 
   afterEach(async () => {
@@ -51,11 +53,16 @@ describe("AudioMetadataService", () => {
     it("should extract ID3v2.3 metadata from MP3", async () => {
       // Create a mock MP3 file with ID3v2.3 header
       const id3Header = Buffer.from([
-        0x49, 0x44, 0x33, // "ID3"
+        0x49,
+        0x44,
+        0x33, // "ID3"
         0x03, // Version 2.3
         0x00, // Revision
         0x00, // Flags
-        0x00, 0x00, 0x00, 0x7f, // Size (synchsafe: 127 bytes)
+        0x00,
+        0x00,
+        0x00,
+        0x7f, // Size (synchsafe: 127 bytes)
       ]);
 
       // TIT2 frame (Title)
@@ -76,7 +83,12 @@ describe("AudioMetadataService", () => {
         Buffer.from("Test Artist"),
       ]);
 
-      const mp3Content = Buffer.concat([id3Header, tit2Frame, tpe1Frame, Buffer.alloc(100)]);
+      const mp3Content = Buffer.concat([
+        id3Header,
+        tit2Frame,
+        tpe1Frame,
+        Buffer.alloc(100),
+      ]);
       const filePath = path.join(testDir, "test.mp3");
       await fs.writeFile(filePath, mp3Content);
 
@@ -91,11 +103,16 @@ describe("AudioMetadataService", () => {
 
     it("should extract ID3v2.4 metadata with different encoding", async () => {
       const id3Header = Buffer.from([
-        0x49, 0x44, 0x33, // "ID3"
+        0x49,
+        0x44,
+        0x33, // "ID3"
         0x04, // Version 2.4
         0x00, // Revision
         0x00, // Flags
-        0x00, 0x00, 0x00, 0x4f, // Size
+        0x00,
+        0x00,
+        0x00,
+        0x4f, // Size
       ]);
 
       // TALB frame (Album) with UTF-16 encoding
@@ -108,7 +125,11 @@ describe("AudioMetadataService", () => {
         Buffer.from("Test Album", "utf16le"),
       ]);
 
-      const mp3Content = Buffer.concat([id3Header, talbFrame, Buffer.alloc(100)]);
+      const mp3Content = Buffer.concat([
+        id3Header,
+        talbFrame,
+        Buffer.alloc(100),
+      ]);
       const filePath = path.join(testDir, "test-utf16.mp3");
       await fs.writeFile(filePath, mp3Content);
 
@@ -121,7 +142,7 @@ describe("AudioMetadataService", () => {
     it("should extract ID3v1 metadata from end of file", async () => {
       const mp3Data = Buffer.alloc(200);
       const id3v1Offset = 200 - 128;
-      
+
       // ID3v1 header
       mp3Data.write("TAG", id3v1Offset);
       // Title (30 bytes)
@@ -146,14 +167,13 @@ describe("AudioMetadataService", () => {
 
     it("should parse track and disc numbers", async () => {
       const id3Header = Buffer.from([
-        0x49, 0x44, 0x33, 0x03, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x7f,
+        0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7f,
       ]);
 
       // TRCK frame (Track number: 5/12)
       const trckFrame = Buffer.concat([
         Buffer.from("TRCK"),
-        Buffer.from([0x00, 0x00, 0x00, 0x06]),
+        Buffer.from([0x00, 0x00, 0x00, 0x05]), // Size: 5 bytes (1 encoding + 4 text "5/12")
         Buffer.from([0x00, 0x00]),
         Buffer.from([0x03]), // UTF-8
         Buffer.from("5/12"),
@@ -162,13 +182,18 @@ describe("AudioMetadataService", () => {
       // TPOS frame (Disc number: 2/3)
       const tposFrame = Buffer.concat([
         Buffer.from("TPOS"),
-        Buffer.from([0x00, 0x00, 0x00, 0x06]),
+        Buffer.from([0x00, 0x00, 0x00, 0x04]), // Size: 4 bytes (1 encoding + 3 text "2/3")
         Buffer.from([0x00, 0x00]),
         Buffer.from([0x03]),
         Buffer.from("2/3"),
       ]);
 
-      const mp3Content = Buffer.concat([id3Header, trckFrame, tposFrame, Buffer.alloc(100)]);
+      const mp3Content = Buffer.concat([
+        id3Header,
+        trckFrame,
+        tposFrame,
+        Buffer.alloc(100),
+      ]);
       const filePath = path.join(testDir, "test-tracks.mp3");
       await fs.writeFile(filePath, mp3Content);
 
@@ -182,8 +207,7 @@ describe("AudioMetadataService", () => {
 
     it("should detect embedded artwork in MP3", async () => {
       const id3Header = Buffer.from([
-        0x49, 0x44, 0x33, 0x03, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x7f,
+        0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7f,
       ]);
 
       // APIC frame (Attached Picture)
@@ -200,7 +224,11 @@ describe("AudioMetadataService", () => {
         Buffer.alloc(10), // Fake image data
       ]);
 
-      const mp3Content = Buffer.concat([id3Header, apicFrame, Buffer.alloc(100)]);
+      const mp3Content = Buffer.concat([
+        id3Header,
+        apicFrame,
+        Buffer.alloc(100),
+      ]);
       const filePath = path.join(testDir, "test-artwork.mp3");
       await fs.writeFile(filePath, mp3Content);
 
@@ -216,7 +244,7 @@ describe("AudioMetadataService", () => {
     it("should extract Vorbis comments from FLAC", async () => {
       // FLAC header
       const flacHeader = Buffer.from([0x66, 0x4c, 0x61, 0x43]); // "fLaC"
-      
+
       // STREAMINFO block (METADATA_BLOCK_HEADER: 4 bytes)
       const streaminfoBlock = Buffer.concat([
         Buffer.from([0x00]), // Last-metadata-block flag: 0
@@ -233,7 +261,7 @@ describe("AudioMetadataService", () => {
       const comment1 = Buffer.from("TITLE=FLAC Test Song");
       const comment2 = Buffer.from("ARTIST=FLAC Test Artist");
       const comment3 = Buffer.from("ALBUM=FLAC Test Album");
-      
+
       const comments = Buffer.concat([
         vendorLength,
         vendorString,
@@ -247,13 +275,20 @@ describe("AudioMetadataService", () => {
       ]);
 
       const vorbisBlock = Buffer.concat([
-        Buffer.from([0x80]), // Last-metadata-block flag: 1
-        Buffer.from([0x04]), // Block type: VORBIS_COMMENT (4)
-        Buffer.from([(comments.length >> 16) & 0xff, (comments.length >> 8) & 0xff, comments.length & 0xff]),
+        Buffer.from([0x80 | 0x04]), // Last-metadata-block flag: 1, Block type: VORBIS_COMMENT (4)
+        Buffer.from([
+          (comments.length >> 16) & 0xff,
+          (comments.length >> 8) & 0xff,
+          comments.length & 0xff,
+        ]),
         comments,
       ]);
 
-      const flacContent = Buffer.concat([flacHeader, streaminfoBlock, vorbisBlock]);
+      const flacContent = Buffer.concat([
+        flacHeader,
+        streaminfoBlock,
+        vorbisBlock,
+      ]);
       const filePath = path.join(testDir, "test.flac");
       await fs.writeFile(filePath, flacContent);
 
@@ -382,10 +417,12 @@ describe("AudioMetadataService", () => {
     it("should extract metadata from multiple files", async () => {
       // Create test files
       const files: string[] = [];
-      
+
       for (let i = 0; i < 3; i++) {
         const mp3Data = Buffer.concat([
-          Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1f]),
+          Buffer.from([
+            0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1f,
+          ]),
           Buffer.alloc(31),
         ]);
         const filePath = path.join(testDir, `batch-${i}.mp3`);
@@ -405,11 +442,16 @@ describe("AudioMetadataService", () => {
     it("should handle errors in batch without stopping", async () => {
       const validFile = path.join(testDir, "valid.mp3");
       const invalidFile = path.join(testDir, "nonexistent.mp3");
-      
-      await fs.writeFile(validFile, Buffer.concat([
-        Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f]),
-        Buffer.alloc(15),
-      ]));
+
+      await fs.writeFile(
+        validFile,
+        Buffer.concat([
+          Buffer.from([
+            0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f,
+          ]),
+          Buffer.alloc(15),
+        ]),
+      );
 
       const results = await service.extractBatch([validFile, invalidFile]);
 
@@ -424,7 +466,9 @@ describe("AudioMetadataService", () => {
   describe("hasMetadata", () => {
     it("should return true for files with metadata", async () => {
       const mp3Data = Buffer.concat([
-        Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f]),
+        Buffer.from([
+          0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f,
+        ]),
         Buffer.alloc(15),
       ]);
       const filePath = path.join(testDir, "has-meta.mp3");
@@ -445,7 +489,9 @@ describe("AudioMetadataService", () => {
     });
 
     it("should return false for non-existent files", async () => {
-      const hasMeta = await service.hasMetadata(path.join(testDir, "nonexistent.mp3"));
+      const hasMeta = await service.hasMetadata(
+        path.join(testDir, "nonexistent.mp3"),
+      );
 
       expect(hasMeta).toBe(false);
     });
@@ -487,10 +533,21 @@ describe("AudioMetadataService", () => {
       const filePath = path.join(testDir, "large.mp3");
       // Create a file with ID3 header but large padding
       const id3Header = Buffer.from([
-        0x49, 0x44, 0x33, 0x03, 0x00, 0x00,
-        0x00, 0x00, 0x10, 0x00, // Size: 1024 bytes
+        0x49,
+        0x44,
+        0x33,
+        0x03,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x10,
+        0x00, // Size: 1024 bytes
       ]);
-      await fs.writeFile(filePath, Buffer.concat([id3Header, Buffer.alloc(1100)]));
+      await fs.writeFile(
+        filePath,
+        Buffer.concat([id3Header, Buffer.alloc(1100)]),
+      );
 
       const metadata = await service.extract(filePath);
 
@@ -499,8 +556,7 @@ describe("AudioMetadataService", () => {
 
     it("should handle Unicode in metadata", async () => {
       const id3Header = Buffer.from([
-        0x49, 0x44, 0x33, 0x04, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x7f,
+        0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7f,
       ]);
 
       // UTF-8 encoded title with emoji
@@ -512,7 +568,11 @@ describe("AudioMetadataService", () => {
         Buffer.from("Song with 🎵 emoji"),
       ]);
 
-      const mp3Content = Buffer.concat([id3Header, tit2Frame, Buffer.alloc(100)]);
+      const mp3Content = Buffer.concat([
+        id3Header,
+        tit2Frame,
+        Buffer.alloc(100),
+      ]);
       const filePath = path.join(testDir, "unicode.mp3");
       await fs.writeFile(filePath, mp3Content);
 
@@ -523,8 +583,7 @@ describe("AudioMetadataService", () => {
 
     it("should handle corrupted ID3 frames", async () => {
       const id3Header = Buffer.from([
-        0x49, 0x44, 0x33, 0x03, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x7f,
+        0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7f,
       ]);
 
       // Corrupted frame with invalid size
@@ -536,7 +595,11 @@ describe("AudioMetadataService", () => {
         Buffer.from("Test"),
       ]);
 
-      const mp3Content = Buffer.concat([id3Header, badFrame, Buffer.alloc(100)]);
+      const mp3Content = Buffer.concat([
+        id3Header,
+        badFrame,
+        Buffer.alloc(100),
+      ]);
       const filePath = path.join(testDir, "corrupted.mp3");
       await fs.writeFile(filePath, mp3Content);
 
@@ -580,8 +643,16 @@ describe("AudioMetadataService", () => {
   describe("Integration Tests", () => {
     it("should extract complete metadata from complex MP3", async () => {
       const id3Header = Buffer.from([
-        0x49, 0x44, 0x33, 0x03, 0x00, 0x00,
-        0x00, 0x00, 0x02, 0x00, // Size: 256 bytes
+        0x49,
+        0x44,
+        0x33,
+        0x03,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x02,
+        0x00, // Size: 256 bytes
       ]);
 
       const frames = [
@@ -617,7 +688,11 @@ describe("AudioMetadataService", () => {
         allFrames = Buffer.concat([allFrames, frame]);
       }
 
-      const mp3Content = Buffer.concat([id3Header, allFrames, Buffer.alloc(100)]);
+      const mp3Content = Buffer.concat([
+        id3Header,
+        allFrames,
+        Buffer.alloc(100),
+      ]);
       const filePath = path.join(testDir, "complete.mp3");
       await fs.writeFile(filePath, mp3Content);
 
@@ -638,8 +713,7 @@ describe("AudioMetadataService", () => {
 
     it("should handle mixed ID3v2 and ID3v1 with priority to v2", async () => {
       const id3v2Header = Buffer.from([
-        0x49, 0x44, 0x33, 0x03, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x3f,
+        0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f,
       ]);
 
       const tit2Frame = Buffer.concat([
@@ -655,7 +729,12 @@ describe("AudioMetadataService", () => {
       id3v1Data.write("ID3v1 Title", 3);
       id3v1Data.write("ID3v1 Artist", 33);
 
-      const mp3Content = Buffer.concat([id3v2Header, tit2Frame, Buffer.alloc(50), id3v1Data]);
+      const mp3Content = Buffer.concat([
+        id3v2Header,
+        tit2Frame,
+        Buffer.alloc(50),
+        id3v1Data,
+      ]);
       const filePath = path.join(testDir, "mixed.mp3");
       await fs.writeFile(filePath, mp3Content);
 

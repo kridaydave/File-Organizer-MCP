@@ -40,6 +40,82 @@ jest.unstable_mockModule(
   }),
 );
 
+jest.unstable_mockModule(
+  "../../../src/services/text-extraction.service.js",
+  () => ({
+    textExtractionService: {
+      extract: jest.fn(async (filePath: string) => {
+        const fs = await import("fs/promises");
+        const path = await import("path");
+        const ext = path.extname(filePath).toLowerCase();
+        const basename = path.basename(filePath).toLowerCase();
+
+        if (basename === "empty.pdf") {
+          return {
+            text: "",
+            truncated: false,
+            originalLength: 0,
+            extractionMethod: "pdf-parse-empty",
+          };
+        }
+
+        if (basename === "corrupted.pdf" || basename === "bad.pdf") {
+          return {
+            text: "",
+            truncated: false,
+            originalLength: 0,
+            extractionMethod: "pdf-parse-error",
+          };
+        }
+
+        if (ext === ".txt" || ext === ".md") {
+          try {
+            const content = await fs.readFile(filePath, "utf-8");
+            return {
+              text: content,
+              truncated: false,
+              originalLength: content.length,
+              extractionMethod: "plain-text-mock",
+            };
+          } catch {
+            return {
+              text: "",
+              truncated: false,
+              originalLength: 0,
+              extractionMethod: "error",
+            };
+          }
+        }
+
+        if (ext === ".pdf") {
+          return {
+            text: "This is a PDF document with sufficient text content about various topics for testing purposes. It contains mathematics, science, and business content.",
+            truncated: false,
+            originalLength: 150,
+            extractionMethod: "pdf-parse-mock",
+          };
+        }
+
+        if (ext === ".docx") {
+          return {
+            text: "This is a DOCX document with sufficient text content about business and financial topics for testing purposes.",
+            truncated: false,
+            originalLength: 120,
+            extractionMethod: "mammoth-mock",
+          };
+        }
+
+        return {
+          text: "",
+          truncated: false,
+          originalLength: 0,
+          extractionMethod: "unsupported",
+        };
+      }),
+    },
+  }),
+);
+
 const { handleOrganizeByContent, OrganizeByContentInputSchema } =
   await import("../../../src/tools/content-organization.js");
 
@@ -76,7 +152,7 @@ describe("organize_by_content Tool", () => {
       const mathDoc = path.join(testDir, "calculus.pdf");
       await fs.writeFile(
         mathDoc,
-        "This document covers calculus, algebra, and derivatives.",
+        "This document covers calculus, algebra, derivatives and mathematical functions for advanced students.",
       );
 
       mockGetAllFiles.mockResolvedValue([
@@ -104,7 +180,7 @@ describe("organize_by_content Tool", () => {
 
       const text = result.content[0].text;
       expect(text).toContain("Dry Run");
-      expect(text).toContain("Organized Files: 1");
+      expect(text).toContain("**Organized Files:** 1");
       expect(text).toContain("Mathematics");
 
       await expect(
@@ -142,8 +218,8 @@ describe("organize_by_content Tool", () => {
       });
 
       const text = result.content[0].text;
-      expect(text).toContain("Organized Files: 0");
-      expect(text).toContain("Skipped Files: 0");
+      expect(text).toContain("**Organized Files:** 0");
+      expect(text).toContain("**Skipped Files:** 0");
     });
   });
 
@@ -152,7 +228,7 @@ describe("organize_by_content Tool", () => {
       const scienceDoc = path.join(testDir, "research.pdf");
       await fs.writeFile(
         scienceDoc,
-        "This is a scientific paper about DNA and molecules.",
+        "This is a scientific research paper about DNA and molecules in biology.",
       );
 
       mockGetAllFiles.mockResolvedValue([
@@ -192,8 +268,14 @@ describe("organize_by_content Tool", () => {
     it("should categorize multiple documents into different topics", async () => {
       const mathDoc = path.join(testDir, "algebra.txt");
       const bizDoc = path.join(testDir, "quarterly.docx");
-      await fs.writeFile(mathDoc, "Linear algebra and matrix operations");
-      await fs.writeFile(bizDoc, "Quarterly revenue and profit forecast");
+      await fs.writeFile(
+        mathDoc,
+        "Linear algebra and matrix operations for solving complex equations in mathematics",
+      );
+      await fs.writeFile(
+        bizDoc,
+        "Quarterly revenue and profit forecast for business planning and financial analysis",
+      );
 
       mockGetAllFiles.mockResolvedValue([
         { name: "algebra.txt", path: mathDoc, size: 50 },
@@ -315,7 +397,7 @@ describe("organize_by_content Tool", () => {
       const badDoc = path.join(testDir, "bad.pdf");
       await fs.writeFile(
         goodDoc,
-        "This is about calculus and algebra for mathematics.",
+        "This is about calculus and algebra for mathematics and advanced mathematical concepts.",
       );
 
       mockGetAllFiles.mockResolvedValue([
@@ -416,7 +498,7 @@ describe("organize_by_content Tool", () => {
 
       const text = result.content[0].text;
       expect(text).not.toContain("Dry Run");
-      expect(text).toContain("Organized Files: 1");
+      expect(text).toContain("**Organized Files:** 1");
 
       const targetFile = path.join(targetDir, "Mathematics", "calculus.txt");
       await expect(fs.access(targetFile)).resolves.not.toThrow();

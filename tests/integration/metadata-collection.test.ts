@@ -405,7 +405,7 @@ describe("Metadata Cache Tests", () => {
     await fs.writeFile(testFile, initialData);
 
     const metadata1 = await audioMetadataService.extract(testFile);
-    await cacheService.set(testFile, metadata1);
+    await cacheService.set(testFile, metadata1, { filePath: testFile });
 
     await fs.writeFile(
       testFile,

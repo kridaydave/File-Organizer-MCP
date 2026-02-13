@@ -141,6 +141,7 @@ export interface ImageMetadataOptions {
   extractThumbnail?: boolean;
   concurrency?: number;
   onProgress?: ProgressCallback;
+  useFileDate?: boolean;
 }
 
 interface EXIFValue {
@@ -191,6 +192,16 @@ export class ImageMetadataService {
   }
 
   /**
+   * Check if an image file format is supported
+   * @param filePath - The file path or filename to check
+   * @returns true if the format is supported
+   */
+  isFormatSupported(filePath: string): boolean {
+    const ext = path.extname(filePath).toLowerCase().slice(1);
+    return this.supportedFormats.includes(ext);
+  }
+
+  /**
    * Extract metadata from a single image file
    */
   async extract(
@@ -211,18 +222,21 @@ export class ImageMetadataService {
         extractedAt,
       };
 
-      if (!this.isFormatSupported(format)) {
-        return {
+      if (!this.isDetailedParsingSupported(format)) {
+        const result: ImageMetadata = {
           ...baseMetadata,
           hasEXIF: false,
           camera: { make: undefined, model: undefined, lens: undefined },
-          gps: {
+        };
+        if (options.extractGPS) {
+          result.gps = {
             hasGPS: false,
             latitude: undefined,
             longitude: undefined,
             altitude: undefined,
-          },
-        };
+          };
+        }
+        return result;
       }
 
       if (format === "jpeg" || format === "jpg") {
@@ -234,24 +248,39 @@ export class ImageMetadataService {
         );
       }
 
+      if (format === "png") {
+        return this.parsePNGMetadata(buffer, baseMetadata);
+      }
+
       // For other formats, return basic metadata
       return baseMetadata;
     } catch (error) {
-      // Return minimal metadata on error, never throw
-      return {
+      // Re-throw directory and file not found errors, return minimal metadata for other errors
+      if (
+        error instanceof Error &&
+        (error.message.includes("Not a file") ||
+          error.message.includes("ENOENT"))
+      ) {
+        throw error;
+      }
+
+      const result: ImageMetadata = {
         filePath,
         format: this.formatFormatName(this.getFormatFromExtension(filePath)),
         hasGPS: false,
         extractedAt,
         hasEXIF: false,
         camera: { make: undefined, model: undefined, lens: undefined },
-        gps: {
+      };
+      if (options.extractGPS) {
+        result.gps = {
           hasGPS: false,
           latitude: undefined,
           longitude: undefined,
           altitude: undefined,
-        },
-      };
+        };
+      }
+      return result;
     }
   }
 
@@ -378,6 +407,70 @@ export class ImageMetadataService {
   }
 
   /**
+   * Strip GPS data from an image file (public method)
+   * @param filePath - Source file path
+   * @param outputPath - Optional output path (if different from source)
+   * @returns Result object with success status and gpsRemoved flag
+   */
+  async stripGPS(
+    filePath: string,
+    outputPath: string,
+  ): Promise<{ success: boolean; gpsRemoved: boolean }> {
+    try {
+      const hasGPS = await this.hasGPS(filePath);
+      if (!hasGPS) {
+        // If no GPS, just copy the file
+        if (outputPath) {
+          await fs.copyFile(filePath, outputPath);
+        }
+        return { success: true, gpsRemoved: false };
+      }
+
+      const buffer = await this.readImageFile(filePath);
+      const format = this.detectImageFormat(buffer);
+
+      if (format !== "jpeg" && format !== "jpg") {
+        return { success: false, gpsRemoved: false };
+      }
+
+      const strippedBuffer = this.removeGPSFromJPEG(buffer);
+      const destPath = outputPath || filePath;
+      await fs.writeFile(destPath, strippedBuffer);
+      return { success: true, gpsRemoved: true };
+    } catch {
+      return { success: false, gpsRemoved: false };
+    }
+  }
+
+  /**
+   * Strip all metadata from an image file
+   * @param filePath - Source file path
+   * @param outputPath - Optional output path (if different from source)
+   * @returns Result object with success status
+   */
+  async stripAllMetadata(
+    filePath: string,
+    outputPath: string,
+  ): Promise<{ success: boolean }> {
+    try {
+      const buffer = await this.readImageFile(filePath);
+      const format = this.detectImageFormat(buffer);
+
+      if (format !== "jpeg" && format !== "jpg") {
+        return { success: false };
+      }
+
+      // Remove all APP segments (metadata) from JPEG
+      const strippedBuffer = this.removeAllMetadataFromJPEG(buffer);
+      const destPath = outputPath || filePath;
+      await fs.writeFile(destPath, strippedBuffer);
+      return { success: true };
+    } catch {
+      return { success: false };
+    }
+  }
+
+  /**
    * Read image file into buffer
    */
   private async readImageFile(filePath: string): Promise<Buffer> {
@@ -441,10 +534,10 @@ export class ImageMetadataService {
   }
 
   /**
-   * Check if format is supported for detailed parsing
+   * Check if format is supported for detailed EXIF parsing
    */
-  private isFormatSupported(format: string): boolean {
-    return ["jpg", "jpeg", "tiff"].includes(format);
+  private isDetailedParsingSupported(format: string): boolean {
+    return ["jpg", "jpeg", "tiff", "png"].includes(format);
   }
 
   /**
@@ -471,20 +564,26 @@ export class ImageMetadataService {
         if (stats) {
           metadata.dateModified = stats.mtime;
           metadata.dateCreated = stats.birthtime;
+          if (options.useFileDate) {
+            metadata.dateTaken = new Date(stats.mtime);
+          }
         }
         metadata.hasEXIF = false;
-        // Add empty camera and gps objects for test compatibility
+        // Add empty camera object for test compatibility
         metadata.camera = {
           make: undefined,
           model: undefined,
           lens: undefined,
         };
-        metadata.gps = {
-          hasGPS: false,
-          latitude: undefined,
-          longitude: undefined,
-          altitude: undefined,
-        };
+        // Only add gps object if extractGPS is true
+        if (options.extractGPS) {
+          metadata.gps = {
+            hasGPS: false,
+            latitude: undefined,
+            longitude: undefined,
+            altitude: undefined,
+          };
+        }
         return metadata;
       }
 
@@ -644,23 +743,75 @@ export class ImageMetadataService {
         }
       }
 
-      // Build nested GPS object (always present for test compatibility)
-      metadata.gps = {
-        hasGPS: metadata.hasGPS,
-        latitude: metadata.latitude,
-        longitude: metadata.longitude,
-        altitude: metadata.altitude,
-      };
+      // Build nested GPS object only when extractGPS is true
+      if (options.extractGPS) {
+        metadata.gps = {
+          hasGPS: metadata.hasGPS,
+          latitude: metadata.latitude,
+          longitude: metadata.longitude,
+          altitude: metadata.altitude,
+        };
+      }
 
       // Get file stats for dates
       const stats = await fs.stat(filePath).catch(() => null);
       if (stats) {
         if (!metadata.dateModified) metadata.dateModified = stats.mtime;
         if (!metadata.dateCreated) metadata.dateCreated = stats.birthtime;
+        if (!metadata.dateTaken && options.useFileDate)
+          metadata.dateTaken = new Date(stats.mtime);
       }
 
       return metadata;
     } catch (error) {
+      // Return base metadata on parsing error
+      return baseMetadata;
+    }
+  }
+
+  /**
+   * Parse PNG metadata from IHDR chunk
+   */
+  private parsePNGMetadata(
+    buffer: Buffer,
+    baseMetadata: ImageMetadata,
+  ): ImageMetadata {
+    try {
+      // PNG signature is 8 bytes, IHDR chunk starts at offset 8
+      // IHDR chunk structure:
+      // Bytes 0-3: Chunk length (big-endian) - always 13 for IHDR
+      // Bytes 4-7: Chunk type ('IHDR')
+      // Bytes 8-11: Width (big-endian UINT32)
+      // Bytes 12-15: Height (big-endian UINT32)
+      // Remaining: Bit depth, color type, compression, filter, interlace
+
+      const IHDR_OFFSET = 8; // After PNG signature
+
+      // Verify we have enough data for IHDR chunk
+      if (buffer.length < IHDR_OFFSET + 17) {
+        return baseMetadata;
+      }
+
+      // Check chunk type is 'IHDR'
+      const chunkType = buffer.toString(
+        "ascii",
+        IHDR_OFFSET + 4,
+        IHDR_OFFSET + 8,
+      );
+      if (chunkType !== "IHDR") {
+        return baseMetadata;
+      }
+
+      // Read width and height (big-endian UINT32)
+      const width = buffer.readUInt32BE(IHDR_OFFSET + 8);
+      const height = buffer.readUInt32BE(IHDR_OFFSET + 12);
+
+      return {
+        ...baseMetadata,
+        width,
+        height,
+      };
+    } catch {
       // Return base metadata on parsing error
       return baseMetadata;
     }
@@ -1167,6 +1318,84 @@ export class ImageMetadataService {
     }
 
     return newBuffer;
+  }
+
+  /**
+   * Remove all metadata (EXIF, IPTC, XMP, etc.) from JPEG buffer
+   */
+  private removeAllMetadataFromJPEG(buffer: Buffer): Buffer {
+    // JPEG structure: [FF D8] [FF E0 len app0] [FF E1 len app1 exif] ... [FF DB] [image data] [FF D9]
+    // We want to keep SOI (FF D8), DQT (FF DB), SOS (FF DA), and EOI (FF D9)
+
+    const result: number[] = [];
+
+    // Start with SOI marker
+    result.push(0xff, 0xd8);
+
+    let i = 2; // Skip SOI
+    while (i < buffer.length - 1) {
+      if (buffer[i] !== 0xff) {
+        i++;
+        continue;
+      }
+
+      const marker = buffer[i + 1];
+      if (marker === undefined) {
+        i++;
+        continue;
+      }
+
+      // Skip APP markers (APP0-APP15: E0-EF)
+      if (marker >= 0xe0 && marker <= 0xef) {
+        const len = ((buffer[i + 2] ?? 0) << 8) | (buffer[i + 3] ?? 0);
+        i += 2 + len;
+        continue;
+      }
+
+      // Skip COM (comment) marker
+      if (marker === 0xfe) {
+        const len = ((buffer[i + 2] ?? 0) << 8) | (buffer[i + 3] ?? 0);
+        i += 2 + len;
+        continue;
+      }
+
+      // Keep DQT (quantization), SOF (start of frame), SOS (start of scan), EOI
+      const byte1 = buffer[i];
+      const byte2 = buffer[i + 1];
+      if (byte1 !== undefined && byte2 !== undefined) {
+        result.push(byte1, byte2);
+      }
+
+      // For markers with length field
+      if (marker !== 0xda && marker !== 0xd9) {
+        const len = ((buffer[i + 2] ?? 0) << 8) | (buffer[i + 3] ?? 0);
+        const b2 = buffer[i + 2];
+        const b3 = buffer[i + 3];
+        if (b2 !== undefined && b3 !== undefined) {
+          result.push(b2, b3);
+        }
+        for (let j = 0; j < len - 2; j++) {
+          const b = buffer[i + 4 + j];
+          if (b !== undefined) {
+            result.push(b);
+          }
+        }
+        i += 2 + len;
+      } else if (marker === 0xda) {
+        // Copy rest of the file (scan data)
+        for (let j = i + 2; j < buffer.length; j++) {
+          const b = buffer[j];
+          if (b !== undefined) {
+            result.push(b);
+          }
+        }
+        break;
+      } else {
+        i += 2;
+      }
+    }
+
+    return Buffer.from(result);
   }
 }
 

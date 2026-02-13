@@ -41,6 +41,7 @@ export class MetadataCacheService {
   private readonly maxEntries: number;
   private readonly cacheFilePath: string;
   private writeLock: Promise<void> = Promise.resolve();
+  private initLock: Promise<void> = Promise.resolve();
   private memoryCache: Map<string, ExtendedCacheEntry> = new Map();
   private stats: { hits: number; misses: number } = { hits: 0, misses: 0 };
   private initialized: boolean = false;
@@ -68,7 +69,20 @@ export class MetadataCacheService {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
+    // Use lock to prevent concurrent initialization race conditions
+    const previousLock = this.initLock;
+    let resolveLock: () => void;
+    this.initLock = new Promise<void>((resolve) => {
+      resolveLock = resolve;
+    });
+    await previousLock;
+
     try {
+      // Double-check after acquiring lock
+      if (this.initialized) {
+        return;
+      }
+
       await fs.mkdir(this.cacheDir, { recursive: true });
       await this.loadFromDisk();
       this.initialized = true;
@@ -76,6 +90,8 @@ export class MetadataCacheService {
     } catch (error) {
       logger.error("Failed to create cache directory", error);
       throw error;
+    } finally {
+      resolveLock!();
     }
   }
 
@@ -129,17 +145,38 @@ export class MetadataCacheService {
       savedAt: new Date().toISOString(),
     };
 
-    // On Windows, atomic rename can fail if the temp file doesn't exist yet.
-    // Write directly to the target file instead.
-    try {
-      await fs.writeFile(
-        this.cacheFilePath,
-        JSON.stringify(cacheData, null, 2),
-        "utf-8",
-      );
-    } catch (error) {
-      logger.error("Failed to save cache to disk", error);
-      throw error;
+    // On Windows, use direct write with locking (already protected by writeLock)
+    // On Unix, use atomic rename pattern
+    const isWindows = process.platform === "win32";
+
+    if (isWindows) {
+      // Windows: Write directly since we have proper locking
+      try {
+        await fs.writeFile(
+          this.cacheFilePath,
+          JSON.stringify(cacheData),
+          "utf-8",
+        );
+      } catch (error) {
+        logger.error("Failed to save cache to disk", error);
+        throw error;
+      }
+    } else {
+      // Unix: Use atomic rename pattern
+      const tempPath = `${this.cacheFilePath}.tmp`;
+      try {
+        await fs.writeFile(tempPath, JSON.stringify(cacheData), "utf-8");
+        await fs.rename(tempPath, this.cacheFilePath);
+      } catch (error) {
+        // Clean up temp file on error
+        try {
+          await fs.unlink(tempPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+        logger.error("Failed to save cache to disk", error);
+        throw error;
+      }
     }
   }
 
@@ -147,21 +184,20 @@ export class MetadataCacheService {
    * Acquire write lock for atomic operations
    */
   private async acquireLock<T>(operation: () => Promise<T>): Promise<T> {
-    // Wait for previous lock to be released
-    await this.writeLock;
+    // Capture the previous lock BEFORE awaiting
+    const previousLock = this.writeLock;
 
-    // Create new lock that will be released when operation completes
+    // Create and assign new lock immediately (before any await)
     let resolveLock: () => void;
-    const newLock = new Promise<void>((resolve) => {
+    this.writeLock = new Promise<void>((resolve) => {
       resolveLock = resolve;
     });
-    this.writeLock = newLock;
+
+    // Now await the previous lock
+    await previousLock;
 
     try {
       return await operation();
-    } catch (error) {
-      // Re-throw error after releasing lock
-      throw error;
     } finally {
       resolveLock!();
     }

@@ -13,6 +13,7 @@ import {
   withMockedLogger,
   MockLoggerType,
 } from "../../utils/logger-mock.js";
+import { jest } from "@jest/globals";
 
 // Example service that uses logging
 class ExampleService {
@@ -129,16 +130,33 @@ describe("Logger Mocking Examples", () => {
 
   describe("Console Output Suppression", () => {
     it("should suppress all console output", () => {
-      // These should not produce any output during test execution
+      const spyLog = jest.spyOn(console, "log").mockImplementation(() => {});
+      const spyError = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const spyWarn = jest.spyOn(console, "warn").mockImplementation(() => {});
+      const spyInfo = jest.spyOn(console, "info").mockImplementation(() => {});
+      const spyDebug = jest
+        .spyOn(console, "debug")
+        .mockImplementation(() => {});
+
       console.log("This should be suppressed");
       console.error("This should be suppressed");
       console.warn("This should be suppressed");
       console.info("This should be suppressed");
       console.debug("This should be suppressed");
 
-      // Verify console methods were mocked
-      expect(console.log).toHaveBeenCalled();
-      expect(console.error).toHaveBeenCalled();
+      expect(spyLog).toHaveBeenCalledWith("This should be suppressed");
+      expect(spyError).toHaveBeenCalledWith("This should be suppressed");
+      expect(spyWarn).toHaveBeenCalledWith("This should be suppressed");
+      expect(spyInfo).toHaveBeenCalledWith("This should be suppressed");
+      expect(spyDebug).toHaveBeenCalledWith("This should be suppressed");
+
+      spyLog.mockRestore();
+      spyError.mockRestore();
+      spyWarn.mockRestore();
+      spyInfo.mockRestore();
+      spyDebug.mockRestore();
     });
   });
 
@@ -238,9 +256,9 @@ describe("Advanced Logger Mocking Patterns", () => {
       expect(logs).toHaveLength(6);
 
       expect(logger.getDebugLogs()).toHaveLength(1);
-      expect(logger.getInfoLogs()).toHaveLength(2); // info + metadata
+      expect(logger.getInfoLogs()).toHaveLength(3); // info + metadata + scan result
       expect(logger.getWarnLogs()).toHaveLength(1);
-      expect(logger.getErrorLogs()).toHaveLength(2); // error + scan result (low threat = info)
+      expect(logger.getErrorLogs()).toHaveLength(1);
     });
   });
 

@@ -490,13 +490,14 @@ export class AudioMetadataService {
             const sampleRateChannelBits = blockData.readUInt32BE(10);
             metadata.sampleRate = (sampleRateChannelBits >> 12) & 0xfffff;
             metadata.channels = ((sampleRateChannelBits >> 4) & 0x07) + 1;
-            
+
             // Total samples is 36 bits spanning bytes 13-17
             // Upper 4 bits are in byte 13 (lower nibble), lower 32 bits in bytes 14-17
             const totalSamplesHigh = blockData[13]! & 0x0f;
             const totalSamplesLow = blockData.readUInt32BE(14);
-            const totalSamples = (totalSamplesHigh * Math.pow(2, 32)) + totalSamplesLow;
-            
+            const totalSamples =
+              totalSamplesHigh * Math.pow(2, 32) + totalSamplesLow;
+
             // Calculate duration only if we have valid values
             if (metadata.sampleRate > 0 && totalSamples > 0) {
               metadata.duration = totalSamples / metadata.sampleRate;
@@ -518,10 +519,12 @@ export class AudioMetadataService {
     let offset = 0;
 
     // Vendor string length (little-endian uint32)
+    if (offset + 4 > data.length) return;
     const vendorLength = data.readUInt32LE(offset);
     offset += 4;
-    
-    // Vendor string
+
+    // Validate vendor string fits within buffer
+    if (offset + vendorLength > data.length) return;
     offset += vendorLength;
 
     // User comment list length (little-endian uint32)
@@ -532,7 +535,10 @@ export class AudioMetadataService {
     // Parse comments - also continue parsing if there's more data
     // (some files have incorrect comment counts)
     let i = 0;
-    while ((i < commentCount || offset < data.length) && offset + 4 <= data.length) {
+    while (
+      (i < commentCount || offset < data.length) &&
+      offset + 4 <= data.length
+    ) {
       const commentLength = data.readUInt32LE(offset);
       offset += 4;
 

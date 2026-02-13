@@ -405,7 +405,7 @@ describe("MetadataCacheService", () => {
   describe("Atomic Writes", () => {
     it("should write cache atomically", async () => {
       // Rapid concurrent writes
-      const promises = [];
+      const promises: Promise<void>[] = [];
       for (let i = 0; i < 10; i++) {
         promises.push(service.set(`concurrent-${i}`, { index: i }));
       }
@@ -513,7 +513,7 @@ describe("MetadataCacheService", () => {
     });
 
     it("should handle concurrent reads and writes", async () => {
-      const operations = [];
+      const operations: Promise<unknown>[] = [];
 
       for (let i = 0; i < 20; i++) {
         operations.push(service.set(`concurrent-${i}`, { value: i }));
