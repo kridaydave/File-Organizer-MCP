@@ -9,7 +9,7 @@ import fs from "fs";
 import { logger } from "./utils/logger.js";
 
 export const CONFIG = {
-  VERSION: "3.3.0",
+  VERSION: "3.3.1",
 
   // Security Settings
   security: {

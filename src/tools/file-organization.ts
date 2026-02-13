@@ -110,6 +110,7 @@ export async function handleOrganizeFiles(args: Record<string, unknown>): Promis
     const { statistics, actions, errors } = await organizer.organize(validatedPath, files, {
       dryRun: dry_run,
       conflictStrategy: effectiveConflictStrategy,
+      useContentAnalysis: use_content_analysis,
     });
 
     const result: OrganizeResult & { content_analysis_enabled?: boolean } = {

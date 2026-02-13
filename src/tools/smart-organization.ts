@@ -289,21 +289,16 @@ class SmartOrganizerService {
       },
     };
 
-    // Create target subdirectories
+    // Prepare target subdirectories (only create when needed)
     const musicTarget = path.join(targetDir, "Music");
     const photosTarget = path.join(targetDir, "Photos");
     const documentsTarget = path.join(targetDir, "Documents");
-    const otherTarget = path.join(targetDir, "Other");
-
-    if (!options.dryRun) {
-      await fs.mkdir(musicTarget, { recursive: true });
-      await fs.mkdir(photosTarget, { recursive: true });
-      await fs.mkdir(documentsTarget, { recursive: true });
-      await fs.mkdir(otherTarget, { recursive: true });
-    }
 
     // Organize music files
     if (result.summary.musicFiles > 0) {
+      if (!options.dryRun) {
+        await fs.mkdir(musicTarget, { recursive: true });
+      }
       const musicFiles = classified
         .filter((f) => f.type === "music")
         .map((f) => ({ path: f.path, size: 0 }));
@@ -329,6 +324,9 @@ class SmartOrganizerService {
 
     // Organize photo files
     if (result.summary.photoFiles > 0) {
+      if (!options.dryRun) {
+        await fs.mkdir(photosTarget, { recursive: true });
+      }
       const photoResult = await this.photoService.organize({
         sourceDir,
         targetDir: photosTarget,
@@ -353,6 +351,9 @@ class SmartOrganizerService {
 
     // Organize document files
     if (result.summary.documentFiles > 0) {
+      if (!options.dryRun) {
+        await fs.mkdir(documentsTarget, { recursive: true });
+      }
       result.documents = await this.organizeDocuments(
         classified.filter((f) => f.type === "document"),
         documentsTarget,
@@ -385,6 +386,7 @@ class SmartOrganizerService {
     options: {
       dryRun: boolean;
       createShortcuts: boolean;
+      copyInsteadOfMove: boolean;
     },
   ): Promise<{
     organized: number;
@@ -429,8 +431,13 @@ class SmartOrganizerService {
           const fileName = path.basename(file.path);
           const targetPath = path.join(topicDir, fileName);
 
-          // Copy or move file
+          // Copy or move file based on options
           await fs.copyFile(file.path, targetPath);
+          
+          // If move mode (not copy), delete the source file
+          if (!options.copyInsteadOfMove) {
+            await fs.unlink(file.path);
+          }
 
           // Create shortcuts for additional topics if enabled
           if (options.createShortcuts && topics.topics.length > 1) {

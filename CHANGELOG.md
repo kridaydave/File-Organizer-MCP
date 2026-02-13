@@ -1,5 +1,28 @@
 # Changelog
 
+## [3.3.1] - 2026-02-13
+
+### 🐛 Bug Fixes
+
+#### Error Handling
+- **Fixed `createErrorResponse` missing `isError: true`** - All error responses now consistently include the `isError` flag
+
+#### Smart Organization
+- **Fixed directory creation bug** - Only creates Music/Photos/Documents folders when files of those types actually exist (was creating all folders unconditionally)
+- **Fixed Copy vs Move behavior** - `organizeDocuments()` now correctly respects the `copyInsteadOfMove` option
+
+#### File Organization
+- **Fixed `use_content_analysis` no-op bug** - The flag was parsed but not passed to the categorizer; now properly flows through `organize()` → `generateOrganizationPlan()` → `getCategory()`
+
+#### Code Cleanup
+- **Removed empty `cleanupEmptyFolders` method** - Was an unused placeholder in organizer.service.ts
+
+### 🧪 Testing
+- Added 74 comprehensive tests for Smart Organization tool:
+  - Unit tests (29 tests)
+  - Edge case tests (25 tests)  
+  - Integration tests (20 tests)
+
 ## [3.3.0] - 2026-02-13
 
 ### ✨ New Features

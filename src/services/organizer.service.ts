@@ -30,6 +30,7 @@ export type ConflictStrategy =
 export interface OrganizeOptions {
   dryRun?: boolean;
   conflictStrategy?: ConflictStrategy;
+  useContentAnalysis?: boolean;
 }
 
 export interface OrganizeResult {
@@ -77,6 +78,7 @@ export class OrganizerService {
     directory: string,
     files: FileWithSize[],
     conflictStrategy: ConflictStrategy = "rename",
+    useContentAnalysis: boolean = false,
   ): Promise<OrganizationPlan> {
     const moves: OrganizationPlan["moves"] = [];
     const categoryCounts: Record<string, number> = {};
@@ -102,7 +104,8 @@ export class OrganizerService {
 
       try {
         // Use the stateful categorizer (rules aware)
-        const category = this.categorizer.getCategory(file.name);
+        // Pass useContentAnalysis to enable content-based type verification
+        const category = this.categorizer.getCategory(file.name, useContentAnalysis);
 
         if (!categoryCounts[category]) categoryCounts[category] = 0;
         categoryCounts[category]++;
@@ -216,13 +219,14 @@ export class OrganizerService {
     files: FileWithSize[],
     options: OrganizeOptions = {},
   ): Promise<OrganizeResult> {
-    const { dryRun = false, conflictStrategy = "rename" } = options;
+    const { dryRun = false, conflictStrategy = "rename", useContentAnalysis = false } = options;
 
     // 1. Generate Plan (Now includes resolved paths)
     const plan = await this.generateOrganizationPlan(
       directory,
       files,
       conflictStrategy,
+      useContentAnalysis,
     );
 
     if (dryRun) {
@@ -506,12 +510,5 @@ export class OrganizerService {
       successCount,
       aborted,
     };
-  }
-
-  private async cleanupEmptyFolders(
-    directory: string,
-    stats: Record<string, number>,
-  ): Promise<void> {
-    // Implementation kept for compatibility
   }
 }

@@ -62,6 +62,7 @@ export function createErrorResponse(error: unknown): ToolResponse {
   }
 
   return {
+    isError: true,
     content: [
       {
         type: "text",
