@@ -2,14 +2,15 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { CategorizerService } from '../../src/services/categorizer.service.js';
 import { CustomRule } from '../../src/types.js';
+import { logger } from '../../src/utils/logger.js';
 
 describe('Category Security Tests', () => {
     let categorizer: CategorizerService;
-    let consoleSpy: any;
+    let loggerSpy: any;
 
     beforeEach(() => {
         categorizer = new CategorizerService();
-        consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
+        loggerSpy = jest.spyOn(logger, 'error').mockImplementation(() => { });
     });
 
     afterEach(() => {
@@ -24,7 +25,7 @@ describe('Category Security Tests', () => {
         }];
         const count = categorizer.setCustomRules(xssRules);
         expect(count).toBe(0);
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Skipping invalid rule'));
+        expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('Skipping invalid rule'));
         expect(categorizer.getCategory('evil.js')).not.toBe('<script>alert("xss")</script>');
     });
 
