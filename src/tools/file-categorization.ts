@@ -5,53 +5,71 @@
  * @module tools/file-categorization
  */
 
-import { z } from 'zod';
-import type { ToolDefinition, ToolResponse, CategorizedResult } from '../types.js';
-import { validateStrictPath } from '../services/path-validator.service.js';
-import { FileScannerService } from '../services/file-scanner.service.js';
-import { globalCategorizerService } from '../services/index.js';
-import { createErrorResponse } from '../utils/error-handler.js';
-import { CommonParamsSchema } from '../schemas/common.schemas.js';
+import { z } from "zod";
+import type {
+  ToolDefinition,
+  ToolResponse,
+  CategorizedResult,
+} from "../types.js";
+import { validateStrictPath } from "../services/path-validator.service.js";
+import { FileScannerService } from "../services/file-scanner.service.js";
+import { globalCategorizerService } from "../services/index.js";
+import { createErrorResponse } from "../utils/error-handler.js";
+import { CommonParamsSchema } from "../schemas/common.schemas.js";
 
 export const CategorizeByTypeInputSchema = z
   .object({
     directory: z
       .string()
-      .min(1, 'Directory path cannot be empty')
-      .describe('Full path to the directory to categorize'),
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to categorize"),
     include_subdirs: z
       .boolean()
       .optional()
       .default(false)
-      .describe('Include subdirectories in categorization'),
+      .describe("Include subdirectories in categorization"),
     use_content_analysis: z
       .boolean()
       .optional()
       .default(false)
-      .describe('Analyze file content for accurate type detection (slower but more secure)'),
+      .describe(
+        "Analyze file content for accurate type detection (slower but more secure)",
+      ),
   })
   .merge(CommonParamsSchema);
 
 export type CategorizeByTypeInput = z.infer<typeof CategorizeByTypeInputSchema>;
 
 export const categorizeByTypeToolDefinition: ToolDefinition = {
-  name: 'file_organizer_categorize_by_type',
-  title: 'Categorize Files by Type',
+  name: "file_organizer_categorize_by_type",
+  title: "Categorize Files by Type",
   description:
-    'Categorize files by their type (Executables, Videos, Documents, etc.) and show statistics for each category. Enable use_content_analysis to detect file type mismatches and security threats.',
+    "Categorize files by their type (Executables, Videos, Documents, etc.) and show statistics for each category. Enable use_content_analysis to detect file type mismatches and security threats.",
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
-      directory: { type: 'string', description: 'Full path to the directory to categorize' },
-      include_subdirs: { type: 'boolean', description: 'Include subdirectories', default: false },
-      use_content_analysis: { 
-        type: 'boolean', 
-        description: 'Analyze file content for accurate type detection (slower but detects mismatches and threats)',
-        default: false 
+      directory: {
+        type: "string",
+        description: "Full path to the directory to categorize",
       },
-      response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
+      include_subdirs: {
+        type: "boolean",
+        description: "Include subdirectories",
+        default: false,
+      },
+      use_content_analysis: {
+        type: "boolean",
+        description:
+          "Analyze file content for accurate type detection (slower but detects mismatches and threats)",
+        default: false,
+      },
+      response_format: {
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
+      },
     },
-    required: ['directory'],
+    required: ["directory"],
   },
   annotations: {
     readOnlyHint: true,
@@ -61,30 +79,44 @@ export const categorizeByTypeToolDefinition: ToolDefinition = {
   },
 };
 
-export async function handleCategorizeByType(args: Record<string, unknown>): Promise<ToolResponse> {
+export async function handleCategorizeByType(
+  args: Record<string, unknown>,
+): Promise<ToolResponse> {
   try {
     const parsed = CategorizeByTypeInputSchema.safeParse(args);
     if (!parsed.success) {
       return {
         content: [
-          { type: 'text', text: `Error: ${parsed.error.issues.map((i) => i.message).join(', ')}` },
+          {
+            type: "text",
+            text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
+          },
         ],
       };
     }
 
-    const { directory, include_subdirs, use_content_analysis, response_format } = parsed.data;
+    const {
+      directory,
+      include_subdirs,
+      use_content_analysis,
+      response_format,
+    } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
     const scanner = new FileScannerService();
     // Use global categorizer which has content analyzer and metadata cache
     const categorizer = globalCategorizerService;
 
     const files = await scanner.getAllFiles(validatedPath, include_subdirs);
-    
+
     // Track content analysis warnings
-    const contentWarnings: Array<{ file: string; warnings: string[]; category: string }> = [];
-    
-    let categories: CategorizedResult['categories'];
-    
+    const contentWarnings: Array<{
+      file: string;
+      warnings: string[];
+      category: string;
+    }> = [];
+
+    let categories: CategorizedResult["categories"];
+
     if (use_content_analysis) {
       // Perform content-based categorization for each file
       // Build a map of file paths to their content-analyzed categories
@@ -118,29 +150,31 @@ export async function handleCategorizeByType(args: Record<string, unknown>): Pro
       categories = categorizer.categorizeFiles(files);
     }
 
-    const result: CategorizedResult & { content_warnings?: typeof contentWarnings } = {
+    const result: CategorizedResult & {
+      content_warnings?: typeof contentWarnings;
+    } = {
       directory: validatedPath,
       categories,
     };
-    
+
     if (contentWarnings.length > 0) {
       result.content_warnings = contentWarnings;
     }
 
-    if (response_format === 'json') {
+    if (response_format === "json") {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }
 
     let markdown = `### File Categories in \`${result.directory}\``;
-    
+
     if (use_content_analysis) {
-      markdown += '\n*(Content analysis enabled)*';
+      markdown += "\n*(Content analysis enabled)*";
     }
-    
-    markdown += '\n\n';
+
+    markdown += "\n\n";
 
     markdown += Object.entries(result.categories)
       .map(
@@ -148,19 +182,21 @@ export async function handleCategorizeByType(args: Record<string, unknown>): Pro
           `#### ${cat} (${stats?.count} files, ${stats?.total_size_readable})\n${stats?.files
             .slice(0, 5)
             .map((f) => `- ${f}`)
-            .join('\n')}${stats && stats.count > 5 ? `\n- ...and ${stats.count - 5} more` : ''}`
+            .join(
+              "\n",
+            )}${stats && stats.count > 5 ? `\n- ...and ${stats.count - 5} more` : ""}`,
       )
-      .join('\n\n');
+      .join("\n\n");
 
     if (contentWarnings.length > 0) {
-      markdown += '\n\n#### ⚠️ Content Analysis Warnings\n\n';
+      markdown += "\n\n#### ⚠️ Content Analysis Warnings\n\n";
       markdown += contentWarnings
-        .map(w => `- \`${w.file}\`: ${w.warnings.join(', ')}`)
-        .join('\n');
+        .map((w) => `- \`${w.file}\`: ${w.warnings.join(", ")}`)
+        .join("\n");
     }
 
     return {
-      content: [{ type: 'text', text: markdown }],
+      content: [{ type: "text", text: markdown }],
     };
   } catch (error) {
     return createErrorResponse(error);

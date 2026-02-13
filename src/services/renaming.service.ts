@@ -3,15 +3,15 @@
  * Renaming Service
  */
 
-import fs from 'fs/promises';
-import { constants } from 'fs';
-import path from 'path';
-import type { RenameRule } from '../schemas/rename.schemas.js';
-import type { FileWithSize, RollbackAction } from '../types.js';
-import { logger } from '../utils/logger.js';
-import { fileExists } from '../utils/file-utils.js';
-import { RollbackService } from './rollback.service.js';
-import { PathValidatorService } from './path-validator.service.js';
+import fs from "fs/promises";
+import { constants } from "fs";
+import path from "path";
+import type { RenameRule } from "../schemas/rename.schemas.js";
+import type { FileWithSize, RollbackAction } from "../types.js";
+import { logger } from "../utils/logger.js";
+import { fileExists } from "../utils/file-utils.js";
+import { RollbackService } from "./rollback.service.js";
+import { PathValidatorService } from "./path-validator.service.js";
 
 export interface RenameResult {
   statistics: {
@@ -38,7 +38,10 @@ export class RenamingService {
   /**
    * Preview renaming results without modifying files
    */
-  async applyRenameRules(files: string[], rules: RenameRule[]): Promise<RenamePreview[]> {
+  async applyRenameRules(
+    files: string[],
+    rules: RenameRule[],
+  ): Promise<RenamePreview[]> {
     const previews: RenamePreview[] = [];
     const usedNames = new Set<string>();
 
@@ -65,93 +68,102 @@ export class RenamingService {
         for (const rule of rules) {
           try {
             switch (rule.type) {
-              case 'find_replace':
+              case "find_replace":
                 // TS Narrowing helper
                 const frRule = rule;
-                if (frRule.type !== 'find_replace') break;
+                if (frRule.type !== "find_replace") break;
 
                 if (frRule.use_regex) {
-                  const flags = (frRule.global ? 'g' : '') + (frRule.case_sensitive ? '' : 'i');
+                  const flags =
+                    (frRule.global ? "g" : "") +
+                    (frRule.case_sensitive ? "" : "i");
                   const regex = new RegExp(frRule.find, flags);
                   newBasename = newBasename.replace(regex, frRule.replace);
                 } else {
                   if (frRule.global) {
                     const split = frRule.case_sensitive
                       ? newBasename.split(frRule.find)
-                      : newBasename.split(new RegExp(escapeRegExp(frRule.find), 'gi'));
+                      : newBasename.split(
+                          new RegExp(escapeRegExp(frRule.find), "gi"),
+                        );
                     newBasename = split.join(frRule.replace);
                   } else {
-                    newBasename = newBasename.replace(frRule.find, frRule.replace);
+                    newBasename = newBasename.replace(
+                      frRule.find,
+                      frRule.replace,
+                    );
                   }
                 }
                 break;
 
-              case 'case':
+              case "case":
                 switch (rule.conversion) {
-                  case 'lowercase':
+                  case "lowercase":
                     newBasename = newBasename.toLowerCase();
                     newExt = newExt.toLowerCase();
                     break;
-                  case 'uppercase':
+                  case "uppercase":
                     newBasename = newBasename.toUpperCase();
                     newExt = newExt.toUpperCase();
                     break;
-                  case 'camelCase':
+                  case "camelCase":
                     newBasename = toCamelCase(newBasename);
                     break;
-                  case 'PascalCase':
+                  case "PascalCase":
                     newBasename = toPascalCase(newBasename);
                     break;
-                  case 'snake_case':
+                  case "snake_case":
                     newBasename = toSnakeCase(newBasename);
                     break;
-                  case 'kebab-case':
+                  case "kebab-case":
                     newBasename = toKebabCase(newBasename);
                     break;
-                  case 'Title Case':
+                  case "Title Case":
                     newBasename = toTitleCase(newBasename);
                     break;
                 }
                 break;
 
-              case 'add_text':
-                if (rule.position === 'start') {
+              case "add_text":
+                if (rule.position === "start") {
                   newBasename = rule.text + newBasename;
                 } else {
                   newBasename = newBasename + rule.text;
                 }
                 break;
 
-              case 'numbering':
+              case "numbering":
                 // index is 0-based, start_at defaults to 1
                 const num = rule.start_at + i * rule.increment_by;
                 const numStr = String(num);
-                const sep = rule.separator ?? ' ';
+                const sep = rule.separator ?? " ";
 
-                let textToAdd = '';
-                if (rule.format === 'search_index') {
+                let textToAdd = "";
+                if (rule.format === "search_index") {
                   textToAdd = numStr;
                 } else {
-                  textToAdd = rule.format.replace('%n', numStr);
+                  textToAdd = rule.format.replace("%n", numStr);
                 }
 
-                if (rule.location === 'start') {
+                if (rule.location === "start") {
                   newBasename = textToAdd + sep + newBasename;
                 } else {
                   newBasename = newBasename + sep + textToAdd;
                 }
                 break;
 
-              case 'trim':
-                if (rule.position === 'start' || rule.position === 'both')
+              case "trim":
+                if (rule.position === "start" || rule.position === "both")
                   newBasename = newBasename.trimStart();
-                if (rule.position === 'end' || rule.position === 'both')
+                if (rule.position === "end" || rule.position === "both")
                   newBasename = newBasename.trimEnd();
                 break;
             }
           } catch (ruleErr) {
             // warning for rule failure? ignore for now
-            logger.warn(`Rule failed for file ${basename}: ${(ruleErr as Error).message}`);
+            logger.warn(
+              `Rule failed for file ${basename}: ${(ruleErr as Error).message}`,
+            );
           }
         }
 
@@ -185,7 +197,8 @@ export class RenamingService {
               // Fallback for systems where ino is unreliable (e.g. Windows sometimes)
               // If full paths match case-insensitively, assume it's the same file
               const isSamePath =
-                path.resolve(originalPath).toLowerCase() === path.resolve(newPath).toLowerCase();
+                path.resolve(originalPath).toLowerCase() ===
+                path.resolve(newPath).toLowerCase();
               if (!isSamePath) {
                 conflict = true;
               }
@@ -217,7 +230,10 @@ export class RenamingService {
   /**
    * Execute renaming plan
    */
-  async executeRename(previews: RenamePreview[], dryRun: boolean = false): Promise<RenameResult> {
+  async executeRename(
+    previews: RenamePreview[],
+    dryRun: boolean = false,
+  ): Promise<RenameResult> {
     const result: RenameResult = {
       statistics: { total: previews.length, renamed: 0, skipped: 0, failed: 0 },
       successes: [],
@@ -248,53 +264,52 @@ export class RenamingService {
       if (item.conflict) {
         result.statistics.failed++;
         result.errors.push(
-          `Skipped ${path.basename(item.original)} due to conflict with ${path.basename(item.new)}`
+          `Skipped ${path.basename(item.original)} due to conflict with ${path.basename(item.new)}`,
         );
         continue;
       }
       if (item.error) {
         result.statistics.failed++;
-        result.errors.push(`Skipped ${path.basename(item.original)}: ${item.error}`);
+        result.errors.push(
+          `Skipped ${path.basename(item.original)}: ${item.error}`,
+        );
         continue;
       }
 
       try {
-        // Perform Rename
-        // Use Atomic Copy-Delete strategies from OrganizerService?
-        // For Rename in same folder, fs.rename is usually atomic.
-
-        // CHECK AGAIN for conflict just in case (race condition)
-        // CHECK AGAIN for conflict just in case (race condition)
-        if (await fileExists(item.new)) {
-          // Verify if it is strictly a different file (e.g. A.txt -> a.txt on Windows should pass)
-          try {
-            const srcStat = await fs.stat(item.original);
-            const destStat = await fs.stat(item.new);
-            const isSameFile = srcStat.ino === destStat.ino && srcStat.dev === destStat.dev;
-            const isSamePath =
-              path.resolve(item.original).toLowerCase() === path.resolve(item.new).toLowerCase();
-
-            if (!isSameFile && !isSamePath) {
-              throw new Error('Destination file exists (Race Condition)');
-            }
-          } catch (e) {
-            // If stat fails but access worked?
-            throw new Error('Destination file exists (Race Condition)');
-          }
-        }
+        // Perform Rename atomically - NO pre-check to avoid TOCTOU race condition
+        // fs.rename() will atomically fail if destination exists (on POSIX)
+        // On Windows, it may overwrite, so we handle that case
 
         // Security Check
         const validator = new PathValidatorService();
         await validator.validatePath(item.original);
         await validator.validatePath(item.new);
 
-        await fs.rename(item.original, item.new);
+        // Attempt rename and handle specific errors atomically
+        try {
+          await fs.rename(item.original, item.new);
+        } catch (renameError) {
+          const err = renameError as NodeJS.ErrnoException;
+          // EEXIST: Destination file already exists (POSIX)
+          // EPERM: Permission error or operation not permitted
+          // EBUSY: File is busy (Windows)
+          if (err.code === "EEXIST") {
+            throw new Error(
+              `Destination file already exists: ${path.basename(item.new)}`,
+            );
+          } else if (err.code === "EPERM" || err.code === "EBUSY") {
+            throw new Error(`Operation failed: ${err.message}`);
+          }
+          // Re-throw other errors
+          throw renameError;
+        }
 
         result.statistics.renamed++;
         result.successes.push({ original: item.original, new: item.new });
 
         rollbackActions.push({
-          type: 'rename',
+          type: "rename",
           originalPath: item.original,
           currentPath: item.new,
           timestamp: Date.now(),
@@ -310,7 +325,7 @@ export class RenamingService {
     if (rollbackActions.length > 0) {
       await this.rollbackService.createManifest(
         `Batch Rename of ${rollbackActions.length} files`,
-        rollbackActions as RollbackAction[]
+        rollbackActions as RollbackAction[],
       );
     }
 
@@ -320,7 +335,7 @@ export class RenamingService {
 
 // Helpers
 function escapeRegExp(string: string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function toCamelCase(str: string) {
@@ -328,7 +343,7 @@ function toCamelCase(str: string) {
     .replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) => {
       return index === 0 ? word.toLowerCase() : word.toUpperCase();
     })
-    .replace(/\s+/g, '');
+    .replace(/\s+/g, "");
 }
 
 function toPascalCase(str: string) {
@@ -336,30 +351,34 @@ function toPascalCase(str: string) {
     .replace(/(?:^\w|[A-Z]|\b\w)/g, (word) => {
       return word.toUpperCase();
     })
-    .replace(/\s+/g, '');
+    .replace(/\s+/g, "");
 }
 
 function toSnakeCase(str: string) {
   return (
     str
-      .match(/[A-Z]{2,}(?=[A-Z][a-z]+[0-9]*|\b)|[A-Z]?[a-z]+[0-9]*|[A-Z]|[0-9]+/g)
+      .match(
+        /[A-Z]{2,}(?=[A-Z][a-z]+[0-9]*|\b)|[A-Z]?[a-z]+[0-9]*|[A-Z]|[0-9]+/g,
+      )
       ?.map((x) => x.toLowerCase())
-      .join('_') ?? str
+      .join("_") ?? str
   );
 }
 
 function toKebabCase(str: string) {
   return (
     str
-      .match(/[A-Z]{2,}(?=[A-Z][a-z]+[0-9]*|\b)|[A-Z]?[a-z]+[0-9]*|[A-Z]|[0-9]+/g)
+      .match(
+        /[A-Z]{2,}(?=[A-Z][a-z]+[0-9]*|\b)|[A-Z]?[a-z]+[0-9]*|[A-Z]|[0-9]+/g,
+      )
       ?.map((x) => x.toLowerCase())
-      .join('-') ?? str
+      .join("-") ?? str
   );
 }
 
 function toTitleCase(str: string) {
   return str.replace(
     /\w\S*/g,
-    (text) => text.charAt(0).toUpperCase() + text.substring(1).toLowerCase()
+    (text) => text.charAt(0).toUpperCase() + text.substring(1).toLowerCase(),
   );
 }

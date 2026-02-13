@@ -73,10 +73,17 @@ jest.unstable_mockModule(
     topicExtractorService: {
       extractTopics: jest.fn((text: string) => {
         if (!text || text.trim().length < 10) {
-          return { topics: [], keywords: [], language: "en", documentType: "unknown" };
+          return {
+            topics: [],
+            keywords: [],
+            language: "en",
+            documentType: "unknown",
+          };
         }
         return {
-          topics: [{ topic: "TestTopic", confidence: 0.9, matchedKeywords: ["test"] }],
+          topics: [
+            { topic: "TestTopic", confidence: 0.9, matchedKeywords: ["test"] },
+          ],
           keywords: ["test"],
           language: "en",
           documentType: "general",
@@ -87,9 +94,8 @@ jest.unstable_mockModule(
   }),
 );
 
-const { handleOrganizeSmart } = await import(
-  "../../../src/tools/smart-organization.js"
-);
+const { handleOrganizeSmart } =
+  await import("../../../src/tools/smart-organization.js");
 
 describe("Smart Organization Tool - Edge Cases", () => {
   let sourceDir: string;
@@ -175,7 +181,10 @@ describe("Smart Organization Tool - Edge Cases", () => {
     });
 
     it("should handle files with no extension", async () => {
-      await fs.writeFile(path.join(sourceDir, "README"), "This is a readme file");
+      await fs.writeFile(
+        path.join(sourceDir, "README"),
+        "This is a readme file",
+      );
       await fs.writeFile(path.join(sourceDir, "LICENSE"), "MIT License");
       await fs.writeFile(path.join(sourceDir, "Makefile"), "all: build");
 
@@ -196,7 +205,10 @@ describe("Smart Organization Tool - Edge Cases", () => {
     });
 
     it("should handle files with dots in names but no real extension", async () => {
-      await fs.writeFile(path.join(sourceDir, "file.name.with.dots"), "content");
+      await fs.writeFile(
+        path.join(sourceDir, "file.name.with.dots"),
+        "content",
+      );
       await fs.writeFile(path.join(sourceDir, "archive.tar.gz"), "content");
 
       mockScanDirectory.mockResolvedValue([
@@ -218,7 +230,16 @@ describe("Smart Organization Tool - Edge Cases", () => {
 
   describe("File Extension Edge Cases", () => {
     it("should handle all supported music extensions", async () => {
-      const musicExts = [".mp3", ".flac", ".ogg", ".wav", ".m4a", ".aac", ".wma", ".opus"];
+      const musicExts = [
+        ".mp3",
+        ".flac",
+        ".ogg",
+        ".wav",
+        ".m4a",
+        ".aac",
+        ".wma",
+        ".opus",
+      ];
       const files = musicExts.map((ext, i) => `track${i}${ext}`);
 
       for (const file of files) {
@@ -247,9 +268,27 @@ describe("Smart Organization Tool - Edge Cases", () => {
 
     it("should handle all supported photo extensions", async () => {
       const photoExts = [
-        ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".heic", ".heif",
-        ".raw", ".cr2", ".cr3", ".nef", ".arw", ".dng", ".orf",
-        ".rw2", ".pef", ".sr2", ".raf", ".gif", ".bmp", ".webp",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".tiff",
+        ".tif",
+        ".heic",
+        ".heif",
+        ".raw",
+        ".cr2",
+        ".cr3",
+        ".nef",
+        ".arw",
+        ".dng",
+        ".orf",
+        ".rw2",
+        ".pef",
+        ".sr2",
+        ".raf",
+        ".gif",
+        ".bmp",
+        ".webp",
       ];
       const files = photoExts.map((ext, i) => `image${i}${ext}`);
 
@@ -283,7 +322,10 @@ describe("Smart Organization Tool - Edge Cases", () => {
       const files = docExts.map((ext, i) => `doc${i}${ext}`);
 
       for (const file of files) {
-        await fs.writeFile(path.join(sourceDir, file), "document content with topics");
+        await fs.writeFile(
+          path.join(sourceDir, file),
+          "document content with topics",
+        );
       }
 
       mockScanDirectory.mockResolvedValue(
@@ -376,7 +418,9 @@ describe("Smart Organization Tool - Edge Cases", () => {
       const longName = "a".repeat(200) + ".mp3";
       await fs.writeFile(path.join(sourceDir, longName), "audio");
 
-      mockScanDirectory.mockResolvedValue([{ path: path.join(sourceDir, longName) }]);
+      mockScanDirectory.mockResolvedValue([
+        { path: path.join(sourceDir, longName) },
+      ]);
 
       mockMusicOrganize.mockResolvedValue({
         organizedFiles: 1,
@@ -431,7 +475,9 @@ describe("Smart Organization Tool - Edge Cases", () => {
     it("should handle documents with very short content", async () => {
       await fs.writeFile(path.join(sourceDir, "short.txt"), "tiny");
 
-      mockScanDirectory.mockResolvedValue([{ path: path.join(sourceDir, "short.txt") }]);
+      mockScanDirectory.mockResolvedValue([
+        { path: path.join(sourceDir, "short.txt") },
+      ]);
 
       const result = await handleOrganizeSmart({
         source_dir: sourceDir,
@@ -445,9 +491,14 @@ describe("Smart Organization Tool - Edge Cases", () => {
     });
 
     it("should handle documents with whitespace-only content", async () => {
-      await fs.writeFile(path.join(sourceDir, "whitespace.txt"), "   \n\t  \n  ");
+      await fs.writeFile(
+        path.join(sourceDir, "whitespace.txt"),
+        "   \n\t  \n  ",
+      );
 
-      mockScanDirectory.mockResolvedValue([{ path: path.join(sourceDir, "whitespace.txt") }]);
+      mockScanDirectory.mockResolvedValue([
+        { path: path.join(sourceDir, "whitespace.txt") },
+      ]);
 
       const result = await handleOrganizeSmart({
         source_dir: sourceDir,
@@ -463,7 +514,9 @@ describe("Smart Organization Tool - Edge Cases", () => {
       const longContent = "word ".repeat(10000);
       await fs.writeFile(path.join(sourceDir, "long.txt"), longContent);
 
-      mockScanDirectory.mockResolvedValue([{ path: path.join(sourceDir, "long.txt") }]);
+      mockScanDirectory.mockResolvedValue([
+        { path: path.join(sourceDir, "long.txt") },
+      ]);
 
       const result = await handleOrganizeSmart({
         source_dir: sourceDir,
@@ -599,7 +652,9 @@ describe("Smart Organization Tool - Edge Cases", () => {
       ]);
 
       // Music service throws
-      mockMusicOrganize.mockRejectedValue(new Error("Music service unavailable"));
+      mockMusicOrganize.mockRejectedValue(
+        new Error("Music service unavailable"),
+      );
 
       // Photo service works
       mockPhotoOrganize.mockResolvedValue({
@@ -624,7 +679,9 @@ describe("Smart Organization Tool - Edge Cases", () => {
     it("should handle paths with trailing slashes", async () => {
       await fs.writeFile(path.join(sourceDir, "file.txt"), "content");
 
-      mockScanDirectory.mockResolvedValue([{ path: path.join(sourceDir, "file.txt") }]);
+      mockScanDirectory.mockResolvedValue([
+        { path: path.join(sourceDir, "file.txt") },
+      ]);
 
       const result = await handleOrganizeSmart({
         source_dir: sourceDir + path.sep,
@@ -638,12 +695,13 @@ describe("Smart Organization Tool - Edge Cases", () => {
     it("should handle relative paths if allowed", async () => {
       await fs.writeFile(path.join(sourceDir, "file.txt"), "content");
 
-      mockScanDirectory.mockResolvedValue([{ path: path.join(sourceDir, "file.txt") }]);
+      mockScanDirectory.mockResolvedValue([
+        { path: path.join(sourceDir, "file.txt") },
+      ]);
 
       // This depends on path validator behavior
-      const { validateStrictPath } = await import(
-        "../../../src/services/path-validator.service.js"
-      );
+      const { validateStrictPath } =
+        await import("../../../src/services/path-validator.service.js");
       (validateStrictPath as jest.Mock).mockResolvedValue(sourceDir);
 
       const result = await handleOrganizeSmart({
@@ -653,6 +711,9 @@ describe("Smart Organization Tool - Edge Cases", () => {
       });
 
       expect(result.content[0].text).toBeDefined();
+      (validateStrictPath as jest.Mock).mockImplementation((p: string) =>
+        Promise.resolve(p),
+      );
     });
   });
 
@@ -693,7 +754,10 @@ describe("Smart Organization Tool - Edge Cases", () => {
     it("should handle single file of each type efficiently", async () => {
       await fs.writeFile(path.join(sourceDir, "song.mp3"), "audio");
       await fs.writeFile(path.join(sourceDir, "photo.jpg"), "image");
-      await fs.writeFile(path.join(sourceDir, "document.txt"), "document content");
+      await fs.writeFile(
+        path.join(sourceDir, "document.txt"),
+        "document content",
+      );
 
       mockScanDirectory.mockResolvedValue([
         { path: path.join(sourceDir, "song.mp3") },
@@ -768,7 +832,9 @@ describe("Smart Organization Tool - Edge Cases", () => {
     it("should handle all photo options enabled simultaneously", async () => {
       await fs.writeFile(path.join(sourceDir, "img.jpg"), "image");
 
-      mockScanDirectory.mockResolvedValue([{ path: path.join(sourceDir, "img.jpg") }]);
+      mockScanDirectory.mockResolvedValue([
+        { path: path.join(sourceDir, "img.jpg") },
+      ]);
 
       mockPhotoOrganize.mockResolvedValue({
         organizedFiles: 1,
@@ -796,9 +862,14 @@ describe("Smart Organization Tool - Edge Cases", () => {
     });
 
     it("should handle create_shortcuts option for documents", async () => {
-      await fs.writeFile(path.join(sourceDir, "doc.txt"), "document content with topics");
+      await fs.writeFile(
+        path.join(sourceDir, "doc.txt"),
+        "document content with topics",
+      );
 
-      mockScanDirectory.mockResolvedValue([{ path: path.join(sourceDir, "doc.txt") }]);
+      mockScanDirectory.mockResolvedValue([
+        { path: path.join(sourceDir, "doc.txt") },
+      ]);
 
       const result = await handleOrganizeSmart({
         source_dir: sourceDir,

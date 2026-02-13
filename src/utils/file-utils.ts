@@ -16,8 +16,11 @@ export async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
   }
 }
 
@@ -53,6 +56,7 @@ export function expandHomePath(inputPath: string): string {
 /**
  * Expand environment variables in path
  * Supports: $VAR, ${VAR}, %VAR%
+ * Also handles escape sequences: $$ and \$ become literal $
  * @param inputPath - Path with env vars
  * @returns Path with env vars expanded
  */
@@ -61,21 +65,36 @@ export function expandEnvVars(inputPath: string): string {
     return inputPath;
   }
 
-  // Unix style: $VAR or ${VAR}
-  let result = inputPath.replace(
+  const ESCAPE_MARKER = "\x00ENV_ESCAPE\x00";
+
+  let result = inputPath;
+
+  // Step 1: Escape literal dollar signs ($$ and \$ become placeholder)
+  // $$ -> escape marker (literal $)
+  result = result.replace(/\$\$/g, ESCAPE_MARKER);
+  // \$ -> escape marker (literal $)
+  result = result.replace(/\\\$/g, ESCAPE_MARKER);
+
+  // Step 2: Expand Windows-style %VAR% first (they take precedence)
+  result = result.replace(
+    /%([^%]+)%/g,
+    (_, name: string) => process.env[name] ?? `%${name}%`,
+  );
+
+  // Step 3: Expand ${VAR} - braces take precedence over bare $VAR
+  result = result.replace(
     /\$\{([^}]+)\}/g,
     (_, name: string) => process.env[name] ?? "",
   );
+
+  // Step 4: Expand $VAR (bare variable names)
   result = result.replace(
     /\$([A-Za-z_][A-Za-z0-9_]*)/g,
     (_, name: string) => process.env[name] ?? "",
   );
 
-  // Windows style: %VAR%
-  result = result.replace(
-    /%([^%]+)%/g,
-    (_, name: string) => process.env[name] ?? "",
-  );
+  // Step 5: Restore escaped dollar signs to literal $
+  result = result.replace(new RegExp(ESCAPE_MARKER, "g"), "$");
 
   return result;
 }

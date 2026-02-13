@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.3.2] - 2026-02-13
+
+### 🐛 Bug Fixes
+
+#### Smart Organization
+- **Fixed dry_run not passed** in photo-organization.ts and music-organization.ts
+- **Fixed delete-before-verify bug** - Source files now verified copied before deletion
+- **Fixed source/target validation** - Added proper path validation in smart-organization.ts
+
+#### Code Quality
+- **Fixed logger.ts Jest detection** - typeof jest no longer throws ReferenceError
+- **Fixed path-security.ts argument order** - Corrected wrong argument order to isSubPath
+- **Fixed categorizer.service.ts** - useContentAnalysis now properly implemented
+- **Fixed test mock pollution** - smart-organization-edge-cases.test.ts no longer pollutes other tests
+
+### 🧪 Testing
+- All 59 test suites passing (893/896 tests, 3 skipped)
+- Build passes successfully
+
 ## [3.3.1] - 2026-02-13
 
 ### 🐛 Bug Fixes

@@ -3,13 +3,13 @@
  * Common Validation Schemas
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * Base directory input schema
  */
 export const DirectoryInputSchema = z.object({
-  directory: z.string().min(1, 'Directory path is required'),
+  directory: z.string().min(1, "Directory path is required"),
 });
 
 /**
@@ -32,9 +32,11 @@ export const PaginationSchema = z.object({
  */
 export const CommonParamsSchema = z.object({
   response_format: z
-    .enum(['json', 'markdown'])
-    .default('markdown')
-    .describe('Output format: "markdown" for human-readable, "json" for programmatic use'),
+    .enum(["json", "markdown"])
+    .default("markdown")
+    .describe(
+      'Output format: "markdown" for human-readable, "json" for programmatic use',
+    ),
 });
 
 export type DirectoryInput = z.infer<typeof DirectoryInputSchema>;

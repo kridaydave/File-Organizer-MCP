@@ -49,6 +49,7 @@ export interface MusicOrganizationConfig {
   copyInsteadOfMove?: boolean;
   skipIfMissingMetadata?: boolean;
   variousArtistsAlbumName?: string;
+  dryRun?: boolean;
 }
 
 /**

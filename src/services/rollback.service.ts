@@ -5,17 +5,17 @@
  * Manages operation manifests and performs undo operations.
  */
 
-import fs from 'fs/promises';
-import path from 'path';
-import { randomUUID } from 'crypto';
-import os from 'os';
-import type { RollbackManifest, RollbackAction } from '../types.js';
-import { fileExists } from '../utils/file-utils.js';
-import { logger } from '../utils/logger.js';
-import { CONFIG } from '../config.js';
+import fs from "fs/promises";
+import path from "path";
+import { randomUUID } from "crypto";
+import os from "os";
+import type { RollbackManifest, RollbackAction } from "../types.js";
+import { fileExists } from "../utils/file-utils.js";
+import { logger } from "../utils/logger.js";
+import { CONFIG } from "../config.js";
 
 function isValidPath(filePath: string): boolean {
-  if (!filePath || typeof filePath !== 'string') return false;
+  if (!filePath || typeof filePath !== "string") return false;
   // Prevent path traversal attacks
   const resolved = path.resolve(filePath);
   const cwd = process.cwd();
@@ -30,7 +30,7 @@ export class RollbackService {
     // Store manifests in .agent/rollbacks or similar if possible,
     // but for this MCP, let's store in a hidden directory in the workspace or temp?
     // Let's use `.file-organizer-rollbacks` in the CWD (User's workspace root usually).
-    this.storageDir = path.join(process.cwd(), '.file-organizer-rollbacks');
+    this.storageDir = path.join(process.cwd(), ".file-organizer-rollbacks");
   }
 
   private async ensureStorage(): Promise<void> {
@@ -42,7 +42,10 @@ export class RollbackService {
   /**
    * Create and save a new rollback manifest
    */
-  async createManifest(description: string, actions: RollbackAction[]): Promise<string> {
+  async createManifest(
+    description: string,
+    actions: RollbackAction[],
+  ): Promise<string> {
     await this.ensureStorage();
 
     const id = randomUUID();
@@ -70,9 +73,12 @@ export class RollbackService {
     const manifests: RollbackManifest[] = [];
 
     for (const file of files) {
-      if (file.endsWith('.json')) {
+      if (file.endsWith(".json")) {
         try {
-          const content = await fs.readFile(path.join(this.storageDir, file), 'utf-8');
+          const content = await fs.readFile(
+            path.join(this.storageDir, file),
+            "utf-8",
+          );
           manifests.push(JSON.parse(content));
         } catch (e) {
           logger.error(`Failed to parse rollback manifest ${file}: ${e}`);
@@ -93,10 +99,14 @@ export class RollbackService {
    * @throws {Error} When file path validation fails for security reasons
    */
   async rollback(
-    manifestId: string
+    manifestId: string,
   ): Promise<{ success: number; failed: number; errors: string[] }> {
     // Security: Validate ID format (UUID)
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(manifestId)) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        manifestId,
+      )
+    ) {
       throw new Error(`Invalid manifest ID format: ${manifestId}`);
     }
 
@@ -109,10 +119,12 @@ export class RollbackService {
 
     let manifest: RollbackManifest;
     try {
-      const content = await fs.readFile(filePath, 'utf-8');
+      const content = await fs.readFile(filePath, "utf-8");
       manifest = JSON.parse(content);
     } catch (error) {
-      throw new Error(`Failed to parse manifest ${manifestId}: ${(error as Error).message}`);
+      throw new Error(
+        `Failed to parse manifest ${manifestId}: ${(error as Error).message}`,
+      );
     }
     const results = { success: 0, failed: 0, errors: [] as string[] };
 
@@ -129,7 +141,10 @@ export class RollbackService {
           throw new Error(`Invalid current path: ${action.currentPath}`);
         }
 
-        if ((action.type === 'move' || action.type === 'rename') && action.currentPath) {
+        if (
+          (action.type === "move" || action.type === "rename") &&
+          action.currentPath
+        ) {
           // Undo Move/Rename: Move currentPath -> originalPath
           // TOCTOU-safe: Try the operation directly, handle ENOENT
           try {
@@ -138,15 +153,17 @@ export class RollbackService {
             throw new Error(`Current file not found: ${action.currentPath}`);
           }
 
-          await fs.mkdir(path.dirname(action.originalPath), { recursive: true });
+          await fs.mkdir(path.dirname(action.originalPath), {
+            recursive: true,
+          });
 
           // TOCTOU-safe: Try rename directly, handle EEXIST
           try {
             await fs.rename(action.currentPath, action.originalPath);
           } catch (e) {
-            if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
+            if ((e as NodeJS.ErrnoException).code === "EEXIST") {
               throw new Error(
-                `Destination already exists, would overwrite: ${action.originalPath}`
+                `Destination already exists, would overwrite: ${action.originalPath}`,
               );
             }
             throw e;
@@ -159,16 +176,16 @@ export class RollbackService {
               await fs.rename(action.overwrittenBackupPath, action.currentPath);
             } catch (e) {
               const err = e as NodeJS.ErrnoException;
-              if (err.code === 'ENOENT') {
+              if (err.code === "ENOENT") {
                 results.errors.push(
-                  `Critical: Original file backup missing: ${action.overwrittenBackupPath}`
+                  `Critical: Original file backup missing: ${action.overwrittenBackupPath}`,
                 );
                 results.failed++;
                 continue;
               }
-              if (err.code === 'EEXIST') {
+              if (err.code === "EEXIST") {
                 throw new Error(
-                  `Cannot restore backup, destination occupied: ${action.currentPath}`
+                  `Cannot restore backup, destination occupied: ${action.currentPath}`,
                 );
               }
               throw e;
@@ -176,44 +193,52 @@ export class RollbackService {
           }
 
           results.success++;
-        } else if (action.type === 'copy' && action.currentPath) {
+        } else if (action.type === "copy" && action.currentPath) {
           // Undo Copy: Delete the copied file (currentPath)
           try {
             await fs.access(action.currentPath);
             await fs.unlink(action.currentPath);
             results.success++;
           } catch (e) {
-            if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
-              results.errors.push(`File to un-copy not found: ${action.currentPath}`);
+            if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+              results.errors.push(
+                `File to un-copy not found: ${action.currentPath}`,
+              );
               results.failed++;
             } else {
               throw e;
             }
           }
-        } else if (action.type === 'delete') {
+        } else if (action.type === "delete") {
           // Undo Delete: Restore from backup
           if (!action.backupPath) {
             results.failed++;
-            results.errors.push(`Cannot restore deleted file: no backup path recorded`);
+            results.errors.push(
+              `Cannot restore deleted file: no backup path recorded`,
+            );
             continue;
           }
 
-          await fs.mkdir(path.dirname(action.originalPath), { recursive: true });
+          await fs.mkdir(path.dirname(action.originalPath), {
+            recursive: true,
+          });
 
           // TOCTOU-safe: Try rename directly, handle errors
           try {
             await fs.rename(action.backupPath, action.originalPath);
           } catch (e) {
             const err = e as NodeJS.ErrnoException;
-            if (err.code === 'ENOENT') {
+            if (err.code === "ENOENT") {
               results.failed++;
               results.errors.push(
-                `Cannot restore deleted file. Backup not found: ${action.backupPath}`
+                `Cannot restore deleted file. Backup not found: ${action.backupPath}`,
               );
               continue;
             }
-            if (err.code === 'EEXIST') {
-              throw new Error(`Cannot restore, destination already exists: ${action.originalPath}`);
+            if (err.code === "EEXIST") {
+              throw new Error(
+                `Cannot restore, destination already exists: ${action.originalPath}`,
+              );
             }
             throw e;
           }
@@ -222,7 +247,7 @@ export class RollbackService {
       } catch (error) {
         results.failed++;
         results.errors.push(
-          `Failed to undo ${action.type} for ${action.originalPath}: ${(error as Error).message}`
+          `Failed to undo ${action.type} for ${action.originalPath}: ${(error as Error).message}`,
         );
       }
     }
@@ -234,7 +259,7 @@ export class RollbackService {
       // Throwing is better here to warn the user that the manifest is still there
       // and might be re-runnable (risky).
       throw new Error(
-        `Rollback completed but failed to delete manifest ${manifestId}: ${(e as Error).message}`
+        `Rollback completed but failed to delete manifest ${manifestId}: ${(e as Error).message}`,
       );
     }
 

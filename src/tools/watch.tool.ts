@@ -5,91 +5,98 @@
  * @module tools/watch
  */
 
-import { z } from 'zod';
-import cron from 'node-cron';
-import type { ToolDefinition, ToolResponse } from '../types.js';
-import { validateStrictPath } from '../services/path-validator.service.js';
-import { loadUserConfig, updateUserConfig, type WatchConfig } from '../config.js';
-import { reloadAutoOrganizeScheduler } from '../services/auto-organize.service.js';
-import { createErrorResponse } from '../utils/error-handler.js';
-import { CommonParamsSchema } from '../schemas/common.schemas.js';
+import { z } from "zod";
+import cron from "node-cron";
+import type { ToolDefinition, ToolResponse } from "../types.js";
+import { validateStrictPath } from "../services/path-validator.service.js";
+import {
+  loadUserConfig,
+  updateUserConfig,
+  type WatchConfig,
+} from "../config.js";
+import { reloadAutoOrganizeScheduler } from "../services/auto-organize.service.js";
+import { createErrorResponse } from "../utils/error-handler.js";
+import { CommonParamsSchema } from "../schemas/common.schemas.js";
 
 export const WatchDirectoryInputSchema = z
   .object({
     directory: z
       .string()
-      .min(1, 'Directory path cannot be empty')
-      .describe('Full path to the directory to watch'),
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to watch"),
     schedule: z
       .string()
-      .min(1, 'Schedule cannot be empty')
+      .min(1, "Schedule cannot be empty")
       .describe(
-        'Cron expression (e.g., "0 9 * * *" for 9am daily, "*/30 * * * *" for every 30 min)'
+        'Cron expression (e.g., "0 9 * * *" for 9am daily, "*/30 * * * *" for every 30 min)',
       ),
-    auto_organize: z.boolean().default(true).describe('Enable auto-organization on this schedule'),
+    auto_organize: z
+      .boolean()
+      .default(true)
+      .describe("Enable auto-organization on this schedule"),
     min_file_age_minutes: z
       .number()
       .int()
       .min(0)
       .optional()
       .describe(
-        'Minimum file age in minutes before organizing (prevents organizing files being written)'
+        "Minimum file age in minutes before organizing (prevents organizing files being written)",
       ),
     max_files_per_run: z
       .number()
       .int()
       .min(1)
       .optional()
-      .describe('Maximum files to process per run'),
+      .describe("Maximum files to process per run"),
   })
   .merge(CommonParamsSchema);
 
 export type WatchDirectoryInput = z.infer<typeof WatchDirectoryInputSchema>;
 
 export const watchDirectoryToolDefinition: ToolDefinition = {
-  name: 'file_organizer_watch_directory',
-  title: 'Watch Directory',
+  name: "file_organizer_watch_directory",
+  title: "Watch Directory",
   description:
-    'Add a directory to the watch list with a cron-based schedule for automatic organization. ' +
+    "Add a directory to the watch list with a cron-based schedule for automatic organization. " +
     'When the user specifies a schedule in natural language (e.g., "every day at 10am"), ' +
     'convert it to a standard cron expression. Cron format: "minute hour day month weekday". ' +
     'Common conversions: "every day at 10am" → "0 10 * * *", "every 30 minutes" → "*/30 * * * *", ' +
     '"every Monday at 9am" → "0 9 * * 1", "every hour" → "0 * * * *".',
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
       directory: {
-        type: 'string',
+        type: "string",
         description:
           'Full path to the directory to watch (e.g., "C:\\Users\\John\\Desktop\\Work-Notes")',
       },
       schedule: {
-        type: 'string',
+        type: "string",
         description:
           'Cron expression. Convert natural language to cron: "every day at 10am" → "0 10 * * *", "every 30 minutes" → "*/30 * * * *", "every Monday at 9am" → "0 9 * * 1", "every hour" → "0 * * * *", "daily at midnight" → "0 0 * * *"',
       },
       auto_organize: {
-        type: 'boolean',
-        description: 'Enable auto-organization',
+        type: "boolean",
+        description: "Enable auto-organization",
         default: true,
       },
       response_format: {
-        type: 'string',
-        enum: ['json', 'markdown'],
-        default: 'markdown',
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
       },
       min_file_age_minutes: {
-        type: 'number',
-        description: 'Minimum file age in minutes before organizing',
+        type: "number",
+        description: "Minimum file age in minutes before organizing",
         minimum: 0,
       },
       max_files_per_run: {
-        type: 'number',
-        description: 'Maximum files to process per run',
+        type: "number",
+        description: "Maximum files to process per run",
         minimum: 1,
       },
     },
-    required: ['directory', 'schedule'],
+    required: ["directory", "schedule"],
   },
   annotations: {
     readOnlyHint: false,
@@ -106,24 +113,28 @@ export const UnwatchDirectoryInputSchema = z
   .object({
     directory: z
       .string()
-      .min(1, 'Directory path cannot be empty')
-      .describe('Full path to the directory to remove from watch list'),
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to remove from watch list"),
   })
   .merge(CommonParamsSchema);
 
 export type UnwatchDirectoryInput = z.infer<typeof UnwatchDirectoryInputSchema>;
 
 export const unwatchDirectoryToolDefinition: ToolDefinition = {
-  name: 'file_organizer_unwatch_directory',
-  title: 'Unwatch Directory',
-  description: 'Remove a directory from the watch list.',
+  name: "file_organizer_unwatch_directory",
+  title: "Unwatch Directory",
+  description: "Remove a directory from the watch list.",
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
-      directory: { type: 'string', description: 'Full path to the directory' },
-      response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
+      directory: { type: "string", description: "Full path to the directory" },
+      response_format: {
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
+      },
     },
-    required: ['directory'],
+    required: ["directory"],
   },
   annotations: {
     readOnlyHint: false,
@@ -141,13 +152,18 @@ export const ListWatchesInputSchema = z.object({}).merge(CommonParamsSchema);
 export type ListWatchesInput = z.infer<typeof ListWatchesInputSchema>;
 
 export const listWatchesToolDefinition: ToolDefinition = {
-  name: 'file_organizer_list_watches',
-  title: 'List Watched Directories',
-  description: 'List all directories currently being watched with their schedules.',
+  name: "file_organizer_list_watches",
+  title: "List Watched Directories",
+  description:
+    "List all directories currently being watched with their schedules.",
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
-      response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
+      response_format: {
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
+      },
     },
     required: [],
   },
@@ -159,15 +175,17 @@ export const listWatchesToolDefinition: ToolDefinition = {
   },
 };
 
-export async function handleWatchDirectory(args: Record<string, unknown>): Promise<ToolResponse> {
+export async function handleWatchDirectory(
+  args: Record<string, unknown>,
+): Promise<ToolResponse> {
   try {
     const parsed = WatchDirectoryInputSchema.safeParse(args);
     if (!parsed.success) {
       return {
         content: [
           {
-            type: 'text',
-            text: `Error: ${parsed.error.issues.map((i) => i.message).join(', ')}`,
+            type: "text",
+            text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
       };
@@ -190,7 +208,7 @@ export async function handleWatchDirectory(args: Record<string, unknown>): Promi
       return {
         content: [
           {
-            type: 'text',
+            type: "text",
             text: `Error: Invalid cron expression "${schedule}". Use standard cron syntax (e.g., "0 9 * * *" for daily at 9am).`,
           },
         ],
@@ -214,7 +232,9 @@ export async function handleWatchDirectory(args: Record<string, unknown>): Promi
     const watchList = userConfig.watchList ?? [];
 
     // Check if directory already exists in watch list
-    const existingIndex = watchList.findIndex((w) => w.directory === validatedPath);
+    const existingIndex = watchList.findIndex(
+      (w) => w.directory === validatedPath,
+    );
 
     if (existingIndex >= 0) {
       // Update existing watch
@@ -230,7 +250,7 @@ export async function handleWatchDirectory(args: Record<string, unknown>): Promi
     // Reload scheduler to pick up changes
     reloadAutoOrganizeScheduler();
 
-    const action = existingIndex >= 0 ? 'Updated' : 'Added';
+    const action = existingIndex >= 0 ? "Updated" : "Added";
     const result = {
       success: true,
       action,
@@ -239,9 +259,9 @@ export async function handleWatchDirectory(args: Record<string, unknown>): Promi
       rules: watchConfig.rules,
     };
 
-    if (response_format === 'json') {
+    if (response_format === "json") {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         structuredContent: result,
       };
     }
@@ -249,29 +269,31 @@ export async function handleWatchDirectory(args: Record<string, unknown>): Promi
     const markdown = `### ${action} Watch for \`${validatedPath}\`
 
 **Schedule:** ${schedule}
-**Auto-organize:** ${auto_organize ? 'Enabled' : 'Disabled'}
-${min_file_age_minutes !== undefined ? `**Min File Age:** ${min_file_age_minutes} minutes` : ''}
-${max_files_per_run !== undefined ? `**Max Files Per Run:** ${max_files_per_run}` : ''}
+**Auto-organize:** ${auto_organize ? "Enabled" : "Disabled"}
+${min_file_age_minutes !== undefined ? `**Min File Age:** ${min_file_age_minutes} minutes` : ""}
+${max_files_per_run !== undefined ? `**Max Files Per Run:** ${max_files_per_run}` : ""}
 
 The scheduler has been reloaded with the new configuration.`;
 
     return {
-      content: [{ type: 'text', text: markdown }],
+      content: [{ type: "text", text: markdown }],
     };
   } catch (error) {
     return createErrorResponse(error);
   }
 }
 
-export async function handleUnwatchDirectory(args: Record<string, unknown>): Promise<ToolResponse> {
+export async function handleUnwatchDirectory(
+  args: Record<string, unknown>,
+): Promise<ToolResponse> {
   try {
     const parsed = UnwatchDirectoryInputSchema.safeParse(args);
     if (!parsed.success) {
       return {
         content: [
           {
-            type: 'text',
-            text: `Error: ${parsed.error.issues.map((i) => i.message).join(', ')}`,
+            type: "text",
+            text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
       };
@@ -291,7 +313,7 @@ export async function handleUnwatchDirectory(args: Record<string, unknown>): Pro
       return {
         content: [
           {
-            type: 'text',
+            type: "text",
             text: `Directory "${directory}" was not in the watch list.`,
           },
         ],
@@ -307,13 +329,13 @@ export async function handleUnwatchDirectory(args: Record<string, unknown>): Pro
 
     const result = {
       success: true,
-      action: 'Removed',
+      action: "Removed",
       directory,
     };
 
-    if (response_format === 'json') {
+    if (response_format === "json") {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         structuredContent: result,
       };
     }
@@ -321,7 +343,7 @@ export async function handleUnwatchDirectory(args: Record<string, unknown>): Pro
     return {
       content: [
         {
-          type: 'text',
+          type: "text",
           text: `Removed "${directory}" from watch list. The scheduler has been updated.`,
         },
       ],
@@ -331,15 +353,17 @@ export async function handleUnwatchDirectory(args: Record<string, unknown>): Pro
   }
 }
 
-export async function handleListWatches(args: Record<string, unknown>): Promise<ToolResponse> {
+export async function handleListWatches(
+  args: Record<string, unknown>,
+): Promise<ToolResponse> {
   try {
     const parsed = ListWatchesInputSchema.safeParse(args);
     if (!parsed.success) {
       return {
         content: [
           {
-            type: 'text',
-            text: `Error: ${parsed.error.issues.map((i) => i.message).join(', ')}`,
+            type: "text",
+            text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
       };
@@ -360,9 +384,9 @@ export async function handleListWatches(args: Record<string, unknown>): Promise<
       })),
     };
 
-    if (response_format === 'json') {
+    if (response_format === "json") {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         structuredContent: result,
       };
     }
@@ -371,8 +395,8 @@ export async function handleListWatches(args: Record<string, unknown>): Promise<
       return {
         content: [
           {
-            type: 'text',
-            text: 'No directories are currently being watched. Use `file_organizer_watch_directory` to add one.',
+            type: "text",
+            text: "No directories are currently being watched. Use `file_organizer_watch_directory` to add one.",
           },
         ],
       };
@@ -384,14 +408,14 @@ ${watchList
   .map(
     (w, i) => `${i + 1}. **${w.directory}**
    - Schedule: \`${w.schedule}\`
-   - Auto-organize: ${w.rules.auto_organize ? '✓' : '✗'}
-   ${w.rules.min_file_age_minutes !== undefined ? `- Min file age: ${w.rules.min_file_age_minutes} min` : ''}
-   ${w.rules.max_files_per_run !== undefined ? `- Max files/run: ${w.rules.max_files_per_run}` : ''}`
+   - Auto-organize: ${w.rules.auto_organize ? "✓" : "✗"}
+   ${w.rules.min_file_age_minutes !== undefined ? `- Min file age: ${w.rules.min_file_age_minutes} min` : ""}
+   ${w.rules.max_files_per_run !== undefined ? `- Max files/run: ${w.rules.max_files_per_run}` : ""}`,
   )
-  .join('\n\n')}`;
+  .join("\n\n")}`;
 
     return {
-      content: [{ type: 'text', text: markdown }],
+      content: [{ type: "text", text: markdown }],
     };
   } catch (error) {
     return createErrorResponse(error);

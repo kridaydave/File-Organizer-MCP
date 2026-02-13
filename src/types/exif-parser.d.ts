@@ -1,4 +1,4 @@
-declare module 'exif-parser' {
+declare module "exif-parser" {
   interface ExifTags {
     DateTimeOriginal?: number;
     CreateDate?: number;

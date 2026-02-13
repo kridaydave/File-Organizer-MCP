@@ -48,6 +48,7 @@ export interface PhotoOrganizationConfig {
   copyInsteadOfMove?: boolean;
   stripGPS?: boolean;
   unknownDateFolder?: string;
+  dryRun?: boolean;
 }
 
 export interface PhotoOrganizationResult {
@@ -80,7 +81,7 @@ export class PhotoOrganizerService {
   async organize(
     config: PhotoOrganizationConfig,
   ): Promise<PhotoOrganizationResult> {
-    return this.performOrganization(config, false);
+    return this.performOrganization(config, config.dryRun ?? false);
   }
 
   /**

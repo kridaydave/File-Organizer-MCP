@@ -5,9 +5,9 @@
  * Whitelist/blacklist checking for path access control
  */
 
-import path from 'path';
-import { CONFIG } from '../config.js';
-import { normalizePath, isSubPath } from './file-utils.js';
+import path from "path";
+import { CONFIG } from "../config.js";
+import { normalizePath, isSubPath } from "./file-utils.js";
 
 export interface PathValidationResult {
   allowed: boolean;
@@ -19,16 +19,23 @@ export interface PathValidationResult {
  * Check if a path matches any blocked patterns
  */
 export function isPathBlocked(normalizedPath: string): boolean {
-  return CONFIG.paths.alwaysBlocked.some((pattern) => pattern.test(normalizedPath));
+  return CONFIG.paths.alwaysBlocked.some((pattern) =>
+    pattern.test(normalizedPath),
+  );
 }
 
 /**
  * Check if a path is within allowed directories
  */
 export function isPathInAllowedDirectories(normalizedPath: string): boolean {
-  const allowedDirs = [...CONFIG.paths.defaultAllowed, ...CONFIG.paths.customAllowed];
+  const allowedDirs = [
+    ...CONFIG.paths.defaultAllowed,
+    ...CONFIG.paths.customAllowed,
+  ];
 
-  return allowedDirs.some((allowedDir) => isSubPath(allowedDir, normalizedPath));
+  return allowedDirs.some((allowedDir) =>
+    isSubPath(allowedDir, normalizedPath),
+  );
 }
 
 /**
@@ -43,7 +50,8 @@ export function isPathAllowed(requestedPath: string): PathValidationResult {
   if (isPathBlocked(normalizedPath)) {
     return {
       allowed: false,
-      reason: 'Path matches blocked pattern (system directory or protected location)',
+      reason:
+        "Path matches blocked pattern (system directory or protected location)",
     };
   }
 
@@ -51,8 +59,8 @@ export function isPathAllowed(requestedPath: string): PathValidationResult {
   if (!isPathInAllowedDirectories(normalizedPath)) {
     return {
       allowed: false,
-      reason: 'Path is outside allowed directories',
-      hint: 'Add this directory to your configuration file to grant access',
+      reason: "Path is outside allowed directories",
+      hint: "Add this directory to your configuration file to grant access",
     };
   }
 
@@ -71,15 +79,15 @@ export function getAllowedDirectories(): string[] {
  */
 export function formatAccessDeniedMessage(
   requestedPath: string,
-  validation: PathValidationResult
+  validation: PathValidationResult,
 ): string {
   const allowedDirs = getAllowedDirectories();
 
   let message = `Access Denied: ${validation.reason}\n\n`;
   message += `The directory "${requestedPath}" is not accessible.\n\n`;
   message += `Current allowed directories:\n`;
-  message += allowedDirs.map((d) => `  - ${d}`).join('\n');
-  message += '\n\n';
+  message += allowedDirs.map((d) => `  - ${d}`).join("\n");
+  message += "\n\n";
 
   if (validation.hint) {
     message += `To grant access to this directory:\n`;
@@ -99,28 +107,28 @@ export function getBlockedPatternsDescription(): string {
   const platform = process.platform;
   const patterns: string[] = [];
 
-  patterns.push('- node_modules directories');
-  patterns.push('- .git directories');
-  patterns.push('- .vscode, .idea directories');
-  patterns.push('- dist, build directories');
+  patterns.push("- node_modules directories");
+  patterns.push("- .git directories");
+  patterns.push("- .vscode, .idea directories");
+  patterns.push("- dist, build directories");
 
-  if (platform === 'win32') {
-    patterns.push('- C:\\Windows');
-    patterns.push('- C:\\Program Files');
-    patterns.push('- C:\\Program Files (x86)');
-    patterns.push('- C:\\ProgramData');
-    patterns.push('- AppData directories');
-    patterns.push('- $Recycle.Bin');
-  } else if (platform === 'darwin') {
-    patterns.push('- /System');
-    patterns.push('- /Library');
-    patterns.push('- /Applications');
-    patterns.push('- /usr, /bin, /sbin');
+  if (platform === "win32") {
+    patterns.push("- C:\\Windows");
+    patterns.push("- C:\\Program Files");
+    patterns.push("- C:\\Program Files (x86)");
+    patterns.push("- C:\\ProgramData");
+    patterns.push("- AppData directories");
+    patterns.push("- $Recycle.Bin");
+  } else if (platform === "darwin") {
+    patterns.push("- /System");
+    patterns.push("- /Library");
+    patterns.push("- /Applications");
+    patterns.push("- /usr, /bin, /sbin");
   } else {
-    patterns.push('- /etc, /usr, /bin, /sbin');
-    patterns.push('- /sys, /proc');
-    patterns.push('- /root, /var, /boot');
+    patterns.push("- /etc, /usr, /bin, /sbin");
+    patterns.push("- /sys, /proc");
+    patterns.push("- /root, /var, /boot");
   }
 
-  return patterns.join('\n');
+  return patterns.join("\n");
 }

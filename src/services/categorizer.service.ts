@@ -27,6 +27,9 @@ import { MetadataCacheService } from "./metadata-cache.service.js";
 export class CategorizerService {
   private customRules: CustomRule[] = [];
   private pathValidator: PathValidatorService;
+  private contentAnalysisPromises: Map<string, Promise<CategoryName>> =
+    new Map();
+  private contentAnalysisResults: Map<string, CategoryName> = new Map();
 
   constructor(
     private contentAnalyzer?: ContentAnalyzerService,
@@ -95,18 +98,116 @@ export class CategorizerService {
   /**
    * Get category for a file
    * @param name - File name
-   * @param useContentAnalysis - When true, verify extension matches content
+   * @param useContentAnalysis - When true, verify extension matches content asynchronously
+   * @param filePath - Optional file path for content analysis (required if useContentAnalysis is true)
    * @returns Category name
    */
-  getCategory(name: string, useContentAnalysis?: boolean): CategoryName {
-    // If content analysis is requested and analyzer is available, validate
-    if (useContentAnalysis && this.contentAnalyzer) {
-      // Note: This is async but getCategory is sync - we do the check asynchronously
-      // and in the meantime return based on extension
-      // For a sync API, caller should use getCategoryByContent for full validation
+  getCategory(
+    name: string,
+    useContentAnalysis?: boolean,
+    filePath?: string,
+  ): CategoryName {
+    const extensionCategory = this.getCategoryByExtension(name);
+
+    if (useContentAnalysis && this.contentAnalyzer && filePath) {
+      this.triggerContentAnalysis(name, filePath);
     }
 
-    return this.getCategoryByExtension(name);
+    return extensionCategory;
+  }
+
+  /**
+   * Trigger async content analysis in the background
+   * @param name - File name (used as key for result retrieval)
+   * @param filePath - Full file path for analysis
+   */
+  private triggerContentAnalysis(name: string, filePath: string): void {
+    const key = `${filePath}:${name}`;
+
+    if (this.contentAnalysisPromises.has(key)) {
+      return;
+    }
+
+    const analysisPromise = (async (): Promise<CategoryName> => {
+      try {
+        const result = await this.getCategoryByContent(filePath);
+
+        if (result.confidence >= 0.7) {
+          this.contentAnalysisResults.set(key, result.category);
+          logger.info("Content analysis updated category", {
+            filePath,
+            name,
+            oldCategory: this.getCategoryByExtension(name),
+            newCategory: result.category,
+            confidence: result.confidence,
+          });
+          return result.category;
+        }
+
+        return this.getCategoryByExtension(name);
+      } catch (error) {
+        logger.error("Content analysis failed", {
+          filePath,
+          name,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return this.getCategoryByExtension(name);
+      } finally {
+        this.contentAnalysisPromises.delete(key);
+      }
+    })();
+
+    this.contentAnalysisPromises.set(key, analysisPromise);
+  }
+
+  /**
+   * Get the updated category from background content analysis (if available)
+   * @param name - File name
+   * @param filePath - Full file path
+   * @returns Updated category or undefined if analysis not yet complete
+   */
+  getUpdatedCategory(name: string, filePath: string): CategoryName | undefined {
+    const key = `${filePath}:${name}`;
+    return this.contentAnalysisResults.get(key);
+  }
+
+  /**
+   * Wait for content analysis to complete and get the final category
+   * @param name - File name
+   * @param filePath - Full file path
+   * @returns Category after content analysis completes
+   */
+  async waitForContentAnalysis(
+    name: string,
+    filePath: string,
+  ): Promise<CategoryName> {
+    const key = `${filePath}:${name}`;
+    const promise = this.contentAnalysisPromises.get(key);
+
+    if (promise) {
+      return promise;
+    }
+
+    const cachedResult = this.contentAnalysisResults.get(key);
+    return cachedResult || this.getCategoryByExtension(name);
+  }
+
+  /**
+   * Clear content analysis cache for a specific file
+   * @param filePath - File path to clear
+   */
+  clearContentAnalysisCache(filePath?: string): void {
+    if (filePath) {
+      for (const key of this.contentAnalysisResults.keys()) {
+        if (key.startsWith(filePath)) {
+          this.contentAnalysisResults.delete(key);
+          this.contentAnalysisPromises.delete(key);
+        }
+      }
+    } else {
+      this.contentAnalysisResults.clear();
+      this.contentAnalysisPromises.clear();
+    }
   }
 
   /**

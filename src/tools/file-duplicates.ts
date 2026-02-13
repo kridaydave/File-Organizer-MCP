@@ -5,41 +5,58 @@
  * @module tools/file-duplicates
  */
 
-import { z } from 'zod';
-import type { ToolDefinition, ToolResponse, DuplicateResult } from '../types.js';
-import { validateStrictPath } from '../services/path-validator.service.js';
-import { FileScannerService } from '../services/file-scanner.service.js';
-import { HashCalculatorService } from '../services/hash-calculator.service.js';
-import { createErrorResponse } from '../utils/error-handler.js';
-import { formatBytes } from '../utils/formatters.js';
-import { CommonParamsSchema, PaginationSchema } from '../schemas/common.schemas.js';
+import { z } from "zod";
+import type {
+  ToolDefinition,
+  ToolResponse,
+  DuplicateResult,
+} from "../types.js";
+import { validateStrictPath } from "../services/path-validator.service.js";
+import { FileScannerService } from "../services/file-scanner.service.js";
+import { HashCalculatorService } from "../services/hash-calculator.service.js";
+import { createErrorResponse } from "../utils/error-handler.js";
+import { formatBytes } from "../utils/formatters.js";
+import {
+  CommonParamsSchema,
+  PaginationSchema,
+} from "../schemas/common.schemas.js";
 
 export const FindDuplicateFilesInputSchema = z
   .object({
     directory: z
       .string()
-      .min(1, 'Directory path cannot be empty')
-      .describe('Full path to the directory to search for duplicates'),
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to search for duplicates"),
   })
   .merge(CommonParamsSchema)
   .merge(PaginationSchema);
 
-export type FindDuplicateFilesInput = z.infer<typeof FindDuplicateFilesInputSchema>;
+export type FindDuplicateFilesInput = z.infer<
+  typeof FindDuplicateFilesInputSchema
+>;
 
 export const findDuplicateFilesToolDefinition: ToolDefinition = {
-  name: 'file_organizer_find_duplicate_files',
-  title: 'Find Duplicate Files',
+  name: "file_organizer_find_duplicate_files",
+  title: "Find Duplicate Files",
   description:
-    'Find duplicate files in a directory based on their content (SHA-256 hash). Shows potential wasted space.',
+    "Find duplicate files in a directory based on their content (SHA-256 hash). Shows potential wasted space.",
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
-      directory: { type: 'string', description: 'Full path to the directory' },
-      limit: { type: 'number', description: 'Max groups to return', default: 100 },
-      offset: { type: 'number', description: 'Groups to skip', default: 0 },
-      response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
+      directory: { type: "string", description: "Full path to the directory" },
+      limit: {
+        type: "number",
+        description: "Max groups to return",
+        default: 100,
+      },
+      offset: { type: "number", description: "Groups to skip", default: 0 },
+      response_format: {
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
+      },
     },
-    required: ['directory'],
+    required: ["directory"],
   },
   annotations: {
     readOnlyHint: true,
@@ -50,14 +67,17 @@ export const findDuplicateFilesToolDefinition: ToolDefinition = {
 };
 
 export async function handleFindDuplicateFiles(
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
 ): Promise<ToolResponse> {
   try {
     const parsed = FindDuplicateFilesInputSchema.safeParse(args);
     if (!parsed.success) {
       return {
         content: [
-          { type: 'text', text: `Error: ${parsed.error.issues.map((i) => i.message).join(', ')}` },
+          {
+            type: "text",
+            text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
+          },
         ],
       };
     }
@@ -71,7 +91,8 @@ export async function handleFindDuplicateFiles(
     const allDuplicates = await hashCalculator.findDuplicates(files);
 
     const totalDuplicateSize = allDuplicates.reduce((sum, group) => {
-      const fileSize = files.find((f) => f.name === group.files[0]?.name)?.size ?? 0;
+      const fileSize =
+        files.find((f) => f.name === group.files[0]?.name)?.size ?? 0;
       return sum + fileSize * (group.count - 1);
     }, 0);
 
@@ -95,9 +116,9 @@ export async function handleFindDuplicateFiles(
       wasted_space: formatBytes(totalDuplicateSize),
     };
 
-    if (response_format === 'json') {
+    if (response_format === "json") {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }
@@ -107,12 +128,12 @@ export async function handleFindDuplicateFiles(
 **Duplicate Groups:** ${result.total_count}
 **Showing:** ${result.returned_count > 0 ? result.offset + 1 : 0} - ${result.offset + result.returned_count}
 
-${result.items.map((g) => `**Group (${g.size} each):**\n${g.files.map((f) => `- ${f.path}`).join('\n')}`).join('\n\n')}
+${result.items.map((g) => `**Group (${g.size} each):**\n${g.files.map((f) => `- ${f.path}`).join("\n")}`).join("\n\n")}
 
-${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more groups (use offset=${result.next_offset})*` : ''}`;
+${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more groups (use offset=${result.next_offset})*` : ""}`;
 
     return {
-      content: [{ type: 'text', text: markdown }],
+      content: [{ type: "text", text: markdown }],
     };
   } catch (error) {
     return createErrorResponse(error);

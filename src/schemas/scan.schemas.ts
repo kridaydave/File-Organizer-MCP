@@ -3,8 +3,11 @@
  * Scan Operation Schemas
  */
 
-import { z } from 'zod';
-import { DirectoryInputSchema, RecursiveInputSchema } from './common.schemas.js';
+import { z } from "zod";
+import {
+  DirectoryInputSchema,
+  RecursiveInputSchema,
+} from "./common.schemas.js";
 
 /**
  * Schema for list_files tool
@@ -38,5 +41,7 @@ export const CategorizeByTypeInputSchema = RecursiveInputSchema;
 export type ListFilesInput = z.infer<typeof ListFilesInputSchema>;
 export type ScanDirectoryInput = z.infer<typeof ScanDirectoryInputSchema>;
 export type FindLargestFilesInput = z.infer<typeof FindLargestFilesInputSchema>;
-export type FindDuplicateFilesInput = z.infer<typeof FindDuplicateFilesInputSchema>;
+export type FindDuplicateFilesInput = z.infer<
+  typeof FindDuplicateFilesInputSchema
+>;
 export type CategorizeByTypeInput = z.infer<typeof CategorizeByTypeInputSchema>;

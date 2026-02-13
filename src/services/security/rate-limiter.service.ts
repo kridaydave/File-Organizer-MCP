@@ -12,7 +12,7 @@ export class RateLimiter {
 
   constructor(
     private maxRequestsPerMinute: number = 60,
-    private maxRequestsPerHour: number = 500
+    private maxRequestsPerHour: number = 500,
   ) {}
 
   checkLimit(identifier: string): { allowed: boolean; resetIn?: number } {

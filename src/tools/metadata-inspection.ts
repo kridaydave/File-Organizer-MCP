@@ -5,20 +5,20 @@
  * @module tools/metadata-inspection
  */
 
-import { z } from 'zod';
-import type { ToolDefinition, ToolResponse } from '../types.js';
-import { validateStrictPath } from '../services/path-validator.service.js';
-import { createErrorResponse } from '../utils/error-handler.js';
-import { CommonParamsSchema } from '../schemas/common.schemas.js';
-import { MetadataService } from '../services/metadata.service.js';
-import * as path from 'path';
+import { z } from "zod";
+import type { ToolDefinition, ToolResponse } from "../types.js";
+import { validateStrictPath } from "../services/path-validator.service.js";
+import { createErrorResponse } from "../utils/error-handler.js";
+import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { MetadataService } from "../services/metadata.service.js";
+import * as path from "path";
 
 export const InspectMetadataInputSchema = z
   .object({
     file: z
       .string()
-      .min(1, 'File path cannot be empty')
-      .describe('Full path to the file to inspect'),
+      .min(1, "File path cannot be empty")
+      .describe("Full path to the file to inspect"),
   })
   .merge(CommonParamsSchema);
 
@@ -51,17 +51,21 @@ export interface MetadataInspectionResult {
 }
 
 export const inspectMetadataToolDefinition: ToolDefinition = {
-  name: 'file_organizer_inspect_metadata',
-  title: 'Inspect File Metadata',
+  name: "file_organizer_inspect_metadata",
+  title: "Inspect File Metadata",
   description:
-    'Inspects a file and returns comprehensive but privacy-safe metadata. For images, extracts EXIF data (date, camera, dimensions). For audio, extracts ID3 tags (artist, album, title). Excludes sensitive data like GPS coordinates.',
+    "Inspects a file and returns comprehensive but privacy-safe metadata. For images, extracts EXIF data (date, camera, dimensions). For audio, extracts ID3 tags (artist, album, title). Excludes sensitive data like GPS coordinates.",
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
-      file: { type: 'string', description: 'Full path to the file to inspect' },
-      response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
+      file: { type: "string", description: "Full path to the file to inspect" },
+      response_format: {
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
+      },
     },
-    required: ['file'],
+    required: ["file"],
   },
   annotations: {
     readOnlyHint: true,
@@ -71,13 +75,18 @@ export const inspectMetadataToolDefinition: ToolDefinition = {
   },
 };
 
-export async function handleInspectMetadata(args: Record<string, unknown>): Promise<ToolResponse> {
+export async function handleInspectMetadata(
+  args: Record<string, unknown>,
+): Promise<ToolResponse> {
   try {
     const parsed = InspectMetadataInputSchema.safeParse(args);
     if (!parsed.success) {
       return {
         content: [
-          { type: 'text', text: `Error: ${parsed.error.issues.map((i) => i.message).join(', ')}` },
+          {
+            type: "text",
+            text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
+          },
         ],
       };
     }
@@ -86,12 +95,14 @@ export async function handleInspectMetadata(args: Record<string, unknown>): Prom
     const validatedPath = await validateStrictPath(file);
 
     // Get file stats
-    const fs = await import('fs/promises');
+    const fs = await import("fs/promises");
     const stats = await fs.stat(validatedPath);
 
     if (!stats.isFile()) {
       return {
-        content: [{ type: 'text', text: `Error: ${validatedPath} is not a file` }],
+        content: [
+          { type: "text", text: `Error: ${validatedPath} is not a file` },
+        ],
       };
     }
 
@@ -101,13 +112,21 @@ export async function handleInspectMetadata(args: Record<string, unknown>): Prom
 
     // Determine category
     let category: string | null = null;
-    const imageExts = ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.heic', '.heif'];
-    const audioExts = ['.mp3', '.flac', '.ogg', '.wav', '.m4a', '.aac'];
+    const imageExts = [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".tiff",
+      ".tif",
+      ".heic",
+      ".heif",
+    ];
+    const audioExts = [".mp3", ".flac", ".ogg", ".wav", ".m4a", ".aac"];
 
     if (imageExts.includes(fileExtension)) {
-      category = 'Images';
+      category = "Images";
     } else if (audioExts.includes(fileExtension)) {
-      category = 'Audio';
+      category = "Audio";
     }
 
     const result: MetadataInspectionResult = {
@@ -126,10 +145,10 @@ export async function handleInspectMetadata(args: Record<string, unknown>): Prom
       try {
         const extractedMetadata = await metadataService.extractMetadata(
           validatedPath,
-          fileExtension
+          fileExtension,
         );
 
-        if (category === 'Images' && extractedMetadata) {
+        if (category === "Images" && extractedMetadata) {
           if (extractedMetadata.dateTaken) {
             result.metadata.dateTaken = extractedMetadata.dateTaken;
           }
@@ -142,7 +161,7 @@ export async function handleInspectMetadata(args: Record<string, unknown>): Prom
               height: extractedMetadata.height,
             };
           }
-        } else if (category === 'Audio' && extractedMetadata) {
+        } else if (category === "Audio" && extractedMetadata) {
           if (extractedMetadata.artist) {
             result.metadata.artist = extractedMetadata.artist;
           }
@@ -161,29 +180,34 @@ export async function handleInspectMetadata(args: Record<string, unknown>): Prom
         }
 
         // Get suggested organization path
-        const subpath = await metadataService.getMetadataSubpath(validatedPath, category as any);
+        const subpath = await metadataService.getMetadataSubpath(
+          validatedPath,
+          category as any,
+        );
         if (subpath) {
           result.organizationPath = path.join(category, subpath, fileName);
         }
       } catch (metadataError) {
         result.warnings?.push(
-          `Could not extract metadata: ${metadataError instanceof Error ? metadataError.message : String(metadataError)}`
+          `Could not extract metadata: ${metadataError instanceof Error ? metadataError.message : String(metadataError)}`,
         );
       }
     } else {
-      result.warnings?.push(`File type ${fileExtension} is not supported for metadata extraction`);
-    }
-
-    // Add privacy reminder
-    if (category === 'Images') {
       result.warnings?.push(
-        'Note: GPS/Location data is excluded from metadata extraction for privacy protection'
+        `File type ${fileExtension} is not supported for metadata extraction`,
       );
     }
 
-    if (response_format === 'json') {
+    // Add privacy reminder
+    if (category === "Images") {
+      result.warnings?.push(
+        "Note: GPS/Location data is excluded from metadata extraction for privacy protection",
+      );
+    }
+
+    if (response_format === "json") {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         structuredContent: result as unknown as Record<string, unknown>,
       };
     }
@@ -191,14 +215,14 @@ export async function handleInspectMetadata(args: Record<string, unknown>): Prom
     // Format as markdown
     let markdown = `### Metadata Inspection: \`${fileName}\`\n\n`;
     markdown += `**File Path:** \`${result.file}\`\n`;
-    markdown += `**Category:** ${result.category || 'Unknown'}\n\n`;
+    markdown += `**Category:** ${result.category || "Unknown"}\n\n`;
 
     markdown += `#### File Information\n`;
     markdown += `- **Size:** ${formatBytes(result.metadata.fileSize)}\n`;
     markdown += `- **Extension:** ${result.metadata.fileExtension}\n`;
     markdown += `- **Last Modified:** ${new Date(result.metadata.lastModified).toLocaleString()}\n\n`;
 
-    if (category === 'Images') {
+    if (category === "Images") {
       markdown += `#### Image Metadata\n`;
       if (result.metadata.dateTaken) {
         markdown += `- **Date Taken:** ${result.metadata.dateTaken}\n`;
@@ -209,8 +233,8 @@ export async function handleInspectMetadata(args: Record<string, unknown>): Prom
       if (result.metadata.dimensions) {
         markdown += `- **Dimensions:** ${result.metadata.dimensions.width}x${result.metadata.dimensions.height}\n`;
       }
-      markdown += '\n';
-    } else if (category === 'Audio') {
+      markdown += "\n";
+    } else if (category === "Audio") {
       markdown += `#### Audio Metadata\n`;
       if (result.metadata.title) {
         markdown += `- **Title:** ${result.metadata.title}\n`;
@@ -227,7 +251,7 @@ export async function handleInspectMetadata(args: Record<string, unknown>): Prom
       if (result.metadata.duration) {
         markdown += `- **Duration:** ${formatDuration(result.metadata.duration)}\n`;
       }
-      markdown += '\n';
+      markdown += "\n";
     }
 
     if (result.organizationPath) {
@@ -243,7 +267,7 @@ export async function handleInspectMetadata(args: Record<string, unknown>): Prom
     }
 
     return {
-      content: [{ type: 'text', text: markdown }],
+      content: [{ type: "text", text: markdown }],
     };
   } catch (error) {
     return createErrorResponse(error);
@@ -254,11 +278,11 @@ export async function handleInspectMetadata(args: Record<string, unknown>): Prom
  * Format bytes to human-readable string
  */
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) return "0 Bytes";
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 /**
@@ -270,7 +294,7 @@ function formatDuration(seconds: number): string {
   const secs = Math.floor(seconds % 60);
 
   if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   }
-  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }

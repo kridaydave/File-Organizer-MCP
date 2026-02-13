@@ -288,9 +288,7 @@ export async function startSetupWizard(): Promise<void> {
     printInfo("Some dependencies are missing. Installing now...");
     const depsInstalled = await installDependencies();
     if (!depsInstalled) {
-      out(
-        colors.error("\n✗ Failed to install dependencies. Please try:"),
-      );
+      out(colors.error("\n✗ Failed to install dependencies. Please try:"));
       out(colors.info("  npm install"));
       process.exit(1);
     }
@@ -321,9 +319,7 @@ export async function startSetupWizard(): Promise<void> {
     out();
   } catch (error) {
     if ((error as Error).message.includes("User force closed")) {
-      out(
-        colors.muted("\n\nSetup cancelled. You can re-run it anytime."),
-      );
+      out(colors.muted("\n\nSetup cancelled. You can re-run it anytime."));
       process.exit(0);
     }
     console.error(colors.error("\n✗ Setup failed:"), (error as Error).message);
@@ -345,13 +341,9 @@ async function detectAndSelectClients(): Promise<string[]> {
 
   if (installedClients.length === 0) {
     out(colors.warning("\n  No MCP clients detected on your system."));
-    out(
-      colors.muted("\n  Don't worry! You can still use the file organizer."),
-    );
+    out(colors.muted("\n  Don't worry! You can still use the file organizer."));
     out(colors.muted("  Popular options:"));
-    out(
-      colors.info("    • Claude Desktop - https://claude.ai/download"),
-    );
+    out(colors.info("    • Claude Desktop - https://claude.ai/download"));
     out(colors.info("    • Cursor - https://cursor.com"));
     out(colors.info("    • Cline (VS Code extension)"));
     return [];
@@ -474,9 +466,7 @@ async function promptUser(): Promise<SetupAnswers> {
       const message =
         error instanceof Error ? error.message : "Security validation failed";
       out(colors.error(`  ✗ Security check failed: ${message}`));
-      out(
-        colors.warning("  This path is not allowed for security reasons."),
-      );
+      out(colors.warning("  This path is not allowed for security reasons."));
       continue;
     }
 
@@ -487,9 +477,7 @@ async function promptUser(): Promise<SetupAnswers> {
   // Step 2: Conflict strategy (simplified)
   printStep(2, 4, "Choose how to handle duplicate files");
 
-  out(
-    colors.muted("\n  What happens when a file with the same name exists?"),
-  );
+  out(colors.muted("\n  What happens when a file with the same name exists?"));
 
   const conflictStrategy = await select<"rename" | "skip" | "overwrite">({
     message: "Select option:",

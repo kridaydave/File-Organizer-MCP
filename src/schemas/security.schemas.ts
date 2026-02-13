@@ -3,7 +3,7 @@
  * Security Validation Schemas
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * Schema for path validation - ensures path is a valid non-empty string
@@ -11,15 +11,19 @@ import { z } from 'zod';
  */
 export const PathSchema = z
   .string()
-  .min(1, 'Path is required')
-  .refine((path) => !path.includes('\0'), {
-    message: 'Path contains invalid null byte',
+  .min(1, "Path is required")
+  .refine((path) => !path.includes("\0"), {
+    message: "Path contains invalid null byte",
   });
 
 /**
  * Schema for security mode configuration
  */
-export const SecurityModeSchema = z.enum(['strict', 'sandboxed', 'unrestricted']);
+export const SecurityModeSchema = z.enum([
+  "strict",
+  "sandboxed",
+  "unrestricted",
+]);
 
 /**
  * Schema for allowed paths configuration

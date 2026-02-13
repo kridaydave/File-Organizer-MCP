@@ -13,11 +13,11 @@
  * or: minute hour day-of-month month day-of-week
  */
 interface CronComponents {
-  minute: number | '*/n' | '*';
-  hour: number | '*/n' | '*';
-  dayOfMonth: number | '*/n' | '*';
-  month: number | '*/n' | '*';
-  dayOfWeek: number | '*/n' | '*';
+  minute: number | "*/n" | "*";
+  hour: number | "*/n" | "*";
+  dayOfMonth: number | "*/n" | "*";
+  month: number | "*/n" | "*";
+  dayOfWeek: number | "*/n" | "*";
 }
 
 /**
@@ -28,7 +28,11 @@ function parseCronExpression(expression: string): CronComponents | null {
   const parts = expression.trim().split(/\s+/);
 
   // Handle both 5-part (standard) and 6-part (with seconds) cron
-  let minute: string, hour: string, dayOfMonth: string, month: string, dayOfWeek: string;
+  let minute: string,
+    hour: string,
+    dayOfMonth: string,
+    month: string,
+    dayOfWeek: string;
 
   if (parts.length === 5) {
     [minute, hour, dayOfMonth, month, dayOfWeek] = parts as [
@@ -52,11 +56,11 @@ function parseCronExpression(expression: string): CronComponents | null {
     return null;
   }
 
-  const parseField = (field: string): number | '*/n' | '*' => {
-    if (field === '*') return '*';
-    if (field.startsWith('*/')) return field as '*/n';
+  const parseField = (field: string): number | "*/n" | "*" => {
+    if (field === "*") return "*";
+    if (field.startsWith("*/")) return field as "*/n";
     const num = parseInt(field, 10);
-    return isNaN(num) ? '*' : num;
+    return isNaN(num) ? "*" : num;
   };
 
   return {
@@ -80,8 +84,8 @@ function getMinimumIntervalMs(expression: string): number {
   }
 
   // Check for step values like */n
-  const getStep = (field: number | '*/n' | '*'): number | null => {
-    if (typeof field === 'string' && field.startsWith('*/')) {
+  const getStep = (field: number | "*/n" | "*"): number | null => {
+    if (typeof field === "string" && field.startsWith("*/")) {
       return parseInt(field.slice(2), 10);
     }
     return null;
@@ -101,11 +105,15 @@ function getMinimumIntervalMs(expression: string): number {
   }
 
   // Check for specific values to determine frequency
-  const isHourly = components.minute !== '*' && components.hour === '*';
+  const isHourly = components.minute !== "*" && components.hour === "*";
   const isDaily =
-    components.minute !== '*' && components.hour !== '*' && components.dayOfMonth === '*';
+    components.minute !== "*" &&
+    components.hour !== "*" &&
+    components.dayOfMonth === "*";
   const isWeekly =
-    components.minute !== '*' && components.hour !== '*' && components.dayOfWeek !== '*';
+    components.minute !== "*" &&
+    components.hour !== "*" &&
+    components.dayOfWeek !== "*";
 
   if (isWeekly) return 7 * 24 * 60 * 60 * 1000; // 7 days
   if (isDaily) return 24 * 60 * 60 * 1000; // 1 day
@@ -121,7 +129,10 @@ function getMinimumIntervalMs(expression: string): number {
  * @param fromDate - The date to calculate from (defaults to now)
  * @returns The next scheduled run time
  */
-export function getNextRunTime(cronExpression: string, fromDate: Date = new Date()): Date {
+export function getNextRunTime(
+  cronExpression: string,
+  fromDate: Date = new Date(),
+): Date {
   const components = parseCronExpression(cronExpression);
   if (!components) {
     // Fallback: return 1 day from now
@@ -133,7 +144,10 @@ export function getNextRunTime(cronExpression: string, fromDate: Date = new Date
   next.setUTCMilliseconds(0);
 
   // Handle step values (e.g., */30 for every 30 minutes)
-  if (typeof components.minute === 'string' && components.minute.startsWith('*/')) {
+  if (
+    typeof components.minute === "string" &&
+    components.minute.startsWith("*/")
+  ) {
     const step = parseInt(components.minute.slice(2), 10);
     const currentMinute = next.getUTCMinutes();
     const nextMinute = Math.ceil((currentMinute + 1) / step) * step;
@@ -149,11 +163,11 @@ export function getNextRunTime(cronExpression: string, fromDate: Date = new Date
 
   // Handle hourly pattern: "0 * * * *"
   if (
-    components.minute !== '*' &&
-    components.hour === '*' &&
-    components.dayOfMonth === '*' &&
-    components.month === '*' &&
-    components.dayOfWeek === '*'
+    components.minute !== "*" &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
   ) {
     next.setUTCMinutes(components.minute as number);
     if (next.getTime() <= fromDate.getTime()) {
@@ -164,11 +178,11 @@ export function getNextRunTime(cronExpression: string, fromDate: Date = new Date
 
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
-    components.minute !== '*' &&
-    components.hour !== '*' &&
-    components.dayOfMonth === '*' &&
-    components.month === '*' &&
-    components.dayOfWeek === '*'
+    components.minute !== "*" &&
+    components.hour !== "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
   ) {
     next.setUTCMinutes(components.minute as number);
     next.setUTCHours(components.hour as number);
@@ -180,10 +194,10 @@ export function getNextRunTime(cronExpression: string, fromDate: Date = new Date
 
   // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
   if (
-    components.minute !== '*' &&
-    components.hour !== '*' &&
-    components.dayOfWeek !== '*' &&
-    components.dayOfMonth === '*'
+    components.minute !== "*" &&
+    components.hour !== "*" &&
+    components.dayOfWeek !== "*" &&
+    components.dayOfMonth === "*"
   ) {
     next.setUTCMinutes(components.minute as number);
     next.setUTCHours(components.hour as number);
@@ -208,7 +222,10 @@ export function getNextRunTime(cronExpression: string, fromDate: Date = new Date
  * @param fromDate - The date to calculate from (defaults to now)
  * @returns The most recent scheduled run time before fromDate
  */
-export function getPreviousRunTime(cronExpression: string, fromDate: Date = new Date()): Date {
+export function getPreviousRunTime(
+  cronExpression: string,
+  fromDate: Date = new Date(),
+): Date {
   const components = parseCronExpression(cronExpression);
   if (!components) {
     // Fallback: return 1 day ago
@@ -220,7 +237,10 @@ export function getPreviousRunTime(cronExpression: string, fromDate: Date = new 
   prev.setUTCMilliseconds(0);
 
   // Handle step values (e.g., */30 for every 30 minutes)
-  if (typeof components.minute === 'string' && components.minute.startsWith('*/')) {
+  if (
+    typeof components.minute === "string" &&
+    components.minute.startsWith("*/")
+  ) {
     const step = parseInt(components.minute.slice(2), 10);
     const currentMinute = prev.getUTCMinutes();
     const prevMinute = Math.floor(currentMinute / step) * step;
@@ -243,11 +263,11 @@ export function getPreviousRunTime(cronExpression: string, fromDate: Date = new 
 
   // Handle hourly pattern: "0 * * * *"
   if (
-    components.minute !== '*' &&
-    components.hour === '*' &&
-    components.dayOfMonth === '*' &&
-    components.month === '*' &&
-    components.dayOfWeek === '*'
+    components.minute !== "*" &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
   ) {
     prev.setUTCMinutes(components.minute as number);
     if (prev.getTime() >= fromDate.getTime()) {
@@ -258,11 +278,11 @@ export function getPreviousRunTime(cronExpression: string, fromDate: Date = new 
 
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
-    components.minute !== '*' &&
-    components.hour !== '*' &&
-    components.dayOfMonth === '*' &&
-    components.month === '*' &&
-    components.dayOfWeek === '*'
+    components.minute !== "*" &&
+    components.hour !== "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
   ) {
     prev.setUTCMinutes(components.minute as number);
     prev.setUTCHours(components.hour as number);
@@ -274,10 +294,10 @@ export function getPreviousRunTime(cronExpression: string, fromDate: Date = new 
 
   // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
   if (
-    components.minute !== '*' &&
-    components.hour !== '*' &&
-    components.dayOfWeek !== '*' &&
-    components.dayOfMonth === '*'
+    components.minute !== "*" &&
+    components.hour !== "*" &&
+    components.dayOfWeek !== "*" &&
+    components.dayOfMonth === "*"
   ) {
     prev.setUTCMinutes(components.minute as number);
     prev.setUTCHours(components.hour as number);
@@ -307,7 +327,7 @@ export function getPreviousRunTime(cronExpression: string, fromDate: Date = new 
 export function shouldCatchup(
   cronExpression: string,
   lastRunTime: Date | null,
-  currentTime: Date = new Date()
+  currentTime: Date = new Date(),
 ): boolean {
   // If never ran before, we should run (first time initialization)
   if (!lastRunTime) {
@@ -329,7 +349,10 @@ export function shouldCatchup(
  * @param fromDate - The date to calculate from (defaults to now)
  * @returns Milliseconds until next run (0 if should have run already)
  */
-export function getTimeUntilNextRun(cronExpression: string, fromDate: Date = new Date()): number {
+export function getTimeUntilNextRun(
+  cronExpression: string,
+  fromDate: Date = new Date(),
+): number {
   const nextRun = getNextRunTime(cronExpression, fromDate);
   return Math.max(0, nextRun.getTime() - fromDate.getTime());
 }
@@ -347,8 +370,8 @@ export function isValidCronExpression(expression: string): boolean {
 
   // Basic validation of each field
   const validateField = (field: string, min: number, max: number): boolean => {
-    if (field === '*') return true;
-    if (field.startsWith('*/')) {
+    if (field === "*") return true;
+    if (field.startsWith("*/")) {
       const step = parseInt(field.slice(2), 10);
       return !isNaN(step) && step > 0 && step <= max;
     }

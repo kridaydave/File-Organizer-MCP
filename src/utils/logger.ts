@@ -26,7 +26,7 @@ export class Logger {
     return (
       process.env.NODE_ENV === "test" ||
       process.env.JEST_WORKER_ID !== undefined ||
-      typeof jest !== "undefined" ||
+      typeof (globalThis as any).jest !== "undefined" ||
       // Check if we're running under a test runner
       process.argv.some((arg) => arg.includes("jest") || arg.includes("test"))
     );

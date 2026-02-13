@@ -105,7 +105,11 @@ export class OrganizerService {
       try {
         // Use the stateful categorizer (rules aware)
         // Pass useContentAnalysis to enable content-based type verification
-        const category = this.categorizer.getCategory(file.name, useContentAnalysis);
+        const category = this.categorizer.getCategory(
+          file.name,
+          useContentAnalysis,
+          file.path,
+        );
 
         if (!categoryCounts[category]) categoryCounts[category] = 0;
         categoryCounts[category]++;
@@ -122,49 +126,22 @@ export class OrganizerService {
           : path.join(directory, category);
         let destPath = path.join(destFolder, file.name);
         let hasConflict = false;
-        let conflictResolution: "rename" | "skip" | "overwrite" | undefined;
+        const conflictResolution: ConflictStrategy = conflictStrategy;
 
-        // Check conflict with Disk OR Previous Planned Move
-        if ((await fileExists(destPath)) || plannedDestinations.has(destPath)) {
+        // BUG-TOCTOU-FIX: Don't check disk for file existence here - use "act-then-handle-error" pattern
+        // Only check against batch-internal collisions (plannedDestinations) since those are guaranteed
+        // Disk-based conflicts will be handled at execution time with proper EEXIST error handling
+        if (plannedDestinations.has(destPath)) {
           hasConflict = true;
 
-          if (conflictStrategy === "skip") {
-            conflictResolution = "skip";
-          } else if (conflictStrategy === "overwrite") {
-            conflictResolution = "overwrite";
-          } else if (conflictStrategy === "overwrite_if_newer") {
-            // Note: We can only check disk timestamp, not "planned" file timestamp easily if batch collision.
-            // For simplicity, we assume disk check.
-            // usage: if file exists on disk, check time.
-            // if file is only in plannedDestinations, we treat as standard collision (rename).
-
-            if (await fileExists(destPath)) {
-              const srcStat = await fs.stat(file.path);
-              const destStat = await fs.stat(destPath);
-              if (srcStat.mtime > destStat.mtime) {
-                conflictResolution = "overwrite";
-              } else {
-                conflictResolution = "skip";
-              }
-            } else {
-              // Collision with another file in this batch -> Default to rename to avoid data loss
-              conflictResolution = "rename";
-            }
-          } else {
-            conflictResolution = "rename";
-          }
-
-          // Perform Rename Simulation if needed
+          // Perform Rename Simulation if needed (only against batch collisions)
           if (conflictResolution === "rename") {
             const ext = path.extname(destPath);
             const base = path.basename(destPath, ext);
             let counter = 1;
             const originalBase = base;
-            // Check against Disk AND Plan
-            while (
-              (await fileExists(destPath)) ||
-              plannedDestinations.has(destPath)
-            ) {
+            // Only check against planned destinations in batch (not disk)
+            while (plannedDestinations.has(destPath)) {
               destPath = path.join(
                 destFolder,
                 `${originalBase}_${counter}${ext}`,
@@ -219,7 +196,11 @@ export class OrganizerService {
     files: FileWithSize[],
     options: OrganizeOptions = {},
   ): Promise<OrganizeResult> {
-    const { dryRun = false, conflictStrategy = "rename", useContentAnalysis = false } = options;
+    const {
+      dryRun = false,
+      conflictStrategy = "rename",
+      useContentAnalysis = false,
+    } = options;
 
     // 1. Generate Plan (Now includes resolved paths)
     const plan = await this.generateOrganizationPlan(
@@ -301,36 +282,70 @@ export class OrganizerService {
 
         let finalDest = targetPath;
         let overwrittenBackupPath: string | undefined;
+        let skipped = false;
 
-        // --- Handle Overwrites ---
+        // --- Handle Overwrites (overwrite, overwrite_if_newer) ---
         if (
           move.conflictResolution === "overwrite" ||
           move.conflictResolution === "overwrite_if_newer"
         ) {
-          let backupCreated = false;
-          if (await fileExists(targetPath)) {
-            // BACKUP EXISTING FILE
-            const backupName = `${Date.now()}_overwrite_${path.basename(targetPath)}`;
-            overwrittenBackupPath = path.join(backupDir, backupName);
-            await fs.rename(targetPath, overwrittenBackupPath);
-            backupCreated = true;
-          }
-
-          // Now standard move/rename will work as target is gone
-          try {
-            await fs.rename(sourcePath, targetPath);
-          } catch (renameErr) {
-            // BUG-003 FIX: Restore backup if rename fails
-            if (backupCreated && overwrittenBackupPath) {
-              try {
-                await fs.rename(overwrittenBackupPath, targetPath);
-              } catch (restoreErr) {
-                const criticalMsg = `CRITICAL: Failed to restore backup for ${targetPath}. Original may be lost. Error: ${(restoreErr as Error).message}`;
-                errors.push(criticalMsg);
-                logger.error(criticalMsg);
+          // TOCTOU-FIX: Handle overwrite_if_newer at execution time
+          // We check timestamps at execution (not planning) to get accurate info
+          if (move.conflictResolution === "overwrite_if_newer") {
+            try {
+              const destStat = await fs.stat(targetPath);
+              const srcStat = await fs.stat(sourcePath);
+              if (srcStat.mtime <= destStat.mtime) {
+                // Source is not newer - skip this file
+                const msg = `Skipped ${sourcePath}: destination is newer or same age`;
+                logger.info(msg);
+                errors.push(msg);
+                continue;
+              }
+            } catch (statErr: any) {
+              if (statErr.code === "ENOENT") {
+                // Destination doesn't exist - proceed with move (no overwrite needed)
+                logger.debug(
+                  `Destination ${targetPath} does not exist, proceeding with move`,
+                );
+              } else {
+                throw statErr;
               }
             }
-            throw renameErr;
+          }
+
+          // Check if destination exists and needs backup
+          // TOCTOU-FIX: Don't pre-check - attempt operation and handle errors
+          // This avoids race window between check and rename
+          try {
+            // First try to rename (will fail if destination exists)
+            await fs.rename(sourcePath, targetPath);
+            // Success - no overwrite needed
+          } catch (renameErr: any) {
+            if (renameErr.code === "EEXIST") {
+              // Destination exists - need to handle overwrite
+              const backupName = `${Date.now()}_overwrite_${path.basename(targetPath)}`;
+              overwrittenBackupPath = path.join(backupDir, backupName);
+
+              try {
+                // Backup existing file
+                await fs.rename(targetPath, overwrittenBackupPath);
+                // Now retry the original move
+                await fs.rename(sourcePath, targetPath);
+              } catch (backupErr: any) {
+                // Restore backup if secondary operation fails
+                try {
+                  await fs.rename(overwrittenBackupPath!, targetPath);
+                } catch (restoreErr) {
+                  const criticalMsg = `CRITICAL: Failed to restore backup for ${targetPath}. Original may be lost. Error: ${(restoreErr as Error).message}`;
+                  errors.push(criticalMsg);
+                  logger.error(criticalMsg);
+                }
+                throw backupErr;
+              }
+            } else {
+              throw renameErr;
+            }
           }
         }
         // --- Handle Safe Moves (No Overwrite Intended) ---
@@ -422,44 +437,93 @@ export class OrganizerService {
               );
             }
           } else {
-            // BUG-005 COMPLETE: Make standard move more robust with atomic operations
-            // Use COPYFILE_EXCL even for "standard" moves to prevent race conditions
-            try {
-              // Try atomic copy first
-              await fs.copyFile(
-                sourcePath,
-                targetPath,
-                constants.COPYFILE_EXCL,
-              );
+            // TOCTOU-FIX: Handle disk conflicts at execution time when no batch collision was detected
+            // Use the conflictStrategy to resolve the conflict
+            const sourceExt = path.extname(sourcePath);
+            const sourceBaseName = path.basename(sourcePath, sourceExt);
+            const destDir = path.dirname(targetPath);
 
-              // Delete source after successful copy
+            // Extract counter from planned path if available
+            let startCounter = 1;
+            const plannedBaseName = path.basename(
+              targetPath,
+              path.extname(targetPath),
+            );
+            const counterMatch = plannedBaseName.match(/_(\d+)$/);
+            if (counterMatch && counterMatch[1]) {
+              startCounter = parseInt(counterMatch[1], 10) + 1;
+            }
+
+            let success = false;
+            let retryCount = startCounter - 1;
+            let effectivePath = targetPath;
+
+            // Apply conflict strategy at execution time (act-then-handle-error pattern)
+            while (!success && !skipped && retryCount < 100) {
               try {
-                await fs.unlink(sourcePath);
-                finalDest = targetPath;
-              } catch (unlinkErr) {
-                // Cleanup copied file if unlink fails
-                logger.error(
-                  `Failed to unlink source ${sourcePath}. Cleaning up copy.`,
+                // Atomic COPY with COPYFILE_EXCL to prevent overwrites
+                await fs.copyFile(
+                  sourcePath,
+                  effectivePath,
+                  constants.COPYFILE_EXCL,
                 );
+
+                // Delete source after successful copy
                 try {
-                  await fs.unlink(targetPath);
-                } catch (cleanupErr) {
-                  errors.push(
-                    `CRITICAL: Failed to cleanup ${targetPath} after failed source unlink`,
+                  await fs.unlink(sourcePath);
+                  success = true;
+                  finalDest = effectivePath;
+                } catch (unlinkErr) {
+                  // Cleanup copied file if unlink fails
+                  logger.error(
+                    `Failed to unlink source ${sourcePath}. Cleaning up copy.`,
                   );
+                  try {
+                    await fs.unlink(effectivePath);
+                  } catch (cleanupErr) {
+                    errors.push(
+                      `CRITICAL: Failed to cleanup ${effectivePath} after failed source unlink`,
+                    );
+                  }
+                  throw unlinkErr;
                 }
-                throw unlinkErr;
+              } catch (err: any) {
+                if (err.code === "EEXIST") {
+                  // Race condition: destination file exists, apply conflict strategy
+                  if (move.conflictResolution === "skip") {
+                    // Skip this file - don't move it
+                    const msg = `Skipped ${sourcePath}: destination ${effectivePath} already exists`;
+                    logger.info(msg);
+                    errors.push(msg);
+                    skipped = true; // Mark as skipped
+                    success = true; // Exit the loop
+                  } else {
+                    retryCount++;
+                    effectivePath = path.join(
+                      destDir,
+                      `${sourceBaseName}_${retryCount}${sourceExt}`,
+                    );
+                    logger.debug(
+                      `Disk conflict detected for ${sourcePath}, retrying as ${effectivePath}`,
+                    );
+                  }
+                } else {
+                  throw err;
+                }
               }
-            } catch (err: any) {
-              if (err.code === "EEXIST") {
-                // Unexpected conflict in standard move path
-                throw new Error(
-                  `Destination ${targetPath} unexpectedly exists (Race Condition). This should not happen in standard move path.`,
-                );
-              }
-              throw err;
+            }
+
+            if (!success) {
+              throw new Error(
+                `Failed to move ${sourcePath} after 100 retries due to race conditions.`,
+              );
             }
           }
+        }
+
+        // Don't add to actions if file was skipped
+        if (skipped) {
+          continue;
         }
 
         actionsPerformed.push({

@@ -2,7 +2,7 @@
 
 > Auto-generated from tool definitions
 
-**Version:** 3.3.0  
+**Version:** 3.3.2  
 **Generated:** 2026-02-13T16:45:00.000Z
 
 [⬆ Back to Top](#top)

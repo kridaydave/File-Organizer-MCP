@@ -1,13 +1,13 @@
-import fs from 'fs/promises';
-import { createReadStream } from 'fs'; // For exif-parser which might need buffer or music-metadata stream
-import path from 'path';
-import { parseFile } from 'music-metadata';
-import * as ExifParser from 'exif-parser'; // Handle older CJS import style if needed, or stick to import if it supports it. exif-parser is usually CJS.
-import { CategoryName } from '../types.js';
-import { PathValidatorService } from './path-validator.service.js';
-import { logger } from '../utils/logger.js';
-import { AudioMetadataService } from './audio-metadata.service.js';
-import { ImageMetadataService } from './image-metadata.service.js';
+import fs from "fs/promises";
+import { createReadStream } from "fs"; // For exif-parser which might need buffer or music-metadata stream
+import path from "path";
+import { parseFile } from "music-metadata";
+import * as ExifParser from "exif-parser"; // Handle older CJS import style if needed, or stick to import if it supports it. exif-parser is usually CJS.
+import { CategoryName } from "../types.js";
+import { PathValidatorService } from "./path-validator.service.js";
+import { logger } from "../utils/logger.js";
+import { AudioMetadataService } from "./audio-metadata.service.js";
+import { ImageMetadataService } from "./image-metadata.service.js";
 
 export interface FileMetadata {
   date?: Date;
@@ -34,15 +34,20 @@ export class MetadataService {
    * Guaranteed to NOT return sensitive location data.
    * Uses specialized services for enhanced metadata extraction.
    */
-  async getMetadata(filePath: string, category: CategoryName): Promise<FileMetadata> {
+  async getMetadata(
+    filePath: string,
+    category: CategoryName,
+  ): Promise<FileMetadata> {
     try {
-      if (category === 'Images' || category === 'Videos') {
+      if (category === "Images" || category === "Videos") {
         return await this.getImageMetadataEnhanced(filePath);
-      } else if (category === 'Audio') {
+      } else if (category === "Audio") {
         return await this.getAudioMetadataEnhanced(filePath);
       }
     } catch (error) {
-      logger.debug(`Failed to extract metadata for ${filePath}: ${(error as Error).message}`);
+      logger.debug(
+        `Failed to extract metadata for ${filePath}: ${(error as Error).message}`,
+      );
     }
     return {};
   }
@@ -52,17 +57,22 @@ export class MetadataService {
    * e.g. "2024/01" for images, "Artist/Album" for audio.
    * Returns empty string if no relevant metadata found.
    */
-  async getMetadataSubpath(filePath: string, category: CategoryName): Promise<string> {
+  async getMetadataSubpath(
+    filePath: string,
+    category: CategoryName,
+  ): Promise<string> {
     const metadata = await this.getMetadata(filePath, category);
-    let subpath = '';
+    let subpath = "";
 
-    if (category === 'Images' || category === 'Videos') {
+    if (category === "Images" || category === "Videos") {
       if (metadata.date) {
         const year = metadata.date.getFullYear().toString();
-        const month = (metadata.date.getMonth() + 1).toString().padStart(2, '0');
+        const month = (metadata.date.getMonth() + 1)
+          .toString()
+          .padStart(2, "0");
         subpath = path.join(year, month);
       }
-    } else if (category === 'Audio') {
+    } else if (category === "Audio") {
       const artist = this.sanitizeMetadataValue(metadata.artist);
       const album = this.sanitizeMetadataValue(metadata.album);
 
@@ -79,9 +89,11 @@ export class MetadataService {
     if (subpath) {
       // We use a simplified check here because PathValidator might be too strict for partial paths (checking existence)
       // But we must ensure it doesn't have '..' or null bytes.
-      if (subpath.includes('..') || subpath.includes('\0')) {
-        logger.warn(`Security: Generated subpath contains unsafe sequences: ${subpath}`);
-        return '';
+      if (subpath.includes("..") || subpath.includes("\0")) {
+        logger.warn(
+          `Security: Generated subpath contains unsafe sequences: ${subpath}`,
+        );
+        return "";
       }
     }
 
@@ -91,7 +103,9 @@ export class MetadataService {
   /**
    * Enhanced image metadata extraction using ImageMetadataService
    */
-  private async getImageMetadataEnhanced(filePath: string): Promise<FileMetadata> {
+  private async getImageMetadataEnhanced(
+    filePath: string,
+  ): Promise<FileMetadata> {
     try {
       const imageMetadata = await this.imageMetadataService.extract(filePath);
       if (imageMetadata) {
@@ -100,7 +114,9 @@ export class MetadataService {
         };
       }
     } catch (error) {
-      logger.debug(`Enhanced image metadata extraction failed, falling back: ${(error as Error).message}`);
+      logger.debug(
+        `Enhanced image metadata extraction failed, falling back: ${(error as Error).message}`,
+      );
     }
     // Fallback to basic extraction
     return this.getImageMetadata(filePath);
@@ -109,7 +125,9 @@ export class MetadataService {
   /**
    * Enhanced audio metadata extraction using AudioMetadataService
    */
-  private async getAudioMetadataEnhanced(filePath: string): Promise<FileMetadata> {
+  private async getAudioMetadataEnhanced(
+    filePath: string,
+  ): Promise<FileMetadata> {
     try {
       const audioMetadata = await this.audioMetadataService.extract(filePath);
       if (audioMetadata) {
@@ -121,7 +139,9 @@ export class MetadataService {
         };
       }
     } catch (error) {
-      logger.debug(`Enhanced audio metadata extraction failed, falling back: ${(error as Error).message}`);
+      logger.debug(
+        `Enhanced audio metadata extraction failed, falling back: ${(error as Error).message}`,
+      );
     }
     // Fallback to basic extraction
     return this.getAudioMetadata(filePath);
@@ -138,7 +158,7 @@ export class MetadataService {
     let handle: fs.FileHandle | undefined;
 
     try {
-      handle = await fs.open(filePath, 'r');
+      handle = await fs.open(filePath, "r");
       const { bytesRead } = await handle.read(buffer, 0, 65536, 0);
 
       if (bytesRead < 4) return {}; // Too small
@@ -197,11 +217,11 @@ export class MetadataService {
     if (!trimmed) return undefined;
 
     // Replace illegal chars
-    const sanitized = trimmed.replace(/[\\/:*?"<>|\x00-\x1F]/g, '_');
+    const sanitized = trimmed.replace(/[\\/:*?"<>|\x00-\x1F]/g, "_");
 
     // Prevent strictly reserved names if it's the whole segment (though unlikely for Artist names)
     if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(sanitized)) {
-      return sanitized + '_';
+      return sanitized + "_";
     }
 
     // Limit length to avoid path limit issues
@@ -212,9 +232,22 @@ export class MetadataService {
    * Extract detailed metadata for the inspection tool
    * Uses specialized services for enhanced extraction
    */
-  async extractMetadata(filePath: string, ext: string): Promise<Record<string, any> | null> {
-    const isImage = ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.heic', '.heif'].includes(ext);
-    const isAudio = ['.mp3', '.flac', '.ogg', '.wav', '.m4a', '.aac'].includes(ext);
+  async extractMetadata(
+    filePath: string,
+    ext: string,
+  ): Promise<Record<string, any> | null> {
+    const isImage = [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".tiff",
+      ".tif",
+      ".heic",
+      ".heif",
+    ].includes(ext);
+    const isAudio = [".mp3", ".flac", ".ogg", ".wav", ".m4a", ".aac"].includes(
+      ext,
+    );
 
     // Handle image files
     if (isImage) {
@@ -223,15 +256,18 @@ export class MetadataService {
         if (imageMetadata) {
           return {
             dateTaken: imageMetadata.dateTaken?.toISOString(),
-            camera: imageMetadata.cameraMake && imageMetadata.cameraModel 
-              ? `${imageMetadata.cameraMake} ${imageMetadata.cameraModel}`.trim()
-              : undefined,
+            camera:
+              imageMetadata.cameraMake && imageMetadata.cameraModel
+                ? `${imageMetadata.cameraMake} ${imageMetadata.cameraModel}`.trim()
+                : undefined,
             width: imageMetadata.width,
             height: imageMetadata.height,
           };
         }
       } catch (error) {
-        logger.debug(`Image metadata extraction failed for ${filePath}: ${(error as Error).message}`);
+        logger.debug(
+          `Image metadata extraction failed for ${filePath}: ${(error as Error).message}`,
+        );
       }
       // Fallback to legacy extraction
       return this.extractImageMetadataLegacy(filePath);
@@ -251,7 +287,9 @@ export class MetadataService {
           };
         }
       } catch (error) {
-        logger.debug(`Audio metadata extraction failed for ${filePath}: ${(error as Error).message}`);
+        logger.debug(
+          `Audio metadata extraction failed for ${filePath}: ${(error as Error).message}`,
+        );
       }
       // Fallback to legacy extraction
       return this.extractAudioMetadataLegacy(filePath);
@@ -263,34 +301,42 @@ export class MetadataService {
   /**
    * Legacy image metadata extraction for inspection tool
    */
-  private async extractImageMetadataLegacy(filePath: string): Promise<Record<string, any> | null> {
+  private async extractImageMetadataLegacy(
+    filePath: string,
+  ): Promise<Record<string, any> | null> {
     try {
       const buffer = Buffer.alloc(65536);
       let handle: fs.FileHandle | undefined;
 
       try {
-        handle = await fs.open(filePath, 'r');
+        handle = await fs.open(filePath, "r");
         const { bytesRead } = await handle.read(buffer, 0, 65536, 0);
 
         if (bytesRead < 4) return null;
 
-        const parser = (ExifParser as any).create(buffer.subarray(0, bytesRead));
+        const parser = (ExifParser as any).create(
+          buffer.subarray(0, bytesRead),
+        );
         const result = parser.parse();
 
         const metadata: Record<string, any> = {};
 
         // Extract date taken
         if (result.tags?.DateTimeOriginal) {
-          metadata.dateTaken = new Date(result.tags.DateTimeOriginal * 1000).toISOString();
+          metadata.dateTaken = new Date(
+            result.tags.DateTimeOriginal * 1000,
+          ).toISOString();
         } else if (result.tags?.CreateDate) {
-          metadata.dateTaken = new Date(result.tags.CreateDate * 1000).toISOString();
+          metadata.dateTaken = new Date(
+            result.tags.CreateDate * 1000,
+          ).toISOString();
         }
 
         // Extract camera info
         if (result.tags?.Make || result.tags?.Model) {
           metadata.camera = [result.tags?.Make, result.tags?.Model]
             .filter(Boolean)
-            .join(' ')
+            .join(" ")
             .trim();
         }
 
@@ -305,7 +351,9 @@ export class MetadataService {
         await handle?.close();
       }
     } catch (error) {
-      logger.debug(`Legacy image metadata extraction failed for ${filePath}: ${(error as Error).message}`);
+      logger.debug(
+        `Legacy image metadata extraction failed for ${filePath}: ${(error as Error).message}`,
+      );
       return null;
     }
   }
@@ -313,7 +361,9 @@ export class MetadataService {
   /**
    * Legacy audio metadata extraction for inspection tool
    */
-  private async extractAudioMetadataLegacy(filePath: string): Promise<Record<string, any> | null> {
+  private async extractAudioMetadataLegacy(
+    filePath: string,
+  ): Promise<Record<string, any> | null> {
     try {
       const result = await parseFile(filePath);
 
@@ -341,7 +391,9 @@ export class MetadataService {
 
       return Object.keys(metadata).length > 0 ? metadata : null;
     } catch (error) {
-      logger.debug(`Legacy audio metadata extraction failed for ${filePath}: ${(error as Error).message}`);
+      logger.debug(
+        `Legacy audio metadata extraction failed for ${filePath}: ${(error as Error).message}`,
+      );
       return null;
     }
   }

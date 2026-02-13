@@ -433,7 +433,16 @@ class SmartOrganizerService {
 
           // Copy or move file based on options
           await fs.copyFile(file.path, targetPath);
-          
+
+          // Verify copy succeeded before deleting source
+          const copiedStats = await fs.stat(targetPath);
+          const sourceStats = await fs.stat(file.path);
+          if (copiedStats.size !== sourceStats.size) {
+            throw new Error(
+              `Copy verification failed: sizes do not match (source: ${sourceStats.size}, copied: ${copiedStats.size})`,
+            );
+          }
+
           // If move mode (not copy), delete the source file
           if (!options.copyInsteadOfMove) {
             await fs.unlink(file.path);
@@ -515,6 +524,20 @@ export async function handleOrganizeSmart(
     // Validate paths
     const validatedSource = await validateStrictPath(source_dir);
     const validatedTarget = await validateStrictPath(target_dir);
+
+    // Ensure source and target are different directories
+    const resolvedSource = path.resolve(validatedSource);
+    const resolvedTarget = path.resolve(validatedTarget);
+    if (resolvedSource === resolvedTarget) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Error: source_dir and target_dir must be different directories. Using the same path for both could cause catastrophic data loss.",
+          },
+        ],
+      };
+    }
 
     // Execute smart organization
     const result = await smartOrganizer.organize(
