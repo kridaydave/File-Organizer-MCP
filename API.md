@@ -2,8 +2,8 @@
 
 > Auto-generated from tool definitions
 
-**Version:** 3.0.0  
-**Generated:** 2026-02-11T11:52:07.876Z
+**Version:** 3.3.0  
+**Generated:** 2026-02-13T16:45:00.000Z
 
 [⬆ Back to Top](#top)
 
@@ -12,6 +12,7 @@
 ## Table of Contents
 
 - [file_organizer_analyze_duplicates](#file_organizer_analyze_duplicates)
+- [file_organizer_batch_read_files](#file_organizer_batch_read_files) ⭐ v3.3.0
 - [file_organizer_batch_rename](#file_organizer_batch_rename)
 - [file_organizer_categorize_by_type](#file_organizer_categorize_by_type)
 - [file_organizer_delete_duplicates](#file_organizer_delete_duplicates)
@@ -21,7 +22,11 @@
 - [file_organizer_inspect_metadata](#file_organizer_inspect_metadata)
 - [file_organizer_list_files](#file_organizer_list_files)
 - [file_organizer_list_watches](#file_organizer_list_watches)
+- [file_organizer_organize_by_content](#file_organizer_organize_by_content) ⭐ v3.3.0
 - [file_organizer_organize_files](#file_organizer_organize_files)
+- [file_organizer_organize_music](#file_organizer_organize_music) ⭐ v3.3.0
+- [file_organizer_organize_photos](#file_organizer_organize_photos) ⭐ v3.3.0
+- [file_organizer_organize_smart](#file_organizer_organize_smart) ⭐ v3.3.0
 - [file_organizer_preview_organization](#file_organizer_preview_organization)
 - [file_organizer_read_file](#file_organizer_read_file)
 - [file_organizer_scan_directory](#file_organizer_scan_directory)
@@ -515,5 +520,164 @@ file_organizer_watch_directory({
   response_format: "value",
   min_file_age_minutes: 123,
   max_files_per_run: 123,
+});
+```
+
+
+---
+
+## file_organizer_organize_smart
+[⬆ Back to Top](#top)
+
+**Description:** Automatically organizes mixed folders by detecting file types and applying the appropriate strategy. Routes music files to Music/Artist/Album, photos to Photos/YYYY/MM, and documents to Documents/Topic.
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `source_dir` | string | Full path to directory with mixed files | - |
+| `target_dir` | string | Full path where organized folders will be created | - |
+| `music_structure` | string | Folder structure for music: 'artist/album', 'album', 'genre/artist', 'flat' | 'artist/album' |
+| `photo_date_format` | string | Date format for photos: 'YYYY/MM/DD', 'YYYY-MM-DD', 'YYYY/MM', 'YYYY' | 'YYYY/MM' |
+| `photo_group_by_camera` | boolean | Group photos by camera model within date folders | false |
+| `strip_gps` | boolean | Strip GPS location data from photos for privacy | false |
+| `create_shortcuts` | boolean | Create shortcuts for multi-topic documents | false |
+| `dry_run` | boolean | Preview changes without moving files | true |
+| `copy_instead_of_move` | boolean | Copy files instead of moving them | false |
+| `recursive` | boolean | Scan subdirectories recursively | true |
+| `response_format` | string | Output format | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_organize_smart({
+  source_dir: "/Users/Downloads",
+  target_dir: "/Users/Organized",
+  music_structure: "artist/album",
+  photo_date_format: "YYYY/MM",
+  strip_gps: true,
+  dry_run: true,
+});
+```
+
+---
+
+## file_organizer_organize_music
+[⬆ Back to Top](#top)
+
+**Description:** Organize music files into structured folders based on metadata (Artist/Album/Title). Supports MP3, FLAC, OGG, WAV, M4A, AAC formats.
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `source_dir` | string | Full path to directory containing music files | - |
+| `target_dir` | string | Full path where organized music will be placed | - |
+| `structure` | string | Folder structure: 'artist/album', 'album', 'genre/artist', 'flat' | 'artist/album' |
+| `filename_pattern` | string | Rename pattern: '{track} - {title}', '{artist} - {title}', '{title}' | '{track} - {title}' |
+| `dry_run` | boolean | Preview changes without moving files | true |
+| `copy_instead_of_move` | boolean | Copy files instead of moving them | false |
+| `skip_if_missing_metadata` | boolean | Skip files missing artist/album metadata | false |
+| `response_format` | string | Output format | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_organize_music({
+  source_dir: "/Users/Music/Downloads",
+  target_dir: "/Users/Music/Organized",
+  structure: "artist/album",
+  dry_run: true,
+});
+```
+
+---
+
+## file_organizer_organize_photos
+[⬆ Back to Top](#top)
+
+**Description:** Organize photos into date-based folders using EXIF metadata. Supports JPEG, PNG, TIFF, HEIC, and RAW formats. Can strip GPS data for privacy.
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `source_dir` | string | Full path to directory containing photos | - |
+| `target_dir` | string | Full path where organized photos will be placed | - |
+| `date_format` | string | Date folder structure: 'YYYY/MM/DD', 'YYYY-MM-DD', 'YYYY/MM', 'YYYY' | 'YYYY/MM' |
+| `group_by_camera` | boolean | Group photos by camera model within date folders | false |
+| `strip_gps` | boolean | Strip GPS location data from photos | false |
+| `unknown_date_folder` | string | Folder name for photos without date metadata | 'Unknown Date' |
+| `dry_run` | boolean | Preview changes without moving files | true |
+| `copy_instead_of_move` | boolean | Copy files instead of moving them | false |
+| `response_format` | string | Output format | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_organize_photos({
+  source_dir: "/Users/Photos/Import",
+  target_dir: "/Users/Photos/Organized",
+  date_format: "YYYY/MM",
+  strip_gps: true,
+  dry_run: true,
+});
+```
+
+---
+
+## file_organizer_organize_by_content
+[⬆ Back to Top](#top)
+
+**Description:** Organize documents by extracting topics from content. Supports PDF, DOCX, DOC, TXT, MD, RTF, ODT formats.
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `source_dir` | string | Full path to directory containing documents | - |
+| `target_dir` | string | Full path where organized documents will be placed | - |
+| `create_shortcuts` | boolean | Create shortcuts for multi-topic documents | false |
+| `dry_run` | boolean | Preview changes without moving files | true |
+| `recursive` | boolean | Scan subdirectories recursively | true |
+| `response_format` | string | Output format | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_organize_by_content({
+  source_dir: "/Users/Documents/Unsorted",
+  target_dir: "/Users/Documents/Organized",
+  create_shortcuts: true,
+  dry_run: true,
+});
+```
+
+---
+
+## file_organizer_batch_read_files
+[⬆ Back to Top](#top)
+
+**Description:** Read multiple files efficiently in a single operation. Supports text, base64, and binary encoding.
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `files` | array | List of absolute file paths to read | - |
+| `encoding` | string | Text encoding: 'utf-8', 'base64', 'binary' | 'utf-8' |
+| `max_bytes_per_file` | number | Maximum bytes to read per file | 10485760 |
+| `response_format` | string | Output format | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_batch_read_files({
+  files: [
+    "/path/to/file1.txt",
+    "/path/to/file2.txt",
+    "/path/to/file3.txt"
+  ],
+  encoding: "utf-8",
 });
 ```

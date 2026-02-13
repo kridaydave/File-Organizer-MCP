@@ -1,5 +1,79 @@
 # Changelog
 
+## [3.3.0] - 2026-02-13
+
+### ✨ New Features
+
+#### 🧠 Smart Organization (Unified Tool)
+- **New Tool: `file_organizer_organize_smart`** - Automatically organizes mixed folders
+  - Auto-detects file types (music, photos, documents)
+  - Routes files to appropriate organizer:
+    - 🎵 Music → Artist/Album structure
+    - 📸 Photos → Date-based folders (YYYY/MM/DD)
+    - 📄 Documents → Topic-based folders
+  - Creates organized subdirectories: `Music/`, `Photos/`, `Documents/`, `Other/`
+  - All options supported: GPS stripping, camera grouping, shortcuts, etc.
+
+#### 🎵 Music Organization
+- **New Tool: `file_organizer_organize_music`** - Music library organization
+  - Organizes by Artist/Album/Title structure
+  - Supports MP3, FLAC, OGG, WAV, M4A, AAC
+  - Configurable folder structures: `artist/album`, `album`, `genre/artist`, `flat`
+  - ID3 metadata extraction with graceful fallback
+
+#### 📸 Photo Organization  
+- **New Tool: `file_organizer_organize_photos`** - Photo library organization
+  - Organizes by EXIF date: YYYY/MM/DD structure
+  - GPS stripping for privacy (using piexifjs)
+  - Camera model grouping option
+  - Supports JPEG, PNG, TIFF, HEIC, RAW formats
+
+#### 📄 Content-Based Organization
+- **New Tool: `file_organizer_organize_by_content`** - Document organization
+  - Topic extraction from document content
+  - Supports PDF, DOCX, TXT, MD, RTF, ODT
+  - Multi-topic shortcut creation
+  - Text analysis with keyword extraction
+
+#### 📚 Batch File Reading
+- **New Tool: `file_organizer_batch_read_files`** - Read multiple files at once
+  - Efficient batch processing
+  - Multiple encoding support
+
+### 🔧 Code Quality Improvements
+- Full GPS stripping implementation (was TODO stub)
+- All console.* calls migrated to structured logger
+- Removed 24+ redundant type assertions
+- Added comprehensive type guards
+- Improved error handling consistency
+
+### 📦 Dependencies
+- Added `piexifjs` for EXIF manipulation
+- Added `pdf-parse` for PDF text extraction
+- Added `mammoth` for DOCX text extraction
+
+### 🧪 Testing
+- Added 800+ new tests for metadata services
+- Tests for audio metadata extraction
+- Tests for image metadata extraction
+- Tests for music organizer
+- Tests for content organization
+- Tests for topic extractor
+
+### 🛠️ New Services
+- `audio-metadata.service.ts` - Music metadata extraction
+- `image-metadata.service.ts` - Photo metadata extraction
+- `text-extraction.service.ts` - Document text extraction
+- `topic-extractor.service.ts` - Topic/keyword extraction
+- `content-analyzer.service.ts` - File type detection
+- `content-screening.service.ts` - Security screening
+- `metadata-cache.service.ts` - Caching for faster operations
+- `music-organizer.service.ts` - Music organization logic
+- `photo-organizer.service.ts` - Photo organization logic
+- `smart-organization.ts` - Unified organization tool
+
+---
+
 ## [3.2.8] - 2026-02-10
 
 ### 🚨 CRITICAL FIX: MCP Protocol Compatibility

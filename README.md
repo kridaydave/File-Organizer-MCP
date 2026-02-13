@@ -1,14 +1,17 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.2.8 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.3.0 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
-**New Features in v3.2.8:**
+**New in v3.3.0 - Smart Organization:**
 
-- Enhanced metadata extraction for music and photos
-- Music organization by Artist/Album/Title structure
-- Photo organization by date (YYYY/MM/DD) using EXIF data
-- Security screening with metadata-based threat detection
-- Metadata cache system for faster operations
+- 🧠 **`organize_smart`** - Auto-detects and organizes mixed folders (music, photos, documents)
+- 🎵 **`organize_music`** - Music by Artist/Album structure with ID3 metadata
+- 📸 **`organize_photos`** - Photos by EXIF date with GPS stripping
+- 📄 **`organize_by_content`** - Documents by topic extraction
+- 📚 **`batch_read_files`** - Read multiple files efficiently
+
+**Previous v3.2.8:**
+- Enhanced metadata extraction, security screening, metadata cache system
 
 [Why Us](#why-specialized-tools) • [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
@@ -19,7 +22,7 @@
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-983%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-819%20passing-success.svg)](tests/)
 
 > **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
 
@@ -132,8 +135,11 @@ The setup wizard auto-detects and configures:
 - **📅 Smart Scheduling** - Cron-based automatic organization with per-directory configuration
 - **🔍 Duplicate Detection** - Finds duplicate files using SHA-256 content hashing
 - **🏷️ Enhanced Metadata Extraction** - Extracts EXIF for photos, ID3 tags for music, and detailed metadata for documents for content-aware organization
+- **🧠 Smart Organization** - Automatically organizes mixed folders by detecting file types and applying appropriate strategies
 - **🎵 Music Organization** - Organizes music files by Artist/Album/Title structure using ID3 metadata
-- **📸 Photo Organization** - Organizes photos by date (YYYY/MM/DD) using EXIF metadata
+- **📸 Photo Organization** - Organizes photos by date (YYYY/MM/DD) using EXIF metadata with GPS stripping
+- **📄 Content Organization** - Organizes documents by topic extraction from content (PDF, DOCX, TXT)
+- **📚 Batch File Reading** - Read multiple files efficiently with encoding support
 - **✏️ Batch Renaming** - Flexible renaming with patterns, regex, and case conversion
 - **🛡️ Smart Conflict Resolution** - Handles filename conflicts (rename/skip/overwrite)
 - **👁️ Dry Run Mode** - Preview changes before executing
@@ -315,6 +321,32 @@ file_organizer_read_file({
 
 ---
 
+#### `file_organizer_batch_read_files` ⭐ NEW in v3.3.0
+
+Read multiple files efficiently in a single operation.
+
+**Parameters:**
+
+- `files` (array, required) - List of file paths to read
+- `encoding` ('utf-8'|'base64'|'binary', optional) - Text encoding (default: 'utf-8')
+- `max_bytes_per_file` (number, optional) - Max bytes per file (default: 10485760)
+- `response_format` ('json'|'markdown', optional) - Output format
+
+**Example:**
+
+```typescript
+file_organizer_batch_read_files({
+  files: [
+    "/path/to/file1.txt",
+    "/path/to/file2.txt",
+    "/path/to/file3.txt"
+  ],
+  encoding: "utf-8",
+});
+```
+
+---
+
 #### `file_organizer_categorize_by_type`
 
 Group files by category with statistics. Shows breakdown by file type.
@@ -438,6 +470,101 @@ file_organizer_organize_files({
   dry_run: false,
 });
 ```
+
+---
+
+#### `file_organizer_organize_smart` ⭐ NEW in v3.3.0
+
+**Unified organization tool** - Automatically organizes mixed folders by detecting file types and applying the appropriate strategy.
+
+**How it works:**
+- 🎵 Music files (MP3, FLAC, etc.) → `Music/Artist/Album/` structure
+- 📸 Photo files (JPG, PNG, RAW, etc.) → `Photos/YYYY/MM/` structure  
+- 📄 Document files (PDF, DOCX, etc.) → `Documents/Topic/` structure
+- 📦 Other files → `Other/` folder
+
+**Parameters:**
+
+- `source_dir` (string, required) - Directory with mixed files
+- `target_dir` (string, required) - Where organized folders will be created
+- `music_structure` ('artist/album'|'album'|'genre/artist'|'flat', optional) - Music folder structure (default: 'artist/album')
+- `photo_date_format` ('YYYY/MM/DD'|'YYYY-MM-DD'|'YYYY/MM'|'YYYY', optional) - Photo date structure (default: 'YYYY/MM')
+- `photo_group_by_camera` (boolean, optional) - Group photos by camera model
+- `strip_gps` (boolean, optional) - Remove GPS data from photos for privacy
+- `create_shortcuts` (boolean, optional) - Create shortcuts for multi-topic documents
+- `dry_run` (boolean, optional) - Preview without moving (default: true)
+- `copy_instead_of_move` (boolean, optional) - Copy files instead of moving
+- `recursive` (boolean, optional) - Include subdirectories (default: true)
+
+**Example:**
+
+```typescript
+file_organizer_organize_smart({
+  source_dir: "/Users/john/Downloads",
+  target_dir: "/Users/john/Organized",
+  music_structure: "artist/album",
+  photo_date_format: "YYYY/MM",
+  strip_gps: true,
+  dry_run: true,
+});
+// Creates:
+//   Organized/Music/Artist/Album/song.mp3
+//   Organized/Photos/2024/01/photo.jpg
+//   Organized/Documents/Finance/report.pdf
+```
+
+---
+
+#### `file_organizer_organize_music` ⭐ NEW in v3.3.0
+
+Organize music files by metadata (Artist/Album/Title structure).
+
+**Parameters:**
+
+- `source_dir` (string, required) - Directory with music files
+- `target_dir` (string, required) - Where organized music will be placed
+- `structure` ('artist/album'|'album'|'genre/artist'|'flat', optional) - Folder structure (default: 'artist/album')
+- `filename_pattern` ('{track} - {title}'|'{artist} - {title}'|'{title}', optional) - Rename pattern
+- `dry_run` (boolean, optional) - Preview only (default: true)
+- `copy_instead_of_move` (boolean, optional) - Copy instead of move
+- `skip_if_missing_metadata` (boolean, optional) - Skip files without artist/album
+
+**Supported formats:** MP3, FLAC, OGG, WAV, M4A, AAC
+
+---
+
+#### `file_organizer_organize_photos` ⭐ NEW in v3.3.0
+
+Organize photos by EXIF date into structured folders.
+
+**Parameters:**
+
+- `source_dir` (string, required) - Directory with photos
+- `target_dir` (string, required) - Where organized photos will be placed
+- `date_format` ('YYYY/MM/DD'|'YYYY-MM-DD'|'YYYY/MM'|'YYYY', optional) - Date structure (default: 'YYYY/MM')
+- `group_by_camera` (boolean, optional) - Group by camera model within dates
+- `strip_gps` (boolean, optional) - Strip GPS location data for privacy
+- `unknown_date_folder` (string, optional) - Folder for photos without dates (default: 'Unknown Date')
+- `dry_run` (boolean, optional) - Preview only (default: true)
+- `copy_instead_of_move` (boolean, optional) - Copy instead of move
+
+**Supported formats:** JPG, PNG, TIFF, HEIC, RAW (CR2, NEF, ARW, etc.)
+
+---
+
+#### `file_organizer_organize_by_content` ⭐ NEW in v3.3.0
+
+Organize documents by extracting topics from content.
+
+**Parameters:**
+
+- `source_dir` (string, required) - Directory with documents
+- `target_dir` (string, required) - Where organized documents will be placed
+- `create_shortcuts` (boolean, optional) - Create shortcuts for multi-topic docs
+- `dry_run` (boolean, optional) - Preview only (default: true)
+- `recursive` (boolean, optional) - Include subdirectories (default: true)
+
+**Supported formats:** PDF, DOCX, DOC, TXT, MD, RTF, ODT
 
 ---
 
