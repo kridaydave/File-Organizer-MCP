@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.3.3] - 2026-02-14
+
+### 🐛 Bug Fixes
+
+#### File Organization
+- **Fixed file-tracker service** - Migrated from JavaScript to TypeScript with proper typing
+- **Improved service exports** - Fixed module exports across various services
+
+#### Code Quality
+- **ESLint configuration** - Updated ESLint config for better TypeScript support
+- **Security gates** - Enhanced static analysis in security gates
+
+### 🧪 Testing
+- All tests passing
+- Build passes successfully
+
 ## [3.3.2] - 2026-02-13
 
 ### 🐛 Bug Fixes

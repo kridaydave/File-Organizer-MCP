@@ -123,7 +123,7 @@ import { validatePath } from "../../services/path-validator.service.js";
 
 ```typescript
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.3.3
  * Service/Class description
  */
 
@@ -321,7 +321,7 @@ try {
 
 ```typescript
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.3.3
  * Service description
  * @param param - Parameter description
  * @returns Return value description
@@ -476,7 +476,7 @@ import { validatePath } from "../../services/path-validator.service.js";
 
 ```typescript
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.3.3
  * Service/Class description
  */
 
@@ -674,7 +674,7 @@ try {
 
 ```typescript
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.3.3
  * Service description
  * @param param - Parameter description
  * @returns Return value description
