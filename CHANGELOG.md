@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.3.4] - 2026-02-14
+
+### 🐛 Bug Fixes
+- **Fixed version string** - Updated hardcoded version from 3.3.2 to 3.3.4 in config.ts and index.ts
+
 ## [3.3.3] - 2026-02-14
 
 ### 🐛 Bug Fixes
