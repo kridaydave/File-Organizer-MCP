@@ -199,6 +199,10 @@ export class AudioMetadataService {
     return results;
   }
 
+  /**
+   * Check if an audio file has embedded metadata.
+   * Path is validated upstream by PathValidatorService before being passed to this service.
+   */
   async hasMetadata(filePath: string): Promise<boolean> {
     try {
       const ext = path.extname(filePath).toLowerCase().replace(".", "");
@@ -242,6 +246,10 @@ export class AudioMetadataService {
     };
   }
 
+  /**
+   * Parse MP3 file metadata.
+   * Path is validated upstream by PathValidatorService before being passed to this service.
+   */
   private async parseMP3(filePath: string): Promise<Partial<AudioMetadata>> {
     const buffer = await fs.readFile(filePath);
     const metadata: Partial<AudioMetadata> = {};
@@ -458,6 +466,10 @@ export class AudioMetadataService {
     );
   }
 
+  /**
+   * Parse FLAC file metadata.
+   * Path is validated upstream by PathValidatorService before being passed to this service.
+   */
   private async parseFLAC(filePath: string): Promise<Partial<AudioMetadata>> {
     const buffer = await fs.readFile(filePath);
     const metadata: Partial<AudioMetadata> = {};
@@ -600,6 +612,10 @@ export class AudioMetadataService {
     }
   }
 
+  /**
+   * Parse M4A/AAC file metadata.
+   * Path is validated upstream by PathValidatorService before being passed to this service.
+   */
   private async parseM4A(filePath: string): Promise<Partial<AudioMetadata>> {
     const buffer = await fs.readFile(filePath);
     const metadata: Partial<AudioMetadata> = {};

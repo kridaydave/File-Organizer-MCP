@@ -829,6 +829,7 @@ export class SecureFileReader {
    * @returns Unique operation identifier
    */
   private generateOperationId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const randomValue = crypto.getRandomValues(new Uint32Array(1))[0] ?? 0;
+    return `${Date.now()}-${(randomValue / 0xffffffff).toString(36).substring(2, 11)}`;
   }
 }

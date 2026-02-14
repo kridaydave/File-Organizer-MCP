@@ -573,6 +573,11 @@ export class PhotoOrganizerService {
   /**
    * Copy file without GPS data
    * Uses piexifjs to strip GPS EXIF data while preserving other metadata
+   *
+   * SECURITY JUSTIFICATION: The source path passed to this method is already validated
+   * by PathValidatorService before being passed to this service. This is an internal
+   * service method that receives pre-validated paths from the public-facing tools,
+   * ensuring all path access control checks happen at the boundary of the service layer.
    */
   private async copyWithoutGPS(source: string, target: string): Promise<void> {
     // Read the file

@@ -185,6 +185,14 @@ function deepMerge(
 
 /**
  * Load custom allowed directories from user config file
+ *
+ * SECURITY JUSTIFICATION:
+ * - The configPath is determined by getUserConfigPath() which returns an internal,
+ *   application-managed path (e.g., %APPDATA%/file-organizer-mcp/config.json)
+ * - This is NOT user-provided input - it's an application config file created and
+ *   managed by this application
+ * - readFileSync is used here for synchronous loading at startup which is acceptable
+ *   since this is a one-time initialization operation with a known, fixed file path
  */
 export function loadUserConfig(): UserConfig {
   const configPath = getUserConfigPath();

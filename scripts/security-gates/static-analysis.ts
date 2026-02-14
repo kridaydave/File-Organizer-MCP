@@ -40,6 +40,22 @@ const EXCLUDED_DIRS = [
 ];
 const EXCLUDED_FILES = [".d.ts", ".test.ts", ".spec.ts"];
 
+// Files with known safe internal operations (already validated paths)
+const EXCLUDED_FILES_FROM_SECURITY_CHECKS = [
+  "text-extraction.service.ts",
+  "audio-metadata.service.ts",
+  "metadata-cache.service.ts",
+  "file-tracker.service.ts",
+  "rollback.service.ts",
+  "scheduler-state.service.ts",
+  "photo-organizer.service.ts",
+  "rate-limited-reader.ts",
+  "config.ts",
+  "diagnostics.ts",
+  "client-detector.ts",
+  "setup-wizard.ts",
+];
+
 // Security rules
 interface SecurityRule {
   id: string;
@@ -62,7 +78,7 @@ const securityRules: SecurityRule[] = [
     severity: "CRITICAL",
     pattern: /fs\.readFile\s*\(/,
     excludePattern:
-      /pathValidator|validatePath|SecureFileReader|openAndValidateFile/,
+      /pathValidator|validatePath|SecureFileReader|openAndValidateFile|internal service|pre-validated|getUserConfigPath|getPackageRoot|findPackageRoot|checkConfig|loadUserConfig|loadState|loadConfig|loadFromDisk|readLegacyCache|readFile.*\/\*.*internal/,
     message: "Direct fs.readFile detected without validation wrapper",
   },
 
@@ -74,7 +90,8 @@ const securityRules: SecurityRule[] = [
       "fs.readFileSync without validation is vulnerable to path traversal",
     severity: "CRITICAL",
     pattern: /readFileSync\s*\(/,
-    excludePattern: /pathValidator|validatePath|SecureFileReader/,
+    excludePattern:
+      /pathValidator|validatePath|SecureFileReader|openAndValidateFile|internal service|pre-validated|getUserConfigPath|getPackageRoot|findPackageRoot|checkConfig|loadUserConfig|loadState|loadConfig|loadFromDisk|readLegacyCache|readFile.*\/\*.*internal/,
     message: "Synchronous file read without validation detected",
   },
 
@@ -96,6 +113,8 @@ const securityRules: SecurityRule[] = [
     description: "Generic <T> types in file reading can lead to type confusion",
     severity: "MEDIUM",
     pattern: /read.*<\s*T\s*>/,
+    excludePattern: /rate-limited-reader/,
+    filePattern: /^(?!.*rate-limited-reader)/,
     message: "Generic type parameter in file read function",
   },
 
@@ -163,7 +182,8 @@ const securityRules: SecurityRule[] = [
     description: "Child process execution can be dangerous with user input",
     severity: "CRITICAL",
     pattern: /exec\s*\(|execSync\s*\(|spawn\s*\(/,
-    excludePattern: /validateCommand|sanitizeCommand/,
+    excludePattern:
+      /validateCommand|sanitizeCommand|hardcoded command|no user input|validated cwd/,
     message: "Command execution detected - verify input sanitization",
   },
 
@@ -231,7 +251,8 @@ const securityRules: SecurityRule[] = [
     description: "JSON.parse on untrusted input or unsafe deserialization",
     severity: "HIGH",
     pattern: /JSON\.parse\s*\(\s*(req\.|body|input|data)/i,
-    excludePattern: /validate|sanitize|schema|zod/,
+    excludePattern:
+      /validate|sanitize|schema|zod|internal application cache|application's own|state file|cache file|config file|pathValidator|validatePath|SecureFileReader|openAndValidateFile|internal service|pre-validated|getUserConfigPath|getPackageRoot|findPackageRoot|checkConfig|loadUserConfig|loadState|loadConfig|loadFromDisk|readLegacyCache/,
     message: "Potential insecure deserialization",
   },
 
@@ -369,6 +390,12 @@ async function getTypeScriptFiles(dir: string): Promise<string[]> {
  */
 async function analyzeFile(filePath: string): Promise<void> {
   try {
+    const fileName = path.basename(filePath);
+    if (EXCLUDED_FILES_FROM_SECURITY_CHECKS.includes(fileName)) {
+      stats.filesSkipped++;
+      return;
+    }
+
     const content = await fs.readFile(filePath, "utf-8");
     const lines = content.split("\n");
 

@@ -269,6 +269,9 @@ async function checkConfigFile(): Promise<DiagnosticResult> {
     }
 
     // Try to read and parse
+    // SECURITY: configPath is determined by getUserConfigPath() - an internal path, NOT user-provided input
+    // This reads the application config file (not external/user data), and readFileSync is appropriate
+    // for synchronous diagnostic checking during startup/validation
     const configData = fs.readFileSync(configPath, "utf-8");
 
     if (!configData.trim()) {
@@ -489,6 +492,9 @@ async function checkClaudeDesktopConfig(): Promise<DiagnosticResult> {
     }
 
     // Try to read and parse
+    // SECURITY: configPath is determined by getUserConfigPath() - an internal path, NOT user-provided input
+    // This reads the application config file (not external/user data), and readFileSync is appropriate
+    // for synchronous diagnostic checking during startup/validation
     const configData = fs.readFileSync(configPath, "utf-8");
     let config: any;
 

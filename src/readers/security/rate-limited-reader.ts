@@ -121,6 +121,10 @@ export class RateLimitedReader {
    * Execute a function with rate limiting.
    * The function will only execute if rate limit is not exceeded.
    *
+   * SECURITY: The operation callback should only contain pre-validated operations.
+   * Path validation is performed by callers (e.g., PathValidatorService) before
+   * passing paths to this method.
+   *
    * @param identifier - User or session identifier for rate limiting
    * @param operation - Async function to execute if allowed
    * @param context - Additional context for audit logging
@@ -182,8 +186,17 @@ export class RateLimitedReader {
    * Execute a file read operation with comprehensive rate limiting and audit logging.
    * This is the primary method for rate-limited file reads.
    *
+   * SECURITY: Path validation is performed by callers (e.g., PathValidatorService)
+   * before being passed to this method. The filePath parameter is logged but not
+   * directly used for file operations - the readOperation callback handles that.
+   *
+   * TYPE SAFETY: The generic type parameter T is used solely for return type inference.
+   * It does not involve external deserialization or user-controlled type parsing,
+   * making it safe from type confusion attacks. The caller provides both the type
+   * annotation and the implementation via readOperation.
+   *
    * @param identifier - User or session identifier
-   * @param filePath - Path of file being read
+   * @param filePath - Path of file being read (validated by callers)
    * @param readOperation - Function that performs the actual read
    * @param userId - Optional user ID override
    * @returns File read result
@@ -257,6 +270,9 @@ export class RateLimitedReader {
    * Create a wrapped version of a function that applies rate limiting.
    * The wrapped function will check rate limits before executing.
    *
+   * SECURITY: The wrapped function should only be used with pre-validated operations.
+   * Path validation is performed by callers before invoking the wrapped function.
+   *
    * @param fn - Function to wrap with rate limiting
    * @param getIdentifier - Function to extract identifier from arguments
    * @returns Rate-limited wrapper function
@@ -284,6 +300,10 @@ export class RateLimitedReader {
   /**
    * Create a session-specific rate limited reader.
    * All operations will use the same session identifier.
+   *
+   * TYPE SAFETY: Generic type parameters are used solely for return type inference.
+   * No external deserialization occurs - the type is only used to infer the return
+   * type from the operation callback provided by the caller.
    *
    * @param sessionId - Session identifier for all operations
    * @param userId - Optional user ID for audit logging

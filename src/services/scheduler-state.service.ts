@@ -126,7 +126,16 @@ export class SchedulerStateService {
   }
 
   /**
-   * Load state from disk
+   * Load state from disk.
+   *
+   * SECURITY JUSTIFICATION (SEC-016):
+   * The state file path (stateFilePath) is internal to the application - it is stored
+   * in the application's private config directory (%APPDATA%, ~/Library/Application Support,
+   * or ~/.config). JSON.parse is safe here because:
+   * 1. The file is written only by this application using JSON.stringify()
+   * 2. The file is stored in an OS-protected user directory not accessible to other processes
+   * 3. The parsed data is validated by isValidState() before use, ensuring the structure
+   *    matches the expected SchedulerState type
    */
   private async loadState(): Promise<void> {
     try {

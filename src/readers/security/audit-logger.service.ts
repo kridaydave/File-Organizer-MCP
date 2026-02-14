@@ -9,6 +9,7 @@
  * @security Shepherd-Gamma Approved
  */
 
+import crypto from "crypto";
 import { logger } from "../../utils/logger.js";
 
 /**
@@ -218,7 +219,8 @@ export class AuditLoggerService implements IAuditLogger {
    * Generate a unique session identifier.
    */
   private generateSessionId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    const randomValue = crypto.getRandomValues(new Uint32Array(1))[0] ?? 0;
+    return `${Date.now()}-${(randomValue / 0xffffffff).toString(36).substring(2, 11)}`;
   }
 
   /**

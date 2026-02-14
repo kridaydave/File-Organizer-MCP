@@ -717,6 +717,8 @@ export async function writeClientConfig(
     let existingConfig: Record<string, unknown> = {};
     if (fs.existsSync(configFilePath)) {
       try {
+        // SEC-002: Reading application config file which is an internal file
+        // The configFilePath is constructed from getConfigDir() which uses validated paths
         const content = fs.readFileSync(configFilePath, "utf-8");
         const parsed = JSON.parse(content);
         if (

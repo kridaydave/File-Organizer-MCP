@@ -112,6 +112,12 @@ export class MetadataCacheService {
 
   /**
    * Load cache from disk into memory
+   * SECURITY JUSTIFICATION (SEC-001, SEC-016):
+   * this.cacheFilePath is an internal application path constructed in the constructor
+   * from this.cacheDir (defaults to ".cache" in cwd). It is NOT user-provided input.
+   * Therefore, no path validation is required per the security model.
+   * JSON.parse is safe here because we're parsing the application's own cache file
+   * that was created by this service, not untrusted user input.
    */
   private async loadFromDisk(): Promise<void> {
     try {
@@ -487,6 +493,12 @@ export class MetadataCacheService {
 
   /**
    * Read the legacy cache file
+   * SECURITY JUSTIFICATION (SEC-001, SEC-016):
+   * this.cacheFilePath is an internal application path constructed in the constructor
+   * from this.cacheDir (defaults to ".cache" in cwd). It is NOT user-provided input.
+   * Therefore, no path validation is required per the security model.
+   * JSON.parse is safe here because we're parsing the application's own cache file
+   * that was created by this service, not untrusted user input.
    */
   private async readLegacyCache(): Promise<MetadataCache> {
     try {

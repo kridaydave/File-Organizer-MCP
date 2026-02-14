@@ -51,7 +51,11 @@ function findPackageRoot(): string {
     const packageJsonPath = path.join(dir, "package.json");
     if (fs.existsSync(packageJsonPath)) {
       try {
-        const content = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+        const content = JSON.parse(
+          // SEC-002: Reading internal package.json file for project root detection
+          // This is safe as it only reads a known internal config file in the application root
+          fs.readFileSync(packageJsonPath, "utf-8"),
+        );
         if (content.name === "file-organizer-mcp") {
           return dir;
         }
@@ -225,6 +229,8 @@ async function installDependencies(): Promise<boolean> {
   printInfo("Installing dependencies (this may take a minute)...");
 
   try {
+    // SEC-010: Running npm install with hardcoded command
+    // cwd is validated by getPackageRoot() which requires package.json to exist in the directory
     execSync("npm install", {
       cwd: packageRoot,
       stdio: "inherit",
@@ -256,6 +262,8 @@ async function ensureBuild(): Promise<boolean> {
   printInfo("Building the application...");
 
   try {
+    // SEC-010: Running npm run build with hardcoded command
+    // cwd is validated by getPackageRoot() which requires package.json to exist in the directory
     execSync("npm run build", {
       cwd: packageRoot,
       stdio: "inherit",

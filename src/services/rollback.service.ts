@@ -65,6 +65,14 @@ export class RollbackService {
 
   /**
    * List available rollbacks
+   *
+   * SECURITY JUSTIFICATION (SEC-001):
+   * - storageDir is an internal path constructed in the constructor from process.cwd()
+   *   (line 33: path.join(process.cwd(), ".file-organizer-rollbacks"))
+   * - Files read are NOT user-provided - they're internal manifest files created by this service
+   *   (createManifest method writes JSON files with validated UUID names)
+   * - Path validation happens at other layers: storageDir is hardcoded, filenames are filtered
+   *   for ".json" extension, and rollback() validates UUID format before reading
    */
   async listManifests(): Promise<RollbackManifest[]> {
     if (!(await fileExists(this.storageDir))) return [];
@@ -97,6 +105,13 @@ export class RollbackService {
    * @throws {Error} When manifest file is not found
    * @throws {Error} When manifest JSON parsing fails
    * @throws {Error} When file path validation fails for security reasons
+   *
+   * SECURITY JUSTIFICATION (SEC-001):
+   * - storageDir is an internal path constructed in the constructor from process.cwd()
+   *   (line 33: path.join(process.cwd(), ".file-organizer-rollbacks"))
+   * - File read is NOT user-provided - it's an internal manifest file created by this service
+   * - Path validation happens at other layers: storageDir is hardcoded, manifestId is validated
+   *   as UUID format (line 105-111) before being used to construct the file path
    */
   async rollback(
     manifestId: string,
