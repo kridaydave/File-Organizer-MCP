@@ -13,24 +13,19 @@ import type { RollbackManifest, RollbackAction } from "../types.js";
 import { fileExists } from "../utils/file-utils.js";
 import { logger } from "../utils/logger.js";
 import { CONFIG } from "../config.js";
-
-function isValidPath(filePath: string): boolean {
-  if (!filePath || typeof filePath !== "string") return false;
-  // Prevent path traversal attacks
-  const resolved = path.resolve(filePath);
-  const cwd = process.cwd();
-  // Allow paths within cwd or temp directories
-  return resolved.startsWith(cwd) || resolved.startsWith(os.tmpdir());
-}
+import { PathValidatorService } from "./path-validator.service.js";
+import { manifestIntegrityService } from "./manifest-integrity.service.js";
 
 export class RollbackService {
   private storageDir: string;
+  private pathValidator: PathValidatorService;
 
   constructor() {
-    // Store manifests in .agent/rollbacks or similar if possible,
-    // but for this MCP, let's store in a hidden directory in the workspace or temp?
-    // Let's use `.file-organizer-rollbacks` in the CWD (User's workspace root usually).
     this.storageDir = path.join(process.cwd(), ".file-organizer-rollbacks");
+    this.pathValidator = new PathValidatorService(process.cwd(), [
+      process.cwd(),
+      os.tmpdir(),
+    ]);
   }
 
   private async ensureStorage(): Promise<void> {
@@ -49,12 +44,20 @@ export class RollbackService {
     await this.ensureStorage();
 
     const id = randomUUID();
+    const timestamp = Date.now();
+    const hash = manifestIntegrityService.computeHash(actions, timestamp);
+
     const manifest: RollbackManifest = {
       id,
-      timestamp: Date.now(),
+      timestamp,
       description,
       actions,
+      version: "1.0",
+      hash,
     };
+
+    const signature = manifestIntegrityService.computeSignature(manifest);
+    manifest.signature = signature;
 
     const filePath = path.join(this.storageDir, `${id}.json`);
     await fs.writeFile(filePath, JSON.stringify(manifest, null, 2));
@@ -141,6 +144,12 @@ export class RollbackService {
         `Failed to parse manifest ${manifestId}: ${(error as Error).message}`,
       );
     }
+
+    const verification = manifestIntegrityService.verifyManifest(manifest);
+    if (!verification.valid) {
+      throw new Error(`Manifest integrity check failed: ${verification.error}`);
+    }
+
     const results = { success: 0, failed: 0, errors: [] as string[] };
 
     // Reverse actions: Undo last action first
@@ -149,10 +158,16 @@ export class RollbackService {
     for (const action of reverseActions) {
       try {
         // Validate paths before operations
-        if (action.originalPath && !isValidPath(action.originalPath)) {
+        if (
+          action.originalPath &&
+          !this.pathValidator.isPathAllowed(action.originalPath)
+        ) {
           throw new Error(`Invalid original path: ${action.originalPath}`);
         }
-        if (action.currentPath && !isValidPath(action.currentPath)) {
+        if (
+          action.currentPath &&
+          !this.pathValidator.isPathAllowed(action.currentPath)
+        ) {
           throw new Error(`Invalid current path: ${action.currentPath}`);
         }
 

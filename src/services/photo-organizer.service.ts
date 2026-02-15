@@ -11,6 +11,7 @@ import * as piexif from "piexifjs";
 import { MetadataService } from "./metadata.service.js";
 import { PathValidatorService } from "./path-validator.service.js";
 import { logger } from "../utils/logger.js";
+import { isSubPath } from "../utils/file-utils.js";
 import { FileInfo } from "../types.js";
 
 // Photo file extensions supported
@@ -275,8 +276,8 @@ export class PhotoOrganizerService {
 
     // Check if source is within target or vice versa (would cause issues)
     if (
-      targetReal.startsWith(sourceReal + path.sep) ||
-      sourceReal.startsWith(targetReal + path.sep)
+      isSubPath(sourceReal, targetReal) ||
+      isSubPath(targetReal, sourceReal)
     ) {
       throw new Error(
         "Source and target directories cannot be nested within each other",

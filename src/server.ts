@@ -33,7 +33,10 @@ import {
   handleOrganizePhotos,
   handleOrganizeByContent,
   handleOrganizeSmart,
+  handleSystemOrganization,
   handleBatchReadFiles,
+  handleViewHistory,
+  handleSmartSuggest,
 } from "./tools/index.js";
 import { sanitizeErrorMessage } from "./utils/error-handler.js";
 import { logger } from "./utils/logger.js";
@@ -87,8 +90,10 @@ export function createServer(): Server {
  * Route tool calls to appropriate handlers
  */
 import { RateLimiter } from "./services/security/rate-limiter.service.js";
+import { HistoryLoggerService } from "./services/history-logger.service.js";
 
 const rateLimiter = new RateLimiter();
+export const historyLogger = new HistoryLoggerService();
 
 /**
  * Route tool calls to appropriate handlers
@@ -183,6 +188,9 @@ async function handleToolCall(
       case "file_organizer_unwatch_directory":
         response = await handleUnwatchDirectory(args);
         break;
+      case "file_organizer_view_history":
+        response = await handleViewHistory(args);
+        break;
       case "file_organizer_list_watches":
         response = await handleListWatches(args);
         break;
@@ -200,6 +208,12 @@ async function handleToolCall(
         break;
       case "file_organizer_organize_smart":
         response = await handleOrganizeSmart(args);
+        break;
+      case "file_organizer_smart_suggest":
+        response = await handleSmartSuggest(args);
+        break;
+      case "file_organizer_system_organize":
+        response = await handleSystemOrganization(args);
         break;
       case "file_organizer_batch_read_files":
         response = await handleBatchReadFiles(args);
@@ -230,5 +244,19 @@ async function handleToolCall(
   } finally {
     logEntry.durationMs = Date.now() - startTime;
     // Could enable structured JSON logging to file here if Config allowed it
+
+    // Log operation to history (non-blocking, graceful failure)
+    try {
+      await historyLogger.log({
+        operation: name,
+        source: "manual",
+        status: logEntry.error ? "error" : "success",
+        durationMs: logEntry.durationMs,
+        details: logEntry.error ? undefined : `Completed ${name}`,
+        error: logEntry.error ? { message: logEntry.error } : undefined,
+      });
+    } catch {
+      // History logging should never break operations
+    }
   }
 }

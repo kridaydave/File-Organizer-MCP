@@ -219,6 +219,9 @@ export interface RollbackManifest {
   timestamp: number;
   description: string;
   actions: RollbackAction[];
+  version: "1.0";
+  hash?: string;
+  signature?: string;
 }
 
 // ==================== Tool Types ====================
@@ -480,4 +483,113 @@ export interface PhotoOrganizationResult {
   strippedGPSFiles: number;
   errors: Array<{ file: string; error: string }>;
   structure: Record<string, number>;
+}
+
+// ==================== History Logging Types ====================
+
+export interface HistoryEntry {
+  id: string;
+  timestamp: string;
+  operation: string;
+  source: "manual" | "scheduled";
+  status: "success" | "error" | "partial";
+  durationMs: number;
+  filesProcessed?: number;
+  filesSkipped?: number;
+  details?: string;
+  error?: {
+    message: string;
+    code?: string;
+  };
+}
+
+export interface HistoryQuery {
+  limit?: number;
+  since?: string;
+  until?: string;
+  operation?: string;
+  status?: "success" | "error" | "partial";
+  source?: "manual" | "scheduled";
+}
+
+export interface HistoryResult {
+  entries: HistoryEntry[];
+  total: number;
+  hasMore: boolean;
+}
+
+// ==================== System Organize Types ====================
+
+export interface SystemDirs {
+  music: string;
+  documents: string;
+  pictures: string;
+  videos: string;
+  downloads: string;
+  desktop: string;
+  temp: string;
+}
+
+export interface SystemOrganizeOptions {
+  sourceDir: string;
+  useSystemDirs?: boolean;
+  createSubfolders?: boolean;
+  fallbackToLocal?: boolean;
+  localFallbackPrefix?: string;
+  conflictStrategy?: "skip" | "rename" | "overwrite";
+  dryRun?: boolean;
+  copyInsteadOfMove?: boolean;
+}
+
+export interface SystemOrganizeResult {
+  movedToSystem: number;
+  organizedLocally: number;
+  failed: number;
+  details: Array<{
+    file: string;
+    destination: "system" | "local";
+    targetPath: string;
+    category: string;
+  }>;
+  undoManifest?: {
+    manifestId: string;
+    operations: Array<{ from: string; to: string; timestamp: string }>;
+  };
+}
+
+export type PrivacyMode = "full" | "redacted" | "none";
+
+// ==================== Smart Suggest Types ====================
+
+export interface DirectoryHealthReport {
+  score: number;
+  grade: "A" | "B" | "C" | "D" | "F";
+  metrics: {
+    fileTypeEntropy: { score: number; details: string };
+    namingConsistency: { score: number; details: string };
+    depthBalance: { score: number; details: string };
+    duplicateRatio: { score: number; details: string };
+    misplacedFiles: { score: number; details: string };
+  };
+  suggestions: Array<{
+    priority: "high" | "medium" | "low";
+    message: string;
+    suggestedTool?: string;
+    suggestedArgs?: Record<string, unknown>;
+  }>;
+  quickWins?: Array<{
+    action: string;
+    estimatedScoreImprovement: number;
+    tool: string;
+    args: Record<string, unknown>;
+  }>;
+}
+
+export interface SmartSuggestOptions {
+  includeSubdirs?: boolean;
+  includeDuplicates?: boolean;
+  maxFiles?: number;
+  timeoutSeconds?: number;
+  sampleRate?: number;
+  useCache?: boolean;
 }

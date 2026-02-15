@@ -7,9 +7,11 @@ import os from "os";
 import path from "path";
 import fs from "fs";
 import { logger } from "./utils/logger.js";
+import { isSubPath } from "./utils/file-utils.js";
+import type { PrivacyMode } from "./types.js";
 
 export const CONFIG = {
-  VERSION: "3.3.4",
+  VERSION: "3.4.0",
 
   // Security Settings
   security: {
@@ -56,6 +58,13 @@ export interface UserConfig {
   }>;
   /** Watch list for smart scheduling */
   watchList?: WatchConfig[];
+  /** History logging settings */
+  historyLogging?: {
+    enabled?: boolean;
+    maxFileSizeMB?: number;
+    keepRotatedFiles?: number;
+    privacyMode?: PrivacyMode;
+  };
 }
 
 /**
@@ -320,7 +329,7 @@ function loadCustomAllowedDirs(): string[] {
           const home = os.homedir();
 
           // Block path traversal outside of home directory
-          if (!resolvedDir.startsWith(home)) {
+          if (!isSubPath(home, resolvedDir)) {
             logger.error(
               `Warning: Custom directory blocked (outside home): ${dir}`,
             );
@@ -375,6 +384,42 @@ export function getUserConfigPath(): string {
     return path.join(home, ".config", "file-organizer-mcp", "config.json");
   }
 }
+
+/**
+ * Get the history directory path
+ */
+export function getHistoryDirectory(): string {
+  const platform = process.platform;
+  const home = os.homedir();
+
+  let basePath: string;
+  if (platform === "win32") {
+    basePath = process.env.APPDATA || path.join(home, "AppData", "Roaming");
+  } else if (platform === "darwin") {
+    basePath = path.join(home, "Library", "Application Support");
+  } else {
+    basePath = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
+  }
+
+  return path.join(basePath, "file-organizer-mcp");
+}
+
+/**
+ * Get the history file path
+ */
+export function getHistoryFilePath(): string {
+  return path.join(getHistoryDirectory(), "operations.jsonl");
+}
+
+export const HISTORY_LOGGING_CONFIG = {
+  DEFAULT_MAX_FILE_SIZE_MB: 10,
+  DEFAULT_KEEP_ROTATED_FILES: 5,
+  DEFAULT_PRIVACY_MODE: "full" as PrivacyMode,
+  MAX_ENTRIES_PER_FLUSH: 10,
+  FLUSH_TIMEOUT_MS: 1000,
+  LOCK_FILE_TIMEOUT_MS: 5000,
+  MAX_RETRY_ATTEMPTS: 3,
+};
 
 /**
  * Get always-blocked path patterns

@@ -87,6 +87,18 @@ export {
 } from "./smart-organization.js";
 export type { OrganizeSmartInput } from "./smart-organization.js";
 
+export {
+  smartSuggestToolDefinition,
+  handleSmartSuggest,
+  SmartSuggestInputSchema,
+} from "./smart-suggest.js";
+export type { SmartSuggestInput } from "./smart-suggest.js";
+
+export {
+  systemOrganizationToolDefinition,
+  handleSystemOrganization,
+} from "./system-organization.js";
+
 // ==================== Batch File Reader ====================
 
 export {
@@ -123,6 +135,8 @@ import { organizeMusicToolDefinition } from "./music-organization.js";
 import { organizePhotosToolDefinition } from "./photo-organization.js";
 import { organizeByContentToolDefinition } from "./content-organization.js";
 import { organizeSmartToolDefinition } from "./smart-organization.js";
+import { smartSuggestToolDefinition } from "./smart-suggest.js";
+import { systemOrganizationToolDefinition } from "./system-organization.js";
 import { batchReadFilesToolDefinition } from "./batch-file-reader.js";
 
 export {
@@ -191,7 +205,11 @@ export {
 } from "./file-reader.tool.js";
 export type { ReadFileInput } from "./file-reader.tool.js";
 
-// ==================== Tool Registry ====================
+export {
+  viewHistoryToolDefinition,
+  handleViewHistory,
+} from "./view-history.js";
+export type { ViewHistoryInput } from "./view-history.js";
 
 import {
   watchDirectoryToolDefinition,
@@ -199,6 +217,7 @@ import {
   listWatchesToolDefinition,
 } from "./watch.tool.js";
 import { fileReaderToolDefinition } from "./file-reader.tool.js";
+import { viewHistoryToolDefinition } from "./view-history.js";
 
 /**
  * All available tools for MCP registration
@@ -217,6 +236,8 @@ export const TOOLS: ToolDefinition[] = [
   organizePhotosToolDefinition,
   organizeByContentToolDefinition,
   organizeSmartToolDefinition,
+  smartSuggestToolDefinition,
+  systemOrganizationToolDefinition,
   batchReadFilesToolDefinition,
   getCategoriesToolDefinition,
   setCustomRulesToolDefinition,
@@ -229,4 +250,5 @@ export const TOOLS: ToolDefinition[] = [
   unwatchDirectoryToolDefinition,
   listWatchesToolDefinition,
   fileReaderToolDefinition,
+  viewHistoryToolDefinition,
 ];

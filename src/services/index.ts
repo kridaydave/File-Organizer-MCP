@@ -3,6 +3,7 @@
  * Services Module Exports
  */
 
+export * from "./manifest-integrity.service.js";
 export * from "./path-validator.service.js";
 export * from "./file-scanner.service.js";
 export * from "./hash-calculator.service.js";
@@ -12,6 +13,7 @@ export * from "./duplicate-finder.service.js";
 export * from "./renaming.service.js";
 export * from "./scheduler-state.service.js";
 export * from "./metadata-cache.service.js";
+export * from "./system-organize.service.js";
 
 // Content Analysis Services (Phase 2.1)
 export * from "./content-analyzer.service.js";

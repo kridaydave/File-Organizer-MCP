@@ -11,6 +11,7 @@
 import path from "path";
 import fs from "fs";
 import { SECURITY_LIMITS } from "./security-constants.js";
+import { isSubPath } from "../utils/file-utils.js";
 
 export interface ArchiveValidationResult {
   valid: boolean;
@@ -124,11 +125,11 @@ export function validateEntryPath(
   // Ensure the resolved path is still within the target directory
   const normalizedTarget = path.resolve(targetDirectory);
 
-  if (!resolvedPath.startsWith(normalizedTarget)) {
+  if (!isSubPath(normalizedTarget, resolvedPath)) {
     return {
       valid: false,
       entryName,
-      error: `Zip-slip attempt: extracted path ${resolvedPath} escapes target directory ${normalizedTarget}`,
+      error: "Zip-slip attempt: extracted path escapes target directory",
     };
   }
 

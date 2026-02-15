@@ -1,0 +1,548 @@
+# System Organize, History Logging & Smart Suggest — v3.4.0
+
+Three features for File-Organizer-MCP: persistent history logging, OS-aware system-directory organization, and directory health scoring.
+
+> [!NOTE]
+> **Revised plan** incorporating all Priority 1 (critical) and Priority 2 (should fix) items from review.
+
+---
+
+## Feature 1: History Logging Service
+
+All tool calls (manual + scheduled) appended to `history.md` at `%APPDATA%/file-organizer-mcp/history.md`.
+
+### Architecture
+
+```mermaid
+flowchart TD
+    A[MCP Tool Call] --> B["server.ts handleToolCall (finally block)"]
+    C[Auto-Organize Scheduler] --> D[auto-organize.service.ts runOrganization]
+    B --> E["HistoryLoggerService.log()"]
+    D --> E
+    E --> F[Write Queue — serialized, batched]
+    F --> G[Append to history.md]
+    G --> H{File > maxFileSizeMB?}
+    H -->|Yes| I[Rotate: rename to history-DATE.md]
+    H -->|No| J[Done]
+    I --> K[Clean old archives > keepRotatedFiles]
+```
+
+### Components
+
+---
+
+#### [NEW] [history-logger.service.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/history-logger.service.ts)
+
+**Core methods:**
+- **[log(entry: HistoryEntry)](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/utils/logger.ts#35-50)** — Enqueues entry to write queue (serialized via promise chain, batched flush after 1s idle or 10 entries)
+- **`getHistory(options?)`** — Reads entries with filtering (`limit`, `since`, `operation`, `status`, `source`). For small limits (≤100), reads from end of file only
+- **`getHistoryFilePath()`** — Derives from [getUserConfigPath()](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/config.ts#352-378)
+
+**Concurrency protection** (fixes Issue 1.2):
+```typescript
+private writeQueue: Promise<void> = Promise.resolve();
+private pendingEntries: HistoryEntry[] = [];
+private flushTimer: NodeJS.Timeout | null = null;
+
+async log(entry: HistoryEntry): Promise<void> {
+  if (!this.config.historyLogging?.enabled) return;
+  this.pendingEntries.push(entry);
+  if (this.pendingEntries.length >= 10) {
+    await this.flush();
+  } else {
+    this.scheduleFlush(); // 1s debounce
+  }
+}
+
+private async flush(): Promise<void> {
+  const entries = this.pendingEntries.splice(0);
+  if (entries.length === 0) return;
+  // Chain writes to prevent interleaving
+  this.writeQueue = this.writeQueue
+    .then(() => this._writeBatch(entries))
+    .catch(err => logger.error('History write failed', err));
+  return this.writeQueue;
+}
+```
+
+**File rotation** (fixes Issue 1.1):
+```typescript
+private async _writeBatch(entries: HistoryEntry[]): Promise<void> {
+  const historyPath = this.getHistoryFilePath();
+  const stats = await fs.stat(historyPath).catch(() => null);
+  if (stats && stats.size > this.maxFileSizeMB * 1024 * 1024) {
+    const archivePath = historyPath.replace('.md', `-${isoDate()}.md`);
+    await fs.rename(historyPath, archivePath);
+    await this.cleanOldArchives(); // keep only N rotated files
+  }
+  const formatted = entries.map(e => this.formatEntry(e)).join('\n');
+  await fs.appendFile(historyPath, formatted);
+}
+```
+
+**Entry format in history.md:**
+```markdown
+---
+
+## 📋 2026-02-14 19:46:45
+
+| Field | Value |
+|-------|-------|
+| **Operation** | `file_organizer_organize_files` |
+| **Source** | `scheduled` |
+| **Status** | ✅ Success |
+| **Duration** | 342ms |
+| **Files Processed** | 12 |
+| **Files Skipped** | 2 |
+| **Details** | Organized 12 files in C:\Users\NewAdmin\Downloads |
+```
+
+---
+
+#### [MODIFY] [server.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/server.ts)
+
+Replace the stub comment at line ~232 (`// Could enable structured JSON logging...`) with actual `HistoryLoggerService.log()` call in the `finally` block. Add `handleViewHistory` to the switch dispatcher + import.
+
+---
+
+#### [MODIFY] [auto-organize.service.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/auto-organize.service.ts)
+
+In [runOrganization()](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/auto-organize.service.ts#220-327), after organization completes, call `HistoryLoggerService.log()` with `source: "scheduled"`.
+
+---
+
+#### [MODIFY] [config.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/config.ts)
+
+Add to [UserConfig](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/config.ts#34-60):
+```typescript
+historyLogging?: {
+  enabled: boolean;               // default: true
+  maxFileSizeMB?: number;         // default: 10 (auto-rotate)
+  rotationStrategy?: "rotate";    // rotate = rename old, start fresh
+  keepRotatedFiles?: number;      // default: 3
+  privacyMode?: "full" | "anonymized" | "aggregate"; // default: "full"
+};
+```
+
+**Privacy modes** (fixes Security Issue 2):
+- `"full"` — logs filenames and paths
+- `"anonymized"` — logs file counts and directories only, no filenames
+- `"aggregate"` — logs only operation name, status, duration
+
+---
+
+#### [MODIFY] [types.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/types.ts)
+
+```typescript
+interface HistoryEntry {
+  timestamp: string;
+  operation: string;
+  source: "manual" | "scheduled";
+  status: "success" | "error" | "partial";  // "partial" for mixed results
+  durationMs: number;
+  filesProcessed?: number;
+  filesSkipped?: number;
+  details?: string;
+  error?: {
+    message: string;
+    code?: string;
+  };
+}
+```
+
+---
+
+#### [NEW] [view-history.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/tools/view-history.ts)
+
+MCP tool `file_organizer_view_history` (read-only) with schema:
+```typescript
+{
+  limit?: number;                          // default: 20
+  since?: string;                          // ISO date filter
+  operation?: string;                      // filter by tool name
+  status?: "success" | "error" | "partial";
+  source?: "manual" | "scheduled";
+}
+```
+
+---
+
+## Feature 2: System Organize
+
+Moves files to OS-standard directories (Music, Documents, Pictures, Videos) based on type, with graceful fallback.
+
+### Architecture
+
+```mermaid
+flowchart TD
+    A["system_organize(source_dir)"] --> V[Security: validate source is Downloads/Desktop/Temp]
+    V --> S[Security: scan for symlinks — reject if found]
+    S --> B[Scan all files]
+    B --> C["Classify via CategorizerService"]
+    C --> D{File Type?}
+    D -->|Music| E["~/Music writable?"]
+    D -->|Document| F["~/Documents writable?"]
+    D -->|Image| G["~/Pictures writable?"]
+    D -->|Video| H["~/Videos writable?"]
+    D -->|Other| J["Fallback: source/Organized/{category}/"]
+    E -->|Yes| K["~/Music/Organized/{artist}/"]
+    E -->|No| J
+    F -->|Yes| L["~/Documents/Organized/{topic}/"]
+    F -->|No| J
+    G -->|Yes| M["~/Pictures/Organized/{date}/"]
+    G -->|No| J
+    H -->|Yes| N["~/Videos/Organized/"]
+    H -->|No| J
+    K & L & M & N & J --> P[Log to History + Create Undo Manifest]
+    P --> Q[Return stats]
+```
+
+### Components
+
+---
+
+#### [NEW] [system-organize.service.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/system-organize.service.ts)
+
+**Core methods:**
+
+- **`getSystemDirectories()`** — Cross-platform via `os.homedir()` + `os.platform()` (macOS uses `Movies` not `Videos`)
+- **`canWriteToDirectory(dir)`** — Enhanced permission check (fixes Issue 2.2):
+  ```typescript
+  async canWriteToDirectory(dir: string): Promise<{
+    writable: boolean;
+    reason?: string;
+    availableSpace?: number;
+  }> {
+    // 1. Check dir exists and is actually a directory
+    // 2. Create+delete temp file (write test)
+    // 3. Create+delete temp subdirectory (mkdir test)
+    // 4. Check available disk space (warn if <100MB)
+  }
+  ```
+- **`validateSystemOperation(sourceDir, systemDirs)`** — Security gate (fixes Issue 2.1):
+  ```typescript
+  // Only allow source from Downloads, Desktop, or Temp
+  const allowedSources = [systemDirs.downloads, Desktop, Temp];
+  if (!allowedSources.some(a => sourceDir.startsWith(a))) {
+    throw new Error('system_organize only allowed from Downloads/Desktop/Temp');
+  }
+  // Scan for symlinks — reject all
+  const symlinks = await this.detectSymlinks(files); // uses fs.lstat
+  if (symlinks.length > 0) throw new Error(`Found ${symlinks.length} symlinks`);
+  ```
+- **`determineSystemDestination(file, systemDirs)`** — Maps file type to target. Uses [CategorizerService](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/categorizer.service.ts#27-1034) for type, reuses `MusicOrganizerService`/`PhotoOrganizerService` for smart subfolders
+- **`systemOrganize(options)`** — Main orchestrator with progress reporting and conflict resolution
+
+**Security approach** (fixes Issue 2.1 — no temporary PathValidator modification):
+```typescript
+// Direct validation instead of modifying PathValidatorService
+private async safeMove(file: string, targetSystemDir: string): Promise<void> {
+  const systemDirs = this.getSystemDirectories();
+  const isValidTarget = Object.values(systemDirs).some(
+    dir => targetSystemDir.startsWith(dir)
+  );
+  if (!isValidTarget) throw new Error(`Invalid system target: ${targetSystemDir}`);
+  // Direct fs.rename/copyFile — no PathValidator needed for known-safe system dirs
+}
+```
+
+**Fallback behavior** (fixes Issue 2.3 — clear structure under `Organized/`):
+```typescript
+// When system dir is non-writable:
+// source/Organized/Music/song.mp3
+// source/Organized/Documents/report.pdf
+// NOT source/Music/song.mp3 (confusing)
+const fallbackPath = path.join(sourceDir, 'Organized', category, filename);
+```
+
+**Conflict resolution** (fixes Issue 2.4):
+- Reuses existing [ConflictStrategy](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/organizer.service.ts#24-29) from [OrganizerService](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/organizer.service.ts#52-579) (`skip` | `rename` | `overwrite`)
+
+**Progress reporting** (P2 improvement):
+```typescript
+interface OrganizeProgress {
+  current: number;
+  total: number;
+  currentFile: string;
+  phase: "validating" | "scanning" | "classifying" | "moving";
+}
+```
+
+**Batch moves** (P2 — groups files by destination for efficiency):
+```typescript
+// Group files by target dir, then move batch at once
+const moveGroups = new Map<string, string[]>();
+for (const file of files) { /* group */ }
+for (const [dest, batch] of moveGroups) { await this.batchMove(batch, dest); }
+```
+
+---
+
+#### [NEW] [system-organization.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/tools/system-organization.ts)
+
+MCP tool `file_organizer_system_organize`:
+```typescript
+{
+  source_dir: string;                    // Required (must be Downloads/Desktop/Temp)
+  use_system_dirs?: boolean;             // default: true
+  create_subfolders?: boolean;           // default: true (Artist/, Date/ etc.)
+  fallback_to_local?: boolean;           // default: true
+  local_fallback_prefix?: string;        // default: "Organized"
+  conflict_strategy?: "skip" | "rename" | "overwrite";  // default: "rename"
+  dry_run?: boolean;                     // default: true
+  copy_instead_of_move?: boolean;        // default: false
+}
+```
+
+---
+
+#### [MODIFY] [tools/index.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/tools/index.ts) + [server.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/server.ts)
+
+Register `systemOrganizeToolDefinition`, `handleSystemOrganize`.
+
+---
+
+#### [MODIFY] [types.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/types.ts)
+
+```typescript
+interface SystemDirs {
+  music: string;
+  documents: string;
+  pictures: string;
+  videos: string;
+  downloads: string;
+}
+
+interface SystemOrganizeResult {
+  movedToSystem: number;
+  organizedLocally: number;
+  failed: number;
+  details: Array<{
+    file: string;
+    destination: "system" | "local";
+    targetPath: string;
+    category: string;
+  }>;
+  undoManifest?: {
+    manifestId: string;
+    operations: Array<{ from: string; to: string; timestamp: string }>;
+  };
+}
+```
+
+---
+
+## Feature 3: Smart Suggest (Directory Health Score)
+
+Scans a directory, computes a **health score 0–100** from 5 weighted metrics, returns actionable suggestions.
+
+### Scoring Algorithm
+
+| Metric | Weight | Formula |
+|--------|--------|---------|
+| **File Type Entropy** | 25% | Shannon entropy: `H = -Σ(p × log₂(p))`, normalized to 0–1 against `log₂(uniqueTypes)`, inverted so uniform = 100 |
+| **Naming Consistency** | 20% | Per-directory: % of files matching dominant pattern (camelCase/kebab-case/snake_case/PascalCase). Averaged across dirs. 80%+ consistency = good |
+| **Depth Balance** | 15% | Optimal depth 2–4 levels. Penalize >6 or all-in-root. Score = 100 - (deviation × 15) |
+| **Duplicate Ratio** | 20% | `score = 100 × (1 - duplicateCount/totalFiles)`. Uses existing `HashCalculatorService` |
+| **Misplaced Files** | 20% | `score = 100 × (1 - misplacedCount/totalFiles)`. Project dirs auto-score 100 (mixed types expected). Thematic dirs get 85 baseline |
+
+**Grade mapping:** A=90+, B=75+, C=50+, D=25+, F=<25
+
+### Smart Context Detection (fixes Issue 3.4 — false positives)
+
+```typescript
+// Before scoring misplaced files:
+const projectMarkers = ['package.json', '.git', 'Makefile', 'requirements.txt', ...];
+if (hasAnyMarker(directory, projectMarkers)) {
+  return { score: 100, details: 'Project directory — mixed types expected' };
+}
+const thematicKeywords = ['project', 'work', 'personal', 'temp', 'archive', ...];
+if (dirNameContains(thematicKeywords)) {
+  return { score: 85, details: 'Thematic directory — some mixing expected' };
+}
+```
+
+### Architecture
+
+```mermaid
+flowchart TD
+    A["smart_suggest(dir)"] --> CC{Cached + fresh?}
+    CC -->|Yes| CR[Return cached result]
+    CC -->|No| B["Scan with limits (max_files, timeout)"]
+    B --> C[Compute 5 metrics in parallel]
+    C --> D["File Type Entropy (Shannon)"]
+    C --> E["Naming Consistency (per-dir pattern detection)"]
+    C --> F["Depth Balance (optimal 2-4)"]
+    C --> G["Duplicate Ratio (HashCalculatorService)"]
+    C --> H["Misplaced Files (with project/thematic detection)"]
+    D & E & F & G & H --> I["Weighted Score + Grade"]
+    I --> J[Generate Suggestions + Quick Wins]
+    J --> K["Cache result (TTL 30min)"]
+    K --> L["Return { score, grade, metrics, suggestions, quickWins }"]
+```
+
+### Components
+
+---
+
+#### [NEW] [smart-suggest.service.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/smart-suggest.service.ts)
+
+**Core method:**
+```typescript
+async analyzeHealth(directory: string, options: SmartSuggestOptions): Promise<DirectoryHealthReport>
+```
+
+**Performance protection** (fixes Issue 3.1):
+- `max_files` (default 10000) — abort if exceeded
+- `timeout_seconds` (default 60) — `Promise.race` against timeout
+- `sample_rate` (default 1.0) — for huge dirs, sample 10% of files
+- In-memory cache with configurable TTL (default 30min)
+- Duplicate detection optional (`include_duplicates: false` skips the slowest metric)
+
+**Naming consistency** (fixes Issue 3.3):
+- Groups files by parent directory
+- Detects dominant naming pattern per directory (`camelCase`, `kebab-case`, `snake_case`, `PascalCase`, `lowercase`)
+- 80%+ following one pattern = consistent. Avoids false-flagging multi-convention projects
+
+**Quick Wins** (P3 improvement):
+```typescript
+quickWins: Array<{
+  action: string;
+  estimatedScoreImprovement: number;
+  tool: string;
+  args: Record<string, unknown>;
+}>
+```
+
+---
+
+#### [NEW] [smart-suggest.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/tools/smart-suggest.ts)
+
+MCP tool `file_organizer_smart_suggest`:
+```typescript
+{
+  directory: string;                // Required
+  include_subdirs?: boolean;        // default: true
+  include_duplicates?: boolean;     // default: true (slower)
+  max_files?: number;               // default: 10000
+  timeout_seconds?: number;         // default: 60
+  sample_rate?: number;             // default: 1.0
+  use_cache?: boolean;              // default: true
+}
+```
+
+---
+
+#### [MODIFY] [types.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/types.ts)
+
+```typescript
+interface DirectoryHealthReport {
+  score: number;
+  grade: "A" | "B" | "C" | "D" | "F";
+  metrics: {
+    fileTypeEntropy: { score: number; details: string };
+    namingConsistency: { score: number; details: string };
+    depthBalance: { score: number; details: string };
+    duplicateRatio: { score: number; details: string };
+    misplacedFiles: { score: number; details: string };
+  };
+  suggestions: Array<{
+    priority: "high" | "medium" | "low";
+    message: string;
+    suggestedTool?: string;
+    suggestedArgs?: Record<string, unknown>;
+  }>;
+  quickWins?: Array<{
+    action: string;
+    estimatedScoreImprovement: number;
+    tool: string;
+    args: Record<string, unknown>;
+  }>;
+}
+```
+
+#### [MODIFY] [config.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/config.ts)
+
+```typescript
+smartSuggest?: {
+  weights?: {
+    fileTypeEntropy?: number;    // default: 0.25
+    namingConsistency?: number;  // default: 0.20
+    depthBalance?: number;      // default: 0.15
+    duplicateRatio?: number;    // default: 0.20
+    misplacedFiles?: number;    // default: 0.20
+  };
+};
+```
+
+#### [MODIFY] [tools/index.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/tools/index.ts) + [server.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/server.ts)
+
+Register `smartSuggestToolDefinition`, `handleSmartSuggest`.
+
+---
+
+## Summary of All File Changes
+
+| Action | File | Feature |
+|--------|------|---------|
+| **NEW** | `src/services/history-logger.service.ts` | History |
+| **NEW** | `src/tools/view-history.ts` | History |
+| **NEW** | `src/services/system-organize.service.ts` | System Organize |
+| **NEW** | `src/tools/system-organization.ts` | System Organize |
+| **NEW** | `src/services/smart-suggest.service.ts` | Smart Suggest |
+| **NEW** | `src/tools/smart-suggest.ts` | Smart Suggest |
+| MODIFY | [src/server.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/server.ts) | All 3 (dispatch + history logging) |
+| MODIFY | [src/tools/index.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/tools/index.ts) | All 3 (registration) |
+| MODIFY | [src/config.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/config.ts) | History + Smart Suggest (config options) |
+| MODIFY | [src/types.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/types.ts) | All 3 (new types) |
+| MODIFY | [src/services/auto-organize.service.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/auto-organize.service.ts) | History (scheduled logging) |
+| **NEW** | `tests/unit/services/history-logger.test.ts` | Tests |
+| **NEW** | `tests/unit/services/system-organize.test.ts` | Tests |
+| **NEW** | `tests/unit/services/smart-suggest.test.ts` | Tests |
+
+---
+
+## Verification Plan
+
+### Automated Tests (`npm test`)
+
+**`history-logger.test.ts`:**
+- Append + read back entries in correct markdown format
+- Auto-creation of `history.md` on first write
+- File rotation when exceeding `maxFileSizeMB`
+- Archive cleanup (`keepRotatedFiles`)
+- Concurrent writes via write queue don't interleave
+- Recovery from corrupted `history.md`
+- Unicode filenames in entries
+- Privacy mode filtering (`anonymized` / `aggregate`)
+
+**`system-organize.test.ts`:**
+- `getSystemDirectories()` per platform
+- `canWriteToDirectory()` — writable, non-writable, low disk space
+- `determineSystemDestination()` — `.mp3`→Music, `.pdf`→Documents, etc.
+- Fallback to `source/Organized/{category}/` when system dir non-writable
+- Security: rejects symlinks in source
+- Security: rejects sources outside Downloads/Desktop/Temp
+- Dry-run returns plan without moving
+- Conflict resolution (`skip`/`rename`/`overwrite`)
+- Very long paths (Windows 260 char limit)
+- Read-only / locked files in source
+
+**`smart-suggest.test.ts`:**
+- Shannon entropy: single type = 100, 10 equal types ≈ 67
+- Known organized directory scores 90+
+- Messy mixed directory scores <40
+- Project directory auto-scores 100 on misplaced metric
+- Suggestion generation per low-scoring metric
+- Grade mapping (A/B/C/D/F)
+- Timeout aborts after configured seconds
+- Cache returns fresh result, invalidates after TTL
+- Empty directory edge case
+- Single file edge case
+- Performance: 10,000 files completes within timeout
+
+### Build Check
+```bash
+npm run build
+npm test
+```

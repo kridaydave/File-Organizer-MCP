@@ -11,6 +11,7 @@ import path from "path";
 import { AudioMetadataService } from "./audio-metadata.service.js";
 import { PathValidatorService } from "./path-validator.service.js";
 import { logger } from "../utils/logger.js";
+import { isSubPath } from "../utils/file-utils.js";
 
 /**
  * Audio metadata structure for music organization
@@ -275,10 +276,10 @@ export class MusicOrganizerService {
     }
 
     // Ensure source is not a parent of target or vice versa
-    if (this.isPathInside(validatedSource, validatedTarget)) {
+    if (isSubPath(validatedSource, validatedTarget)) {
       throw new Error("Target directory cannot be inside source directory");
     }
-    if (this.isPathInside(validatedTarget, validatedSource)) {
+    if (isSubPath(validatedTarget, validatedSource)) {
       throw new Error("Source directory cannot be inside target directory");
     }
 
@@ -302,18 +303,6 @@ export class MusicOrganizerService {
     if (!validPatterns.includes(config.filenamePattern)) {
       throw new Error(`Invalid filename pattern: ${config.filenamePattern}`);
     }
-  }
-
-  /**
-   * Check if a path is inside another path
-   */
-  private isPathInside(parent: string, child: string): boolean {
-    const relative = path.relative(parent, child);
-    return (
-      Boolean(relative) &&
-      !relative.startsWith("..") &&
-      !path.isAbsolute(relative)
-    );
   }
 
   /**
