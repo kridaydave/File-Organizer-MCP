@@ -5,6 +5,7 @@ import { parseFile } from "music-metadata";
 import * as ExifParser from "exif-parser"; // Handle older CJS import style if needed, or stick to import if it supports it. exif-parser is usually CJS.
 import { CategoryName } from "../types.js";
 import { PathValidatorService } from "./path-validator.service.js";
+import { isWindowsReservedName } from "../utils/file-utils.js";
 import { logger } from "../utils/logger.js";
 import { AudioMetadataService } from "./audio-metadata.service.js";
 import { ImageMetadataService } from "./image-metadata.service.js";
@@ -219,8 +220,8 @@ export class MetadataService {
     // Replace illegal chars
     const sanitized = trimmed.replace(/[\\/:*?"<>|\x00-\x1F]/g, "_");
 
-    // Prevent strictly reserved names if it's the whole segment (though unlikely for Artist names)
-    if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(sanitized)) {
+    // Prevent strictly reserved names if it's the whole segment
+    if (isWindowsReservedName(sanitized)) {
       return sanitized + "_";
     }
 

@@ -13,13 +13,15 @@ import type {
   OrganizationPlan,
   RollbackAction,
 } from "../types.js";
-import { CATEGORIES } from "../constants.js";
-import { fileExists } from "../utils/file-utils.js";
+import {
+  fileExists,
+  isWindowsReservedName,
+  performAtomicMove,
+} from "../utils/file-utils.js";
 import { logger } from "../utils/logger.js";
 import { isErrnoException } from "../utils/error-handler.js";
 import { CategorizerService } from "./categorizer.service.js";
 import { RollbackService } from "./rollback.service.js";
-import { PathValidatorService } from "./path-validator.service.js";
 import { MetadataService } from "./metadata.service.js";
 
 export type ConflictStrategy =
@@ -46,6 +48,12 @@ export interface OrganizeResult {
 
 // BUG-003 FIX: Maximum consecutive errors before aborting to prevent endless processing
 const MAX_CONSECUTIVE_ERRORS = 10;
+
+interface BatchMoveResult {
+  action: OrganizeAction;
+  rollbackAction: RollbackAction;
+  skipped?: boolean;
+}
 
 /**
  * Organizer Service - file organization logic
@@ -247,7 +255,6 @@ export class OrganizerService {
 
     // 2. Prepare Backup Directory for Overwrites
     const backupDir = path.join(process.cwd(), ".file-organizer-backups");
-    let hasOverwrites = false;
 
     // Check if any move needs overwrite backup
     if (
@@ -258,7 +265,6 @@ export class OrganizerService {
       )
     ) {
       await fs.mkdir(backupDir, { recursive: true });
-      hasOverwrites = true;
     }
 
     for (const move of plan.moves) {
@@ -266,337 +272,34 @@ export class OrganizerService {
         continue;
       }
 
-      // Check for Windows reserved names to avoid security errors on non-Windows platforms (or hard errors on Windows)
-      const windowsReservedRegex =
-        /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
-
-      // Check source filename (with extension - "CON.txt" is also invalid)
-      const sourceBase = path.basename(move.source);
-      if (windowsReservedRegex.test(sourceBase)) {
+      if (isWindowsReservedName(move.source)) {
         const msg = `Skipped reserved Windows filename: ${move.source}`;
         logger.warn(msg);
         continue;
       }
 
-      // Check destination filename
-      const destBase = path.basename(move.destination);
-      if (windowsReservedRegex.test(destBase)) {
+      if (isWindowsReservedName(move.destination)) {
         const msg = `Skipped reserved Windows filename in destination: ${move.destination}`;
         logger.warn(msg);
         continue;
       }
 
       try {
-        await fs.mkdir(path.dirname(move.destination), { recursive: true });
+        const result = await this.executeBatchMove(move, backupDir, errors);
 
-        const targetPath = move.destination;
-        const sourcePath = move.source;
-
-        let finalDest = targetPath;
-        let overwrittenBackupPath: string | undefined;
-        let skipped = false;
-
-        // --- Handle Overwrites (overwrite, overwrite_if_newer) ---
-        if (
-          move.conflictResolution === "overwrite" ||
-          move.conflictResolution === "overwrite_if_newer"
-        ) {
-          // TOCTOU-FIX: Handle overwrite_if_newer at execution time
-          // We check timestamps at execution (not planning) to get accurate info
-          if (move.conflictResolution === "overwrite_if_newer") {
-            try {
-              const destStat = await fs.stat(targetPath);
-              const srcStat = await fs.stat(sourcePath);
-              if (srcStat.mtime < destStat.mtime) {
-                // Source is not newer - skip this file
-                const msg = `Skipped ${sourcePath}: destination is newer`;
-                logger.info(msg);
-                errors.push(msg);
-                continue;
-              }
-            } catch (statErr: unknown) {
-              if (isErrnoException(statErr) && statErr.code === "ENOENT") {
-                // Destination doesn't exist - proceed with move (no overwrite needed)
-                logger.debug(
-                  `Destination ${targetPath} does not exist, proceeding with move`,
-                );
-              } else {
-                throw statErr;
-              }
-            }
-          }
-
-          // Check if destination exists and needs backup
-          // TOCTOU-FIX: Don't pre-check - attempt operation and handle errors
-          // This avoids race window between check and rename
-          try {
-            // First try to rename (will fail if destination exists)
-            await fs.rename(sourcePath, targetPath);
-            // Success - no overwrite needed
-          } catch (renameErr: unknown) {
-            if (isErrnoException(renameErr) && renameErr.code === "EEXIST") {
-              // Destination exists - need to handle overwrite
-              const backupName = `${Date.now()}_overwrite_${path.basename(targetPath)}`;
-              overwrittenBackupPath = path.join(backupDir, backupName);
-
-              try {
-                // Backup existing file
-                await fs.rename(targetPath, overwrittenBackupPath);
-                // Now retry the original move
-                await fs.rename(sourcePath, targetPath);
-              } catch (backupErr: unknown) {
-                // Restore backup if secondary operation fails
-                try {
-                  await fs.rename(overwrittenBackupPath!, targetPath);
-                } catch (restoreErr) {
-                  const criticalMsg = `CRITICAL: Failed to restore backup for ${targetPath}. Original may be lost. Error: ${(restoreErr as Error).message}`;
-                  errors.push(criticalMsg);
-                  logger.error(criticalMsg);
-                }
-                throw backupErr;
-              }
-            } else {
-              throw renameErr;
-            }
-          }
-        }
-        // --- Handle Safe Moves (No Overwrite Intended) ---
-        else {
-          // Logic:
-          // 1. If strategy is 'rename', we already computed a unique name in Plan.
-          //    But race condition might mean someone took it.
-          // 2. We use atomic COPYFILE_EXCL to ensure we don't clobber.
-
-          if (move.conflictResolution === "rename") {
-            // Extract the original filename from the source file
-            const sourceExt = path.extname(sourcePath);
-            const sourceBaseName = path.basename(sourcePath, sourceExt);
-            const destDir = path.dirname(targetPath);
-
-            // Extract the counter from the planned targetPath to continue from there
-            // e.g., if plan gave us "test_1.txt", start retrying from counter=2
-            let startCounter = 1;
-            const plannedBaseName = path.basename(
-              targetPath,
-              path.extname(targetPath),
-            );
-            const counterMatch = plannedBaseName.match(/_(\d+)$/);
-            if (counterMatch && counterMatch[1]) {
-              startCounter = parseInt(counterMatch[1], 10) + 1;
-            }
-
-            let success = false;
-            let retryCount = startCounter - 1; // Will increment to startCounter on first EEXIST
-            let effectivePath = targetPath;
-
-            while (!success && retryCount < 100) {
-              // HIGH-001 FIX: Validate source file integrity before each retry attempt
-              try {
-                await fs.access(sourcePath, constants.F_OK);
-              } catch (accessErr) {
-                logger.error(
-                  `Source file ${sourcePath} not accessible before retry attempt ${retryCount + 1}. File may be corrupted or partially processed.`,
-                );
-                throw new Error(
-                  `Source file integrity check failed for ${sourcePath}: File not accessible before retry`,
-                );
-              }
-
-              let copySucceeded = false;
-
-              try {
-                // Atomic COPY with COPYFILE_EXCL to prevent overwrites
-                await fs.copyFile(
-                  sourcePath,
-                  effectivePath,
-                  constants.COPYFILE_EXCL,
-                );
-                copySucceeded = true;
-
-                // HIGH-001 FIX: Delete Source after successful copy (with robust cleanup)
-                try {
-                  await fs.unlink(sourcePath);
-                  success = true;
-                  finalDest = effectivePath;
-                } catch (unlinkErr) {
-                  // HIGH-001 FIX: If unlink fails, source file may be in inconsistent state
-                  // Do NOT retry - this is a critical error
-                  const cleanupMsg = `Failed to unlink source ${sourcePath} after copy. Source file may be in inconsistent state.`;
-                  logger.error(cleanupMsg);
-
-                  try {
-                    await fs.unlink(effectivePath);
-                    logger.info(
-                      `Successfully cleaned up copied file ${effectivePath}`,
-                    );
-                  } catch (cleanupErr) {
-                    // Cleanup failed - log critical error with both file paths
-                    const criticalMsg = `CRITICAL: Failed to cleanup copied file ${effectivePath} after failed source unlink. Manual intervention may be required.`;
-                    logger.error(criticalMsg);
-                    errors.push(criticalMsg);
-                  }
-
-                  // HIGH-001 FIX: Categorize unlink errors as critical - don't retry
-                  const errMessage =
-                    unlinkErr instanceof Error
-                      ? unlinkErr.message
-                      : String(unlinkErr);
-                  throw new Error(
-                    `CRITICAL: Source file ${sourcePath} unlink failed after successful copy. ` +
-                      `Source file integrity compromised. Error: ${errMessage}`,
-                  );
-                }
-              } catch (err: unknown) {
-                // HIGH-001 FIX: Distinguish between copy errors and unlink errors
-                // Only retry on EEXIST errors from copy operation
-                // NOTE: Use isErrnoException instead of instanceof Error to handle cross-realm errors (Jest VM modules)
-                if (
-                  !copySucceeded &&
-                  isErrnoException(err) &&
-                  err.code === "EEXIST"
-                ) {
-                  // Race condition hit during copy! Increment counter and try again
-                  retryCount++;
-                  // Use consistent naming: originalname_1.ext, originalname_2.ext, etc.
-                  effectivePath = path.join(
-                    destDir,
-                    `${sourceBaseName}_${retryCount}${sourceExt}`,
-                  );
-                  logger.debug(
-                    `Race condition detected for ${sourcePath}, retrying as ${effectivePath}`,
-                  );
-                } else if (copySucceeded) {
-                  // HIGH-001 FIX: Unlink failed - source compromised, do not retry
-                  logger.error(
-                    `Unlink failed after successful copy for ${sourcePath}: ${err instanceof Error ? err.message : String(err)}`,
-                  );
-                  throw err;
-                } else {
-                  // Unexpected error during copy - log and rethrow
-                  logger.error(
-                    `Unexpected error during atomic move of ${sourcePath}: ${err instanceof Error ? err.message : String(err)}`,
-                  );
-                  throw err;
-                }
-              }
-            }
-
-            if (!success) {
-              throw new Error(
-                `Failed to move ${sourcePath} after 100 retries due to race conditions.`,
-              );
-            }
-          } else {
-            // TOCTOU-FIX: Handle disk conflicts at execution time when no batch collision was detected
-            // Use the conflictStrategy to resolve the conflict
-            const sourceExt = path.extname(sourcePath);
-            const sourceBaseName = path.basename(sourcePath, sourceExt);
-            const destDir = path.dirname(targetPath);
-
-            // Extract counter from planned path if available
-            let startCounter = 0;
-            const plannedBaseName = path.basename(
-              targetPath,
-              path.extname(targetPath),
-            );
-            const counterMatch = plannedBaseName.match(/_(\d+)$/);
-            if (counterMatch && counterMatch[1]) {
-              startCounter = parseInt(counterMatch[1], 10) + 1;
-            }
-
-            let success = false;
-            let retryCount = startCounter - 1;
-            let effectivePath = targetPath;
-
-            // Apply conflict strategy at execution time (act-then-handle-error pattern)
-            while (!success && !skipped && retryCount < 100) {
-              try {
-                // Atomic COPY with COPYFILE_EXCL to prevent overwrites
-                await fs.copyFile(
-                  sourcePath,
-                  effectivePath,
-                  constants.COPYFILE_EXCL,
-                );
-
-                // Delete source after successful copy
-                try {
-                  await fs.unlink(sourcePath);
-                  success = true;
-                  finalDest = effectivePath;
-                } catch (unlinkErr) {
-                  // Cleanup copied file if unlink fails
-                  logger.error(
-                    `Failed to unlink source ${sourcePath}. Cleaning up copy.`,
-                  );
-                  try {
-                    await fs.unlink(effectivePath);
-                  } catch (cleanupErr) {
-                    errors.push(
-                      `CRITICAL: Failed to cleanup ${effectivePath} after failed source unlink`,
-                    );
-                  }
-                  throw unlinkErr;
-                }
-              } catch (err: unknown) {
-                if (isErrnoException(err) && err.code === "EEXIST") {
-                  // Race condition: destination file exists, apply conflict strategy
-                  if (move.conflictResolution === "skip") {
-                    // Skip this file - don't move it
-                    const msg = `Skipped ${sourcePath}: destination ${effectivePath} already exists`;
-                    logger.info(msg);
-                    errors.push(msg);
-                    skipped = true; // Mark as skipped
-                    success = true; // Exit the loop
-                  } else {
-                    retryCount++;
-                    effectivePath = path.join(
-                      destDir,
-                      `${sourceBaseName}_${retryCount}${sourceExt}`,
-                    );
-                    logger.debug(
-                      `Disk conflict detected for ${sourcePath}, retrying as ${effectivePath}`,
-                    );
-                  }
-                } else {
-                  throw err;
-                }
-              }
-            }
-
-            if (!success) {
-              throw new Error(
-                `Failed to move ${sourcePath} after 100 retries due to race conditions.`,
-              );
-            }
-          }
-        }
-
-        // Don't add to actions if file was skipped
-        if (skipped) {
+        if (result === null) {
           continue;
         }
 
-        actionsPerformed.push({
-          file: path.basename(sourcePath),
-          from: sourcePath,
-          to: finalDest,
-          category: move.category as CategoryName,
-        });
-
-        rollbackActions.push({
-          type: "move",
-          originalPath: sourcePath,
-          currentPath: finalDest,
-          overwrittenBackupPath: overwrittenBackupPath,
-          timestamp: Date.now(),
-        });
+        actionsPerformed.push(result.action);
+        rollbackActions.push(result.rollbackAction);
 
         // HIGH-002 FIX: Save manifest incrementally after each successful operation
         // This ensures partial successes can be rolled back if a later operation fails
         try {
           await rollbackService.createManifest(
             `Organization of ${directory} (${rollbackActions.length} files)`,
-            [...rollbackActions], // Create a copy to ensure we capture current state
+            [...rollbackActions],
           );
         } catch (manifestErr) {
           const manifestError =
@@ -633,5 +336,294 @@ export class OrganizerService {
       successCount,
       aborted,
     };
+  }
+
+  /**
+   * Execute a single file move operation with conflict handling
+   * @param move - The move operation to execute
+   * @param backupDir - Directory for backup files during overwrites
+   * @returns BatchMoveResult with action and rollback info, or null if skipped
+   * @private
+   */
+  private async executeBatchMove(
+    move: OrganizationPlan["moves"][0],
+    backupDir: string,
+    errors: string[],
+  ): Promise<BatchMoveResult | null> {
+    await fs.mkdir(path.dirname(move.destination), { recursive: true });
+
+    const targetPath = move.destination;
+    const sourcePath = move.source;
+
+    let finalDest = targetPath;
+    let overwrittenBackupPath: string | undefined;
+
+    if (
+      move.conflictResolution === "overwrite" ||
+      move.conflictResolution === "overwrite_if_newer"
+    ) {
+      if (move.conflictResolution === "overwrite_if_newer") {
+        try {
+          const destStat = await fs.stat(targetPath);
+          const srcStat = await fs.stat(sourcePath);
+          if (srcStat.mtime < destStat.mtime) {
+            const msg = `Skipped ${sourcePath}: destination is newer`;
+            logger.info(msg);
+            errors.push(msg);
+            return null;
+          }
+        } catch (statErr: unknown) {
+          if (isErrnoException(statErr) && statErr.code === "ENOENT") {
+            logger.debug(
+              `Destination ${targetPath} does not exist, proceeding with move`,
+            );
+          } else {
+            throw statErr;
+          }
+        }
+      }
+
+      try {
+        await fs.rename(sourcePath, targetPath);
+      } catch (renameErr: unknown) {
+        if (isErrnoException(renameErr) && renameErr.code === "EEXIST") {
+          const backupName = `${Date.now()}_overwrite_${path.basename(targetPath)}`;
+          overwrittenBackupPath = path.join(backupDir, backupName);
+
+          try {
+            await fs.rename(targetPath, overwrittenBackupPath);
+            await fs.rename(sourcePath, targetPath);
+          } catch (backupErr: unknown) {
+            try {
+              await fs.rename(overwrittenBackupPath!, targetPath);
+            } catch (restoreErr) {
+              const criticalMsg = `CRITICAL: Failed to restore backup for ${targetPath}. Original may be lost. Error: ${(restoreErr as Error).message}`;
+              errors.push(criticalMsg);
+              logger.error(criticalMsg);
+            }
+            throw backupErr;
+          }
+        } else {
+          throw renameErr;
+        }
+      }
+    } else {
+      if (move.conflictResolution === "rename") {
+        const result = await this.executeRenameMove(
+          sourcePath,
+          targetPath,
+          errors,
+        );
+        if (result === null) {
+          return null;
+        }
+        finalDest = result;
+      } else {
+        const result = await this.executeDiskConflictMove(
+          sourcePath,
+          targetPath,
+          move.conflictResolution ?? "rename",
+          errors,
+        );
+        if (result.skipped) {
+          return null;
+        }
+        finalDest = result.finalDest;
+      }
+    }
+
+    return {
+      action: {
+        file: path.basename(sourcePath),
+        from: sourcePath,
+        to: finalDest,
+        category: move.category as CategoryName,
+      },
+      rollbackAction: {
+        type: "move",
+        originalPath: sourcePath,
+        currentPath: finalDest,
+        overwrittenBackupPath: overwrittenBackupPath,
+        timestamp: Date.now(),
+      },
+    };
+  }
+
+  /**
+   * Execute a move with rename conflict resolution (retry loop)
+   * @private
+   */
+  private async executeRenameMove(
+    sourcePath: string,
+    targetPath: string,
+    errors: string[],
+  ): Promise<string | null> {
+    const sourceExt = path.extname(sourcePath);
+    const sourceBaseName = path.basename(sourcePath, sourceExt);
+    const destDir = path.dirname(targetPath);
+
+    let startCounter = 1;
+    const plannedBaseName = path.basename(targetPath, path.extname(targetPath));
+    const counterMatch = plannedBaseName.match(/_(\d+)$/);
+    if (counterMatch && counterMatch[1]) {
+      startCounter = parseInt(counterMatch[1], 10) + 1;
+    }
+
+    let success = false;
+    let retryCount = startCounter - 1;
+    let effectivePath = targetPath;
+
+    while (!success && retryCount < 100) {
+      try {
+        await fs.access(sourcePath, constants.F_OK);
+      } catch (accessErr) {
+        logger.error(
+          `Source file ${sourcePath} not accessible before retry attempt ${retryCount + 1}. File may be corrupted or partially processed.`,
+        );
+        throw new Error(
+          `Source file integrity check failed for ${sourcePath}: File not accessible before retry`,
+        );
+      }
+
+      let copySucceeded = false;
+
+      try {
+        await fs.copyFile(sourcePath, effectivePath, constants.COPYFILE_EXCL);
+        copySucceeded = true;
+
+        try {
+          await fs.unlink(sourcePath);
+          success = true;
+        } catch (unlinkErr) {
+          const cleanupMsg = `Failed to unlink source ${sourcePath} after copy. Source file may be in inconsistent state.`;
+          logger.error(cleanupMsg);
+
+          try {
+            await fs.unlink(effectivePath);
+            logger.info(`Successfully cleaned up copied file ${effectivePath}`);
+          } catch (cleanupErr) {
+            const criticalMsg = `CRITICAL: Failed to cleanup copied file ${effectivePath} after failed source unlink. Manual intervention may be required.`;
+            logger.error(criticalMsg);
+            errors.push(criticalMsg);
+          }
+
+          const errMessage =
+            unlinkErr instanceof Error ? unlinkErr.message : String(unlinkErr);
+          throw new Error(
+            `CRITICAL: Source file ${sourcePath} unlink failed after successful copy. Source file integrity compromised. Error: ${errMessage}`,
+          );
+        }
+      } catch (err: unknown) {
+        if (!copySucceeded && isErrnoException(err) && err.code === "EEXIST") {
+          retryCount++;
+          effectivePath = path.join(
+            destDir,
+            `${sourceBaseName}_${retryCount}${sourceExt}`,
+          );
+          logger.debug(
+            `Race condition detected for ${sourcePath}, retrying as ${effectivePath}`,
+          );
+        } else if (copySucceeded) {
+          logger.error(
+            `Unlink failed after successful copy for ${sourcePath}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          throw err;
+        } else {
+          logger.error(
+            `Unexpected error during atomic move of ${sourcePath}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          throw err;
+        }
+      }
+    }
+
+    if (!success) {
+      throw new Error(
+        `Failed to move ${sourcePath} after 100 retries due to race conditions.`,
+      );
+    }
+
+    return effectivePath;
+  }
+
+  /**
+   * Execute a move handling disk conflicts with skip or rename fallback
+   * @private
+   */
+  private async executeDiskConflictMove(
+    sourcePath: string,
+    targetPath: string,
+    conflictResolution: ConflictStrategy,
+    errors: string[],
+  ): Promise<{ finalDest: string; skipped: boolean }> {
+    const sourceExt = path.extname(sourcePath);
+    const sourceBaseName = path.basename(sourcePath, sourceExt);
+    const destDir = path.dirname(targetPath);
+
+    let startCounter = 0;
+    const plannedBaseName = path.basename(targetPath, path.extname(targetPath));
+    const counterMatch = plannedBaseName.match(/_(\d+)$/);
+    if (counterMatch && counterMatch[1]) {
+      startCounter = parseInt(counterMatch[1], 10) + 1;
+    }
+
+    let success = false;
+    let skipped = false;
+    let retryCount = startCounter - 1;
+    let effectivePath = targetPath;
+    let finalDest = targetPath;
+
+    while (!success && !skipped && retryCount < 100) {
+      try {
+        await fs.copyFile(sourcePath, effectivePath, constants.COPYFILE_EXCL);
+
+        try {
+          await fs.unlink(sourcePath);
+          success = true;
+          finalDest = effectivePath;
+        } catch (unlinkErr) {
+          logger.error(
+            `Failed to unlink source ${sourcePath}. Cleaning up copy.`,
+          );
+          try {
+            await fs.unlink(effectivePath);
+          } catch (cleanupErr) {
+            errors.push(
+              `CRITICAL: Failed to cleanup ${effectivePath} after failed source unlink`,
+            );
+          }
+          throw unlinkErr;
+        }
+      } catch (err: unknown) {
+        if (isErrnoException(err) && err.code === "EEXIST") {
+          if (conflictResolution === "skip") {
+            const msg = `Skipped ${sourcePath}: destination ${effectivePath} already exists`;
+            logger.info(msg);
+            errors.push(msg);
+            skipped = true;
+            success = true;
+          } else {
+            retryCount++;
+            effectivePath = path.join(
+              destDir,
+              `${sourceBaseName}_${retryCount}${sourceExt}`,
+            );
+            logger.debug(
+              `Disk conflict detected for ${sourcePath}, retrying as ${effectivePath}`,
+            );
+          }
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!success) {
+      throw new Error(
+        `Failed to move ${sourcePath} after 100 retries due to race conditions.`,
+      );
+    }
+
+    return { finalDest, skipped };
   }
 }

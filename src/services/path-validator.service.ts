@@ -17,7 +17,11 @@ import fs from "fs/promises"; // for promise-based methods
 import { constants } from "fs"; // for constants (O_NOFOLLOW, etc)
 import path from "path";
 import { AccessDeniedError, ValidationError } from "../types.js";
-import { normalizePath, isSubPath } from "../utils/file-utils.js";
+import {
+  normalizePath,
+  isSubPath,
+  isWindowsReservedName,
+} from "../utils/file-utils.js";
 import { sanitizeErrorMessage } from "../utils/error-handler.js";
 import { PathSchema } from "../schemas/security.schemas.js";
 import { logger } from "../utils/logger.js";
@@ -264,13 +268,10 @@ export async function validatePathBase(
     throw new ValidationError("Path exceeds maximum length (4096)");
   }
 
-  // Layer 3.5: Block Windows Reserved Names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
-  const baseName = path.basename(expandedPath).toUpperCase();
-  // Check exact match or name with extension (e.g. CON.txt is also invalid on Windows)
-  const nameWithoutExt = baseName.split(".")[0] ?? "";
-  if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(nameWithoutExt)) {
+  // Layer 3.5: Block Windows Reserved Names
+  if (isWindowsReservedName(expandedPath)) {
     throw new ValidationError(
-      `Path contains Windows reserved name: ${baseName}`,
+      `Path contains Windows reserved name: ${path.basename(expandedPath)}`,
     );
   }
 

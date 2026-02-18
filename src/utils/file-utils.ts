@@ -4,9 +4,13 @@
  */
 
 import fs from "fs/promises";
+import { constants } from "fs";
 import path from "path";
 import os from "os";
 import { logger } from "./logger.js";
+import { isErrnoException } from "./error-handler.js";
+
+const WINDOWS_RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
 
 /**
  * Check if a file exists
@@ -178,4 +182,57 @@ export function isSubPath(parentPath: string, childPath: string): boolean {
     relative === "" ||
     (!relative.startsWith("..") && !path.isAbsolute(relative))
   );
+}
+
+/**
+ * Check if a filename (with or without extension) is a Windows reserved name
+ * Reserved names: CON, PRN, AUX, NUL, COM1-9, LPT1-9
+ * @param name - Filename to check (may include extension)
+ * @returns True if the name is reserved on Windows
+ */
+export function isWindowsReservedName(name: string): boolean {
+  if (!name || typeof name !== "string") {
+    return false;
+  }
+
+  const baseName = path.parse(name).name;
+  return WINDOWS_RESERVED_NAMES.test(baseName);
+}
+
+/**
+ * Perform an atomic file move using copy + unlink pattern
+ * Uses COPYFILE_EXCL to prevent overwrites
+ * @param source - Source file path
+ * @param destination - Destination file path
+ * @throws Error if the operation fails
+ */
+export async function performAtomicMove(
+  source: string,
+  destination: string,
+): Promise<void> {
+  try {
+    await fs.copyFile(source, destination, constants.COPYFILE_EXCL);
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "EEXIST") {
+      throw new Error(
+        `Cannot move file: destination already exists: ${destination}`,
+      );
+    }
+    throw new Error(
+      `Failed to copy file from ${source} to ${destination}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  try {
+    await fs.unlink(source);
+  } catch (error) {
+    try {
+      await fs.unlink(destination);
+    } catch {
+      // Ignore cleanup errors - the original error is more important
+    }
+    throw new Error(
+      `Failed to delete source file after copy: ${source}. Cleanup attempted. Error: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
