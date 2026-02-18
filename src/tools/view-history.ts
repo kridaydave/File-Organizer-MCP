@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.3.4
+ * File Organizer MCP Server v3.4.0
  * view_history Tool
  *
  * @module tools/view-history

@@ -285,19 +285,37 @@ export class SecureFileReader {
       maxBytes: mergedOptions.maxBytes,
     });
 
-    try {
-      // Validate the path before creating stream
-      await this.pathValidator.validatePath(filePath, { allowSymlinks: false });
+    let fileHandle: fs.FileHandle | undefined;
+    let handleClosed = false;
 
-      // Create readable stream with backpressure handling
-      const stream = createReadStream(validatedPath, {
+    try {
+      // TOCTOU-safe: Open file handle first to prevent race conditions
+      fileHandle = await this.pathValidator.openAndValidateFile(validatedPath);
+
+      // Create readable stream from file descriptor (TOCTOU-safe)
+      const stream = fileHandle.createReadStream({
         encoding: mergedOptions.encoding ?? undefined,
         start: mergedOptions.offset,
         highWaterMark: 64 * 1024, // 64KB chunks for optimal performance
       });
 
-      // Handle stream errors
+      // Ensure file handle closes when stream ends or errors
+      stream.on("close", () => {
+        if (fileHandle && !handleClosed) {
+          handleClosed = true;
+          fileHandle.close().catch(() => {});
+        }
+        this.auditLogger.logOperationSuccess("readStream", filePath, {
+          operationId,
+          completed: true,
+        });
+      });
+
       stream.on("error", (error) => {
+        if (fileHandle && !handleClosed) {
+          handleClosed = true;
+          fileHandle.close().catch(() => {});
+        }
         this.auditLogger.logOperationFailure(
           "readStream",
           filePath,
@@ -305,16 +323,13 @@ export class SecureFileReader {
         );
       });
 
-      // Handle stream end/success
-      stream.on("end", () => {
-        this.auditLogger.logOperationSuccess("readStream", filePath, {
-          operationId,
-          completed: true,
-        });
-      });
-
       return ok(stream);
     } catch (error) {
+      // Ensure handle is closed on error
+      if (fileHandle && !handleClosed) {
+        handleClosed = true;
+        await fileHandle.close().catch(() => {});
+      }
       const fileError = this.convertToFileReadError(filePath, error);
       this.auditLogger.logOperationFailure("readStream", filePath, fileError);
       return err(fileError);
@@ -580,8 +595,9 @@ export class SecureFileReader {
         highWaterMark: 64 * 1024, // 64KB chunks
       });
 
-      const chunks: Buffer[] = [];
-      let totalBytes = 0;
+      // Pre-allocate buffer for memory efficiency (instead of accumulating chunks)
+      const buffer = Buffer.alloc(bytesToRead);
+      let bytesWritten = 0;
 
       for await (const chunk of stream) {
         // Check abort signal during streaming
@@ -593,28 +609,32 @@ export class SecureFileReader {
         }
 
         const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        chunks.push(bufferChunk);
-        totalBytes += bufferChunk.length;
+        const chunkLength = bufferChunk.length;
 
-        // Safety check
-        if (totalBytes > options.maxBytes) {
-          throw new FileTooLargeError(filePath, totalBytes, options.maxBytes);
+        // Safety check - ensure we don't exceed the buffer
+        if (bytesWritten + chunkLength > bytesToRead) {
+          const truncatedLength = bytesToRead - bytesWritten;
+          bufferChunk.copy(buffer, bytesWritten, 0, truncatedLength);
+          bytesWritten = bytesToRead;
+          break;
         }
+
+        bufferChunk.copy(buffer, bytesWritten);
+        bytesWritten += chunkLength;
       }
 
-      // Combine chunks
-      const combinedBuffer = Buffer.concat(chunks);
+      const totalBytes = bytesWritten;
 
       // Calculate checksum
-      const checksum = this.calculateChecksum(combinedBuffer);
+      const checksum = this.calculateChecksum(buffer);
 
       // Convert to string if encoding specified
       const data =
         options.encoding !== null
-          ? combinedBuffer.toString(
+          ? buffer.toString(
               options.encoding ?? SecureFileReader.DEFAULT_ENCODING,
             )
-          : combinedBuffer;
+          : buffer;
 
       const result: FileReadResult = {
         data,

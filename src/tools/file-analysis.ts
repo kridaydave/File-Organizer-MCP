@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * find_largest_files Tool
  *
  * @module tools/file-analysis

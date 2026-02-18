@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.3.4
+ * File Organizer MCP Server v3.4.0
  * History Logger Service
  *
  * Tracks operation history with JSON-lines format, batching, and file rotation.
@@ -81,14 +81,13 @@ export class HistoryLoggerService {
 
     try {
       await fs.mkdir(this.config.dataDir, { recursive: true });
-      this.initialized = true;
       logger.info("HistoryLoggerService initialized", {
         dataDir: this.config.dataDir,
         historyFile: this.historyFilePath,
       });
+      this.initialized = true;
     } catch (error) {
       logger.error("Failed to initialize HistoryLoggerService:", error);
-      this.initialized = true;
     }
   }
 
@@ -258,8 +257,10 @@ export class HistoryLoggerService {
         try {
           const entry = JSON.parse(line) as HistoryEntry;
           allEntries.push(entry);
-        } catch {
-          // Skip corrupted lines
+        } catch (error) {
+          logger.debug(
+            `Skipped corrupted history line: ${(error as Error).message}`,
+          );
         }
       }
     } catch (error) {

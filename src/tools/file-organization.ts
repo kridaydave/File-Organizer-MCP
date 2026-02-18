@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * organize_files Tool
  *
  * @module tools/file-organization
@@ -11,6 +11,7 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { globalOrganizerService } from "../services/index.js";
 import { createErrorResponse } from "../utils/error-handler.js";
+import { escapeMarkdown } from "../utils/index.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
 import { loadUserConfig } from "../config.js";
 
@@ -117,6 +118,16 @@ export async function handleOrganizeFiles(
       use_content_analysis,
     } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
+    if (!validatedPath) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: Invalid or forbidden source path: ${directory}`,
+          },
+        ],
+      };
+    }
     const scanner = new FileScannerService();
     // Use global organizer service which has content analyzer enabled
     const organizer = globalOrganizerService;
@@ -182,7 +193,10 @@ ${Object.entries(result.statistics)
 **Actions:**
 ${result.actions
   .slice(0, 20)
-  .map((a) => `- Moved \`${a.file}\` → \`${a.to}\``)
+  .map(
+    (a) =>
+      `- Moved \`${escapeMarkdown(a.file)}\` → \`${escapeMarkdown(a.to)}\``,
+  )
   .join("\n")}
 ${result.actions.length > 20 ? `\n*(...and ${result.actions.length - 20} more actions)*` : ""}
 

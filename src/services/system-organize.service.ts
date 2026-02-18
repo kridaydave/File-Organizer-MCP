@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.3.3
+ * File Organizer MCP Server v3.4.0
  * System Organize Service
  *
  * Handles organizing files from system directories (Downloads, Desktop, Temp)
@@ -140,9 +140,9 @@ export class SystemOrganizeService {
         const validated = await this.pathValidator.validatePath(dirPath, {
           requireExists: true,
         });
-        (validatedDirs as any)[key] = validated;
+        validatedDirs[key as keyof SystemDirs] = validated;
       } catch {
-        (validatedDirs as any)[key] = dirPath;
+        validatedDirs[key as keyof SystemDirs] = dirPath;
       }
     }
 
@@ -377,20 +377,25 @@ export class SystemOrganizeService {
         const ext = path.extname(destPath);
         const baseName = path.basename(destPath, ext);
         let counter = 1;
-        let newPath: string;
+        const maxAttempts = 100;
 
-        do {
-          newPath = path.join(dir, `${baseName}_${counter}${ext}`);
-          counter++;
-        } while (counter < 1000);
+        while (counter <= maxAttempts) {
+          const newPath = path.join(dir, `${baseName}_${counter}${ext}`);
 
-        try {
-          await fs.access(newPath, constants.F_OK);
-        } catch {
-          return newPath;
+          try {
+            await fs.access(newPath, constants.F_OK);
+            // File exists, try next counter
+            counter++;
+          } catch {
+            // File does not exist, we can use this path
+            return newPath;
+          }
         }
 
-        return newPath;
+        // All paths taken, throw error
+        throw new Error(
+          `Unable to find available path for "${destPath}" after ${maxAttempts} attempts`,
+        );
       }
 
       return destPath;
@@ -463,7 +468,7 @@ export class SystemOrganizeService {
       try {
         const stats = await fs.stat(sourcePath);
 
-        const category = this.categorizeFile(fileName);
+        const category = await this.categorizeFile(fileName);
         const destResult = await this.determineSystemDestination(
           category,
           useSystemDirs,

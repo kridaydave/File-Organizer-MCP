@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * find_duplicate_files Tool
  *
  * @module tools/file-duplicates
@@ -84,6 +84,16 @@ export async function handleFindDuplicateFiles(
 
     const { directory, response_format, limit, offset } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
+    if (!validatedPath) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: Invalid or forbidden source path: ${directory}`,
+          },
+        ],
+      };
+    }
     const scanner = new FileScannerService();
     const hashCalculator = new HashCalculatorService();
 

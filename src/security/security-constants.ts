@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Security Amendments - Security Constants & Limits
  *
  * These security limits are mandatory for all archive operations
@@ -88,10 +88,17 @@ export const SECURITY_LIMITS = {
     },
 
     /**
-     * Maximum path length for entries
-     * 255 characters is standard filesystem limit
+     * Maximum length for a single path component (filename/directory name)
+     * 255 characters is the standard filesystem limit for individual names
      */
-    MAX_PATH_LENGTH: 255,
+    MAX_PATH_COMPONENT_LENGTH: 255,
+
+    /**
+     * Maximum total path length for entries
+     * 260 characters is a conservative cross-platform value (Windows MAX_PATH)
+     * Note: Linux typically allows 4096, but we use conservative limit
+     */
+    MAX_PATH_LENGTH: 260,
 
     /**
      * Reserved paths that must never be extracted

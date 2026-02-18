@@ -18,8 +18,7 @@ import { getAutoOrganizeScheduler } from "../services/auto-organize.service.js";
 // Try to import chalk, fallback if not available
 let chalk: any;
 try {
-  const chalkModule = await import("chalk");
-  chalk = chalkModule.default;
+  chalk = require("chalk");
 } catch {
   // Fallback if chalk not available
   chalk = {
@@ -643,7 +642,7 @@ async function checkFileSystemPermissions(): Promise<DiagnosticResult> {
     const configDir = path.dirname(getUserConfigPath());
     testDirs.push(configDir);
   } catch {
-    // Ignore error
+    // Config directory may not exist yet - not critical for write test
   }
 
   for (const dir of testDirs) {

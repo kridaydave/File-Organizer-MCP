@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Rollback Service
  *
  * Manages operation manifests and performs undo operations.
@@ -152,11 +152,18 @@ export class RollbackService {
 
     const results = { success: 0, failed: 0, errors: [] as string[] };
 
+    // Track completed actions for potential rollback recovery
+    const completedActions: Array<{
+      action: RollbackAction;
+      stage: "move" | "restore" | "copy" | "delete";
+      paths: { from: string; to: string };
+    }> = [];
+
     // Reverse actions: Undo last action first
     const reverseActions = [...manifest.actions].reverse();
 
-    for (const action of reverseActions) {
-      try {
+    try {
+      for (const action of reverseActions) {
         // Validate paths before operations
         if (
           action.originalPath &&
@@ -199,6 +206,13 @@ export class RollbackService {
             throw e;
           }
 
+          // Track successful move for potential recovery
+          completedActions.push({
+            action,
+            stage: "move",
+            paths: { from: action.currentPath, to: action.originalPath },
+          });
+
           // 2. Restore the overwritten file if it exists
           if (action.overwrittenBackupPath) {
             // TOCTOU-safe: Try rename directly, handle errors
@@ -210,6 +224,19 @@ export class RollbackService {
                 results.errors.push(
                   `Critical: Original file backup missing: ${action.overwrittenBackupPath}`,
                 );
+
+                // Attempt to recover: revert the move operation
+                try {
+                  await fs.rename(action.originalPath, action.currentPath);
+                  results.errors.push(
+                    `Recovered: Reverted move for ${action.originalPath} -> ${action.currentPath}`,
+                  );
+                } catch (recoveryError) {
+                  results.errors.push(
+                    `CRITICAL: Partial rollback state - file at ${action.originalPath}, expected at ${action.currentPath}. Recovery failed: ${(recoveryError as Error).message}`,
+                  );
+                }
+
                 results.failed++;
                 continue;
               }
@@ -220,6 +247,16 @@ export class RollbackService {
               }
               throw e;
             }
+
+            // Track successful restore
+            completedActions.push({
+              action,
+              stage: "restore",
+              paths: {
+                from: action.overwrittenBackupPath,
+                to: action.currentPath,
+              },
+            });
           }
 
           results.success++;
@@ -228,6 +265,12 @@ export class RollbackService {
           try {
             await fs.access(action.currentPath);
             await fs.unlink(action.currentPath);
+            // Track successful copy undo for potential recovery
+            completedActions.push({
+              action,
+              stage: "copy",
+              paths: { from: action.currentPath, to: "" },
+            });
             results.success++;
           } catch (e) {
             if ((e as NodeJS.ErrnoException).code === "ENOENT") {
@@ -256,6 +299,13 @@ export class RollbackService {
           // TOCTOU-safe: Try rename directly, handle errors
           try {
             await fs.rename(action.backupPath, action.originalPath);
+            // Track successful delete undo for potential recovery
+            completedActions.push({
+              action,
+              stage: "delete",
+              paths: { from: action.backupPath, to: action.originalPath },
+            });
+            results.success++;
           } catch (e) {
             const err = e as NodeJS.ErrnoException;
             if (err.code === "ENOENT") {
@@ -272,24 +322,88 @@ export class RollbackService {
             }
             throw e;
           }
-          results.success++;
         }
-      } catch (error) {
-        results.failed++;
+      }
+    } catch (error) {
+      results.failed++;
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const actionType =
+        error instanceof Error && "action" in error
+          ? (error as { action?: { type?: string } }).action?.type || "unknown"
+          : "unknown";
+      const actionPath =
+        error instanceof Error && "action" in error
+          ? (error as { action?: { originalPath?: string } }).action
+              ?.originalPath || "unknown path"
+          : "unknown path";
+      results.errors.push(
+        `Failed to undo ${actionType} for ${actionPath}: ${errorMessage}`,
+      );
+
+      // Attempt to recover already completed actions to restore to original state
+      if (completedActions.length > 0) {
         results.errors.push(
-          `Failed to undo ${action.type} for ${action.originalPath}: ${(error as Error).message}`,
+          `Attempting recovery: Reverting ${completedActions.length} successfully completed actions`,
         );
+
+        // Reverse the completed actions to restore them in correct order
+        for (const completed of [...completedActions].reverse()) {
+          try {
+            if (completed.stage === "move") {
+              // Revert the move: move back from original to current
+              await fs.rename(completed.paths.to, completed.paths.from);
+              results.errors.push(
+                `Recovered move: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
+              );
+            } else if (completed.stage === "restore") {
+              // Revert the restore: move back from current to backup location
+              await fs.rename(completed.paths.to, completed.paths.from);
+              results.errors.push(
+                `Recovered restore: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
+              );
+            } else if (completed.stage === "copy") {
+              // Revert copy undo: recreate the copied file (would require backup, but we don't have it)
+              // Note: We can't fully recover copy operation undo, since we don't have the file content
+              results.errors.push(
+                `Warning: Cannot recover copy operation - file content not available: ${completed.paths.from}`,
+              );
+            } else if (completed.stage === "delete") {
+              // Revert delete undo: delete the restored file and move backup back
+              await fs.unlink(completed.paths.to);
+              await fs.rename(completed.paths.from, completed.paths.to);
+              results.errors.push(
+                `Recovered delete: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
+              );
+            }
+          } catch (recoveryError) {
+            results.errors.push(
+              `Recovery failed for ${completed.stage} action: ${(recoveryError as Error).message}`,
+            );
+          }
+        }
       }
     }
 
-    // Cleanup manifest to prevent re-running
-    try {
-      await fs.unlink(filePath);
-    } catch (e) {
-      // Throwing is better here to warn the user that the manifest is still there
-      // and might be re-runnable (risky).
-      throw new Error(
-        `Rollback completed but failed to delete manifest ${manifestId}: ${(e as Error).message}`,
+    // Cleanup manifest to prevent re-running only if full rollback succeeded
+    if (results.failed === 0) {
+      try {
+        await fs.unlink(filePath);
+      } catch (e) {
+        throw new Error(
+          `Rollback completed but failed to delete manifest ${manifestId}: ${(e as Error).message}`,
+        );
+      }
+    } else {
+      results.errors.push(
+        `Manifest not deleted: ${manifestId} remains available for retry or manual recovery`,
+      );
+    }
+
+    // Document partial state if some actions completed before failures
+    if (completedActions.length > 0 && results.failed > 0) {
+      results.errors.push(
+        `Partial rollback state documented: ${completedActions.length} actions were successfully undone before failures occurred. Recovery attempted.`,
       );
     }
 

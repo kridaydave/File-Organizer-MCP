@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Common Validation Schemas
  */
 
@@ -23,7 +23,7 @@ export const RecursiveInputSchema = DirectoryInputSchema.extend({
  * Pagination schema for list operations
  */
 export const PaginationSchema = z.object({
-  limit: z.number().int().positive().default(100),
+  limit: z.number().int().min(1).max(1000).default(100),
   offset: z.number().int().nonnegative().default(0),
 });
 

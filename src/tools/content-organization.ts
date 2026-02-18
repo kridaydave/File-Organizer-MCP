@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * organize_by_content Tool
  *
  * @module tools/content-organization
@@ -17,6 +17,7 @@ import {
 } from "../services/topic-extractor.service.js";
 import { textExtractionService } from "../services/text-extraction.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
+import { escapeMarkdown } from "../utils/index.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
 import { logger } from "../utils/logger.js";
 
@@ -174,7 +175,38 @@ export async function handleOrganizeByContent(
     } = parsed.data;
 
     const validatedSourcePath = await validateStrictPath(source_dir);
+    if (!validatedSourcePath) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: Invalid or forbidden source path: ${source_dir}`,
+          },
+        ],
+      };
+    }
     const validatedTargetPath = await validateStrictPath(target_dir);
+    if (!validatedTargetPath) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: Invalid or forbidden target path: ${target_dir}`,
+          },
+        ],
+      };
+    }
+
+    if (target_dir === source_dir) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: "Error: Source and target directories cannot be the same",
+          },
+        ],
+      };
+    }
 
     const scanner = new FileScannerService();
 
@@ -298,7 +330,7 @@ export async function handleOrganizeByContent(
 ${Object.entries(result.structure)
   .map(
     ([folder, files]) =>
-      `- **${folder}**: ${files.length} file(s)\n  ${files.map((f) => `  - \`${f}\``).join("\n")}`,
+      `- **${escapeMarkdown(folder)}**: ${files.length} file(s)\n  ${files.map((f) => `  - \`${escapeMarkdown(f)}\``).join("\n")}`,
   )
   .join("\n")}
 
@@ -308,13 +340,13 @@ ${
 ${result.results
   .map(
     (r) =>
-      `- \`${r.file}\` → **${r.primaryTopic}** (${r.topics.map((t) => `${t.topic}: ${(t.confidence * 100).toFixed(0)}%`).join(", ")})`,
+      `- \`${escapeMarkdown(r.file)}\` → **${escapeMarkdown(r.primaryTopic)}** (${r.topics.map((t) => `${escapeMarkdown(t.topic)}: ${(t.confidence * 100).toFixed(0)}%`).join(", ")})`,
   )
   .join("\n")}`
     : ""
 }
 
-${result.errors.length > 0 ? `**Errors:**\n${result.errors.map((e) => `- \`${e.file}\`: ${e.error}`).join("\n")}` : ""}`;
+${result.errors.length > 0 ? `**Errors:**\n${result.errors.map((e) => `- \`${escapeMarkdown(e.file)}\`: ${e.error}`).join("\n")}` : ""}`;
 
     return {
       content: [{ type: "text", text: markdown }],

@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * File Scanner Service
  */
 
@@ -63,15 +63,24 @@ export class FileScannerService {
   async getAllFiles(
     directory: string,
     includeSubdirs = false,
+    maxDepth?: number,
   ): Promise<FileWithSize[]> {
     const results: FileWithSize[] = [];
+    const effectiveMaxDepth = maxDepth !== undefined ? maxDepth : this.maxDepth;
 
     const scanDir = async (
       dir: string,
       depth: number,
       visited: Set<string>,
     ): Promise<void> => {
-      if (includeSubdirs && depth > this.maxDepth) {
+      // Stop recursion if depth limit reached
+      // maxDepth of -1 means unlimited depth, so depth > -1 would always be false
+      // maxDepth of 0 means no subdirectories, only process current directory
+      if (
+        includeSubdirs &&
+        effectiveMaxDepth !== -1 &&
+        depth > effectiveMaxDepth
+      ) {
         return;
       }
 
@@ -112,10 +121,6 @@ export class FileScannerService {
 
         try {
           if (item.isFile()) {
-            if (results.length >= this.maxFiles) {
-              throw new Error(`Maximum file limit (${this.maxFiles}) reached`);
-            }
-
             // Security: Open with O_NOFOLLOW to avoid symlinks and race conditions
             // Use usage of file handle for stat
             let handle: fs.FileHandle | undefined;
@@ -127,6 +132,13 @@ export class FileScannerService {
                 fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
               );
               const stats = await handle.stat();
+
+              // Check limit BEFORE pushing to results
+              if (results.length >= this.maxFiles) {
+                throw new Error(
+                  `Maximum file limit (${this.maxFiles}) reached`,
+                );
+              }
 
               results.push({
                 name: item.name,
@@ -269,12 +281,6 @@ export class FileScannerService {
 
       try {
         if (item.isFile()) {
-          if (results.length >= this.maxFiles) {
-            // We stop strictly if max files reached
-            // But we throw to break the recursion efficiently
-            throw new Error(`Maximum file limit (${this.maxFiles}) reached`);
-          }
-
           // Security: Open with O_NOFOLLOW to avoid symlinks and race conditions
           let handle: fs.FileHandle | undefined;
           let statError: Error | undefined;
@@ -284,6 +290,11 @@ export class FileScannerService {
               fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
             );
             const stats = await handle.stat();
+
+            // Check limit BEFORE pushing to results
+            if (results.length >= this.maxFiles) {
+              throw new Error(`Maximum file limit (${this.maxFiles}) reached`);
+            }
 
             results.push({
               name: item.name,

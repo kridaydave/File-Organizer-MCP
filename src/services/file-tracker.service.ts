@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * File Tracker Service
  *
  * Tracks file changes and manages organization rules.
@@ -97,9 +97,13 @@ export class FileTracker {
 
     fsSync.watchFile(this.configPath, () => {
       logger.info("Config file changed, reloading...");
-      this.loadConfig().catch((err) => {
-        logger.error("Failed to reload config:", err);
-      });
+      this.loadConfig()
+        .then(() => {
+          logger.info("Config reloaded successfully");
+        })
+        .catch((err) => {
+          logger.error("Failed to reload config:", err);
+        });
     });
   }
 

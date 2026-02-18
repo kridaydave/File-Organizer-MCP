@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * organize_smart Tool
  *
  * Unified organization tool that auto-detects file types and applies
@@ -461,9 +461,15 @@ class SmartOrganizerService {
               // Create symlink (shortcut)
               const shortcutPath = path.join(shortcutDir, fileName);
               try {
-                await fs.symlink(targetPath, shortcutPath);
-              } catch {
-                // Ignore symlink errors
+                const validatedTarget = await validateStrictPath(targetPath);
+                if (validatedTarget) {
+                  await fs.symlink(targetPath, shortcutPath);
+                }
+              } catch (err) {
+                logger.debug("Could not create symlink", {
+                  targetPath,
+                  error: err,
+                });
               }
             }
           }
@@ -524,6 +530,10 @@ export async function handleOrganizeSmart(
     // Validate paths
     const validatedSource = await validateStrictPath(source_dir);
     const validatedTarget = await validateStrictPath(target_dir);
+
+    if (!validatedSource || !validatedTarget) {
+      throw new Error("Invalid source or target directory");
+    }
 
     // Ensure source and target are different directories
     const resolvedSource = path.resolve(validatedSource);

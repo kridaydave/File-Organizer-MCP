@@ -254,7 +254,7 @@ export class ContentScreeningService {
     };
 
     try {
-      const header = await this.readFileHeader(filePath);
+      const { header, trailer } = await this.readFileHeaderAndTrailer(filePath);
 
       if (header.length === 0) {
         result.issues.push({
@@ -266,18 +266,58 @@ export class ContentScreeningService {
         return result;
       }
 
-      // Detect actual file type from magic number
-      const detected = this.detectFileType(header);
-      result.detectedType = detected.type || "unknown";
+      // Detect actual file type from magic number (header and trailer)
+      const detectedFromHeader = this.detectFileType(header);
+      const detectedFromTrailer =
+        trailer.length > 0 ? this.detectFileType(trailer) : null;
+      result.detectedType = detectedFromHeader.type || "unknown";
+
+      // Check for mismatched file types in header and trailer (polyglot detection)
+      if (
+        detectedFromTrailer &&
+        detectedFromHeader.category !== detectedFromTrailer.category
+      ) {
+        // If categories don't match, check if either contains executable content
+        const isExecutableInHeader =
+          detectedFromHeader.category === "executable";
+        const isExecutableInTrailer =
+          detectedFromTrailer.category === "executable";
+
+        if (isExecutableInTrailer) {
+          result.issues.push({
+            type: "executable_disguised",
+            severity: "error",
+            message: `Polyglot file: ${detectedFromHeader.type} header with executable trailer`,
+            details: {
+              headerType: detectedFromHeader.type,
+              headerCategory: detectedFromHeader.category,
+              trailerType: detectedFromTrailer.type,
+              trailerCategory: detectedFromTrailer.category,
+            },
+          });
+        } else {
+          result.issues.push({
+            type: "suspicious_pattern",
+            severity: "warning",
+            message: `Suspicious file: Mismatched content types (${detectedFromHeader.type} / ${detectedFromTrailer.type})`,
+            details: {
+              headerType: detectedFromHeader.type,
+              headerCategory: detectedFromHeader.category,
+              trailerType: detectedFromTrailer.type,
+              trailerCategory: detectedFromTrailer.category,
+            },
+          });
+        }
+      }
 
       // Check 1: Extension Mismatch
-      if (opts.checkExtensionMismatch && detected.extension) {
-        this.checkExtensionMismatch(result, detected);
+      if (opts.checkExtensionMismatch && detectedFromHeader.extension) {
+        this.checkExtensionMismatch(result, detectedFromHeader);
       }
 
       // Check 2: Executable Masquerading
       if (opts.checkExecutableContent) {
-        this.checkExecutableMasquerading(result, detected);
+        this.checkExecutableMasquerading(result, detectedFromHeader);
       }
 
       // Check 3: Suspicious Patterns
@@ -286,7 +326,7 @@ export class ContentScreeningService {
       }
 
       // Check 4: Unknown Types
-      if (!detected.type && result.declaredExtension) {
+      if (!detectedFromHeader.type && result.declaredExtension) {
         result.issues.push({
           type: "unknown_type",
           severity: "warning",
@@ -422,21 +462,44 @@ export class ContentScreeningService {
   }
 
   /**
-   * Read the header bytes of a file for magic number detection
+   * Read the header and trailer bytes of a file for magic number detection
    */
-  private async readFileHeader(filePath: string): Promise<Buffer> {
+  private async readFileHeaderAndTrailer(filePath: string): Promise<{
+    header: Buffer;
+    trailer: Buffer;
+  }> {
     let handle: fs.FileHandle | undefined;
 
     try {
       handle = await fs.open(filePath, "r");
-      const buffer = Buffer.alloc(this.maxHeaderBytes);
-      const { bytesRead } = await handle.read(
-        buffer,
+      const stats = await handle.stat();
+      const fileSize = stats.size;
+
+      // Read header
+      const headerBuffer = Buffer.alloc(this.maxHeaderBytes);
+      const { bytesRead: headerBytesRead } = await handle.read(
+        headerBuffer,
         0,
         this.maxHeaderBytes,
         0,
       );
-      return buffer.subarray(0, bytesRead);
+      const header = headerBuffer.subarray(0, headerBytesRead);
+
+      // Read trailer - same size as header for consistency
+      let trailer: Buffer = Buffer.alloc(0);
+      if (fileSize > this.maxHeaderBytes) {
+        const trailerBuffer = Buffer.alloc(this.maxHeaderBytes);
+        const startPosition = Math.max(0, fileSize - this.maxHeaderBytes);
+        const { bytesRead: trailerBytesRead } = await handle.read(
+          trailerBuffer,
+          0,
+          this.maxHeaderBytes,
+          startPosition,
+        );
+        trailer = trailerBuffer.subarray(0, trailerBytesRead);
+      }
+
+      return { header, trailer };
     } finally {
       if (handle) {
         try {
@@ -446,6 +509,14 @@ export class ContentScreeningService {
         }
       }
     }
+  }
+
+  /**
+   * Read the header bytes of a file for magic number detection (backward compatibility)
+   */
+  private async readFileHeader(filePath: string): Promise<Buffer> {
+    const { header } = await this.readFileHeaderAndTrailer(filePath);
+    return header;
   }
 
   /**

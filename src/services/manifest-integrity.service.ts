@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.3.3
+ * File Organizer MCP Server v3.4.0
  * Manifest Integrity Service
  *
  * Provides tamper detection for rollback manifests using cryptographic hashing.
@@ -9,7 +9,7 @@ import crypto from "crypto";
 import os from "os";
 import type { RollbackManifest, RollbackAction } from "../types.js";
 
-const SECRET_SEED = "FileOrganizerMCP-v3.3.3";
+const SECRET_SEED = "FileOrganizerMCP-v3.4.0";
 
 function getMachineSecret(): string {
   const machineInfo = [

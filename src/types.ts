@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * TypeScript Type Definitions
  */
 
@@ -108,16 +108,20 @@ export type CategoryName =
   | "Presentations"
   | "Spreadsheets"
   | "Images"
-  | "Photos" // NEW: For photo organization
+  | "Photos" // For photo organization
   | "Audio"
-  | "Music" // NEW: For music organization
+  | "Music" // For music organization
   | "Archives"
   | "Code"
   | "Installers"
   | "Ebooks"
   | "Fonts"
-  | "Suspicious" // NEW: For flagged files
-  | "Quarantine" // NEW: For files that failed screening
+  | "Suspicious" // For files flagged by security screening
+  | "Quarantine" // For files that failed security screening
+  | "Tests" // For test files
+  | "Logs" // For log files
+  | "Demos" // For demo/sample files
+  | "Scripts" // For script files
   | "Others";
 
 export interface CategoryStats {
@@ -158,7 +162,7 @@ export interface OrganizationPlan {
     conflictResolution?: "rename" | "skip" | "overwrite" | "overwrite_if_newer";
   }[];
   categoryCounts: Record<string, number>;
-  conflicts: any[];
+  conflicts: Array<{ file: string; reason: string }>;
   skippedFiles: { path: string; reason: string }[];
   estimatedDuration: number;
   warnings: string[];

@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * File Category Constants
  */
 
@@ -15,9 +15,9 @@ export const CATEGORIES: Record<CategoryName, readonly string[]> = {
   Presentations: [".ppt", ".pptx", ".odp", ".key"],
   Spreadsheets: [".xls", ".xlsx", ".csv", ".ods"],
   Images: [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".ico", ".webp"],
-  Audio: [".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a"],
-  Music: [".mp3", ".flac", ".wav", ".aac", ".m4a", ".ogg", ".wma"], // For music organization
-  Photos: [".jpg", ".jpeg", ".png", ".tiff", ".heic", ".webp"], // For photo organization
+  Audio: [".mp3", ".flac", ".aac", ".ogg", ".wma", ".m4a", ".wav"],
+  Music: [".flac", ".wav"], // For music organization (exclusive formats)
+  Photos: [".tiff", ".heic"], // For photo organization (exclusive formats)
   Archives: [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"],
   Code: [
     ".py",
@@ -38,6 +38,10 @@ export const CATEGORIES: Record<CategoryName, readonly string[]> = {
   Fonts: [".ttf", ".otf", ".woff", ".woff2"],
   Suspicious: [], // For files flagged by security screening
   Quarantine: [], // For files that failed security screening
+  Tests: [".test.ts", ".spec.ts", ".test.js", ".spec.js"], // For test files
+  Logs: [".log"], // For log files
+  Demos: [], // For demo/sample files
+  Scripts: [".sh", ".bat", ".ps1"], // For script files
   Others: [],
 } as const;
 

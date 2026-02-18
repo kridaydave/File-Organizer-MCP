@@ -1,11 +1,12 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * File System Utilities
  */
 
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import { logger } from "./logger.js";
 
 /**
  * Check if a file exists
@@ -14,13 +15,16 @@ import os from "os";
  */
 export async function fileExists(filePath: string): Promise<boolean> {
   try {
-    await fs.access(filePath);
+    await fs.access(filePath, fs.constants.F_OK);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return false;
+    if (error instanceof Error && "code" in error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === "EACCES" || err.code === "EPERM") {
+        throw error;
+      }
     }
-    throw error;
+    return false;
   }
 }
 
@@ -78,7 +82,7 @@ export function expandEnvVars(inputPath: string): string {
   // Step 2: Expand Windows-style %VAR% first (they take precedence)
   result = result.replace(
     /%([^%]+)%/g,
-    (_, name: string) => process.env[name] ?? `%${name}%`,
+    (_, name: string) => process.env[name] ?? "",
   );
 
   // Step 3: Expand ${VAR} - braces take precedence over bare $VAR
@@ -126,7 +130,8 @@ export function normalizePath(inputPath: string): string {
 
     inputPath = decoded;
   } catch {
-    // Continue with original if malformed
+    // Malformed URI - continue with original path
+    logger.debug("URI decode error, using original path");
   }
 
   // 2. Unicode Normalization (NFC)
@@ -159,8 +164,8 @@ export function isSubPath(parentPath: string, childPath: string): boolean {
 
   if (process.platform === "win32") {
     const relative = path.relative(
-      normalizedParent.toLowerCase(),
-      normalizedChild.toLowerCase(),
+      normalizedParent.toLocaleLowerCase("en"),
+      normalizedChild.toLocaleLowerCase("en"),
     );
     return (
       relative === "" ||

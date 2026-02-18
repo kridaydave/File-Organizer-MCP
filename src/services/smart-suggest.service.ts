@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.3.4
+ * File Organizer MCP Server v3.4.0
  * Smart Suggest Service - Directory Health Scoring
  */
 

@@ -1,12 +1,12 @@
-import { jest } from '@jest/globals';
-import fs from 'fs/promises';
-import { open } from 'fs/promises';
-import path from 'path';
-import { performance } from 'perf_hooks';
-import { handleScanDirectory } from '../../src/tools/file-scanning.js';
-import { handleFindDuplicateFiles } from '../../src/tools/file-duplicates.js';
+import { jest } from "@jest/globals";
+import fs from "fs/promises";
+import { open } from "fs/promises";
+import path from "path";
+import { performance } from "perf_hooks";
+import { handleScanDirectory } from "../../src/tools/file-scanning.js";
+import { handleFindDuplicateFiles } from "../../src/tools/file-duplicates.js";
 
-describe('Performance', () => {
+describe("Performance", () => {
   let testDir: string;
 
   beforeEach(async () => {
@@ -18,11 +18,11 @@ describe('Performance', () => {
     try {
       await fs.rm(testDir, { recursive: true, force: true });
     } catch (error) {
-      console.error('Cleanup error:', error);
+      console.error("Cleanup error:", error);
     }
   });
 
-  it('should handle 1,000 files efficiently', async () => {
+  it("should handle 1,000 files efficiently", async () => {
     // Reduced from 10,000 to 1,000 for CI stability, but checking time proportionally.
     // Or we can try 10,000 if fast enough.
     // 10,000 files creation on windows takes time.
@@ -33,16 +33,16 @@ describe('Performance', () => {
 
     await Promise.all(
       Array.from({ length: fileCount }).map((_, i) =>
-        fs.writeFile(path.join(testDir, `file_${i}.txt`), 'content')
-      )
+        fs.writeFile(path.join(testDir, `file_${i}.txt`), "content"),
+      ),
     );
 
     const startTime = performance.now();
     const result = await handleScanDirectory({
       directory: testDir,
       include_subdirs: true,
-      limit: fileCount + 100, // ensure we get all
-      response_format: 'json',
+      limit: 1000,
+      response_format: "json",
     });
     const endTime = performance.now();
 
@@ -52,7 +52,7 @@ describe('Performance', () => {
     expect(output.total_count).toBe(fileCount);
   });
 
-  it('should not exceed memory limits with large files', async () => {
+  it("should not exceed memory limits with large files", async () => {
     // ... (setup remains)
 
     const memoryBefore = process.memoryUsage().heapUsed;
@@ -61,7 +61,9 @@ describe('Performance', () => {
 
     // Handle GC firing (negative delta)
     const memoryIncrease =
-      memoryAfter > memoryBefore ? (memoryAfter - memoryBefore) / 1024 / 1024 : 0;
+      memoryAfter > memoryBefore
+        ? (memoryAfter - memoryBefore) / 1024 / 1024
+        : 0;
 
     console.log(`Memory increase: ${memoryIncrease.toFixed(2)} MB`);
     expect(memoryIncrease).toBeLessThan(100); // 100MB margin

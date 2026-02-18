@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Centralized Error Handling
  */
 
@@ -19,20 +19,29 @@ import { logger } from "./logger.js";
 export function sanitizeErrorMessage(error: Error | string): string {
   const message = error instanceof Error ? error.message : String(error);
 
-  // Replace Windows paths (Look for drive letter, colon, backslash, then chars including spaces until end or distinct break)
-  let sanitized = message.replace(/[a-zA-Z]:\\[\w\s\-\.\(\)\\$]+/g, "[PATH]");
+  // Replace Windows paths (improved pattern for paths with/without trailing backslash)
+  let sanitized = message.replace(
+    /[a-zA-Z]:\\(?:[^\\/:*?"<>|\r\n]+(?:\\[^\\/:*?"<>|\r\n]+)*)/g,
+    "[PATH]",
+  );
 
   // Replace forward-slash Windows paths (e.g., C:/Users)
-  sanitized = sanitized.replace(/[a-zA-Z]:\/[\w\s\-\.\/]+/g, "[PATH]");
+  sanitized = sanitized.replace(
+    /[a-zA-Z]:\/(?:[^/:*?"<>|\r\n]+(?:\/[^/:*?"<>|\r\n]+)*)/g,
+    "[PATH]",
+  );
 
   // Replace UNC paths (e.g., \\server\share)
-  sanitized = sanitized.replace(/\\\\[\w\-\.]+\\[\w\s\-\.\\$]+/g, "[PATH]");
+  sanitized = sanitized.replace(
+    /\\\\[\w\-\.]+\\(?:[^\r\n\\]+(?:\\[^\r\n\\]+)*)/g,
+    "[PATH]",
+  );
 
   // Replace relative paths (e.g., ./foo, ../bar)
-  sanitized = sanitized.replace(/(?:^|\s)\.\.?\/[\w\s\-\.\/]+/g, "$1[PATH]");
+  sanitized = sanitized.replace(/(?:^|\s)\.\.?\/[^\s]*/g, "$1[PATH]");
 
   // Replace Unix paths (start with / and contain path chars)
-  sanitized = sanitized.replace(/(^|\s)\/[\w\s\-\.\/]+/g, "$1[PATH]");
+  sanitized = sanitized.replace(/(^|\s)\/[^\s]*/g, "$1[PATH]");
 
   return sanitized;
 }

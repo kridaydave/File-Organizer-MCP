@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Auto-Organize Scheduler Service
  *
  * Smart scheduling with cron-based per-directory configuration.
@@ -30,10 +30,9 @@ export type ConfigLoader = () => UserConfig;
  */
 export class AutoOrganizeService {
   private tasks: Map<string, cron.ScheduledTask> = new Map();
-  private isRunning = false;
   private runningDirectories: Set<string> = new Set();
   private stateService: SchedulerStateService | null = null;
-  private missedSchedulesLock = false;
+  private missedSchedulesLock: Promise<void> | null = null;
 
   constructor(
     private scanner = new FileScannerService(),
@@ -61,7 +60,11 @@ export class AutoOrganizeService {
    * Loads watch list from config and creates cron tasks
    * @returns Result object with success status, task count, and any errors
    */
-  start(): { success: boolean; taskCount: number; errors: string[] } {
+  async start(): Promise<{
+    success: boolean;
+    taskCount: number;
+    errors: string[];
+  }> {
     const errors: string[] = [];
 
     if (this.tasks.size > 0) {
@@ -83,9 +86,13 @@ export class AutoOrganizeService {
 
     if (result.taskCount > 0) {
       logger.info(`Started ${result.taskCount} scheduled task(s)`);
-      this.runMissedSchedules().catch((error) => {
-        logger.error("Initial catchup failed:", error.message);
-      });
+      try {
+        await this.runMissedSchedules();
+      } catch (error: unknown) {
+        const errorMsg = `Initial catchup failed: ${error instanceof Error ? error.message : String(error)}`;
+        logger.error(errorMsg);
+        errors.push(errorMsg);
+      }
     }
 
     return {
@@ -179,7 +186,28 @@ export class AutoOrganizeService {
 
       try {
         const task = cron.schedule(watch.schedule, async () => {
-          await this.runOrganization(watch);
+          const maxRetries = 3;
+          let attempt = 0;
+          while (attempt < maxRetries) {
+            try {
+              await this.runOrganization(watch);
+              break;
+            } catch (error) {
+              attempt++;
+              if (attempt >= maxRetries) {
+                logger.error(
+                  `Cron job failed for ${watch.directory} after ${maxRetries} attempts: ${error}`,
+                );
+              } else {
+                logger.warn(
+                  `Cron job failed for ${watch.directory}, retrying (attempt ${attempt}/${maxRetries}): ${error}`,
+                );
+                await new Promise((resolve) =>
+                  setTimeout(resolve, 1000 * attempt),
+                );
+              }
+            }
+          }
         });
 
         this.tasks.set(watch.directory, task);
@@ -462,16 +490,22 @@ export class AutoOrganizeService {
    */
   async runMissedSchedules(): Promise<void> {
     // Prevent overlapping executions of runMissedSchedules
-    if (this.missedSchedulesLock) {
-      logger.debug("Missed schedules check already running, skipping");
-      return;
+    // Wait for any existing operation to complete (async-safe lock)
+    while (this.missedSchedulesLock) {
+      await this.missedSchedulesLock;
     }
-    this.missedSchedulesLock = true;
+
+    // Create lock for this operation
+    let releaseLock: () => void;
+    this.missedSchedulesLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
 
     try {
       await this._runMissedSchedulesInternal();
     } finally {
-      this.missedSchedulesLock = false;
+      this.missedSchedulesLock = null;
+      releaseLock!();
     }
   }
 

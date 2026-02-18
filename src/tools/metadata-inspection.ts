@@ -1,12 +1,12 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * inspect_metadata Tool
  *
  * @module tools/metadata-inspection
  */
 
 import { z } from "zod";
-import type { ToolDefinition, ToolResponse } from "../types.js";
+import type { ToolDefinition, ToolResponse, CategoryName } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
@@ -182,7 +182,7 @@ export async function handleInspectMetadata(
         // Get suggested organization path
         const subpath = await metadataService.getMetadataSubpath(
           validatedPath,
-          category as any,
+          category as CategoryName,
         );
         if (subpath) {
           result.organizationPath = path.join(category, subpath, fileName);

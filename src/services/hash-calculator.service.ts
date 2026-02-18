@@ -1,10 +1,11 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Hash Calculator Service
  */
 
 import fs from "fs/promises";
 import { createReadStream, type ReadStream } from "fs";
+import { pipeline } from "stream/promises";
 import crypto from "crypto";
 import type { FileWithSize, DuplicateGroup } from "../types.js";
 import { CONFIG } from "../config.js";
@@ -24,15 +25,18 @@ export class HashCalculatorService {
 
   /**
    * Calculate SHA-256 hash of a file
-   */
-  /**
-   * Calculate SHA-256 hash of a file
    * Accepts path string or FileHandle
    */
-  async calculateHash(fileInput: string | fs.FileHandle): Promise<string> {
+  async calculateHash(
+    fileInput: string | fs.FileHandle,
+    options: { timeoutMs?: number } = {},
+  ): Promise<string> {
+    const timeoutMs = options.timeoutMs ?? 60000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     let size: number;
-    let stream: ReadStream;
-    let handleToClose: fs.FileHandle | undefined;
+    let stream: ReadStream | undefined;
 
     try {
       if (typeof fileInput === "string") {
@@ -42,8 +46,6 @@ export class HashCalculatorService {
       } else {
         const stats = await fileInput.stat();
         size = stats.size;
-        // createReadStream from handle
-        // IMPORTANT: autoClose: false to prevent closing the FD, as caller owns the handle
         stream = fileInput.createReadStream({
           start: 0,
           highWaterMark: 64 * 1024,
@@ -57,26 +59,25 @@ export class HashCalculatorService {
         );
       }
 
-      return new Promise((resolve, reject) => {
-        const hash = crypto.createHash("sha256");
+      const hash = crypto.createHash("sha256");
 
-        stream.on("data", (chunk: string | Buffer) => {
-          hash.update(chunk);
-        });
+      await pipeline(stream, hash, { signal: controller.signal });
 
-        stream.on("end", () => resolve(hash.digest("hex")));
-
-        stream.on("error", (error: Error) => {
-          stream.destroy();
-          reject(error);
-        });
-      });
+      return hash.digest("hex");
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`Hash calculation timed out after ${timeoutMs}ms`);
+      }
+      throw error;
     } finally {
-      // If we opened the file internally (string input), stream auto-closes fd?
-      // createReadStream(path) auto-closes.
-      // createReadStream(handle) does NOT auto-close the handle usually?
-      // Actually we don't own the handle if passed in. We should NOT close it.
-      // The caller owns the handle.
+      clearTimeout(timeoutId);
+      if (stream && !stream.destroyed) {
+        stream.destroy();
+        await new Promise<void>((resolve) => {
+          stream!.once("close", () => resolve());
+          setTimeout(() => resolve(), 100);
+        });
+      }
     }
   }
 

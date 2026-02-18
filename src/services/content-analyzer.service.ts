@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Content Analyzer Service - Phase 1
  * Detects true file types using magic numbers and file signatures
  */
@@ -737,7 +737,7 @@ export class ContentAnalyzerService {
         this.maxHeaderSize,
         0,
       );
-      return buffer.subarray(0, bytesRead);
+      return buffer.slice(0, bytesRead);
     } finally {
       await fileHandle?.close();
     }
@@ -897,7 +897,11 @@ export class ContentAnalyzerService {
     }
 
     // If > 90% of bytes are text characters, it's likely a text file
-    return textBytes / Math.min(buffer.length, 512) > 0.9;
+    const checkLength = Math.min(buffer.length, 512);
+    if (checkLength === 0) {
+      return true; // Already handled above, but explicit for clarity
+    }
+    return textBytes / checkLength > 0.9;
   }
 
   /**

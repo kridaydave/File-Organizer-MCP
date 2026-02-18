@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Streaming Scanner Service
  */
 
@@ -39,23 +39,19 @@ export class StreamingScanner {
               batch = [];
             }
           } catch (e) {
-            // Ignore error (access denied etc)
+            logger.error("Failed to stat file", { path: fullPath, error: e });
           }
         }
       }
     } finally {
-      // BUG-002 FIX: Explicitly close directory handle to prevent resource leaks
-      // if generator is abandoned mid-iteration
+      if (batch.length > 0) {
+        yield batch;
+      }
       try {
         await dirHandle.close();
       } catch (closeErr) {
-        // Log but don't throw - we want to preserve original error if any
         logger.error("Failed to close directory handle:", closeErr);
       }
-    }
-
-    if (batch.length > 0) {
-      yield batch;
     }
   }
 
@@ -86,7 +82,9 @@ export class StreamingScanner {
           created: stats.birthtime,
           modified: stats.mtime,
         });
-      } catch {}
+      } catch (e) {
+        logger.error("Failed to stat file", { path: fullPath, error: e });
+      }
 
       onProgress(i + 1, total);
     }

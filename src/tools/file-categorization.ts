@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * categorize_by_type Tool
  *
  * @module tools/file-categorization
@@ -10,6 +10,7 @@ import type {
   ToolDefinition,
   ToolResponse,
   CategorizedResult,
+  CategoryName,
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
@@ -138,16 +139,16 @@ export async function handleCategorizeByType(
         // Find the file in our map
         for (const [path, cat] of fileCategoryMap.entries()) {
           if (path.endsWith(name)) {
-            return cat as any;
+            return cat as CategoryName;
           }
         }
         return originalGetCategory(name);
       };
-      categories = categorizer.categorizeFiles(files);
+      categories = await categorizer.categorizeFiles(files);
       // Restore original method
       categorizer.getCategory = originalGetCategory;
     } else {
-      categories = categorizer.categorizeFiles(files);
+      categories = await categorizer.categorizeFiles(files);
     }
 
     const result: CategorizedResult & {

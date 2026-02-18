@@ -30,9 +30,9 @@ export const AddTextRuleSchema = z.object({
 
 export const NumberingRuleSchema = z.object({
   type: z.literal("numbering"),
-  start_at: z.number().int().default(1),
-  increment_by: z.number().int().default(1),
-  format: z.string().default("search_index"), // 'search_index' means append to name, or simple format string like "%n - "
+  start_at: z.number().int().min(0).max(99999).default(1),
+  increment_by: z.number().int().min(1).max(1000).default(1),
+  format: z.string().default("search_index"),
   separator: z.string().default(" "),
   location: z.enum(["start", "end"]).default("end"),
 });

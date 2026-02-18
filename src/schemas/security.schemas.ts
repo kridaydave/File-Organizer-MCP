@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Security Validation Schemas
  */
 
@@ -11,9 +11,13 @@ import { z } from "zod";
  */
 export const PathSchema = z
   .string()
-  .min(1, "Path is required")
+  .min(1, "Path cannot be empty")
+  .max(4096, "Path too long")
   .refine((path) => !path.includes("\0"), {
-    message: "Path contains invalid null byte",
+    message: "Path cannot contain null bytes",
+  })
+  .refine((path) => !path.includes(".."), {
+    message: "Path cannot contain parent directory traversal",
   });
 
 /**

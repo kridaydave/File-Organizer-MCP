@@ -1,0 +1,10 @@
+{"operation":"organize","source":"manual","status":"error","durationMs":100,"filesProcessed":1,"id":"48715cf8-798c-4d82-ba11-40a6de320a53","timestamp":"2026-02-15T15:35:50.859Z"}
+{"operation":"organize","source":"scheduled","status":"success","durationMs":101,"filesProcessed":2,"id":"08993db9-6f68-4c4d-a727-ccdd247cd134","timestamp":"2026-02-15T15:35:50.859Z"}
+{"operation":"organize","source":"manual","status":"success","durationMs":102,"filesProcessed":3,"id":"15990e59-fac6-4985-8f80-5b4c56884562","timestamp":"2026-02-15T15:35:50.859Z"}
+{"operation":"organize","source":"scheduled","status":"error","durationMs":103,"filesProcessed":4,"id":"a7ad7326-7776-4258-b21f-9967644c9ef5","timestamp":"2026-02-15T15:35:50.859Z"}
+{"operation":"organize","source":"manual","status":"success","durationMs":104,"filesProcessed":5,"id":"30b9cd84-ff21-4e64-973d-b16fd3c15e56","timestamp":"2026-02-15T15:35:50.859Z"}
+{"operation":"scan","source":"scheduled","status":"success","durationMs":105,"filesProcessed":6,"id":"c6e64bdc-b050-48db-b691-8160d0e533b2","timestamp":"2026-02-15T15:35:51.014Z"}
+{"operation":"scan","source":"manual","status":"error","durationMs":106,"filesProcessed":7,"id":"2d0d24fa-cf1e-47ae-b84d-b283f9812ab0","timestamp":"2026-02-15T15:35:51.014Z"}
+{"operation":"scan","source":"scheduled","status":"success","durationMs":107,"filesProcessed":8,"id":"2955e09c-b998-43ce-8ba5-233d32a5719d","timestamp":"2026-02-15T15:35:51.014Z"}
+{"operation":"scan","source":"manual","status":"success","durationMs":108,"filesProcessed":9,"id":"12d61891-4370-4276-9e5c-4429045f8204","timestamp":"2026-02-15T15:35:51.014Z"}
+{"operation":"scan","source":"scheduled","status":"error","durationMs":109,"filesProcessed":10,"id":"e93e2bb8-4981-4db0-b383-f554291c16d5","timestamp":"2026-02-15T15:35:51.014Z"}

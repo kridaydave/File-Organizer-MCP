@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Archive Validation Utility
  *
  * Provides:
@@ -44,12 +44,16 @@ export function detectArchiveFormat(filePath: string): ArchiveValidationResult {
 
     const magicBytes = Array.from(buffer.subarray(0, bytesRead));
 
-    // Check ZIP format
+    // Check ZIP format (full 4-byte signature: 0x50 0x4B 0x03 0x04)
     if (
       bytesRead >= 4 &&
       magicBytes[0] ===
         SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.zip[0] &&
-      magicBytes[1] === SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.zip[1]
+      magicBytes[1] ===
+        SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.zip[1] &&
+      magicBytes[2] ===
+        SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.zip[2] &&
+      magicBytes[3] === SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.zip[3]
     ) {
       return { valid: true, format: "zip" };
     }
@@ -193,6 +197,20 @@ export function validateArchiveEntries(
   targetDirectory: string,
 ): { valid: boolean; invalidEntries: EntryValidationResult[] } {
   const invalidEntries: EntryValidationResult[] = [];
+  const maxEntries = SECURITY_LIMITS.decompression.MAX_ENTRIES;
+
+  if (entries.length > maxEntries) {
+    return {
+      valid: false,
+      invalidEntries: [
+        {
+          valid: false,
+          entryName: "",
+          error: `Too many entries: ${entries.length} exceeds limit of ${maxEntries}`,
+        },
+      ],
+    };
+  }
 
   for (const entry of entries) {
     const validation = validateEntryPath(entry.name, targetDirectory);
@@ -225,8 +243,11 @@ export function validateArchiveEntries(
  * Sanitize entry name to remove potentially dangerous characters
  */
 export function sanitizeEntryName(entryName: string): string {
+  // Normalize Unicode to prevent bypass with alternate representations
+  let sanitized = entryName.normalize("NFC");
+
   // Remove null bytes
-  let sanitized = entryName.replace(/\0/g, "");
+  sanitized = sanitized.replace(/\0/g, "");
 
   // Remove leading slashes and backslashes
   sanitized = sanitized.replace(/^[\/\\]+/, "");

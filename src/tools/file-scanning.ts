@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * scan_directory Tool
  *
  * @module tools/file-scanning
@@ -13,6 +13,7 @@ import { FileScannerService } from "../services/file-scanner.service.js";
 import { contentScreeningService } from "../services/content-screening.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
+import { escapeMarkdown } from "../utils/index.js";
 import {
   CommonParamsSchema,
   PaginationSchema,
@@ -128,6 +129,16 @@ export async function handleScanDirectory(
       offset,
     } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
+    if (!validatedPath) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: Invalid or forbidden source path: ${directory}`,
+          },
+        ],
+      };
+    }
 
     // Check if directory exists
     try {
@@ -192,7 +203,7 @@ export async function handleScanDirectory(
 **Total Size:** ${result.total_size_readable}
 **Showing:** ${result.offset + 1} - ${result.offset + result.returned_count}
 
-${result.items.map((f) => `- **${f.name}** (${formatBytes(f.size)}) - ${f.modified.toISOString().split("T")[0]}`).join("\n")}
+${result.items.map((f) => `- **${escapeMarkdown(f.name)}** (${formatBytes(f.size)}) - ${f.modified.toISOString().split("T")[0]}`).join("\n")}
 
 ${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more files (use offset=${result.next_offset})*` : ""}
 

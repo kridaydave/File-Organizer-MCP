@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Organizer Service
  */
 
@@ -16,6 +16,7 @@ import type {
 import { CATEGORIES } from "../constants.js";
 import { fileExists } from "../utils/file-utils.js";
 import { logger } from "../utils/logger.js";
+import { isErrnoException } from "../utils/error-handler.js";
 import { CategorizerService } from "./categorizer.service.js";
 import { RollbackService } from "./rollback.service.js";
 import { PathValidatorService } from "./path-validator.service.js";
@@ -84,7 +85,18 @@ export class OrganizerService {
     const categoryCounts: Record<string, number> = {};
     const skippedFiles: { path: string; reason: string }[] = [];
     const warnings: string[] = [];
-    const conflicts: any[] = [];
+    const conflicts: Array<{ file: string; reason: string }> = [];
+
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      return {
+        moves,
+        categoryCounts,
+        conflicts,
+        skippedFiles,
+        estimatedDuration: 0,
+        warnings,
+      };
+    }
 
     // Track planned destinations to handle batch-internal collisions
     const plannedDestinations = new Set<string>();
@@ -105,7 +117,7 @@ export class OrganizerService {
       try {
         // Use the stateful categorizer (rules aware)
         // Pass useContentAnalysis to enable content-based type verification
-        const category = this.categorizer.getCategory(
+        const category = await this.categorizer.getCategory(
           file.name,
           useContentAnalysis,
           file.path,
@@ -212,8 +224,6 @@ export class OrganizerService {
 
     if (dryRun) {
       return {
-        dry_run: true,
-        total_files: plan.moves.length,
         statistics: plan.categoryCounts,
         actions: plan.moves.map((m) => ({
           file: path.basename(m.source),
@@ -222,8 +232,10 @@ export class OrganizerService {
           category: m.category as CategoryName,
         })),
         errors: plan.warnings,
-        directory,
-      } as any;
+        errorCount: 0,
+        successCount: plan.moves.length,
+        aborted: false,
+      };
     }
 
     // 2. Execute
@@ -295,15 +307,15 @@ export class OrganizerService {
             try {
               const destStat = await fs.stat(targetPath);
               const srcStat = await fs.stat(sourcePath);
-              if (srcStat.mtime <= destStat.mtime) {
+              if (srcStat.mtime < destStat.mtime) {
                 // Source is not newer - skip this file
-                const msg = `Skipped ${sourcePath}: destination is newer or same age`;
+                const msg = `Skipped ${sourcePath}: destination is newer`;
                 logger.info(msg);
                 errors.push(msg);
                 continue;
               }
-            } catch (statErr: any) {
-              if (statErr.code === "ENOENT") {
+            } catch (statErr: unknown) {
+              if (isErrnoException(statErr) && statErr.code === "ENOENT") {
                 // Destination doesn't exist - proceed with move (no overwrite needed)
                 logger.debug(
                   `Destination ${targetPath} does not exist, proceeding with move`,
@@ -321,8 +333,8 @@ export class OrganizerService {
             // First try to rename (will fail if destination exists)
             await fs.rename(sourcePath, targetPath);
             // Success - no overwrite needed
-          } catch (renameErr: any) {
-            if (renameErr.code === "EEXIST") {
+          } catch (renameErr: unknown) {
+            if (isErrnoException(renameErr) && renameErr.code === "EEXIST") {
               // Destination exists - need to handle overwrite
               const backupName = `${Date.now()}_overwrite_${path.basename(targetPath)}`;
               overwrittenBackupPath = path.join(backupDir, backupName);
@@ -332,7 +344,7 @@ export class OrganizerService {
                 await fs.rename(targetPath, overwrittenBackupPath);
                 // Now retry the original move
                 await fs.rename(sourcePath, targetPath);
-              } catch (backupErr: any) {
+              } catch (backupErr: unknown) {
                 // Restore backup if secondary operation fails
                 try {
                   await fs.rename(overwrittenBackupPath!, targetPath);
@@ -378,6 +390,20 @@ export class OrganizerService {
             let effectivePath = targetPath;
 
             while (!success && retryCount < 100) {
+              // HIGH-001 FIX: Validate source file integrity before each retry attempt
+              try {
+                await fs.access(sourcePath, constants.F_OK);
+              } catch (accessErr) {
+                logger.error(
+                  `Source file ${sourcePath} not accessible before retry attempt ${retryCount + 1}. File may be corrupted or partially processed.`,
+                );
+                throw new Error(
+                  `Source file integrity check failed for ${sourcePath}: File not accessible before retry`,
+                );
+              }
+
+              let copySucceeded = false;
+
               try {
                 // Atomic COPY with COPYFILE_EXCL to prevent overwrites
                 await fs.copyFile(
@@ -385,15 +411,17 @@ export class OrganizerService {
                   effectivePath,
                   constants.COPYFILE_EXCL,
                 );
+                copySucceeded = true;
 
-                // BUG-005 FIX: Delete Source after successful copy (with robust cleanup)
+                // HIGH-001 FIX: Delete Source after successful copy (with robust cleanup)
                 try {
                   await fs.unlink(sourcePath);
                   success = true;
                   finalDest = effectivePath;
                 } catch (unlinkErr) {
-                  // BUG-005 COMPLETE: If unlink fails, remove the copied file to maintain atomicity
-                  const cleanupMsg = `Failed to unlink source ${sourcePath} after copy. Attempting cleanup.`;
+                  // HIGH-001 FIX: If unlink fails, source file may be in inconsistent state
+                  // Do NOT retry - this is a critical error
+                  const cleanupMsg = `Failed to unlink source ${sourcePath} after copy. Source file may be in inconsistent state.`;
                   logger.error(cleanupMsg);
 
                   try {
@@ -407,11 +435,27 @@ export class OrganizerService {
                     logger.error(criticalMsg);
                     errors.push(criticalMsg);
                   }
-                  throw unlinkErr;
+
+                  // HIGH-001 FIX: Categorize unlink errors as critical - don't retry
+                  const errMessage =
+                    unlinkErr instanceof Error
+                      ? unlinkErr.message
+                      : String(unlinkErr);
+                  throw new Error(
+                    `CRITICAL: Source file ${sourcePath} unlink failed after successful copy. ` +
+                      `Source file integrity compromised. Error: ${errMessage}`,
+                  );
                 }
-              } catch (err: any) {
-                if (err.code === "EEXIST") {
-                  // Race condition hit! Increment counter and try again
+              } catch (err: unknown) {
+                // HIGH-001 FIX: Distinguish between copy errors and unlink errors
+                // Only retry on EEXIST errors from copy operation
+                // NOTE: Use isErrnoException instead of instanceof Error to handle cross-realm errors (Jest VM modules)
+                if (
+                  !copySucceeded &&
+                  isErrnoException(err) &&
+                  err.code === "EEXIST"
+                ) {
+                  // Race condition hit during copy! Increment counter and try again
                   retryCount++;
                   // Use consistent naming: originalname_1.ext, originalname_2.ext, etc.
                   effectivePath = path.join(
@@ -421,10 +465,16 @@ export class OrganizerService {
                   logger.debug(
                     `Race condition detected for ${sourcePath}, retrying as ${effectivePath}`,
                   );
-                } else {
-                  // Unexpected error - log and rethrow
+                } else if (copySucceeded) {
+                  // HIGH-001 FIX: Unlink failed - source compromised, do not retry
                   logger.error(
-                    `Unexpected error during atomic move of ${sourcePath}: ${err.message}`,
+                    `Unlink failed after successful copy for ${sourcePath}: ${err instanceof Error ? err.message : String(err)}`,
+                  );
+                  throw err;
+                } else {
+                  // Unexpected error during copy - log and rethrow
+                  logger.error(
+                    `Unexpected error during atomic move of ${sourcePath}: ${err instanceof Error ? err.message : String(err)}`,
                   );
                   throw err;
                 }
@@ -444,7 +494,7 @@ export class OrganizerService {
             const destDir = path.dirname(targetPath);
 
             // Extract counter from planned path if available
-            let startCounter = 1;
+            let startCounter = 0;
             const plannedBaseName = path.basename(
               targetPath,
               path.extname(targetPath),
@@ -487,8 +537,8 @@ export class OrganizerService {
                   }
                   throw unlinkErr;
                 }
-              } catch (err: any) {
-                if (err.code === "EEXIST") {
+              } catch (err: unknown) {
+                if (isErrnoException(err) && err.code === "EEXIST") {
                   // Race condition: destination file exists, apply conflict strategy
                   if (move.conflictResolution === "skip") {
                     // Skip this file - don't move it
@@ -540,22 +590,31 @@ export class OrganizerService {
           overwrittenBackupPath: overwrittenBackupPath,
           timestamp: Date.now(),
         });
+
+        // HIGH-002 FIX: Save manifest incrementally after each successful operation
+        // This ensures partial successes can be rolled back if a later operation fails
+        try {
+          await rollbackService.createManifest(
+            `Organization of ${directory} (${rollbackActions.length} files)`,
+            [...rollbackActions], // Create a copy to ensure we capture current state
+          );
+        } catch (manifestErr) {
+          const manifestError =
+            manifestErr instanceof Error
+              ? manifestErr
+              : new Error(String(manifestErr));
+          const msg = `Failed to update rollback manifest: ${manifestError.message}`;
+          errors.push(msg);
+          logger.error(msg, {
+            operation: "manifest_update",
+            directory,
+            rollbackCount: rollbackActions.length,
+            error: manifestError.message,
+            errorStack: manifestError.stack,
+          });
+        }
       } catch (error) {
         const msg = `Failed to move ${move.source}: ${(error as Error).message}`;
-        errors.push(msg);
-        logger.error(msg);
-      }
-    }
-
-    // 3. Save Manifest if any actions occurred
-    if (rollbackActions.length > 0) {
-      try {
-        await rollbackService.createManifest(
-          `Organization of ${directory} (${rollbackActions.length} files)`,
-          rollbackActions,
-        );
-      } catch (manifestErr) {
-        const msg = `Failed to create rollback manifest: ${(manifestErr as Error).message}`;
         errors.push(msg);
         logger.error(msg);
       }

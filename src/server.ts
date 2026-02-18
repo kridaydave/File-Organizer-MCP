@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.1
+ * File Organizer MCP Server v3.4.0
  * Server Initialization
  */
 

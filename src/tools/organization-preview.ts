@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * organization-preview Tool
  *
  * @module tools/organization-preview
@@ -17,6 +17,19 @@ import { globalOrganizerService } from "../services/index.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
 import { loadUserConfig } from "../config.js";
+
+export interface MoveItem {
+  source: string;
+  destination: string;
+  category: string;
+  conflict: boolean;
+  conflict_resolution?: "rename" | "skip" | "overwrite" | "overwrite_if_newer";
+}
+
+export interface SkippedFile {
+  path: string;
+  reason: string;
+}
 
 export const PreviewOrganizationInputSchema = z
   .object({
@@ -139,7 +152,7 @@ export async function handlePreviewOrganization(
     };
 
     if (show_conflicts_only) {
-      output.moves = output.moves.filter((m: any) => m.conflict);
+      output.moves = output.moves.filter((m: MoveItem) => m.conflict);
     }
 
     if (response_format === "json") {
@@ -154,7 +167,7 @@ export async function handlePreviewOrganization(
 **Summary:**
 - Files to Move: ${output.summary.total_files}
 - Estimated Time: ${output.summary.estimated_duration_seconds.toFixed(2)}s
-- Conflicts: ${output.moves.filter((m: any) => m.conflict).length}
+- Conflicts: ${output.moves.filter((m: MoveItem) => m.conflict).length}
 - Conflict Strategy: ${effectiveConflictStrategy}
 
 **Category Breakdown:**
@@ -163,9 +176,9 @@ ${Object.entries(output.summary.categories_affected)
   .join("\n")}
 
 **Proposed Moves:**
-${output.moves.map((m: any) => `- \`${m.source}\` -> \`${m.destination}\` ${m.conflict ? `⚠️ (${m.conflict_resolution || "Rename"})` : ""}`).join("\n")}
+${output.moves.map((m: MoveItem) => `- \`${m.source}\` -> \`${m.destination}\` ${m.conflict ? `⚠️ (${m.conflict_resolution || "Rename"})` : ""}`).join("\n")}
 
-${output.skipped_files.length ? `**Skipped Files:**\n${output.skipped_files.map((f: any) => `- ${f.path}: ${f.reason}`).join("\n")}` : ""}
+${output.skipped_files.length ? `**Skipped Files:**\n${output.skipped_files.map((f: SkippedFile) => `- ${f.path}: ${f.reason}`).join("\n")}` : ""}
 `;
 
     return {

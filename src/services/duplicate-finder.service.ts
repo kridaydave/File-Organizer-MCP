@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Duplicate Finder Service
  *
  * Advanced duplicate detection, scoring, and safe deletion.
@@ -51,10 +51,12 @@ export interface DeletionResult {
 export class DuplicateFinderService {
   private hashCalculator: HashCalculatorService;
   private rollbackService: RollbackService;
+  private fileScanner: FileScannerService;
 
   constructor() {
     this.hashCalculator = new HashCalculatorService();
     this.rollbackService = new RollbackService();
+    this.fileScanner = new FileScannerService();
   }
 
   /**
@@ -113,7 +115,8 @@ export class DuplicateFinderService {
 
     // 1. Path Depth (Preferred: Shallower paths)
     // Depth penalty: -1 per directory level
-    const depth = file.path.split(/[/\\]/).length;
+    const normalizedPath = path.normalize(file.path);
+    const depth = normalizedPath.split(/[/\\]/).filter(Boolean).length - 1;
     score -= depth;
     reasons.push(`Path depth: ${depth}`);
 
@@ -145,13 +148,29 @@ export class DuplicateFinderService {
     }
 
     // 4. Time-based (Strategy specific)
-    const age = file.modified ? file.modified.getTime() : 0;
+    // Calculate age in days relative to now
+    let ageInDays = 0;
+    if (file.modified) {
+      const ageMs = Date.now() - file.modified.getTime();
+      ageInDays = ageMs / (1000 * 60 * 60 * 24);
+    } else {
+      reasons.push("No modification date available");
+    }
+
     if (strategy === "newest") {
-      score += age / 1000000000; // Normalizing somewhat
-      reasons.push("Newest bonus");
+      // Newer files get higher score (no cap - raw subtraction)
+      // ageInDays is smaller for newer files, so 50 - smaller = higher score
+      const newestBonus = 50 - ageInDays * 0.5;
+      score += newestBonus;
+      reasons.push(
+        `Newest bonus (${newestBonus >= 0 ? "+" : ""}${newestBonus.toFixed(1)})`,
+      );
     } else if (strategy === "oldest") {
-      score -= age / 1000000000;
-      reasons.push("Oldest bonus");
+      // Older files get higher score
+      // ageInDays is larger for older files
+      const oldestBonus = ageInDays * 0.5;
+      score += oldestBonus;
+      reasons.push(`Oldest bonus (+${oldestBonus.toFixed(1)})`);
     }
 
     return {
@@ -167,13 +186,29 @@ export class DuplicateFinderService {
    * @param filesToDelete - Array of file paths to delete
    * @param options - Deletion options
    * @param options.createBackupManifest - Create backup and rollback manifest (default: true)
-   * @param options.autoVerify - Automatically verify duplicates exist before deletion (default: true)
+   * @param options.autoVerify - Automatically verify duplicates exist before deletion (default: false, WARNING: disabling verification may cause data loss)
    */
   async deleteFiles(
     filesToDelete: string[],
     options: { createBackupManifest?: boolean; autoVerify?: boolean } = {},
   ): Promise<DeletionResult> {
     const { createBackupManifest = true, autoVerify = false } = options;
+
+    if (!autoVerify) {
+      logger.warn(
+        "autoVerify is disabled - file deletion proceeds without verification. This may cause data loss if file paths are invalid.",
+      );
+    }
+
+    // Validate input: check for empty array and deduplicate paths
+    if (!Array.isArray(filesToDelete) || filesToDelete.length === 0) {
+      logger.warn("No files provided for deletion");
+      return { deleted: [], failed: [] };
+    }
+
+    // Deduplicate paths in the array
+    const uniquePaths = [...new Set(filesToDelete)];
+
     const result: DeletionResult = {
       deleted: [],
       failed: [],
@@ -191,7 +226,7 @@ export class DuplicateFinderService {
     // Note: We trust that user has identified duplicates via analyze_duplicates
     // We just ensure files exist, are readable, and pass security validation
     let filesToProcess: string[] = [];
-    for (const filePath of filesToDelete) {
+    for (const filePath of uniquePaths) {
       let handle: fs.FileHandle | undefined;
       try {
         if (!(await fileExists(filePath))) {
@@ -234,9 +269,12 @@ export class DuplicateFinderService {
     for (const filePath of filesToProcess) {
       try {
         if (createBackupManifest) {
-          // Move to backup
-          // BUG-001 FIX: Use cryptographically secure UUID for collision-safe backup names
-          const backupName = `${crypto.randomUUID()}_${Date.now()}_${path.basename(filePath)}`;
+          // Move to backup - use path.parse to safely extract filename components
+          // and sanitize to prevent path traversal attacks
+          const parsed = path.parse(filePath);
+          const safeExt = (parsed.ext || ".bin").replace(/[^a-zA-Z0-9.]/g, "");
+          const safeName = parsed.name.replace(/[^a-zA-Z0-9_-]/g, "") || "file";
+          const backupName = `${crypto.randomUUID()}_${Date.now()}_${safeName}${safeExt}`;
           const backupPath = path.join(backupDir, backupName);
 
           await fs.rename(filePath, backupPath);
@@ -298,8 +336,7 @@ export class DuplicateFinderService {
     for (const [dir, filesInDir] of filesByDir.entries()) {
       try {
         // Scan directory to find all duplicates
-        const scanner = new FileScannerService();
-        const allFilesInDir = await scanner.getAllFiles(dir, false); // Don't recurse
+        const allFilesInDir = await this.fileScanner.getAllFiles(dir, false); // Don't recurse
 
         // Build map of hash -> file paths (excluding files being deleted)
         const hashToFiles = new Map<string, string[]>();
@@ -317,10 +354,13 @@ export class DuplicateFinderService {
               hashToFiles.set(hash, []);
             }
             hashToFiles.get(hash)!.push(file.path);
-
-            await handle.close();
           } catch (error) {
             // Skip files we can't read
+            logger.debug(
+              `Skipping file during verification: ${file.path}`,
+              error as Error,
+            );
+          } finally {
             if (handle) {
               try {
                 await handle.close();
@@ -341,7 +381,6 @@ export class DuplicateFinderService {
             const validator = new PathValidatorService();
             handle = await validator.openAndValidateFile(filePath);
             const hash = await this.hashCalculator.calculateHash(handle);
-            await handle.close();
 
             const remainingCopies = hashToFiles.get(hash) || [];
 
@@ -359,6 +398,7 @@ export class DuplicateFinderService {
               path: filePath,
               error: `Cannot verify: ${(error as Error).message}`,
             });
+          } finally {
             if (handle) {
               try {
                 await handle.close();

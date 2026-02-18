@@ -152,7 +152,10 @@ function getDefaultAllowedDirs(): string[] {
     try {
       const stats = fs.lstatSync(dir);
       return stats.isDirectory() && !stats.isSymbolicLink();
-    } catch {
+    } catch (error) {
+      logger.debug(
+        `Skipping directory ${dir}: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
       return false;
     }
   });
@@ -310,12 +313,28 @@ function loadCustomAllowedDirs(): string[] {
       // Validate that custom directories exist, are not symlinks, and block path traversal
       return config.customAllowedDirectories.filter((dir: string) => {
         try {
+          // Expand ~ to home directory before any checks
+          const expandedDir = dir.startsWith("~")
+            ? path.join(os.homedir(), dir.slice(1))
+            : dir;
+
           // First check if path exists and get stats (before any resolution)
-          const stats = fs.lstatSync(dir);
+          const stats = fs.lstatSync(expandedDir);
 
           // Reject symlinks immediately
           if (stats.isSymbolicLink()) {
             logger.error(`Warning: Custom directory blocked (symlink): ${dir}`);
+            return false;
+          }
+
+          // Block relative path traversal patterns and null bytes BEFORE resolving
+          if (expandedDir.includes("..") || expandedDir.includes("\0")) {
+            const reason = expandedDir.includes("\0")
+              ? "null byte"
+              : "path traversal";
+            logger.error(
+              `Warning: Custom directory blocked (${reason}): ${dir}`,
+            );
             return false;
           }
 
@@ -325,21 +344,13 @@ function loadCustomAllowedDirs(): string[] {
           }
 
           // Resolve to absolute path to check for traversal attempts
-          const resolvedDir = path.resolve(dir);
+          const resolvedDir = path.resolve(expandedDir);
           const home = os.homedir();
 
           // Block path traversal outside of home directory
           if (!isSubPath(home, resolvedDir)) {
             logger.error(
               `Warning: Custom directory blocked (outside home): ${dir}`,
-            );
-            return false;
-          }
-
-          // Block relative path traversal patterns
-          if (dir.includes("..") || dir.includes("~")) {
-            logger.error(
-              `Warning: Custom directory blocked (path traversal): ${dir}`,
             );
             return false;
           }
@@ -507,7 +518,7 @@ export function initializeUserConfig(): void {
       };
 
       fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
-      logger.error(`Created default config file at: ${configPath}`);
+      logger.info(`Created default config file at: ${configPath}`);
     }
   } catch (error) {
     logger.error("Error initializing user config:", (error as Error).message);

@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Metadata Cache Service
  * Caches metadata extractions for audio and image files
  */
@@ -28,6 +28,10 @@ function isMetadataCache(obj: unknown): obj is MetadataCache {
   if (typeof obj !== "object" || obj === null) return false;
   const cache = obj as Record<string, unknown>;
   return typeof cache.version === "string" && Array.isArray(cache.entries);
+}
+
+function isValidDate(value: unknown): value is Date {
+  return value instanceof Date && !isNaN(value.getTime());
 }
 
 // Extended cache entry for internal use with TTL support
@@ -229,7 +233,7 @@ export class MetadataCacheService {
     }
 
     // Check if expired
-    if (entry.ttl !== null && Date.now() - entry.timestamp > entry.ttl) {
+    if (entry.ttl != null && Date.now() - entry.timestamp > entry.ttl) {
       this.memoryCache.delete(key);
       this.stats.misses++;
       return null;
@@ -280,7 +284,7 @@ export class MetadataCacheService {
       const entry: ExtendedCacheEntry = {
         value: serializedValue,
         timestamp: Date.now(),
-        ttl: options?.ttl ?? this.maxAge,
+        ttl: options?.ttl !== undefined ? options.ttl : this.maxAge,
         filePath: options?.filePath,
         fileMtime,
       };
@@ -345,7 +349,7 @@ export class MetadataCacheService {
     try {
       const stats = await fs.stat(entry.filePath);
       // If file has been modified since cache was created, it's stale
-      if (entry.fileMtime && stats.mtimeMs !== entry.fileMtime) {
+      if (entry.fileMtime && Math.abs(stats.mtimeMs - entry.fileMtime) > 1) {
         return true;
       }
     } catch {
@@ -379,7 +383,7 @@ export class MetadataCacheService {
       const keysToDelete: string[] = [];
 
       for (const [key, entry] of this.memoryCache) {
-        if (entry.ttl !== null && now - entry.timestamp > entry.ttl) {
+        if (entry.ttl != null && now - entry.timestamp > entry.ttl) {
           keysToDelete.push(key);
         }
       }
@@ -458,7 +462,10 @@ export class MetadataCacheService {
 
       // Validate cache entry
       const currentHash = this.generateFileHash(filePath, stats.mtimeMs);
-      const isExpired = Date.now() - entry.cachedAt.getTime() > this.maxAge;
+      const cachedAtTime = isValidDate(entry.cachedAt)
+        ? entry.cachedAt.getTime()
+        : 0;
+      const isExpired = Date.now() - cachedAtTime > this.maxAge;
       const isHashValid = entry.fileHash === currentHash;
 
       if (isExpired || !isHashValid) {
@@ -863,7 +870,10 @@ export class MetadataCacheService {
         const expiredEntries: MetadataCacheEntry[] = [];
 
         for (const entry of cache.entries) {
-          const age = now - entry.cachedAt.getTime();
+          const cachedAtTime = isValidDate(entry.cachedAt)
+            ? entry.cachedAt.getTime()
+            : 0;
+          const age = now - cachedAtTime;
           if (age <= this.maxAge) {
             validEntries.push(entry);
           } else {

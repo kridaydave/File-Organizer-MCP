@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Structured Logging Utility
  */
 
@@ -83,11 +83,11 @@ export class Logger {
   logMetadata(
     level: LogLevel,
     message: string,
-    metadata: any,
-    context?: Record<string, any>,
+    metadata?: Record<string, unknown> | undefined,
+    context?: Record<string, unknown>,
   ): void {
     this.log(level, message, {
-      metadata,
+      ...(metadata ? { metadata } : {}),
       ...context,
     });
   }
@@ -102,7 +102,17 @@ export class Logger {
   /**
    * Log security scan results with metadata
    */
-  logScanResult(filePath: string, scanResult: any, metadata?: any): void {
+  logScanResult(
+    filePath: string,
+    scanResult: {
+      detectedType?: string;
+      threatLevel?: string;
+      passed?: boolean;
+      issues?: Array<{ message?: string }>;
+      duration?: number;
+    },
+    metadata?: Record<string, unknown>,
+  ): void {
     const level =
       scanResult.threatLevel === "high" || scanResult.threatLevel === "critical"
         ? "error"
@@ -125,7 +135,14 @@ export class Logger {
 
   private shouldLog(level: string): boolean {
     const levels = ["debug", "info", "warn", "error"];
-    return levels.indexOf(level) >= levels.indexOf(this.logLevel);
+    const levelIndex = levels.indexOf(level);
+    const currentLevelIndex = levels.indexOf(this.logLevel);
+
+    if (levelIndex === -1 || currentLevelIndex === -1) {
+      return levelIndex >= 1;
+    }
+
+    return levelIndex >= currentLevelIndex;
   }
 }
 

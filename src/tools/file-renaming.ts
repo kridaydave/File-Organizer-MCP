@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * batch_rename Tool
  *
  * @module tools/file-renaming
@@ -112,11 +112,27 @@ export async function handleBatchRename(
     let filesToProcess: string[] = [];
 
     if (explicitFiles && explicitFiles.length > 0) {
-      // Validate each file path
+      const validatedFiles: string[] = [];
+      const errors: string[] = [];
       for (const f of explicitFiles) {
-        await validateStrictPath(f);
+        const validated = await validateStrictPath(f);
+        if (validated) {
+          validatedFiles.push(validated);
+        } else {
+          errors.push(`Invalid path: ${f}`);
+        }
       }
-      filesToProcess = explicitFiles;
+      filesToProcess = validatedFiles;
+      if (errors.length > 0 && filesToProcess.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: All provided paths are invalid.\n${errors.join("\n")}`,
+            },
+          ],
+        };
+      }
     } else if (directory) {
       const validatedDir = await validateStrictPath(directory);
       const scanner = new FileScannerService();

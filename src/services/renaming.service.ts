@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.2.0
+ * File Organizer MCP Server v3.4.0
  * Renaming Service
  */
 
@@ -55,7 +55,10 @@ export class RenamingService {
 
     for (let i = 0; i < files.length; i++) {
       const originalPath = files[i];
-      if (!originalPath) continue;
+      if (!originalPath) {
+        logger.warn("Skipping undefined file path in rename preview");
+        continue;
+      }
       const dirname = path.dirname(originalPath);
       const ext = path.extname(originalPath);
       const basename = path.basename(originalPath, ext);
@@ -74,6 +77,15 @@ export class RenamingService {
                 if (frRule.type !== "find_replace") break;
 
                 if (frRule.use_regex) {
+                  const regexValidation = isSafeRegex(frRule.find);
+                  if (!regexValidation.safe) {
+                    logger.warn(
+                      `Unsafe regex pattern detected in rule for file ${basename}: ${regexValidation.error}`,
+                    );
+                    throw new Error(
+                      `Unsafe regex pattern: ${regexValidation.error}`,
+                    );
+                  }
                   const flags =
                     (frRule.global ? "g" : "") +
                     (frRule.case_sensitive ? "" : "i");
@@ -181,30 +193,45 @@ export class RenamingService {
         }
         usedNames.add(newPath);
 
-        // Disk Conflict Check (Naive)
+        // Disk Conflict Check: Try exclusive access to detect conflicts atomically
+        // This avoids TOCTOU race condition by attempting action and handling errors
         if (willChange && !conflict) {
           try {
-            // Check if destination exists
-            await fs.access(newPath); // Will throw if not exists
-
-            // If exists, check if it's the SAME file (case-only rename)
-            const srcStat = await fs.stat(originalPath);
-            const destStat = await fs.stat(newPath);
-
-            // On Windows/Mac (case-insensitive), ino/dev should match if it's the same file
-            // Note: ino might be 0 on some systems but usually consistent for same file handle
-            if (srcStat.ino !== destStat.ino || srcStat.dev !== destStat.dev) {
-              // Fallback for systems where ino is unreliable (e.g. Windows sometimes)
-              // If full paths match case-insensitively, assume it's the same file
-              const isSamePath =
-                path.resolve(originalPath).toLowerCase() ===
-                path.resolve(newPath).toLowerCase();
-              if (!isSamePath) {
+            // Try to get exclusive access to destination - this will fail if it exists
+            // Using 'wx' flag: open for writing, fail if path exists (atomic check)
+            const handle = await fs.open(newPath, "wx");
+            await handle.close();
+            // Successfully opened exclusively, so file didn't exist - clean up our test file
+            await fs.unlink(newPath).catch(() => {
+              // Ignore cleanup errors - the conflict check succeeded
+            });
+          } catch (err) {
+            const nodeErr = err as NodeJS.ErrnoException;
+            // EEXIST: Destination file already exists
+            if (nodeErr.code === "EEXIST") {
+              // Check if it's the SAME file (case-only rename on case-insensitive FS)
+              try {
+                const srcStat = await fs.stat(originalPath);
+                const destStat = await fs.stat(newPath);
+                // On Windows/Mac (case-insensitive), ino/dev should match if same file
+                if (
+                  srcStat.ino !== destStat.ino ||
+                  srcStat.dev !== destStat.dev
+                ) {
+                  // Fallback for systems where ino is unreliable
+                  const isSamePath =
+                    path.resolve(originalPath).toLowerCase() ===
+                    path.resolve(newPath).toLowerCase();
+                  if (!isSamePath) {
+                    conflict = true;
+                  }
+                }
+              } catch {
+                // If we can't stat both files, assume conflict for safety
                 conflict = true;
               }
             }
-          } catch (err) {
-            // Destination does not exist, no conflict
+            // ENOENT or other errors: no conflict (destination doesn't exist or other issue)
           }
         }
 
@@ -333,7 +360,96 @@ export class RenamingService {
   }
 }
 
-// Helpers
+// ==================== Regex Safety ====================
+const MAX_REGEX_LENGTH = 100;
+const REGEX_TIMEOUT_MS = 100;
+
+function isSafeRegex(pattern: string): { safe: boolean; error?: string } {
+  if (pattern.length > MAX_REGEX_LENGTH) {
+    return {
+      safe: false,
+      error: `Regex pattern exceeds maximum length of ${MAX_REGEX_LENGTH} characters`,
+    };
+  }
+
+  const dangerousPatterns = [
+    { pattern: /\(\?[:=!<]/, name: "lookahead/lookbehind" },
+    { pattern: /\(\?<\w*>/, name: "named capture group" },
+    { pattern: /\{\d+\,\d+\}/, name: "bounded quantifier" },
+  ];
+
+  for (const { pattern: dp, name } of dangerousPatterns) {
+    if (dp.test(pattern)) {
+      return {
+        safe: false,
+        error: `Regex contains unsupported pattern: ${name}`,
+      };
+    }
+  }
+
+  const nestedQuantifierPattern = /[\+\*\?][\)\]]+/;
+  const innerQuantifierPattern = /\([\+\*\?]/;
+
+  if (
+    nestedQuantifierPattern.test(pattern) ||
+    innerQuantifierPattern.test(pattern)
+  ) {
+    if (!testRegexTimeout(pattern, REGEX_TIMEOUT_MS)) {
+      return {
+        safe: false,
+        error: "Regex pattern may cause catastrophic backtracking",
+      };
+    }
+  }
+
+  const overlappingAlternation = /\(([^)]+\|){3,}[^)]*\)/;
+  if (overlappingAlternation.test(pattern)) {
+    return {
+      safe: false,
+      error: "Regex contains potentially dangerous overlapping alternation",
+    };
+  }
+
+  return { safe: true };
+}
+
+function testRegexTimeout(pattern: string, timeoutMs: number): boolean {
+  try {
+    const testString = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const regex = new RegExp(pattern);
+
+    const startTime = Date.now();
+    regex.test(testString);
+
+    return Date.now() - startTime < timeoutMs;
+  } catch {
+    return false;
+  }
+}
+
+function safeRegexTest(
+  pattern: string,
+  flags: string,
+  input: string,
+  timeoutMs: number,
+): string | null {
+  try {
+    const regex = new RegExp(pattern, flags);
+
+    const startTime = Date.now();
+    const result = regex.test(input);
+
+    if (Date.now() - startTime > timeoutMs) {
+      return null;
+    }
+
+    return result ? "matched" : "not matched";
+  } catch {
+    return null;
+  }
+}
+
+// ==================== Helpers ====================
 function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
