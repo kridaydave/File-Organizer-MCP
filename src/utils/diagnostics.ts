@@ -18,7 +18,7 @@ import { getAutoOrganizeScheduler } from "../services/auto-organize.service.js";
 // Try to import chalk, fallback if not available
 let chalk: any;
 try {
-  chalk = require("chalk");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports\n  chalk = require("chalk");
 } catch {
   // Fallback if chalk not available
   chalk = {
@@ -684,3 +684,4 @@ async function checkFileSystemPermissions(): Promise<DiagnosticResult> {
     message: "✓ Write access confirmed",
   };
 }
+
