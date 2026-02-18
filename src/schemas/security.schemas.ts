@@ -23,16 +23,12 @@ export const PathSchema = z
 /**
  * Schema for security mode configuration
  */
-export const SecurityModeSchema = z.enum([
-  "strict",
-  "sandboxed",
-  "unrestricted",
-]);
+const SecurityModeSchema = z.enum(["strict", "sandboxed", "unrestricted"]);
 
 /**
  * Schema for allowed paths configuration
  */
-export const AllowedPathsSchema = z.array(PathSchema).min(1);
+const AllowedPathsSchema = z.array(PathSchema).min(1);
 
-export type SecurityMode = z.infer<typeof SecurityModeSchema>;
-export type AllowedPaths = z.infer<typeof AllowedPathsSchema>;
+type SecurityMode = z.infer<typeof SecurityModeSchema>;
+type AllowedPaths = z.infer<typeof AllowedPathsSchema>;

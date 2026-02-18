@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
+import { CommonParamsSchema } from "../schemas/common.schemas.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { AudioMetadataService } from "../services/audio-metadata.service.js";
@@ -16,8 +17,8 @@ import { ImageMetadataService } from "../services/image-metadata.service.js";
 import { MetadataService } from "../services/metadata.service.js";
 import { textExtractionService } from "../services/text-extraction.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
 import { logger } from "../utils/logger.js";
+import { formatBytes } from "../utils/formatters.js";
 import * as path from "path";
 import * as fs from "fs/promises";
 
@@ -300,7 +301,9 @@ export async function handleBatchReadFiles(
     // Filter by file types if specified
     let files = allFiles;
     if (file_types && file_types.length > 0) {
-      const allowedExts = new Set(file_types.map((e) => e.toLowerCase()));
+      const allowedExts = new Set(
+        file_types.map((e: string) => e.toLowerCase()),
+      );
       files = allFiles.filter((f) =>
         allowedExts.has(path.extname(f.name).toLowerCase()),
       );
@@ -548,12 +551,4 @@ export async function handleBatchReadFiles(
   } catch (error) {
     return createErrorResponse(error);
   }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 Bytes";
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }

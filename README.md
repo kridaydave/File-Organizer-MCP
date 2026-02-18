@@ -1,6 +1,6 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.3.4 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.4.0 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
 **New in v3.3.0 - Smart Organization:**
 
@@ -11,13 +11,14 @@
 - 📚 **`batch_read_files`** - Read multiple files efficiently
 
 **Previous v3.2.8:**
+
 - Enhanced metadata extraction, security screening, metadata cache system
 
 [Why Us](#why-specialized-tools) • [Quick Start](#quick-start) • [Features](#features) • [Tools](#tools-reference) • [Examples](#example-workflows) • [API](API.md) • [Security](#security-configuration) • [Architecture](ARCHITECTURE.md)
 
 ---
 
-[![npm version](https://img.shields.io/badge/npm-v3.3.3-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v3.4.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
@@ -205,10 +206,12 @@ Run `npx file-organizer-mcp --setup` for guided configuration:
 - **🤖 Claude Integration** - Auto-generates `claude_desktop_config.json`
 
 ### What's Next ?
+
 - **Automatic Compression of unsed/old files**
 - **Server Code migration to TypeScript**
 - **Added Security and performance**
-See [CHANGELOG.md](CHANGELOG.md) for full details.
+  See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ---
 
 ## <a id="tools-reference"></a>Tools Reference 🛠️
@@ -320,11 +323,7 @@ Read multiple files efficiently in a single operation.
 
 ```typescript
 file_organizer_batch_read_files({
-  files: [
-    "/path/to/file1.txt",
-    "/path/to/file2.txt",
-    "/path/to/file3.txt"
-  ],
+  files: ["/path/to/file1.txt", "/path/to/file2.txt", "/path/to/file3.txt"],
   encoding: "utf-8",
 });
 ```
@@ -462,8 +461,9 @@ file_organizer_organize_files({
 **Unified organization tool** - Automatically organizes mixed folders by detecting file types and applying the appropriate strategy.
 
 **How it works:**
+
 - 🎵 Music files (MP3, FLAC, etc.) → `Music/Artist/Album/` structure
-- 📸 Photo files (JPG, PNG, RAW, etc.) → `Photos/YYYY/MM/` structure  
+- 📸 Photo files (JPG, PNG, RAW, etc.) → `Photos/YYYY/MM/` structure
 - 📄 Document files (PDF, DOCX, etc.) → `Documents/Topic/` structure
 - 📦 Other files → `Other/` folder
 

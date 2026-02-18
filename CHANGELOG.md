@@ -1,8 +1,21 @@
 # Changelog
 
+## [3.4.0] - 2026-02-18
+
+### 🐛 Bug Fixes
+
+- **Integration fixes** - Fixed OrganizeResult type mismatch, duplicate historyLogger
+- **Dead code cleanup** - Removed unused exports, fixed duplicate formatBytes functions
+- **Schema consolidation** - Centralized Zod schemas, removed duplicates
+
+### ⚙️ Maintenance
+
+- Updated documentation to v3.4.0
+
 ## [3.3.4] - 2026-02-14
 
 ### 🐛 Bug Fixes
+
 - **Fixed version string** - Updated hardcoded version from 3.3.2 to 3.3.4 in config.ts and index.ts
 
 ## [3.3.3] - 2026-02-14
@@ -10,14 +23,17 @@
 ### 🐛 Bug Fixes
 
 #### File Organization
+
 - **Fixed file-tracker service** - Migrated from JavaScript to TypeScript with proper typing
 - **Improved service exports** - Fixed module exports across various services
 
 #### Code Quality
+
 - **ESLint configuration** - Updated ESLint config for better TypeScript support
 - **Security gates** - Enhanced static analysis in security gates
 
 ### 🧪 Testing
+
 - All tests passing
 - Build passes successfully
 
@@ -26,17 +42,20 @@
 ### 🐛 Bug Fixes
 
 #### Smart Organization
+
 - **Fixed dry_run not passed** in photo-organization.ts and music-organization.ts
 - **Fixed delete-before-verify bug** - Source files now verified copied before deletion
 - **Fixed source/target validation** - Added proper path validation in smart-organization.ts
 
 #### Code Quality
+
 - **Fixed logger.ts Jest detection** - typeof jest no longer throws ReferenceError
 - **Fixed path-security.ts argument order** - Corrected wrong argument order to isSubPath
 - **Fixed categorizer.service.ts** - useContentAnalysis now properly implemented
 - **Fixed test mock pollution** - smart-organization-edge-cases.test.ts no longer pollutes other tests
 
 ### 🧪 Testing
+
 - All 59 test suites passing (893/896 tests, 3 skipped)
 - Build passes successfully
 
@@ -45,22 +64,27 @@
 ### 🐛 Bug Fixes
 
 #### Error Handling
+
 - **Fixed `createErrorResponse` missing `isError: true`** - All error responses now consistently include the `isError` flag
 
 #### Smart Organization
+
 - **Fixed directory creation bug** - Only creates Music/Photos/Documents folders when files of those types actually exist (was creating all folders unconditionally)
 - **Fixed Copy vs Move behavior** - `organizeDocuments()` now correctly respects the `copyInsteadOfMove` option
 
 #### File Organization
+
 - **Fixed `use_content_analysis` no-op bug** - The flag was parsed but not passed to the categorizer; now properly flows through `organize()` → `generateOrganizationPlan()` → `getCategory()`
 
 #### Code Cleanup
+
 - **Removed empty `cleanupEmptyFolders` method** - Was an unused placeholder in organizer.service.ts
 
 ### 🧪 Testing
+
 - Added 74 comprehensive tests for Smart Organization tool:
   - Unit tests (29 tests)
-  - Edge case tests (25 tests)  
+  - Edge case tests (25 tests)
   - Integration tests (20 tests)
 
 ## [3.3.0] - 2026-02-13
@@ -68,6 +92,7 @@
 ### ✨ New Features
 
 #### 🧠 Smart Organization (Unified Tool)
+
 - **New Tool: `file_organizer_organize_smart`** - Automatically organizes mixed folders
   - Auto-detects file types (music, photos, documents)
   - Routes files to appropriate organizer:
@@ -78,13 +103,15 @@
   - All options supported: GPS stripping, camera grouping, shortcuts, etc.
 
 #### 🎵 Music Organization
+
 - **New Tool: `file_organizer_organize_music`** - Music library organization
   - Organizes by Artist/Album/Title structure
   - Supports MP3, FLAC, OGG, WAV, M4A, AAC
   - Configurable folder structures: `artist/album`, `album`, `genre/artist`, `flat`
   - ID3 metadata extraction with graceful fallback
 
-#### 📸 Photo Organization  
+#### 📸 Photo Organization
+
 - **New Tool: `file_organizer_organize_photos`** - Photo library organization
   - Organizes by EXIF date: YYYY/MM/DD structure
   - GPS stripping for privacy (using piexifjs)
@@ -92,6 +119,7 @@
   - Supports JPEG, PNG, TIFF, HEIC, RAW formats
 
 #### 📄 Content-Based Organization
+
 - **New Tool: `file_organizer_organize_by_content`** - Document organization
   - Topic extraction from document content
   - Supports PDF, DOCX, TXT, MD, RTF, ODT
@@ -99,23 +127,27 @@
   - Text analysis with keyword extraction
 
 #### 📚 Batch File Reading
+
 - **New Tool: `file_organizer_batch_read_files`** - Read multiple files at once
   - Efficient batch processing
   - Multiple encoding support
 
 ### 🔧 Code Quality Improvements
+
 - Full GPS stripping implementation (was TODO stub)
-- All console.* calls migrated to structured logger
+- All console.\* calls migrated to structured logger
 - Removed 24+ redundant type assertions
 - Added comprehensive type guards
 - Improved error handling consistency
 
 ### 📦 Dependencies
+
 - Added `piexifjs` for EXIF manipulation
 - Added `pdf-parse` for PDF text extraction
 - Added `mammoth` for DOCX text extraction
 
 ### 🧪 Testing
+
 - Added 800+ new tests for metadata services
 - Tests for audio metadata extraction
 - Tests for image metadata extraction
@@ -124,6 +156,7 @@
 - Tests for topic extractor
 
 ### 🛠️ New Services
+
 - `audio-metadata.service.ts` - Music metadata extraction
 - `image-metadata.service.ts` - Photo metadata extraction
 - `text-extraction.service.ts` - Document text extraction
@@ -142,6 +175,7 @@
 ### 🚨 CRITICAL FIX: MCP Protocol Compatibility
 
 **FINAL FIX - v3.2.8**
+
 - Removed old local node_modules version conflict
 - npx now correctly resolves to global installation
 
@@ -152,7 +186,7 @@
 **Fixed stdout pollution breaking Claude connection**
 
 - **prepare.cjs**: Changed all `console.log` → `console.error`
-- **postinstall.cjs**: Changed all `console.log` → `console.error`  
+- **postinstall.cjs**: Changed all `console.log` → `console.error`
 - **file-organizer-mcp.mjs**: Changed `log()` to use `console.error`
 - **setup-wizard.ts**: All output now routed to stderr
 
@@ -166,7 +200,6 @@
   - Added validation for user input paths
   - Fixed async/await consistency issues
   - Added graceful handling for prompt cancellations
-  
 - **Client Detector**: Fixed 14 critical bugs from security audit
   - Added config write locking to prevent concurrent access
   - Added atomic file writes (temp file + rename pattern)

@@ -5,7 +5,12 @@
  * @module tools/file-categorization
  */
 
-import { z } from "zod";
+import {
+  CategorizeByTypeInputSchema,
+  type CategorizeByTypeInput,
+} from "../schemas/scan.schemas.js";
+export { CategorizeByTypeInputSchema } from "../schemas/scan.schemas.js";
+export type { CategorizeByTypeInput } from "../schemas/scan.schemas.js";
 import type {
   ToolDefinition,
   ToolResponse,
@@ -16,30 +21,6 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { globalCategorizerService } from "../services/index.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
-
-export const CategorizeByTypeInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Full path to the directory to categorize"),
-    include_subdirs: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Include subdirectories in categorization"),
-    use_content_analysis: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe(
-        "Analyze file content for accurate type detection (slower but more secure)",
-      ),
-  })
-  .merge(CommonParamsSchema);
-
-export type CategorizeByTypeInput = z.infer<typeof CategorizeByTypeInputSchema>;
 
 export const categorizeByTypeToolDefinition: ToolDefinition = {
   name: "file_organizer_categorize_by_type",

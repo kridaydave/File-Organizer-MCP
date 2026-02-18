@@ -65,3 +65,25 @@ export const globalCategorizerService = new CategorizerService(
 export const globalOrganizerService = new OrganizerService(
   globalCategorizerService,
 );
+
+// Additional Services
+export * from "./streaming-scanner.service.js";
+export * from "./file-tracker.service.js";
+
+export {
+  SmartSuggestService,
+  smartSuggestService,
+  type DirectoryHealthReport,
+  type SmartSuggestOptions,
+} from "./smart-suggest.service.js";
+
+export {
+  HistoryLoggerService,
+  historyLogger,
+  type HistoryEntry,
+  type HistoryQuery,
+  type HistoryResult,
+} from "./history-logger.service.js";
+
+// Security Services
+export { RateLimiter } from "./security/rate-limiter.service.js";

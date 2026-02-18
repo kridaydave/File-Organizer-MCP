@@ -86,7 +86,7 @@ export function createErrorResponse(error: unknown): ToolResponse {
  * @param requestedPath - Path that was denied
  * @returns Formatted error message
  */
-export function formatAccessDeniedError(requestedPath: string): string {
+function formatAccessDeniedError(requestedPath: string): string {
   const sanitizedPath = sanitizeErrorMessage(requestedPath);
 
   return `❌ Access Denied: ${sanitizedPath}

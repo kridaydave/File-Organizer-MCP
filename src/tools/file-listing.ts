@@ -7,7 +7,6 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { z } from "zod";
 import type {
   ToolDefinition,
   ToolResponse,
@@ -17,21 +16,9 @@ import type {
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import {
-  CommonParamsSchema,
-  PaginationSchema,
-} from "../schemas/common.schemas.js";
-
-export const ListFilesInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Full path to the directory to list files from"),
-  })
-  .merge(CommonParamsSchema)
-  .merge(PaginationSchema);
-
-export type ListFilesInput = z.infer<typeof ListFilesInputSchema>;
+  ListFilesInputSchema,
+  type ListFilesInput,
+} from "../schemas/scan.schemas.js";
 
 export const listFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_list_files",

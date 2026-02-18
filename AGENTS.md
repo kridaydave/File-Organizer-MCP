@@ -75,12 +75,19 @@ It is compoulsory to do your work as a agent and follow all security guidelines.
 
 ```markdown
 # Agent: [Your Name]
+
 ## Designation: [Your Designation]
+
 ## Task: [Task Description]
+
 ## Work Done:
+
 [Your detailed work here]
+
 ### Confidence Score: [0-100] (if less than 80% then you need to retry)
+
 ### You give confidence score based on the following:
+
 1. How well You think you did the work.
 2. How well you think you followed the security guidelines.
 3. If the code is buggy or breakable .
@@ -124,26 +131,27 @@ It is compoulsory to do your work as a agent and follow all security guidelines.
 - `npm run docs:generate` - Generate documentation from debate system
 
 ## 🏗️ Project Structure
-
 ```
+
 File-Organizer-MCP/
 ├── src/
-│   ├── services/      # Core business logic (path validation, organization, scanning)
-│   ├── tools/         # MCP tool implementations
-│   ├── utils/         # Helper functions (logger, file utils, error handling)
-│   ├── schemas/       # Zod validation schemas
-│   ├── types.ts       # TypeScript type definitions
-│   ├── constants.ts   # Application constants
-│   └── config.ts      # Configuration management
+│ ├── services/ # Core business logic (path validation, organization, scanning)
+│ ├── tools/ # MCP tool implementations
+│ ├── utils/ # Helper functions (logger, file utils, error handling)
+│ ├── schemas/ # Zod validation schemas
+│ ├── types.ts # TypeScript type definitions
+│ ├── constants.ts # Application constants
+│ └── config.ts # Configuration management
 ├── tests/
-│   ├── unit/          # Unit tests
-│   ├── integration/   # Integration tests
-│   └── performance/   # Performance benchmarks
-├── dist/              # Compiled JavaScript output
-├── bin/               # Executable entry points
-├── docs/              # Documentation (content-based organization, debate framework)
-└── workflows/         # Agent workflow definitions
-```
+│ ├── unit/ # Unit tests
+│ ├── integration/ # Integration tests
+│ └── performance/ # Performance benchmarks
+├── dist/ # Compiled JavaScript output
+├── bin/ # Executable entry points
+├── docs/ # Documentation (content-based organization, debate framework)
+└── workflows/ # Agent workflow definitions
+
+````
 
 ## 🧠 Agent System Integration
 
@@ -189,7 +197,7 @@ import type { FileInfo } from "../types.js";
 
 // ✅ Use path aliases for relative imports
 import { validatePath } from "../../services/path-validator.service.js";
-```
+````
 
 ### Naming Conventions
 
@@ -210,7 +218,7 @@ import { validatePath } from "../../services/path-validator.service.js";
 
 ```typescript
 /**
- * File Organizer MCP Server v3.3.3
+ * File Organizer MCP Server v3.4.0
  * Service/Class description
  */
 
@@ -408,7 +416,7 @@ try {
 
 ```typescript
 /**
- * File Organizer MCP Server v3.3.3
+ * File Organizer MCP Server v3.4.0
  * Service description
  * @param param - Parameter description
  * @returns Return value description
@@ -563,7 +571,7 @@ import { validatePath } from "../../services/path-validator.service.js";
 
 ```typescript
 /**
- * File Organizer MCP Server v3.3.3
+ * File Organizer MCP Server v3.4.0
  * Service/Class description
  */
 
@@ -761,7 +769,7 @@ try {
 
 ```typescript
 /**
- * File Organizer MCP Server v3.3.3
+ * File Organizer MCP Server v3.4.0
  * Service description
  * @param param - Parameter description
  * @returns Return value description

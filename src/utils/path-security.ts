@@ -149,7 +149,7 @@ export function formatAccessDeniedMessage(
 /**
  * Get a user-friendly list of blocked patterns (for documentation)
  */
-export function getBlockedPatternsDescription(): string {
+function getBlockedPatternsDescription(): string {
   const platform = process.platform;
   const patterns: string[] = [];
 

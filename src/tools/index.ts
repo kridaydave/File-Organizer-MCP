@@ -11,19 +11,16 @@ import type { ToolDefinition } from "../types.js";
 
 // ==================== Tool Definitions ====================
 
-export {
-  listFilesToolDefinition,
-  handleListFiles,
-  ListFilesInputSchema,
-} from "./file-listing.js";
-export type { ListFilesInput } from "./file-listing.js";
+export { listFilesToolDefinition, handleListFiles } from "./file-listing.js";
+export { ListFilesInputSchema } from "../schemas/scan.schemas.js";
+export type { ListFilesInput } from "../schemas/scan.schemas.js";
 
 export {
   scanDirectoryToolDefinition,
   handleScanDirectory,
-  ScanDirectoryInputSchema,
 } from "./file-scanning.js";
-export type { ScanDirectoryInput } from "./file-scanning.js";
+export { ScanDirectoryInputSchema } from "../schemas/scan.schemas.js";
+export type { ScanDirectoryInput } from "../schemas/scan.schemas.js";
 
 export {
   categorizeByTypeToolDefinition,
@@ -35,23 +32,23 @@ export type { CategorizeByTypeInput } from "./file-categorization.js";
 export {
   findLargestFilesToolDefinition,
   handleFindLargestFiles,
-  FindLargestFilesInputSchema,
 } from "./file-analysis.js";
-export type { FindLargestFilesInput } from "./file-analysis.js";
+export { FindLargestFilesInputSchema } from "../schemas/scan.schemas.js";
+export type { FindLargestFilesInput } from "../schemas/scan.schemas.js";
 
 export {
   findDuplicateFilesToolDefinition,
   handleFindDuplicateFiles,
-  FindDuplicateFilesInputSchema,
 } from "./file-duplicates.js";
-export type { FindDuplicateFilesInput } from "./file-duplicates.js";
+export { FindDuplicateFilesInputSchema } from "../schemas/scan.schemas.js";
+export type { FindDuplicateFilesInput } from "../schemas/scan.schemas.js";
 
 export {
   organizeFilesToolDefinition,
   handleOrganizeFiles,
-  OrganizeFilesInputSchema,
 } from "./file-organization.js";
-export type { OrganizeFilesInput } from "./file-organization.js";
+export { OrganizeFilesInputSchema } from "../schemas/organize.schemas.js";
+export type { OrganizeFilesInput } from "../schemas/organize.schemas.js";
 
 // ==================== Music & Photo Organization ====================
 
@@ -138,6 +135,13 @@ import { organizeSmartToolDefinition } from "./smart-organization.js";
 import { smartSuggestToolDefinition } from "./smart-suggest.js";
 import { systemOrganizationToolDefinition } from "./system-organization.js";
 import { batchReadFilesToolDefinition } from "./batch-file-reader.js";
+import {
+  watchDirectoryToolDefinition,
+  unwatchDirectoryToolDefinition,
+  listWatchesToolDefinition,
+} from "./watch.tool.js";
+import { fileReaderToolDefinition } from "./file-reader.tool.js";
+import { viewHistoryToolDefinition } from "./view-history.js";
 
 export {
   undoLastOperationToolDefinition,
@@ -209,15 +213,6 @@ export {
   viewHistoryToolDefinition,
   handleViewHistory,
 } from "./view-history.js";
-export type { ViewHistoryInput } from "./view-history.js";
-
-import {
-  watchDirectoryToolDefinition,
-  unwatchDirectoryToolDefinition,
-  listWatchesToolDefinition,
-} from "./watch.tool.js";
-import { fileReaderToolDefinition } from "./file-reader.tool.js";
-import { viewHistoryToolDefinition } from "./view-history.js";
 
 /**
  * All available tools for MCP registration

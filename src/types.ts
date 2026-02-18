@@ -191,6 +191,9 @@ export interface OrganizeResult {
   statistics: Record<string, number>;
   actions: OrganizeAction[];
   errors: string[];
+  errorCount: number;
+  successCount: number;
+  aborted: boolean;
 }
 
 // ==================== Analysis Types ====================

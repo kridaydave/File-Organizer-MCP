@@ -222,7 +222,7 @@ for (const file of files) {
 ```typescript
 // In config.ts
 interface SecurityConfig {
-  symlinkHandling: 'block' | 'follow-safe' | 'ignore';
+  symlinkHandling: "block" | "follow-safe" | "ignore";
   maxSymlinkDepth: number;
   allowSymlinksWithinRoot: boolean;
 }
@@ -269,32 +269,32 @@ await renameFile(originalPath, filePath);
 
 ```typescript
 const WINDOWS_RESERVED_NAMES = new Set([
-  'CON',
-  'PRN',
-  'AUX',
-  'NUL',
-  'COM1',
-  'COM2',
-  'COM3',
-  'COM4',
-  'COM5',
-  'COM6',
-  'COM7',
-  'COM8',
-  'COM9',
-  'LPT1',
-  'LPT2',
-  'LPT3',
-  'LPT4',
-  'LPT5',
-  'LPT6',
-  'LPT7',
-  'LPT8',
-  'LPT9',
+  "CON",
+  "PRN",
+  "AUX",
+  "NUL",
+  "COM1",
+  "COM2",
+  "COM3",
+  "COM4",
+  "COM5",
+  "COM6",
+  "COM7",
+  "COM8",
+  "COM9",
+  "LPT1",
+  "LPT2",
+  "LPT3",
+  "LPT4",
+  "LPT5",
+  "LPT6",
+  "LPT7",
+  "LPT8",
+  "LPT9",
 ]);
 
 export function isWindowsReservedName(name: string): boolean {
-  const baseName = name.split('.')[0].toUpperCase();
+  const baseName = name.split(".")[0].toUpperCase();
   return WINDOWS_RESERVED_NAMES.has(baseName);
 }
 ```
@@ -325,7 +325,7 @@ const canonicalPath = await resolveSecurePath(filePath); // Canonicalizes
 
 // Verify containment
 if (!canonicalPath.startsWith(userDir)) {
-  throw new AccessDeniedError('Path traversal detected');
+  throw new AccessDeniedError("Path traversal detected");
 }
 await readFile(filePath);
 ```
@@ -341,7 +341,10 @@ await readFile(filePath);
 ### Path Canonicalization Algorithm
 
 ```typescript
-async function resolveSecurePath(inputPath: string, rootDir: string): Promise<string> {
+async function resolveSecurePath(
+  inputPath: string,
+  rootDir: string,
+): Promise<string> {
   // Layer 1: Sanitize input
   const sanitized = sanitizePath(inputPath);
 
@@ -349,7 +352,9 @@ async function resolveSecurePath(inputPath: string, rootDir: string): Promise<st
   const expanded = expandEnvVars(sanitized);
 
   // Layer 3: Resolve to absolute path
-  const absolute = path.isAbsolute(expanded) ? expanded : path.join(rootDir, expanded);
+  const absolute = path.isAbsolute(expanded)
+    ? expanded
+    : path.join(rootDir, expanded);
 
   // Layer 4: Normalize (removes .. and .)
   const normalized = path.normalize(absolute);
@@ -359,7 +364,7 @@ async function resolveSecurePath(inputPath: string, rootDir: string): Promise<st
 
   // Layer 6: Verify containment
   if (!resolved.startsWith(rootDir)) {
-    throw new AccessDeniedError('Path escapes root directory');
+    throw new AccessDeniedError("Path escapes root directory");
   }
 
   return resolved;
@@ -450,13 +455,14 @@ npm outdated
 
 ## Version History
 
-| Version      | Date       | Security Changes                                         |
-| ------------ | ---------- | -------------------------------------------------------- |
-| 3.1.4        | 2026-02-07 | Code linting cleanup, security audit fixes               |
-| 3.0.0        | 2026-02-02 | Complete TypeScript rewrite with 8-layer path validation |
-| 3.0.0-beta.1 | 2026-02-02 | Initial security hardening (57 bugs fixed)               |
+| Version      | Date       | Security Changes                                           |
+| ------------ | ---------- | ---------------------------------------------------------- |
+| 3.4.0        | 2026-02-18 | Integration fixes, dead code cleanup, schema consolidation |
+| 3.1.4        | 2026-02-07 | Code linting cleanup, security audit fixes                 |
+| 3.0.0        | 2026-02-02 | Complete TypeScript rewrite with 8-layer path validation   |
+| 3.0.0-beta.1 | 2026-02-02 | Initial security hardening (57 bugs fixed)                 |
 
 ---
 
-**Last Updated**: 2026-02-08
+**Last Updated**: 2026-02-18
 **Maintained By**: Security Team

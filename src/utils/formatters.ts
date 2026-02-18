@@ -24,7 +24,7 @@ export function formatBytes(bytes: number): string {
  * @param date - Date to format
  * @returns ISO date string
  */
-export function formatDate(date: Date): string {
+function formatDate(date: Date): string {
   return date.toISOString();
 }
 
@@ -33,7 +33,7 @@ export function formatDate(date: Date): string {
  * @param ms - Duration in milliseconds
  * @returns Formatted duration string
  */
-export function formatDuration(ms: number): string {
+function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${(ms / 60000).toFixed(1)}m`;

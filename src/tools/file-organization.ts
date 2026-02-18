@@ -5,44 +5,17 @@
  * @module tools/file-organization
  */
 
-import { z } from "zod";
 import type { ToolDefinition, ToolResponse, OrganizeResult } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { globalOrganizerService } from "../services/index.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { escapeMarkdown } from "../utils/index.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import {
+  OrganizeFilesInputSchema,
+  type OrganizeFilesInput,
+} from "../schemas/organize.schemas.js";
 import { loadUserConfig } from "../config.js";
-
-export const OrganizeFilesInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Full path to the directory to organize"),
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("If true, only simulate the organization without moving files"),
-    conflict_strategy: z
-      .enum(["rename", "skip", "overwrite"])
-      .optional()
-      .describe(
-        "How to handle file conflicts. Uses config default if not specified",
-      ),
-    use_content_analysis: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe(
-        "Analyze file content for accurate type detection and security (slower)",
-      ),
-  })
-  .merge(CommonParamsSchema);
-
-export type OrganizeFilesInput = z.infer<typeof OrganizeFilesInputSchema>;
 
 export const organizeFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_organize_files",
@@ -143,15 +116,12 @@ export async function handleOrganizeFiles(
     // Full content analysis per-file would require modifying the organizer service
     // For now, we document that content analysis is available in categorize_by_type
 
-    const { statistics, actions, errors } = await organizer.organize(
-      validatedPath,
-      files,
-      {
+    const { statistics, actions, errors, errorCount, successCount, aborted } =
+      await organizer.organize(validatedPath, files, {
         dryRun: dry_run,
         conflictStrategy: effectiveConflictStrategy,
         useContentAnalysis: use_content_analysis,
-      },
-    );
+      });
 
     const result: OrganizeResult & { content_analysis_enabled?: boolean } = {
       directory: validatedPath,
@@ -160,6 +130,9 @@ export async function handleOrganizeFiles(
       statistics,
       actions,
       errors,
+      errorCount,
+      successCount,
+      aborted,
     };
 
     if (use_content_analysis) {

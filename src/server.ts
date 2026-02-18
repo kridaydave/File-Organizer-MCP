@@ -90,10 +90,9 @@ export function createServer(): Server {
  * Route tool calls to appropriate handlers
  */
 import { RateLimiter } from "./services/security/rate-limiter.service.js";
-import { HistoryLoggerService } from "./services/history-logger.service.js";
+import { historyLogger } from "./services/history-logger.service.js";
 
 const rateLimiter = new RateLimiter();
-export const historyLogger = new HistoryLoggerService();
 
 /**
  * Route tool calls to appropriate handlers

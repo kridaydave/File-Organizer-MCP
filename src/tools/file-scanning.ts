@@ -5,7 +5,6 @@
  * @module tools/file-scanning
  */
 
-import { z } from "zod";
 import fs from "fs/promises";
 import type { ToolDefinition, ToolResponse, ScanResult } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
@@ -15,44 +14,10 @@ import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import { escapeMarkdown } from "../utils/index.js";
 import {
-  CommonParamsSchema,
-  PaginationSchema,
-} from "../schemas/common.schemas.js";
+  ScanDirectoryInputSchema,
+  type ScanDirectoryInput,
+} from "../schemas/scan.schemas.js";
 import { ValidationError } from "../types.js";
-
-export const ScanDirectoryInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Full path to the directory to scan"),
-    include_subdirs: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Include subdirectories in the scan"),
-    max_depth: z
-      .number()
-      .int()
-      .min(-1)
-      .max(100)
-      .optional()
-      .default(-1)
-      .describe(
-        "Maximum depth to scan (0 = current directory only, -1 = unlimited, max 100)",
-      ),
-    screen_files: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe(
-        "Screen files for security threats (malware detection, extension mismatches)",
-      ),
-  })
-  .merge(CommonParamsSchema)
-  .merge(PaginationSchema);
-
-export type ScanDirectoryInput = z.infer<typeof ScanDirectoryInputSchema>;
 
 export const scanDirectoryToolDefinition: ToolDefinition = {
   name: "file_organizer_scan_directory",

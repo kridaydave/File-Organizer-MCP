@@ -5,7 +5,6 @@
  * @module tools/file-analysis
  */
 
-import { z } from "zod";
 import type {
   ToolDefinition,
   ToolResponse,
@@ -16,31 +15,10 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
-
-export const FindLargestFilesInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Full path to the directory to search"),
-    include_subdirs: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Include subdirectories in search"),
-    top_n: z
-      .number()
-      .int()
-      .positive()
-      .max(100)
-      .optional()
-      .default(10)
-      .describe("Number of largest files to return"),
-  })
-  .merge(CommonParamsSchema);
-
-export type FindLargestFilesInput = z.infer<typeof FindLargestFilesInputSchema>;
+import {
+  FindLargestFilesInputSchema,
+  type FindLargestFilesInput,
+} from "../schemas/scan.schemas.js";
 
 export const findLargestFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_find_largest_files",

@@ -5,7 +5,6 @@
  * @module tools/file-duplicates
  */
 
-import { z } from "zod";
 import type {
   ToolDefinition,
   ToolResponse,
@@ -17,23 +16,9 @@ import { HashCalculatorService } from "../services/hash-calculator.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import {
-  CommonParamsSchema,
-  PaginationSchema,
-} from "../schemas/common.schemas.js";
-
-export const FindDuplicateFilesInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Full path to the directory to search for duplicates"),
-  })
-  .merge(CommonParamsSchema)
-  .merge(PaginationSchema);
-
-export type FindDuplicateFilesInput = z.infer<
-  typeof FindDuplicateFilesInputSchema
->;
+  FindDuplicateFilesInputSchema,
+  type FindDuplicateFilesInput,
+} from "../schemas/scan.schemas.js";
 
 export const findDuplicateFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_find_duplicate_files",

@@ -8,14 +8,14 @@ import { z } from "zod";
 /**
  * Base directory input schema
  */
-export const DirectoryInputSchema = z.object({
+const DirectoryInputSchema = z.object({
   directory: z.string().min(1, "Directory path is required"),
 });
 
 /**
  * Schema for operations that can include subdirectories
  */
-export const RecursiveInputSchema = DirectoryInputSchema.extend({
+const RecursiveInputSchema = DirectoryInputSchema.extend({
   include_subdirs: z.boolean().default(false),
 });
 
@@ -39,7 +39,8 @@ export const CommonParamsSchema = z.object({
     ),
 });
 
-export type DirectoryInput = z.infer<typeof DirectoryInputSchema>;
-export type RecursiveInput = z.infer<typeof RecursiveInputSchema>;
 export type PaginationInput = z.infer<typeof PaginationSchema>;
 export type CommonParams = z.infer<typeof CommonParamsSchema>;
+
+type DirectoryInput = z.infer<typeof DirectoryInputSchema>;
+type RecursiveInput = z.infer<typeof RecursiveInputSchema>;

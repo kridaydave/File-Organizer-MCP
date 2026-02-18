@@ -167,8 +167,8 @@ Each tool follows this pattern:
 
 ```typescript
 export const toolDefinition: ToolDefinition = {
-  name: 'tool_name',
-  description: 'What it does',
+  name: "tool_name",
+  description: "What it does",
   inputSchema: ZodSchema, // Validation
 };
 
@@ -207,7 +207,10 @@ export async function handleTool(args: ToolArgs): Promise<ToolResponse> {
 ```typescript
 class PathValidatorService {
   // Multi-layer path validation
-  async validateStrictPath(inputPath: unknown, options?: ValidatePathOptions): Promise<string>;
+  async validateStrictPath(
+    inputPath: unknown,
+    options?: ValidatePathOptions,
+  ): Promise<string>;
 
   // Symlink resolution
   async resolvePath(path: string): Promise<string>;
@@ -225,14 +228,14 @@ class OrganizerService {
   async generateOrganizationPlan(
     directory: string,
     files: FileWithSize[],
-    strategy?: ConflictStrategy // 'rename' | 'skip' | 'overwrite' | 'overwrite_if_newer'
+    strategy?: ConflictStrategy, // 'rename' | 'skip' | 'overwrite' | 'overwrite_if_newer'
   ): Promise<OrganizationPlan>;
 
   // Execute organization with safety guarantees
   async organize(
     directory: string,
     files: FileWithSize[],
-    options?: OrganizeOptions
+    options?: OrganizeOptions,
   ): Promise<OrganizeResult>;
 
   // Safety mechanisms:
@@ -260,7 +263,10 @@ class HashCalculatorService {
 ```typescript
 class FileScannerService {
   // Recursive directory scanning
-  async getAllFiles(directory: string, options?: ScanOptions): Promise<FileWithSize[]>;
+  async getAllFiles(
+    directory: string,
+    options?: ScanOptions,
+  ): Promise<FileWithSize[]>;
 
   // Size calculation
   async calculateDirectorySize(directory: string): Promise<number>;
@@ -310,19 +316,19 @@ class SecureFileReader {
   // Read file with full security validation
   async read(
     filePath: string,
-    options?: Partial<FileReadOptions>
+    options?: Partial<FileReadOptions>,
   ): Promise<Result<FileReadResult, FileReadError>>;
 
   // Create readable stream for large files
   async readStream(
     filePath: string,
-    options?: Partial<FileReadOptions>
+    options?: Partial<FileReadOptions>,
   ): Promise<Result<Readable, FileReadError>>;
 
   // Read raw buffer (binary data)
   async readBuffer(
     filePath: string,
-    options?: Partial<FileReadOptions>
+    options?: Partial<FileReadOptions>,
   ): Promise<Result<Buffer, FileReadError>>;
 }
 ```
@@ -400,9 +406,9 @@ class Logger {
 // Example: Path validation
 export const PathSchema = z
   .string()
-  .min(1, 'Path cannot be empty')
-  .max(4096, 'Path exceeds maximum length')
-  .refine((path) => !path.includes('\0'), 'Path contains null bytes');
+  .min(1, "Path cannot be empty")
+  .max(4096, "Path exceeds maximum length")
+  .refine((path) => !path.includes("\0"), "Path contains null bytes");
 ```
 
 ## 🔄 Data Flow
@@ -525,9 +531,9 @@ Large files are processed using streams to avoid memory exhaustion:
 
 ```typescript
 // Hash calculation uses streams
-const hash = crypto.createHash('sha256');
+const hash = crypto.createHash("sha256");
 const stream = createReadStream(filePath, { highWaterMark: 64 * 1024 });
-stream.on('data', (chunk) => hash.update(chunk));
+stream.on("data", (chunk) => hash.update(chunk));
 ```
 
 ### Resource Limits
@@ -556,7 +562,7 @@ The server uses a platform-aware configuration system that combines hardcoded de
 
 ```typescript
 export const CONFIG = {
-  VERSION: '3.1.5',
+  VERSION: "3.4.0",
 
   security: {
     enablePathValidation: true,
@@ -607,7 +613,7 @@ export const CONFIG = {
 class OrganizerService {
   constructor(
     private categorizer: CategorizerService,
-    private rollback?: RollbackService
+    private rollback?: RollbackService,
   ) {}
 }
 ```
@@ -673,4 +679,4 @@ type Args = z.infer<typeof ArgsSchema>;
 ---
 
 **Last Updated:** February 8, 2026  
-**Version:** 3.1.5
+**Version:** 3.4.0

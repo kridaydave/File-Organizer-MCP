@@ -16,6 +16,7 @@ import { FileReaderFactory } from "../readers/factory.js";
 import { SecureFileReader } from "../readers/secure-file-reader.js";
 import { isOk, isErr } from "../readers/result.js";
 import { createErrorResponse } from "../utils/error-handler.js";
+import { formatBytes } from "../utils/formatters.js";
 
 // ============================================================================
 // Tool Definition
@@ -369,14 +370,6 @@ function formatMarkdownResponse(
 // ============================================================================
 // Utilities
 // ============================================================================
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
 
 // Export for testing
 export { getFileReader };

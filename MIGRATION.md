@@ -143,13 +143,13 @@ All v2.x tool calls work identically in v3.0:
 ```javascript
 // v2.x - Still works in v3.0
 await scanDirectory({
-  directory: 'C:/Users/Admin/Downloads',
+  directory: "C:/Users/Admin/Downloads",
   include_subdirs: true,
 });
 
 // v2.x - Still works in v3.0
 await organizeFiles({
-  directory: 'C:/Users/Admin/Downloads',
+  directory: "C:/Users/Admin/Downloads",
   dry_run: true,
 });
 ```
@@ -159,7 +159,7 @@ await organizeFiles({
 ```javascript
 // ❌ v2.x: This worked but was a security bug
 await scanDirectory({
-  directory: 'C:/Users/Admin/Downloads/../../../Windows',
+  directory: "C:/Users/Admin/Downloads/../../../Windows",
 });
 
 // ✅ v3.0: This now correctly fails with ValidationError
@@ -190,13 +190,13 @@ await scanDirectory({
 
 ```javascript
 // ❌ Don't use parent directory access
-directory: './../../some/path';
+directory: "./../../some/path";
 
 // ✅ Use absolute paths
-directory: 'C:/Users/Admin/Documents';
+directory: "C:/Users/Admin/Documents";
 
 // ✅ Or relative paths within working directory
-directory: './Documents';
+directory: "./Documents";
 ```
 
 ### Issue: "Files larger than 100MB skipped"
@@ -270,7 +270,7 @@ MAX_PATH_LENGTH: 4,096     // Characters
 ```javascript
 // v2.x - Still works identically in v3.0
 const result = await scanDirectory({
-  directory: 'C:/Users/Admin/Downloads',
+  directory: "C:/Users/Admin/Downloads",
   include_subdirs: true,
   max_depth: 5,
 });
@@ -283,7 +283,7 @@ const result = await scanDirectory({
 ```javascript
 // v2.x - Still works identically in v3.0
 const result = await organizeFiles({
-  directory: 'C:/Users/Admin/Downloads',
+  directory: "C:/Users/Admin/Downloads",
   dry_run: false,
 });
 
@@ -295,7 +295,7 @@ const result = await organizeFiles({
 ```javascript
 // v2.x - Still works identically in v3.0
 const result = await findDuplicateFiles({
-  directory: 'C:/Users/Admin/Documents',
+  directory: "C:/Users/Admin/Documents",
 });
 
 // No changes needed! ✅
@@ -361,5 +361,5 @@ If you've followed all steps, you're now running File Organizer MCP v3.0 with en
 
 **Questions?** Create an issue on [GitHub](https://github.com/kridaydave/File-Organizer-MCP/issues)
 
-**Last Updated:** February 10, 2026 (v3.2.7 hotfix)  
-**Version:** 3.2.8
+**Last Updated:** February 18, 2026 (v3.4.0 release)  
+**Version:** 3.4.0

@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { ToolDefinition, ToolResponse, CategoryName } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
+import { formatBytes } from "../utils/formatters.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
 import { MetadataService } from "../services/metadata.service.js";
 import * as path from "path";
@@ -272,17 +273,6 @@ export async function handleInspectMetadata(
   } catch (error) {
     return createErrorResponse(error);
   }
-}
-
-/**
- * Format bytes to human-readable string
- */
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 Bytes";
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 /**
