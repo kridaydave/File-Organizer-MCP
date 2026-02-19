@@ -16,9 +16,21 @@ import {
 import { getAutoOrganizeScheduler } from "../services/auto-organize.service.js";
 
 // Try to import chalk, fallback if not available
-let chalk: any;
+let chalk: {
+  green: (s: string) => string;
+  red: (s: string) => string;
+  yellow: (s: string) => string;
+  cyan: (s: string) => string;
+  gray: (s: string) => string;
+  bold: {
+    cyan: (s: string) => string;
+    green: (s: string) => string;
+    red: (s: string) => string;
+  };
+};
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports\n  chalk = require("chalk");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  chalk = require("chalk");
 } catch {
   // Fallback if chalk not available
   chalk = {
