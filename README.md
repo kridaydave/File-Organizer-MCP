@@ -1,8 +1,11 @@
+
+# ATTENTION : Project is not going to receive any new updates or features, only bug fixes. We are working on a new project so STAY TUNED IN AND DROP A FOLLOW
+
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.4.0 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.4.1 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
-**New in v3.3.0 - Smart Organization:**
+**New in v3.4.0 - Smart Organization:**
 
 - 🧠 **`organize_smart`** - Auto-detects and organizes mixed folders (music, photos, documents)
 - 🎵 **`organize_music`** - Music by Artist/Album structure with ID3 metadata
