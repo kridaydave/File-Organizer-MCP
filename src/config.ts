@@ -132,6 +132,9 @@ function getDefaultAllowedDirs(): string[] {
 
     // Add common macOS locations
     commonDirs.push(path.join(home, "Movies"));
+
+    // Allow external volumes mounted at /Volumes/
+    commonDirs.push("/Volumes");
   } else if (platform === "linux") {
     // Linux: Add common development directories
     commonDirs.push(path.join(home, "dev"));
@@ -346,9 +349,15 @@ function loadCustomAllowedDirs(): string[] {
           // Resolve to absolute path to check for traversal attempts
           const resolvedDir = path.resolve(expandedDir);
           const home = os.homedir();
+          const platform = os.platform();
 
           // Block path traversal outside of home directory
-          if (!isSubPath(home, resolvedDir)) {
+          // Exception: allow /Volumes/ on macOS for external drives
+          const isMacOSVolumes =
+            platform === "darwin" &&
+            (resolvedDir.startsWith("/Volumes/") ||
+              resolvedDir === "/Volumes");
+          if (!isSubPath(home, resolvedDir) && !isMacOSVolumes) {
             logger.error(
               `Warning: Custom directory blocked (outside home): ${dir}`,
             );
