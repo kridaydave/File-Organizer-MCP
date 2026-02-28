@@ -9,6 +9,8 @@ scripts/**/*.js
 scripts/**/*.d.ts
 scripts/**/*.js.map
 scripts/**/*.d.ts.map
+# Exception: ai-coder.js is a source file, not compiled
+!scripts/ai-coder.js
 
 # Environment variables
 .env

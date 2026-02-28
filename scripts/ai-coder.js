@@ -1,0 +1,135 @@
+// ── AI Coder Sub-Agent (Node.js) ─────────────────────────
+// This script runs autonomously inside a GitHub Action runner.
+// It has full filesystem access to read, create, and edit files natively.
+
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+const INSTRUCTION = process.env.INSTRUCTION;
+const OPENCODE_API_KEY = process.env.OPENCODE_API_KEY;
+
+if (!INSTRUCTION) {
+    console.error("❌ No INSTRUCTION provided.");
+    process.exit(1);
+}
+if (!OPENCODE_API_KEY) {
+    console.error("❌ No OPENCODE_API_KEY provided in secrets.");
+    process.exit(1);
+}
+
+// OpenCode Zen API helper
+async function callLLM(systemPrompt, userPrompt) {
+    const res = await fetch("https://opencode.ai/zen/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${OPENCODE_API_KEY}`
+        },
+        body: JSON.stringify({
+            model: "minimax-m2.5-free", // OpenCode Zen's primary coding model
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt }
+            ],
+            temperature: 0.2
+        })
+    });
+
+    if (!res.ok) {
+        throw new Error(`OpenCode API error: ${await res.text()}`);
+    }
+    const data = await res.json();
+    return data.choices[0].message.content;
+}
+
+// Basic recursive directory crawler (ignoring node_modules and .git)
+function getFiles(dir, fileList = []) {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+        const filePath = path.join(dir, file);
+        if (filePath.includes('node_modules') || filePath.includes('.git')) continue;
+        if (fs.statSync(filePath).isDirectory()) {
+            getFiles(filePath, fileList);
+        } else {
+            fileList.push(filePath);
+        }
+    }
+    return fileList;
+}
+
+async function main() {
+    console.log(`🚀 Starting AI Coder on Instruction: "${INSTRUCTION}"\n`);
+
+    // 1. Gather Codebase Context
+    console.log("Analyzing local files...");
+    const allFiles = getFiles(process.cwd());
+    let codebaseContext = "";
+
+    // We limit context to small text files to avoid overflowing the prompt
+    for (const file of allFiles) {
+        const ext = path.extname(file);
+        if (['.ts', '.js', '.json', '.md', '.html', '.css', '.yml'].includes(ext)) {
+            const content = fs.readFileSync(file, 'utf8');
+            // Hard cap to prevent massive prompt
+            if (content.length < 15000) {
+                const relativePath = path.relative(process.cwd(), file);
+                codebaseContext += `\n\n--- FILE: ${relativePath} ---\n\`\`\`\n${content}\n\`\`\``;
+            }
+        }
+    }
+
+    // 2. Ask OpenCode Zen to write the code
+    console.log("Requesting architectural modifications from OpenCode Zen...");
+    const systemPrompt = `You are an expert software engineer running inside a CI environment.
+You have been given a codebase and an instruction to fulfill.
+You must output ONLY valid bash script commands that use \`cat << 'EOF' > filename\` or \`sed\` or standard unix utilities to apply the required edits to the files.
+Do NOT use markdown code blocks (\`\`\`). Just raw bash commands. Do not write any explanations.
+`;
+
+    const userPrompt = `### Instruction:\n${INSTRUCTION}\n\n### Codebase:\n${codebaseContext}\n\nOutput only a bash script that writes/modifies these files to implement the instruction.`;
+
+    const bashScriptRaw = await callLLM(systemPrompt, userPrompt);
+
+    // Clean up markdown syntax if the LLM leaked it
+    let bashScript = bashScriptRaw.replace(/^```bash/m, '').replace(/^```/m, '').trim();
+
+    // 3. Execute the resulting script to mutate the filesystem natively
+    console.log("Executing LLM modifications natively on the Github Runner filesystem...");
+    const scriptPath = path.join(process.cwd(), 'ai-modifications.sh');
+    fs.writeFileSync(scriptPath, bashScript);
+    try {
+        execSync(`bash ${scriptPath}`, { stdio: 'inherit' });
+    } catch (e) {
+        console.error("⚠️ Failed to execute bash script completely, proceeding with partial changes...");
+    }
+    fs.unlinkSync(scriptPath);
+
+    // 4. Commit & Create PR
+    console.log("Committing changes and opening Pull Request...");
+    const branchName = `ai-coder-${Date.now()}`;
+    // We use the builtin Git tracking properties provided by actions/checkout
+
+    execSync(`git config user.name "Gravity Claw AI Agent"`);
+    execSync(`git config user.email "bot@gravityclaw.ai"`);
+    execSync(`git checkout -b ${branchName}`);
+    execSync(`git add .`);
+
+    try {
+        execSync(`git commit -m "AI Implementation: ${INSTRUCTION}"`);
+        execSync(`git push -u origin ${branchName}`);
+
+        // Use Github CLI to create PR (GH CLI is pre-installed on ubuntu-latest runners)
+        const prBody = `This is an automated PR generated by Gravity Claw AI Coder.\n\n**Instruction:**\n${INSTRUCTION}\n\nPlease review these autonomous architectural changes carefully.`;
+        execSync(`gh pr create --title "AI: ${INSTRUCTION.slice(0, 50)}" --body "${prBody}" --head ${branchName} --base main`, { stdio: 'inherit' });
+
+        console.log("✅ Success! Pull Request created.");
+    } catch (err) {
+        console.log("ℹ️ No changes were detected or PR failed.");
+    }
+}
+
+main().catch(err => {
+    console.error("FATAL:", err);
+    process.exit(1);
+});
