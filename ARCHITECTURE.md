@@ -562,7 +562,7 @@ The server uses a platform-aware configuration system that combines hardcoded de
 
 ```typescript
 export const CONFIG = {
-  VERSION: "3.4.0",
+  VERSION: "3.4.1",
 
   security: {
     enablePathValidation: true,
@@ -679,4 +679,4 @@ type Args = z.infer<typeof ArgsSchema>;
 ---
 
 **Last Updated:** February 8, 2026  
-**Version:** 3.4.0
+**Version:** 3.4.1

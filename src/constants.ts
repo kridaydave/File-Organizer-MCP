@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * File Category Constants
  */
 

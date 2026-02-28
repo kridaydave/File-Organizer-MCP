@@ -1,16 +1,18 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * organize_photos Tool
  *
  * @module tools/photo-organization
  */
 
 import { z } from "zod";
-import type { ToolDefinition, ToolResponse } from "../types.js";
+import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { PhotoOrganizerService } from "../services/photo-organizer.service.js";
+import { RollbackService } from "../services/rollback.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { logger } from "../utils/logger.js";
 
 export const OrganizePhotosInputSchema = z
   .object({
@@ -168,6 +170,27 @@ export async function handleOrganizePhotos(
       dryRun: dry_run,
     });
 
+    // Create rollback manifest for moved files (not copies)
+    if (!dry_run && !copy_instead_of_move && result.movedFiles.length > 0) {
+      try {
+        const rollbackService = new RollbackService();
+        const rollbackActions: RollbackAction[] = result.movedFiles.map((f) => ({
+          type: "move" as const,
+          originalPath: f.originalPath,
+          currentPath: f.currentPath,
+          timestamp: Date.now(),
+        }));
+        await rollbackService.createManifest(
+          `Photo organization from ${validatedSourcePath} to ${validatedTargetPath} (${rollbackActions.length} files)`,
+          rollbackActions,
+        );
+      } catch (manifestErr) {
+        logger.error(
+          `Failed to create rollback manifest: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
+        );
+      }
+    }
+
     if (response_format === "json") {
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -193,8 +216,8 @@ export async function handleOrganizePhotos(
 
 **Organized Structure:**
 ${Object.entries(result.structure)
-  .map(([folder, count]) => `- \`${folder}\`: ${count} file(s)`)
-  .join("\n")}
+        .map(([folder, count]) => `- \`${folder}\`: ${count} file(s)`)
+        .join("\n")}
 
 ${result.errors.length > 0 ? `**Errors:**\n${result.errors.map((e) => `- \`${e.file}\`: ${e.error}`).join("\n")}` : ""}`;
 

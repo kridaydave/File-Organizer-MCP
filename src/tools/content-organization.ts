@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * organize_by_content Tool
  *
  * @module tools/content-organization
@@ -8,7 +8,7 @@
 import { z } from "zod";
 import fs from "fs/promises";
 import path from "path";
-import type { ToolDefinition, ToolResponse } from "../types.js";
+import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import {
@@ -16,6 +16,7 @@ import {
   type TopicMatch,
 } from "../services/topic-extractor.service.js";
 import { textExtractionService } from "../services/text-extraction.service.js";
+import { RollbackService } from "../services/rollback.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { escapeMarkdown } from "../utils/index.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
@@ -225,6 +226,9 @@ export async function handleOrganizeByContent(
       structure: {},
     };
 
+    // Track rollback actions for undo support
+    const rollbackActions: RollbackAction[] = [];
+
     for (const file of documentFiles) {
       try {
         const text = await extractTextFromFile(file.path);
@@ -271,6 +275,14 @@ export async function handleOrganizeByContent(
           await fs.mkdir(targetFolder, { recursive: true });
           await fs.rename(file.path, targetPath);
 
+          // Track rollback action for undo support
+          rollbackActions.push({
+            type: "move",
+            originalPath: file.path,
+            currentPath: targetPath,
+            timestamp: Date.now(),
+          });
+
           if (create_shortcuts && extractionResult.topics.length > 1) {
             for (const secondaryTopic of extractionResult.topics.slice(1)) {
               const shortcutFolder = path.join(
@@ -286,6 +298,13 @@ export async function handleOrganizeByContent(
               try {
                 await fs.symlink(targetPath, shortcutPath);
                 docResult.shortcuts.push(shortcutPath);
+                // Track symlink for rollback cleanup (reuses "copy" undo = delete)
+                rollbackActions.push({
+                  type: "copy",
+                  originalPath: targetPath,
+                  currentPath: shortcutPath,
+                  timestamp: Date.now(),
+                });
               } catch (symlinkError) {
                 logger.warn(
                   `Failed to create symlink for ${file.name}: ${symlinkError}`,
@@ -302,6 +321,21 @@ export async function handleOrganizeByContent(
           file: file.name,
           error: error instanceof Error ? error.message : String(error),
         });
+      }
+    }
+
+    // Save rollback manifest if any files were actually moved
+    if (!dry_run && rollbackActions.length > 0) {
+      try {
+        const rollbackService = new RollbackService();
+        await rollbackService.createManifest(
+          `Content organization from ${validatedSourcePath} to ${validatedTargetPath} (${rollbackActions.length} files)`,
+          rollbackActions,
+        );
+      } catch (manifestErr) {
+        logger.error(
+          `Failed to create rollback manifest: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
+        );
       }
     }
 

@@ -59,6 +59,8 @@ export interface PhotoOrganizationResult {
   strippedGPSFiles: number;
   errors: Array<{ file: string; error: string }>;
   structure: Record<string, number>;
+  /** Tracks files that were moved (not copied) for rollback support */
+  movedFiles: Array<{ originalPath: string; currentPath: string }>;
 }
 
 interface PhotoFileInfo extends FileInfo {
@@ -108,6 +110,7 @@ export class PhotoOrganizerService {
       strippedGPSFiles: 0,
       errors: [],
       structure: {},
+      movedFiles: [],
     };
 
     try {
@@ -209,6 +212,11 @@ export class PhotoOrganizerService {
               // Now safe to delete original
               await fs.unlink(photo.path);
               result.strippedGPSFiles++;
+              // Track moved file for rollback support
+              result.movedFiles.push({
+                originalPath: photo.path,
+                currentPath: finalTargetPath,
+              });
               logger.info("Moved file with GPS data stripped", {
                 source: photo.path,
                 target: finalTargetPath,
@@ -216,7 +224,23 @@ export class PhotoOrganizerService {
                 targetSize: targetStats.size,
               });
             } else {
-              await fs.rename(photo.path, finalTargetPath);
+              try {
+                await fs.rename(photo.path, finalTargetPath);
+              } catch (renameErr) {
+                const err = renameErr as NodeJS.ErrnoException;
+                if (err.code === "EXDEV") {
+                  // Cross-device move: fall back to copy + delete
+                  await fs.copyFile(photo.path, finalTargetPath);
+                  await fs.unlink(photo.path);
+                } else {
+                  throw renameErr;
+                }
+              }
+              // Track moved file for rollback support
+              result.movedFiles.push({
+                originalPath: photo.path,
+                currentPath: finalTargetPath,
+              });
             }
           }
 

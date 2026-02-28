@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * organize_smart Tool
  *
  * Unified organization tool that auto-detects file types and applies
@@ -11,11 +11,12 @@
 import { z } from "zod";
 import fs from "fs/promises";
 import path from "path";
-import type { ToolDefinition, ToolResponse } from "../types.js";
+import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { MusicOrganizerService } from "../services/music-organizer.service.js";
 import { PhotoOrganizerService } from "../services/photo-organizer.service.js";
+import { RollbackService } from "../services/rollback.service.js";
 import { textExtractionService } from "../services/text-extraction.service.js";
 import { topicExtractorService } from "../services/topic-extractor.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
@@ -166,6 +167,8 @@ interface SmartOrganizationResult {
     skipped: number;
     errors: Array<{ file: string; error: string }>;
   };
+  /** Aggregated moved files from all sub-organizers for rollback support */
+  movedFiles: Array<{ originalPath: string; currentPath: string; isSymlink?: boolean }>;
 }
 
 export const organizeSmartToolDefinition: ToolDefinition = {
@@ -287,6 +290,7 @@ class SmartOrganizerService {
         documentFiles: classified.filter((f) => f.type === "document").length,
         otherFiles: classified.filter((f) => f.type === "other").length,
       },
+      movedFiles: [],
     };
 
     // Prepare target subdirectories (only create when needed)
@@ -320,6 +324,9 @@ class SmartOrganizerService {
         skipped: musicResult.skippedFiles,
         errors: musicResult.errors,
       };
+
+      // Aggregate moved files for rollback
+      result.movedFiles.push(...musicResult.movedFiles);
     }
 
     // Organize photo files
@@ -347,6 +354,9 @@ class SmartOrganizerService {
         strippedGPS: photoResult.strippedGPSFiles,
         errors: photoResult.errors,
       };
+
+      // Aggregate moved files for rollback
+      result.movedFiles.push(...photoResult.movedFiles);
     }
 
     // Organize document files
@@ -354,11 +364,15 @@ class SmartOrganizerService {
       if (!options.dryRun) {
         await fs.mkdir(documentsTarget, { recursive: true });
       }
-      result.documents = await this.organizeDocuments(
+      const docResult = await this.organizeDocuments(
         classified.filter((f) => f.type === "document"),
         documentsTarget,
         options,
       );
+      result.documents = docResult;
+
+      // Aggregate moved files for rollback
+      result.movedFiles.push(...docResult.movedFiles);
     }
 
     return result;
@@ -392,8 +406,10 @@ class SmartOrganizerService {
     organized: number;
     skipped: number;
     errors: Array<{ file: string; error: string }>;
+    movedFiles: Array<{ originalPath: string; currentPath: string; isSymlink?: boolean }>;
   }> {
     const errors: Array<{ file: string; error: string }> = [];
+    const movedFiles: Array<{ originalPath: string; currentPath: string; isSymlink?: boolean }> = [];
     let organized = 0;
     let skipped = 0;
 
@@ -446,6 +462,11 @@ class SmartOrganizerService {
           // If move mode (not copy), delete the source file
           if (!options.copyInsteadOfMove) {
             await fs.unlink(file.path);
+            // Track moved file for rollback
+            movedFiles.push({
+              originalPath: file.path,
+              currentPath: targetPath,
+            });
           }
 
           // Create shortcuts for additional topics if enabled
@@ -464,6 +485,12 @@ class SmartOrganizerService {
                 const validatedTarget = await validateStrictPath(targetPath);
                 if (validatedTarget) {
                   await fs.symlink(targetPath, shortcutPath);
+                  // Track symlink for rollback cleanup
+                  movedFiles.push({
+                    originalPath: targetPath,
+                    currentPath: shortcutPath,
+                    isSymlink: true,
+                  });
                 }
               } catch (err) {
                 logger.debug("Could not create symlink", {
@@ -484,7 +511,7 @@ class SmartOrganizerService {
       }
     }
 
-    return { organized, skipped, errors };
+    return { organized, skipped, errors, movedFiles };
   }
 
   private sanitizeFolderName(name: string): string {
@@ -564,6 +591,27 @@ export async function handleOrganizeSmart(
         recursive: recursive,
       },
     );
+
+    // Create rollback manifest for moved files (not copies, not dry runs)
+    if (!dry_run && !copy_instead_of_move && result.movedFiles.length > 0) {
+      try {
+        const rollbackService = new RollbackService();
+        const rollbackActions: RollbackAction[] = result.movedFiles.map((f) => ({
+          type: f.isSymlink ? "copy" as const : "move" as const,
+          originalPath: f.originalPath,
+          currentPath: f.currentPath,
+          timestamp: Date.now(),
+        }));
+        await rollbackService.createManifest(
+          `Smart organization from ${validatedSource} to ${validatedTarget} (${rollbackActions.length} files)`,
+          rollbackActions,
+        );
+      } catch (manifestErr) {
+        logger.error(
+          `Failed to create rollback manifest: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
+        );
+      }
+    }
 
     // Format response
     const lines: string[] = [];

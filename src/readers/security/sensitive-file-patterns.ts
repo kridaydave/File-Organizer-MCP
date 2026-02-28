@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * Sensitive File Patterns
  *
  * Defines patterns for identifying and blocking access to sensitive files.

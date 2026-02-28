@@ -361,5 +361,5 @@ If you've followed all steps, you're now running File Organizer MCP v3.0 with en
 
 **Questions?** Create an issue on [GitHub](https://github.com/kridaydave/File-Organizer-MCP/issues)
 
-**Last Updated:** February 18, 2026 (v3.4.0 release)  
-**Version:** 3.4.0
+**Last Updated:** February 18, 2026 (3.4.1 release)  
+**Version:** 3.4.1

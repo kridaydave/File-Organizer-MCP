@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * Rollback Service
  *
  * Manages operation manifests and performs undo operations.
@@ -8,7 +8,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
-import os from "os";
+
 import type { RollbackManifest, RollbackAction } from "../types.js";
 import { fileExists } from "../utils/file-utils.js";
 import { logger } from "../utils/logger.js";
@@ -22,10 +22,11 @@ export class RollbackService {
 
   constructor() {
     this.storageDir = path.join(process.cwd(), ".file-organizer-rollbacks");
-    this.pathValidator = new PathValidatorService(process.cwd(), [
-      process.cwd(),
-      os.tmpdir(),
-    ]);
+    // Do not restrict rollback paths to CWD. Manifests may reference any
+    // directory that was permitted at organize-time (e.g. Downloads, Desktop).
+    // Security is enforced by manifest HMAC integrity and the global
+    // path-security whitelist (Layer 4.5) inside PathValidatorService.
+    this.pathValidator = new PathValidatorService();
   }
 
   private async ensureStorage(): Promise<void> {

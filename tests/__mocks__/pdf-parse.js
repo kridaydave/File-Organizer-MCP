@@ -11,7 +11,7 @@ export default function pdfParse(buffer) {
       Author: "Test Author",
     },
     metadata: null,
-    text: "Sample PDF text content for testing",
+    text: "Sample PDF text content for testing purposes. This document contains sufficient text about mathematics, science, and various educational topics for testing.",
     version: "1.0.0",
   });
 }

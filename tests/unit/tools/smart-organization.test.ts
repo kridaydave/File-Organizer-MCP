@@ -82,9 +82,7 @@ jest.unstable_mockModule(
   }),
 );
 
-const { handleOrganizeSmart, OrganizeSmartInputSchema } = await import(
-  "../../../src/tools/smart-organization.js"
-);
+import { handleOrganizeSmart, OrganizeSmartInputSchema } from "../../../src/tools/smart-organization.js";
 
 describe("Smart Organization Tool - Unit Tests", () => {
   let sourceDir: string;
@@ -207,6 +205,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         organizedFiles: 5,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -236,6 +235,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -296,6 +296,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         organizedFiles: 2,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -303,6 +304,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -333,6 +335,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         organizedFiles: 2,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -340,6 +343,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -405,6 +409,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       await handleOrganizeSmart({
@@ -428,6 +433,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       await handleOrganizeSmart({
@@ -474,6 +480,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -481,6 +488,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       await handleOrganizeSmart({
@@ -526,6 +534,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       await handleOrganizeSmart({
@@ -556,6 +565,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 0,
         strippedGPSFiles: 1,
         errors: [],
+        movedFiles: [],
       });
 
       await handleOrganizeSmart({
@@ -590,6 +600,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       await handleOrganizeSmart({
@@ -610,6 +621,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       await handleOrganizeSmart({
@@ -644,6 +656,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         organizedFiles: 0,
         skippedFiles: 0,
         errors: [{ file: "song.mp3", error: "Metadata read failed" }],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -666,6 +679,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 1,
         strippedGPSFiles: 0,
         errors: [{ file: "img.jpg", error: "EXIF read failed" }],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -693,6 +707,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       // Should not throw, but result may indicate partial failure
@@ -720,6 +735,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -727,6 +743,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -757,6 +774,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -764,6 +782,7 @@ describe("Smart Organization Tool - Unit Tests", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({

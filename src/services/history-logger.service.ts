@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * History Logger Service
  *
  * Tracks operation history with JSON-lines format, batching, and file rotation.

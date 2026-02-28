@@ -1,6 +1,46 @@
 # Changelog
 
-## [3.4.0] - 2026-02-18
+## [3.4.2] - 2026-02-25
+
+### 🐛 Bug Fixes
+
+- **External Volume Access on macOS** - Paths under `/Volumes/<name>` (external
+  drives, network mounts) were silently rejected when added to
+  `customAllowedDirectories`, even though `/Volumes` is not in the
+  always-blocked list. The cause was an overly strict "outside home directory"
+  guard in `loadCustomAllowedDirs`.
+
+### ✨ New Feature
+
+- **`allowExternalVolumes` config flag** - Users can now opt in to accessing
+  external volumes by setting `"allowExternalVolumes": true` in their config
+  file alongside the specific volume path in `customAllowedDirectories`:
+
+  ```json
+  {
+    "allowExternalVolumes": true,
+    "customAllowedDirectories": ["/Volumes/MyExternalDrive"]
+  }
+  ```
+
+  Supported mount locations per platform:
+  - **macOS**: `/Volumes/<name>/…`
+  - **Linux**: `/media/<name>/…`, `/mnt/…`, `/run/media/<name>/…`
+  - **Windows**: not needed — drive letters already work
+
+  All existing security guards (symlink checks, traversal prevention, always-
+  blocked patterns) continue to apply inside the allowed volume path.
+
+---
+
+## [3.4.1] - 2026-02-19
+
+
+### 🐛 Bug Fixes
+
+- **Rollback Service** - Fixed path validation bug that caused undo operations to fail for files in external directories (e.g., Downloads).
+
+## [3.4.1] - 2026-02-18
 
 ### 🐛 Bug Fixes
 
@@ -10,7 +50,7 @@
 
 ### ⚙️ Maintenance
 
-- Updated documentation to v3.4.0
+- Updated documentation to 3.4.1
 
 ## [3.3.4] - 2026-02-14
 

@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * duplicate-management Tool (Analyze and Delete Duplicates)
  *
  * @module tools/duplicate-management

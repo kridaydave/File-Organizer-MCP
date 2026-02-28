@@ -1,16 +1,18 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * organize_music Tool
  *
  * @module tools/music-organization
  */
 
 import { z } from "zod";
-import type { ToolDefinition, ToolResponse } from "../types.js";
+import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { MusicOrganizerService } from "../services/music-organizer.service.js";
+import { RollbackService } from "../services/rollback.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { logger } from "../utils/logger.js";
 
 export const OrganizeMusicInputSchema = z
   .object({
@@ -156,8 +158,26 @@ export async function handleOrganizeMusic(
       dryRun: dry_run,
     });
 
-    // If dry_run, we need to simulate - the service doesn't have a dry run mode yet
-    // For now, we'll just report what would happen
+    // Create rollback manifest for moved files (not copies)
+    if (!dry_run && !copy_instead_of_move && result.movedFiles.length > 0) {
+      try {
+        const rollbackService = new RollbackService();
+        const rollbackActions: RollbackAction[] = result.movedFiles.map((f) => ({
+          type: "move" as const,
+          originalPath: f.originalPath,
+          currentPath: f.currentPath,
+          timestamp: Date.now(),
+        }));
+        await rollbackService.createManifest(
+          `Music organization from ${validatedSourcePath} to ${validatedTargetPath} (${rollbackActions.length} files)`,
+          rollbackActions,
+        );
+      } catch (manifestErr) {
+        logger.error(
+          `Failed to create rollback manifest: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
+        );
+      }
+    }
 
     if (response_format === "json") {
       return {
@@ -182,8 +202,8 @@ export async function handleOrganizeMusic(
 
 **Organized Structure:**
 ${Object.entries(result.structure)
-  .map(([folder, files]) => `- \`${folder}\`: ${files.length} file(s)`)
-  .join("\n")}
+        .map(([folder, files]) => `- \`${folder}\`: ${files.length} file(s)`)
+        .join("\n")}
 
 ${result.errors.length > 0 ? `**Errors:**\n${result.errors.map((e) => `- \`${e.file}\`: ${e.error}`).join("\n")}` : ""}`;
 

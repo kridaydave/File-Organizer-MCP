@@ -11,7 +11,7 @@ import { isSubPath } from "./utils/file-utils.js";
 import type { PrivacyMode } from "./types.js";
 
 export const CONFIG = {
-  VERSION: "3.4.0",
+  VERSION: "3.4.1",
 
   // Security Settings
   security: {
@@ -36,6 +36,12 @@ export const CONFIG = {
 export interface UserConfig {
   /** Custom directories allowed for file operations */
   customAllowedDirectories?: string[];
+  /**
+   * Allow directories outside the home directory, such as external drives and
+   * network mounts (e.g. /Volumes/<name> on macOS, /mnt or /media on Linux).
+   * Set to true only for paths you explicitly trust.
+   */
+  allowExternalVolumes?: boolean;
   /** Conflict resolution strategy */
   conflictStrategy?: "rename" | "skip" | "overwrite";
   /** Auto-organize schedule settings */
@@ -305,6 +311,29 @@ export function updateUserConfig(updates: Partial<UserConfig>): boolean {
   }
 }
 
+/**
+ * Returns true if the resolved path is a well-known external-volume mount
+ * location on the current platform.
+ *
+ * - macOS : /Volumes/<name>/...
+ * - Linux : /media/<name>/..., /mnt/..., /run/media/<name>/...
+ * - Windows: not needed — drive letters work without a home-dir guard
+ */
+function isExternalVolumePath(resolvedDir: string): boolean {
+  const platform = os.platform();
+  if (platform === "darwin") {
+    return resolvedDir.startsWith("/Volumes/");
+  }
+  if (platform === "linux") {
+    return (
+      /^\/media\//.test(resolvedDir) ||
+      /^\/mnt\//.test(resolvedDir) ||
+      /^\/run\/media\//.test(resolvedDir)
+    );
+  }
+  return false;
+}
+
 function loadCustomAllowedDirs(): string[] {
   try {
     const config = loadUserConfig();
@@ -347,8 +376,16 @@ function loadCustomAllowedDirs(): string[] {
           const resolvedDir = path.resolve(expandedDir);
           const home = os.homedir();
 
-          // Block path traversal outside of home directory
-          if (!isSubPath(home, resolvedDir)) {
+          // Allow external volume paths when the user has explicitly opted in.
+          // isExternalVolumePath() only recognises well-known, OS-managed mount
+          // locations (e.g. /Volumes on macOS) — arbitrary paths are still blocked.
+          const externalVolumeAllowed =
+            config.allowExternalVolumes === true &&
+            isExternalVolumePath(resolvedDir);
+
+          // Block path traversal outside of home directory unless it is a
+          // recognised external-volume path that the user has opted into.
+          if (!isSubPath(home, resolvedDir) && !externalVolumeAllowed) {
             logger.error(
               `Warning: Custom directory blocked (outside home): ${dir}`,
             );

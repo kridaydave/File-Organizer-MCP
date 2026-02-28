@@ -402,5 +402,5 @@ See main CONTRIBUTING.md for guidelines.
 
 ---
 
-**Version**: 3.4.0  
+**Version**: 3.4.1  
 **Last Updated**: 2026-02-10

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  *
  * A powerful, security-hardened Model Context Protocol server for intelligent file organization.
  * Features 7-layer path validation, file categorization, duplicate detection, and more.
@@ -12,7 +12,7 @@
  *   npx file-organizer-mcp --version    - Show version
  *   npx file-organizer-mcp --help       - Show help
  *
- * @version 3.3.4
+ * @version 3.4.1
  * @license MIT
  */
 

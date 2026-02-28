@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * Content Analyzer Service - Phase 1
  * Detects true file types using magic numbers and file signatures
  */

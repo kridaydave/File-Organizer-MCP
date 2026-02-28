@@ -1,6 +1,6 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.4.0 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.4.1 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
 **New in v3.3.0 - Smart Organization:**
 
@@ -18,12 +18,12 @@
 
 ---
 
-[![npm version](https://img.shields.io/badge/npm-v3.4.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v3.4.1-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-819%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1194%20passing-success.svg)](tests/)
 
 > **A powerful, security-hardened Model Context Protocol (MCP) server for intelligent file organization with Claude**
 
@@ -1035,6 +1035,22 @@ You can customize behavior by editing the user configuration file.
    ```
 
    > 💡 **Tip:** You can copy a folder path directly from your file explorer's address bar and paste it into `customAllowedDirectories`.
+
+#### 💾 External Drives & Network Mounts
+
+By default, for security reasons, you cannot add paths outside your home directory. If you need to access external volumes (like `/Volumes/My Drive` on macOS or `/media/user/usb` on Linux), you must explicitly opt-in by adding `"allowExternalVolumes": true`:
+
+```json
+{
+  "allowExternalVolumes": true,
+  "customAllowedDirectories": [
+    "/Volumes/MyExternalDrive",
+    "/Volumes/Photography Backup"
+  ]
+}
+```
+
+_(Note: Windows drive letters like `D:\` work out of the box and do not require this flag.)_
 
 3. Restart Claude Desktop.
 

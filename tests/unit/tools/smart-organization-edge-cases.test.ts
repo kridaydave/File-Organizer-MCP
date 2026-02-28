@@ -20,7 +20,7 @@ jest.unstable_mockModule(
   "../../../src/services/file-scanner.service.js",
   () => ({
     FileScannerService: jest.fn().mockImplementation(() => ({
-      scanDirectory: mockScanDirectory,
+      scanDirectory: mockScanDirectory.mockResolvedValue([]),
     })),
   }),
 );
@@ -29,7 +29,12 @@ jest.unstable_mockModule(
   "../../../src/services/music-organizer.service.js",
   () => ({
     MusicOrganizerService: jest.fn().mockImplementation(() => ({
-      organize: mockMusicOrganize,
+      organize: mockMusicOrganize.mockResolvedValue({
+        organizedFiles: 0,
+        skippedFiles: 0,
+        errors: [],
+        movedFiles: [],
+      }),
     })),
   }),
 );
@@ -38,7 +43,13 @@ jest.unstable_mockModule(
   "../../../src/services/photo-organizer.service.js",
   () => ({
     PhotoOrganizerService: jest.fn().mockImplementation(() => ({
-      organize: mockPhotoOrganize,
+      organize: mockPhotoOrganize.mockResolvedValue({
+        organizedFiles: 0,
+        skippedFiles: 0,
+        strippedGPSFiles: 0,
+        errors: [],
+        movedFiles: [],
+      }),
     })),
   }),
 );
@@ -94,8 +105,7 @@ jest.unstable_mockModule(
   }),
 );
 
-const { handleOrganizeSmart } =
-  await import("../../../src/tools/smart-organization.js");
+import { handleOrganizeSmart } from "../../../src/tools/smart-organization.js";
 
 describe("Smart Organization Tool - Edge Cases", () => {
   let sourceDir: string;
@@ -110,7 +120,10 @@ describe("Smart Organization Tool - Edge Cases", () => {
     sourceDir = await fs.mkdtemp(path.join(baseTempDir, "test-edge-src-"));
     targetDir = await fs.mkdtemp(path.join(baseTempDir, "test-edge-tgt-"));
 
-    jest.clearAllMocks();
+    // Clear mock call counts but preserve mock function identity for mockModule
+    mockScanDirectory.mockClear();
+    mockMusicOrganize.mockClear();
+    mockPhotoOrganize.mockClear();
   });
 
   afterEach(async () => {
@@ -161,6 +174,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: 0,
         skippedFiles: 1,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -168,6 +182,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 1,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -254,6 +269,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: files.length,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -305,6 +321,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -357,6 +374,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -364,6 +382,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -393,6 +412,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -400,6 +420,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -426,6 +447,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -458,6 +480,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: specialNames.length,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -548,6 +571,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -555,6 +579,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -584,6 +609,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -617,6 +643,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [{ file: "song2.mp3", error: "Corrupt file" }],
+        movedFiles: [],
       });
 
       // Photos: 1 success, 1 skipped
@@ -625,6 +652,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 1,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -637,7 +665,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
       expect(text).toContain("🎵 **Music:** 2");
       expect(text).toContain("📸 **Photos:** 2");
       // Should show error section
-      expect(text).toContain("Errors");
+      expect(text).toContain("- Errors:");
     });
 
     it("should handle complete service failure for one file type", async () => {
@@ -662,6 +690,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       // Should not throw, should continue with other types
@@ -732,6 +761,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: 34,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -739,6 +769,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const result = await handleOrganizeSmart({
@@ -747,8 +778,11 @@ describe("Smart Organization Tool - Edge Cases", () => {
         dry_run: true,
       });
 
+      // Verify mocks were called
+      expect(mockScanDirectory).toHaveBeenCalled();
+
       const text = result.content[0].text;
-      expect(text).toContain("**Total Files:** 100");
+      expect(text).toContain("- **Total Files:** 100");
     });
 
     it("should handle single file of each type efficiently", async () => {
@@ -769,6 +803,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -776,6 +811,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       const startTime = Date.now();
@@ -805,6 +841,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         organizedFiles: 1,
         skippedFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
       mockPhotoOrganize.mockResolvedValue({
@@ -812,15 +849,25 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 0,
         strippedGPSFiles: 0,
         errors: [],
+        movedFiles: [],
       });
 
-      await handleOrganizeSmart({
+      const result = await handleOrganizeSmart({
         source_dir: sourceDir,
         target_dir: targetDir,
         dry_run: false,
         copy_instead_of_move: true,
       });
 
+      // Verify the scan was called
+      expect(mockScanDirectory).toHaveBeenCalled();
+
+      // Verify the result shows the files were processed
+      const text = result.content[0].text;
+      expect(text).toContain("🎵 **Music:** 1");
+      expect(text).toContain("📸 **Photos:** 1");
+
+      // Verify the mocks were called with correct options
       expect(mockMusicOrganize).toHaveBeenCalledWith(
         expect.objectContaining({ copyInsteadOfMove: true }),
       );
@@ -841,6 +888,7 @@ describe("Smart Organization Tool - Edge Cases", () => {
         skippedFiles: 0,
         strippedGPSFiles: 1,
         errors: [],
+        movedFiles: [],
       });
 
       await handleOrganizeSmart({

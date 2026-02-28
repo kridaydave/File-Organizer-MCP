@@ -457,7 +457,7 @@ npm outdated
 
 | Version      | Date       | Security Changes                                           |
 | ------------ | ---------- | ---------------------------------------------------------- |
-| 3.4.0        | 2026-02-18 | Integration fixes, dead code cleanup, schema consolidation |
+| 3.4.1        | 2026-02-18 | Integration fixes, dead code cleanup, schema consolidation |
 | 3.1.4        | 2026-02-07 | Code linting cleanup, security audit fixes                 |
 | 3.0.0        | 2026-02-02 | Complete TypeScript rewrite with 8-layer path validation   |
 | 3.0.0-beta.1 | 2026-02-02 | Initial security hardening (57 bugs fixed)                 |

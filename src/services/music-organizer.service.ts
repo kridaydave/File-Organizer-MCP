@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * Music Organizer Service
  *
  * Organizes audio files into structured folders based on metadata.
@@ -62,6 +62,8 @@ export interface MusicOrganizationResult {
   skippedFiles: number;
   errors: Array<{ file: string; error: string }>;
   structure: Record<string, string[]>;
+  /** Tracks files that were moved (not copied) for rollback support */
+  movedFiles: Array<{ originalPath: string; currentPath: string }>;
 }
 
 /**
@@ -140,6 +142,7 @@ export class MusicOrganizerService {
           },
         ],
         structure: {},
+        movedFiles: [],
       };
     }
   }
@@ -180,6 +183,7 @@ export class MusicOrganizerService {
           },
         ],
         structure: {},
+        movedFiles: [],
       };
     }
   }
@@ -404,6 +408,7 @@ export class MusicOrganizerService {
       skippedFiles: 0,
       errors: [],
       structure: {},
+      movedFiles: [],
     };
 
     // Track used paths for collision detection
@@ -439,14 +444,29 @@ export class MusicOrganizerService {
           const destDir = path.dirname(finalDestination);
           await fs.mkdir(destDir, { recursive: true });
 
-          // Perform the operation
           if (config.copyInsteadOfMove) {
             await fs.copyFile(operation.sourcePath, finalDestination);
             logger.debug(
               `Copied: ${operation.sourcePath} -> ${finalDestination}`,
             );
           } else {
-            await fs.rename(operation.sourcePath, finalDestination);
+            try {
+              await fs.rename(operation.sourcePath, finalDestination);
+            } catch (renameErr) {
+              const err = renameErr as NodeJS.ErrnoException;
+              if (err.code === "EXDEV") {
+                // Cross-device move: fall back to copy + delete
+                await fs.copyFile(operation.sourcePath, finalDestination);
+                await fs.unlink(operation.sourcePath);
+              } else {
+                throw renameErr;
+              }
+            }
+            // Track moved files for rollback support
+            result.movedFiles.push({
+              originalPath: operation.sourcePath,
+              currentPath: finalDestination,
+            });
             logger.debug(
               `Moved: ${operation.sourcePath} -> ${finalDestination}`,
             );

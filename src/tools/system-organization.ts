@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * System Organization Tool
  *
  * Organizes files into OS-standard system directories
@@ -9,7 +9,8 @@
  */
 
 import { z } from "zod";
-import type { ToolDefinition, ToolResponse } from "../types.js";
+import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
+import { RollbackService } from "../services/rollback.service.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { SystemOrganizeService } from "../services/system-organize.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
@@ -187,8 +188,9 @@ export async function handleSystemOrganization(
       dryRun: dry_run,
     });
 
+    const validatedSourcePath = validatedSource;
     const result = await service.systemOrganize({
-      sourceDir: validatedSource,
+      sourceDir: validatedSourcePath,
       useSystemDirs: use_system_dirs,
       createSubfolders: create_subfolders,
       fallbackToLocal: fallback_to_local,
@@ -197,6 +199,27 @@ export async function handleSystemOrganization(
       dryRun: dry_run,
       copyInsteadOfMove: copy_instead_of_move,
     });
+
+    // Create rollback manifest for moved files (not copies, not dry runs)
+    if (!dry_run && !copy_instead_of_move && result.undoManifest && result.undoManifest.operations.length > 0) {
+      try {
+        const rollbackService = new RollbackService();
+        const rollbackActions: RollbackAction[] = result.undoManifest.operations.map((op) => ({
+          type: "move" as const,
+          originalPath: op.from,
+          currentPath: op.to,
+          timestamp: Date.now(),
+        }));
+        await rollbackService.createManifest(
+          `System organization from ${validatedSourcePath} (${rollbackActions.length} files)`,
+          rollbackActions,
+        );
+      } catch (manifestErr) {
+        logger.error(
+          `Failed to create rollback manifest: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
+        );
+      }
+    }
 
     const lines: string[] = [];
     lines.push("# System Organization Results\n");

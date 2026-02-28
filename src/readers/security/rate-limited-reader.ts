@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.0
+ * File Organizer MCP Server v3.4.1
  * Rate Limited Reader
  *
  * Wrapper that applies rate limiting to all file read operations.

@@ -12,7 +12,12 @@ import {
 } from "../../utils/logger-mock.js";
 
 const mockGetAllFiles = jest.fn();
-const mockExtractTopics = jest.fn();
+const mockExtractTopics = jest.fn().mockReturnValue({
+  topics: [],
+  keywords: [],
+  language: "en",
+  documentType: "unknown",
+});
 
 jest.unstable_mockModule(
   "../../../src/services/file-scanner.service.js",
@@ -116,8 +121,10 @@ jest.unstable_mockModule(
   }),
 );
 
-const { handleOrganizeByContent, OrganizeByContentInputSchema } =
-  await import("../../../src/tools/content-organization.js");
+import {
+  handleOrganizeByContent,
+  OrganizeByContentInputSchema,
+} from "../../../src/tools/content-organization.js";
 
 describe("organize_by_content Tool", () => {
   let testDir: string;
@@ -133,6 +140,14 @@ describe("organize_by_content Tool", () => {
     targetDir = await fs.mkdtemp(path.join(baseTempDir, "test-content-tgt-"));
 
     jest.clearAllMocks();
+
+    // Restore default mock implementations after clearing
+    mockExtractTopics.mockReturnValue({
+      topics: [],
+      keywords: [],
+      language: "en",
+      documentType: "unknown",
+    });
   });
 
   afterEach(async () => {
@@ -228,7 +243,7 @@ describe("organize_by_content Tool", () => {
       const scienceDoc = path.join(testDir, "research.pdf");
       await fs.writeFile(
         scienceDoc,
-        "This is a scientific research paper about DNA and molecules in biology.",
+        "This is a scientific research paper about DNA and molecules in biology and genetics.",
       );
 
       mockGetAllFiles.mockResolvedValue([
@@ -270,11 +285,11 @@ describe("organize_by_content Tool", () => {
       const bizDoc = path.join(testDir, "quarterly.docx");
       await fs.writeFile(
         mathDoc,
-        "Linear algebra and matrix operations for solving complex equations in mathematics",
+        "Linear algebra and matrix operations for solving complex equations in mathematics.",
       );
       await fs.writeFile(
         bizDoc,
-        "Quarterly revenue and profit forecast for business planning and financial analysis",
+        "Quarterly revenue and profit forecast for business planning and financial analysis.",
       );
 
       mockGetAllFiles.mockResolvedValue([
@@ -470,7 +485,7 @@ describe("organize_by_content Tool", () => {
       const mathDoc = path.join(testDir, "calculus.txt");
       await fs.writeFile(
         mathDoc,
-        "This document covers calculus, algebra, and derivatives in mathematics.",
+        "This document covers calculus, algebra, and derivatives in mathematics for advanced students.",
       );
 
       mockGetAllFiles.mockResolvedValue([
