@@ -424,7 +424,6 @@ class SmartOrganizerService {
               file: f.path,
               error: error instanceof Error ? error.message : String(error),
             })),
-          movedFiles: [],
         };
       }
     }
