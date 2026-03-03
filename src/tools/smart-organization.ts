@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * organize_smart Tool
  *
  * Unified organization tool that auto-detects file types and applies
@@ -247,9 +247,19 @@ export const organizeSmartToolDefinition: ToolDefinition = {
 
 // Smart organization service
 class SmartOrganizerService {
-  private musicService = new MusicOrganizerService();
-  private photoService = new PhotoOrganizerService();
-  private scanner = new FileScannerService();
+  private musicService: MusicOrganizerService;
+  private photoService: PhotoOrganizerService;
+  private scanner: FileScannerService;
+
+  constructor(
+    musicService?: MusicOrganizerService,
+    photoService?: PhotoOrganizerService,
+    scanner?: FileScannerService,
+  ) {
+    this.musicService = musicService ?? new MusicOrganizerService();
+    this.photoService = photoService ?? new PhotoOrganizerService();
+    this.scanner = scanner ?? new FileScannerService();
+  }
 
   async organize(
     sourceDir: string,
@@ -300,79 +310,123 @@ class SmartOrganizerService {
 
     // Organize music files
     if (result.summary.musicFiles > 0) {
-      if (!options.dryRun) {
-        await fs.mkdir(musicTarget, { recursive: true });
+      try {
+        if (!options.dryRun) {
+          await fs.mkdir(musicTarget, { recursive: true });
+        }
+        const musicFiles = classified
+          .filter((f) => f.type === "music")
+          .map((f) => ({ path: f.path, size: 0 }));
+
+        const musicResult = await this.musicService.organize({
+          sourceDir,
+          targetDir: musicTarget,
+          structure: options.musicStructure as
+            | "artist/album"
+            | "album"
+            | "genre/artist"
+            | "flat",
+          filenamePattern: "{track} - {title}",
+          copyInsteadOfMove: options.copyInsteadOfMove,
+        });
+
+        result.music = {
+          organized: musicResult.organizedFiles,
+          skipped: musicResult.skippedFiles,
+          errors: musicResult.errors,
+        };
+
+        // Aggregate moved files for rollback
+        result.movedFiles.push(...musicResult.movedFiles);
+      } catch (error) {
+        logger.error("Smart organization: music service failed", { error });
+        result.music = {
+          organized: 0,
+          skipped: result.summary.musicFiles,
+          errors: classified
+            .filter((f) => f.type === "music")
+            .map((f) => ({
+              file: f.path,
+              error: error instanceof Error ? error.message : String(error),
+            })),
+        };
       }
-      const musicFiles = classified
-        .filter((f) => f.type === "music")
-        .map((f) => ({ path: f.path, size: 0 }));
-
-      const musicResult = await this.musicService.organize({
-        sourceDir,
-        targetDir: musicTarget,
-        structure: options.musicStructure as
-          | "artist/album"
-          | "album"
-          | "genre/artist"
-          | "flat",
-        filenamePattern: "{track} - {title}",
-        copyInsteadOfMove: options.copyInsteadOfMove,
-      });
-
-      result.music = {
-        organized: musicResult.organizedFiles,
-        skipped: musicResult.skippedFiles,
-        errors: musicResult.errors,
-      };
-
-      // Aggregate moved files for rollback
-      result.movedFiles.push(...musicResult.movedFiles);
     }
 
     // Organize photo files
     if (result.summary.photoFiles > 0) {
-      if (!options.dryRun) {
-        await fs.mkdir(photosTarget, { recursive: true });
+      try {
+        if (!options.dryRun) {
+          await fs.mkdir(photosTarget, { recursive: true });
+        }
+        const photoResult = await this.photoService.organize({
+          sourceDir,
+          targetDir: photosTarget,
+          dateFormat: options.photoDateFormat as
+            | "YYYY/MM/DD"
+            | "YYYY-MM-DD"
+            | "YYYY/MM"
+            | "YYYY",
+          groupByCamera: options.photoGroupByCamera,
+          stripGPS: options.stripGPS,
+          copyInsteadOfMove: options.copyInsteadOfMove,
+          unknownDateFolder: "Unknown Date",
+        });
+
+        result.photos = {
+          organized: photoResult.organizedFiles,
+          skipped: photoResult.skippedFiles,
+          strippedGPS: photoResult.strippedGPSFiles,
+          errors: photoResult.errors,
+        };
+
+        // Aggregate moved files for rollback
+        result.movedFiles.push(...photoResult.movedFiles);
+      } catch (error) {
+        logger.error("Smart organization: photo service failed", { error });
+        result.photos = {
+          organized: 0,
+          skipped: result.summary.photoFiles,
+          strippedGPS: 0,
+          errors: classified
+            .filter((f) => f.type === "photo")
+            .map((f) => ({
+              file: f.path,
+              error: error instanceof Error ? error.message : String(error),
+            })),
+        };
       }
-      const photoResult = await this.photoService.organize({
-        sourceDir,
-        targetDir: photosTarget,
-        dateFormat: options.photoDateFormat as
-          | "YYYY/MM/DD"
-          | "YYYY-MM-DD"
-          | "YYYY/MM"
-          | "YYYY",
-        groupByCamera: options.photoGroupByCamera,
-        stripGPS: options.stripGPS,
-        copyInsteadOfMove: options.copyInsteadOfMove,
-        unknownDateFolder: "Unknown Date",
-      });
-
-      result.photos = {
-        organized: photoResult.organizedFiles,
-        skipped: photoResult.skippedFiles,
-        strippedGPS: photoResult.strippedGPSFiles,
-        errors: photoResult.errors,
-      };
-
-      // Aggregate moved files for rollback
-      result.movedFiles.push(...photoResult.movedFiles);
     }
 
     // Organize document files
     if (result.summary.documentFiles > 0) {
-      if (!options.dryRun) {
-        await fs.mkdir(documentsTarget, { recursive: true });
-      }
-      const docResult = await this.organizeDocuments(
-        classified.filter((f) => f.type === "document"),
-        documentsTarget,
-        options,
-      );
-      result.documents = docResult;
+      try {
+        if (!options.dryRun) {
+          await fs.mkdir(documentsTarget, { recursive: true });
+        }
+        const docResult = await this.organizeDocuments(
+          classified.filter((f) => f.type === "document"),
+          documentsTarget,
+          options,
+        );
+        result.documents = docResult;
 
-      // Aggregate moved files for rollback
-      result.movedFiles.push(...docResult.movedFiles);
+        // Aggregate moved files for rollback
+        result.movedFiles.push(...docResult.movedFiles);
+      } catch (error) {
+        logger.error("Smart organization: document service failed", { error });
+        result.documents = {
+          organized: 0,
+          skipped: result.summary.documentFiles,
+          errors: classified
+            .filter((f) => f.type === "document")
+            .map((f) => ({
+              file: f.path,
+              error: error instanceof Error ? error.message : String(error),
+            })),
+          movedFiles: [],
+        };
+      }
     }
 
     return result;
@@ -523,10 +577,13 @@ class SmartOrganizerService {
   }
 }
 
-const smartOrganizer = new SmartOrganizerService();
-
 export async function handleOrganizeSmart(
   args: Record<string, unknown>,
+  services?: {
+    musicService?: MusicOrganizerService;
+    photoService?: PhotoOrganizerService;
+    scanner?: FileScannerService;
+  },
 ): Promise<ToolResponse> {
   try {
     const parsed = OrganizeSmartInputSchema.safeParse(args);
@@ -577,6 +634,11 @@ export async function handleOrganizeSmart(
     }
 
     // Execute smart organization
+    const smartOrganizer = new SmartOrganizerService(
+      services?.musicService,
+      services?.photoService,
+      services?.scanner,
+    );
     const result = await smartOrganizer.organize(
       validatedSource,
       validatedTarget,

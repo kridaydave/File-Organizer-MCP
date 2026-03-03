@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * Rollback Service
  *
  * Manages operation manifests and performs undo operations.

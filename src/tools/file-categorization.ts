@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * categorize_by_type Tool
  *
  * @module tools/file-categorization

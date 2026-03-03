@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * System Organization Tool
  *
  * Organizes files into OS-standard system directories

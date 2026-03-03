@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * Duplicate Finder Service
  *
  * Advanced duplicate detection, scoring, and safe deletion.

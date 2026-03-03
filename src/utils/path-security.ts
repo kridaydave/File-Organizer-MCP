@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * Path Security Utilities
  *
  * Whitelist/blacklist checking for path access control
@@ -172,9 +172,7 @@ function getBlockedPatternsDescription(): string {
     patterns.push("- /usr, /bin, /sbin, /opt, /private");
     patterns.push(
       "- Note: /Volumes is NOT in the blocked list. " +
-      "External drives mounted under /Volumes are accessible by setting " +
-      "allowExternalVolumes: true in your config and adding the volume path " +
-      "to customAllowedDirectories.",
+      "External drives mounted under /Volumes are accessible by default.",
     );
   } else {
     patterns.push("- /etc, /usr, /bin, /sbin");
