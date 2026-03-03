@@ -33,14 +33,14 @@
 
 ---
 
-## [3.4.1] - 2026-02-19
+## [3.4.2] - 2026-02-19
 
 
 ### 🐛 Bug Fixes
 
 - **Rollback Service** - Fixed path validation bug that caused undo operations to fail for files in external directories (e.g., Downloads).
 
-## [3.4.1] - 2026-02-18
+## [3.4.2] - 2026-02-18
 
 ### 🐛 Bug Fixes
 
@@ -50,7 +50,7 @@
 
 ### ⚙️ Maintenance
 
-- Updated documentation to 3.4.1
+- Updated documentation to 3.4.2
 
 ## [3.3.4] - 2026-02-14
 

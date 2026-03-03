@@ -75,11 +75,13 @@ jobs:
 
       - name: Upload coverage (Ubuntu + Node 20 only)
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           files: ./coverage/lcov.info
           flags: unittests
           name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   security:
     name: Security Audit
@@ -154,6 +156,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check markdown files
-        uses: DavidAnson/markdownlint-cli2-action@v15
+        uses: DavidAnson/markdownlint-cli2-action@v19
         with:
-          globs: "*.md"
+          globs: |
+            *.md
+            docs/**/*.md
+            AGENTS.md
+            ARCHITECTURE.md
+            API.md
+            CHANGELOG.md
+            CONTRIBUTING.md
+            MIGRATION.md
+            SECURITY.md

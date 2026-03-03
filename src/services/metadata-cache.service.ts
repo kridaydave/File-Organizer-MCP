@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * Metadata Cache Service
  * Caches metadata extractions for audio and image files
  */

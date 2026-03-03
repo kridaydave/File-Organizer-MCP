@@ -11,7 +11,7 @@ import { isSubPath } from "./utils/file-utils.js";
 import type { PrivacyMode } from "./types.js";
 
 export const CONFIG = {
-  VERSION: "3.4.1",
+  VERSION: "3.4.2",
 
   // Security Settings
   security: {
@@ -138,9 +138,17 @@ function getDefaultAllowedDirs(): string[] {
 
     // Add common macOS locations
     commonDirs.push(path.join(home, "Movies"));
+    
+    // Add external volumes directory
+    commonDirs.push("/Volumes");
   } else if (platform === "linux") {
     // Linux: Add common development directories
     commonDirs.push(path.join(home, "dev"));
+    
+    // Add external volumes directories
+    commonDirs.push("/mnt");
+    commonDirs.push("/media");
+    commonDirs.push("/run/media");
   }
 
   // Add project directory when running tests

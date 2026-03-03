@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * organize_photos Tool
  *
  * @module tools/photo-organization

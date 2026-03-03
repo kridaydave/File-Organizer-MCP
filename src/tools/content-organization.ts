@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * organize_by_content Tool
  *
  * @module tools/content-organization
@@ -152,6 +152,10 @@ async function extractTextFromFile(filePath: string): Promise<string> {
 
 export async function handleOrganizeByContent(
   args: Record<string, unknown>,
+  services?: {
+    scanner?: FileScannerService;
+    topicExtractor?: TopicExtractorService;
+  },
 ): Promise<ToolResponse> {
   try {
     const parsed = OrganizeByContentInputSchema.safeParse(args);
@@ -209,9 +213,38 @@ export async function handleOrganizeByContent(
       };
     }
 
-    const scanner = new FileScannerService();
+    const scanner = services?.scanner ?? new FileScannerService();
 
     const files = await scanner.getAllFiles(validatedSourcePath, recursive);
+
+    if (files.length === 0) {
+      const emptyResult: OrganizationResult = {
+        success: true,
+        organizedFiles: 0,
+        skippedFiles: 0,
+        errors: [],
+        results: [],
+        structure: {},
+      };
+
+      if (response_format === "json") {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify(emptyResult, null, 2) },
+          ],
+          structuredContent: emptyResult as unknown as Record<string, unknown>,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: "No files found in the source directory.",
+          },
+        ],
+      };
+    }
 
     const documentFiles = files.filter((f) =>
       DOCUMENT_EXTENSIONS.includes(path.extname(f.path).toLowerCase()),
@@ -229,6 +262,8 @@ export async function handleOrganizeByContent(
     // Track rollback actions for undo support
     const rollbackActions: RollbackAction[] = [];
 
+    const topicExtractor = services?.topicExtractor ?? new TopicExtractorService();
+
     for (const file of documentFiles) {
       try {
         const text = await extractTextFromFile(file.path);
@@ -242,7 +277,7 @@ export async function handleOrganizeByContent(
           continue;
         }
 
-        const extractionResult = topicExtractorService.extractTopics(text);
+        const extractionResult = topicExtractor.extractTopics(text);
 
         if (extractionResult.topics.length === 0) {
           result.skippedFiles++;

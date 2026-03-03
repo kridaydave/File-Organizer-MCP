@@ -1,6 +1,6 @@
 # <a id="file-organizer-mcp-server"></a>File Organizer MCP Server 🗂️
 
-**Version:** 3.4.1 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
+**Version:** 3.4.2 | **MCP Protocol:** 2024-11-05 | **Node:** ≥18.0.0
 
 **New in v3.3.0 - Smart Organization:**
 
@@ -18,7 +18,7 @@
 
 ---
 
-[![npm version](https://img.shields.io/badge/npm-v3.4.1-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v3.4.2-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![Security](https://img.shields.io/badge/security-hardened-green.svg)](https://github.com/kridaydave/File-Organizer-MCP)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)

@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * file-management Tool (Get Categories / Set Rules)
  *
  * @module tools/file-management

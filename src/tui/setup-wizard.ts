@@ -510,30 +510,11 @@ async function promptUser(): Promise<SetupAnswers> {
     default: "rename",
   });
 
-  // Step 3: Allow external volumes
-  printStep(3, 5, "External Volumes (USB, Network Drives)");
-
-  out(
-    colors.muted(
-      "\n  By default, only files in your home directory are accessible.",
-    ),
-  );
-  out(
-    colors.muted(
-      "  Enable this to allow organizing files on external drives (e.g., /Volumes on macOS).",
-    ),
-  );
-
-  const allowExternalVolumes = await confirm({
-    message: "Allow access to external volumes?",
-    default: false,
-  });
-
-  // Step 4: Detect and select MCP clients
+  // Step 3: Detect and select MCP clients
   const selectedClients = await detectAndSelectClients();
 
-  // Step 5: Review
-  printStep(5, 5, "Review your settings");
+  // Step 4: Review
+  printStep(4, 4, "Review your settings");
 
   const allFolders = [...selectedFolders, ...customFolders];
 
@@ -550,14 +531,6 @@ async function promptUser(): Promise<SetupAnswers> {
   out(
     colors.info(
       `  ${conflictStrategy === "rename" ? "✨ Rename new files" : conflictStrategy === "skip" ? "⏭️ Skip duplicates" : "📝 Overwrite existing"}`,
-    ),
-  );
-
-  out();
-  out(colors.muted("External Volumes:"));
-  out(
-    colors.info(
-      `  ${allowExternalVolumes ? "🔓 Enabled (Access to /Volumes, /media, etc.)" : "🔒 Disabled (Home directory only)"}`,
     ),
   );
 
@@ -581,7 +554,7 @@ async function promptUser(): Promise<SetupAnswers> {
   return {
     folders: selectedFolders,
     customFolders,
-    allowExternalVolumes,
+    allowExternalVolumes: true, // Auto-enabled conceptually, keeping in type if needed, but we don't prompt
     conflictStrategy,
     selectedClients,
   };
@@ -601,7 +574,6 @@ async function applyConfiguration(answers: SetupAnswers): Promise<void> {
   const configUpdate: Partial<UserConfig> = {
     customAllowedDirectories: allFolders,
     conflictStrategy: answers.conflictStrategy,
-    allowExternalVolumes: answers.allowExternalVolumes,
   };
 
   const configSaved = updateUserConfig(configUpdate);

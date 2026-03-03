@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.1
+ * File Organizer MCP Server v3.4.2
  * Audit Logger Service
  *
  * Comprehensive audit logging for all file read operations.
