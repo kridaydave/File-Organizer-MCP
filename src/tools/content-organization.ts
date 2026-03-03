@@ -12,6 +12,7 @@ import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import {
+  TopicExtractorService,
   topicExtractorService,
   type TopicMatch,
 } from "../services/topic-extractor.service.js";
