@@ -407,6 +407,9 @@ describe("Metadata Cache Tests", () => {
     const metadata1 = await audioMetadataService.extract(testFile);
     await cacheService.set(testFile, metadata1, { filePath: testFile });
 
+    // Ensure at least 2ms difference for mtimeMs check (Math.abs > 1)
+    await new Promise(resolve => setTimeout(resolve, 10));
+
     await fs.writeFile(
       testFile,
       Buffer.concat([initialData, Buffer.alloc(10)]),

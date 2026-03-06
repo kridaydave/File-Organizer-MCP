@@ -55,7 +55,7 @@
   "homepage": "https://github.com/kridaydave/File-Organizer-MCP#readme",
   "dependencies": {
     "@inquirer/prompts": "^8.2.0",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "chalk": "^5.6.2",
     "exif-parser": "^0.1.12",
     "ink": "^5.2.1",
