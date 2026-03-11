@@ -4,6 +4,7 @@
  */
 
 import fs from "fs/promises";
+import * as crypto from "crypto";
 import path from "path";
 import { jest } from "@jest/globals";
 import {
