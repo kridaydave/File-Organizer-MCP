@@ -4,7 +4,7 @@ export class FileOrganizerError extends Error {
   constructor(
     message: string,
     public code: string,
-    public details?: Record<string, any>,
+    public details?: Record<string, unknown>,
     public suggestion?: string,
   ) {
     super(message);

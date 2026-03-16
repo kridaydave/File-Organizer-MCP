@@ -11,34 +11,8 @@ import type { ToolDefinition, ToolResponse } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { RenamingService } from "../services/renaming.service.js";
-import { RenameRuleSchema } from "../schemas/rename.schemas.js";
+import { BatchRenameInputSchema } from "../schemas/batch-rename.schemas.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
-
-export const BatchRenameInputSchema = z
-  .object({
-    files: z
-      .array(z.string())
-      .optional()
-      .describe("List of absolute file paths to rename"),
-    directory: z
-      .string()
-      .optional()
-      .describe('Directory to scan for files (if "files" is not provided)'),
-    rules: z
-      .array(RenameRuleSchema)
-      .min(1, "At least one renaming rule is required"),
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("If true, only simulate renaming. Default: true"),
-  })
-  .merge(CommonParamsSchema)
-  .refine((data) => data.files || data.directory, {
-    message: 'Either "files" or "directory" must be provided',
-    path: ["files", "directory"],
-  });
 
 export type BatchRenameInput = z.infer<typeof BatchRenameInputSchema>;
 

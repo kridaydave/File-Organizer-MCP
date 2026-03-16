@@ -10,18 +10,9 @@ import type { ToolDefinition, ToolResponse, CategoryName } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { InspectMetadataInputSchema } from "../schemas/metadata.schemas.js";
 import { MetadataService } from "../services/metadata.service.js";
 import * as path from "path";
-
-export const InspectMetadataInputSchema = z
-  .object({
-    file: z
-      .string()
-      .min(1, "File path cannot be empty")
-      .describe("Full path to the file to inspect"),
-  })
-  .merge(CommonParamsSchema);
 
 export type InspectMetadataInput = z.infer<typeof InspectMetadataInputSchema>;
 

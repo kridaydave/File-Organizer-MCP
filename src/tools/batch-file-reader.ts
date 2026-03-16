@@ -9,7 +9,7 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { BatchReadFilesInputSchema } from "../schemas/batch.schemas.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { AudioMetadataService } from "../services/audio-metadata.service.js";
@@ -21,48 +21,6 @@ import { logger } from "../utils/logger.js";
 import { formatBytes } from "../utils/formatters.js";
 import * as path from "path";
 import * as fs from "fs/promises";
-
-export const BatchReadFilesInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Full path to the directory containing files to read"),
-    include_subdirs: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Include subdirectories in the batch read"),
-    max_files: z
-      .number()
-      .optional()
-      .default(50)
-      .describe("Maximum number of files to process (safety limit)"),
-    max_file_size_mb: z
-      .number()
-      .optional()
-      .default(10)
-      .describe(
-        "Maximum file size in MB to read content (larger files get metadata only)",
-      ),
-    include_content: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("Include file content for text files"),
-    include_metadata: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("Include metadata for all files"),
-    file_types: z
-      .array(z.string())
-      .optional()
-      .describe(
-        'Filter by specific file extensions (e.g., [".txt", ".pdf"]). Empty = all files',
-      ),
-  })
-  .merge(CommonParamsSchema);
 
 export type BatchReadFilesInput = z.infer<typeof BatchReadFilesInputSchema>;
 

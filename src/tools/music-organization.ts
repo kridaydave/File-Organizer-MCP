@@ -11,48 +11,8 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { MusicOrganizerService } from "../services/music-organizer.service.js";
 import { RollbackService } from "../services/rollback.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { OrganizeMusicInputSchema } from "../schemas/media.schemas.js";
 import { logger } from "../utils/logger.js";
-
-export const OrganizeMusicInputSchema = z
-  .object({
-    source_dir: z
-      .string()
-      .min(1, "Source directory path cannot be empty")
-      .describe("Full path to the directory containing music files"),
-    target_dir: z
-      .string()
-      .min(1, "Target directory path cannot be empty")
-      .describe(
-        "Full path to the directory where organized music will be placed",
-      ),
-    structure: z
-      .enum(["artist/album", "album", "genre/artist", "flat"])
-      .optional()
-      .default("artist/album")
-      .describe("Folder structure for organization"),
-    filename_pattern: z
-      .enum(["{track} - {title}", "{artist} - {title}", "{title}"])
-      .optional()
-      .default("{track} - {title}")
-      .describe("Pattern for renaming files"),
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("If true, only preview changes without moving files"),
-    copy_instead_of_move: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Copy files instead of moving them"),
-    skip_if_missing_metadata: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Skip files that are missing artist/album metadata"),
-  })
-  .merge(CommonParamsSchema);
 
 export type OrganizeMusicInput = z.infer<typeof OrganizeMusicInputSchema>;
 
@@ -162,12 +122,14 @@ export async function handleOrganizeMusic(
     if (!dry_run && !copy_instead_of_move && result.movedFiles.length > 0) {
       try {
         const rollbackService = new RollbackService();
-        const rollbackActions: RollbackAction[] = result.movedFiles.map((f) => ({
-          type: "move" as const,
-          originalPath: f.originalPath,
-          currentPath: f.currentPath,
-          timestamp: Date.now(),
-        }));
+        const rollbackActions: RollbackAction[] = result.movedFiles.map(
+          (f) => ({
+            type: "move" as const,
+            originalPath: f.originalPath,
+            currentPath: f.currentPath,
+            timestamp: Date.now(),
+          }),
+        );
         await rollbackService.createManifest(
           `Music organization from ${validatedSourcePath} to ${validatedTargetPath} (${rollbackActions.length} files)`,
           rollbackActions,
@@ -202,8 +164,8 @@ export async function handleOrganizeMusic(
 
 **Organized Structure:**
 ${Object.entries(result.structure)
-        .map(([folder, files]) => `- \`${folder}\`: ${files.length} file(s)`)
-        .join("\n")}
+  .map(([folder, files]) => `- \`${folder}\`: ${files.length} file(s)`)
+  .join("\n")}
 
 ${result.errors.length > 0 ? `**Errors:**\n${result.errors.map((e) => `- \`${e.file}\`: ${e.error}`).join("\n")}` : ""}`;
 

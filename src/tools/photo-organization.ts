@@ -11,53 +11,8 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { PhotoOrganizerService } from "../services/photo-organizer.service.js";
 import { RollbackService } from "../services/rollback.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { OrganizePhotosInputSchema } from "../schemas/media.schemas.js";
 import { logger } from "../utils/logger.js";
-
-export const OrganizePhotosInputSchema = z
-  .object({
-    source_dir: z
-      .string()
-      .min(1, "Source directory path cannot be empty")
-      .describe("Full path to the directory containing photos"),
-    target_dir: z
-      .string()
-      .min(1, "Target directory path cannot be empty")
-      .describe(
-        "Full path to the directory where organized photos will be placed",
-      ),
-    date_format: z
-      .enum(["YYYY/MM/DD", "YYYY-MM-DD", "YYYY/MM", "YYYY"])
-      .optional()
-      .default("YYYY/MM")
-      .describe("Date format for folder structure"),
-    group_by_camera: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Group photos by camera model within date folders"),
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("If true, only preview changes without moving files"),
-    copy_instead_of_move: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Copy files instead of moving them"),
-    strip_gps: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Strip GPS location data from photos for privacy"),
-    unknown_date_folder: z
-      .string()
-      .optional()
-      .default("Unknown Date")
-      .describe("Folder name for photos without date metadata"),
-  })
-  .merge(CommonParamsSchema);
 
 export type OrganizePhotosInput = z.infer<typeof OrganizePhotosInputSchema>;
 
@@ -174,12 +129,14 @@ export async function handleOrganizePhotos(
     if (!dry_run && !copy_instead_of_move && result.movedFiles.length > 0) {
       try {
         const rollbackService = new RollbackService();
-        const rollbackActions: RollbackAction[] = result.movedFiles.map((f) => ({
-          type: "move" as const,
-          originalPath: f.originalPath,
-          currentPath: f.currentPath,
-          timestamp: Date.now(),
-        }));
+        const rollbackActions: RollbackAction[] = result.movedFiles.map(
+          (f) => ({
+            type: "move" as const,
+            originalPath: f.originalPath,
+            currentPath: f.currentPath,
+            timestamp: Date.now(),
+          }),
+        );
         await rollbackService.createManifest(
           `Photo organization from ${validatedSourcePath} to ${validatedTargetPath} (${rollbackActions.length} files)`,
           rollbackActions,
@@ -216,8 +173,8 @@ export async function handleOrganizePhotos(
 
 **Organized Structure:**
 ${Object.entries(result.structure)
-        .map(([folder, count]) => `- \`${folder}\`: ${count} file(s)`)
-        .join("\n")}
+  .map(([folder, count]) => `- \`${folder}\`: ${count} file(s)`)
+  .join("\n")}
 
 ${result.errors.length > 0 ? `**Errors:**\n${result.errors.map((e) => `- \`${e.file}\`: ${e.error}`).join("\n")}` : ""}`;
 
