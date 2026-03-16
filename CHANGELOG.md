@@ -35,7 +35,6 @@
 
 ## [3.4.2] - 2026-02-19
 
-
 ### 🐛 Bug Fixes
 
 - **Rollback Service** - Fixed path validation bug that caused undo operations to fail for files in external directories (e.g., Downloads).
@@ -214,7 +213,7 @@
 
 ### 🚨 CRITICAL FIX: MCP Protocol Compatibility
 
-**FINAL FIX - v3.2.8**
+### FINAL FIX - v3.2.8
 
 - Removed old local node_modules version conflict
 - npx now correctly resolves to global installation
