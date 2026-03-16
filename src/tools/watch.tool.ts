@@ -5,7 +5,6 @@
  * @module tools/watch
  */
 
-import { z } from "zod";
 import cron from "node-cron";
 import type { ToolDefinition, ToolResponse } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
@@ -16,42 +15,14 @@ import {
 } from "../config.js";
 import { reloadAutoOrganizeScheduler } from "../services/auto-organize.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
-
-export const WatchDirectoryInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Full path to the directory to watch"),
-    schedule: z
-      .string()
-      .min(1, "Schedule cannot be empty")
-      .describe(
-        'Cron expression (e.g., "0 9 * * *" for 9am daily, "*/30 * * * *" for every 30 min)',
-      ),
-    auto_organize: z
-      .boolean()
-      .default(true)
-      .describe("Enable auto-organization on this schedule"),
-    min_file_age_minutes: z
-      .number()
-      .int()
-      .min(0)
-      .optional()
-      .describe(
-        "Minimum file age in minutes before organizing (prevents organizing files being written)",
-      ),
-    max_files_per_run: z
-      .number()
-      .int()
-      .min(1)
-      .optional()
-      .describe("Maximum files to process per run"),
-  })
-  .merge(CommonParamsSchema);
-
-export type WatchDirectoryInput = z.infer<typeof WatchDirectoryInputSchema>;
+import {
+  WatchDirectoryInputSchema,
+  UnwatchDirectoryInputSchema,
+  ListWatchesInputSchema,
+  type WatchDirectoryInput,
+  type UnwatchDirectoryInput,
+  type ListWatchesInput,
+} from "../schemas/watch.schemas.js";
 
 export const watchDirectoryToolDefinition: ToolDefinition = {
   name: "file_organizer_watch_directory",
@@ -109,17 +80,6 @@ export const watchDirectoryToolDefinition: ToolDefinition = {
 /**
  * Remove a directory from the watch list
  */
-export const UnwatchDirectoryInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Full path to the directory to remove from watch list"),
-  })
-  .merge(CommonParamsSchema);
-
-export type UnwatchDirectoryInput = z.infer<typeof UnwatchDirectoryInputSchema>;
-
 export const unwatchDirectoryToolDefinition: ToolDefinition = {
   name: "file_organizer_unwatch_directory",
   title: "Unwatch Directory",
@@ -147,10 +107,6 @@ export const unwatchDirectoryToolDefinition: ToolDefinition = {
 /**
  * List all watched directories
  */
-export const ListWatchesInputSchema = z.object({}).merge(CommonParamsSchema);
-
-export type ListWatchesInput = z.infer<typeof ListWatchesInputSchema>;
-
 export const listWatchesToolDefinition: ToolDefinition = {
   name: "file_organizer_list_watches",
   title: "List Watched Directories",

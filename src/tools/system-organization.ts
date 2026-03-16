@@ -14,56 +14,10 @@ import { RollbackService } from "../services/rollback.service.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { SystemOrganizeService } from "../services/system-organize.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { SystemOrganizationInputSchema } from "../schemas/system.schemas.js";
 import { logger } from "../utils/logger.js";
 
 const VALID_SOURCE_DIRS = ["Downloads", "Desktop", "Temp"];
-
-const SystemOrganizationInputSchema = z
-  .object({
-    source_dir: z
-      .string()
-      .min(1)
-      .describe("Source directory (must be Downloads, Desktop, or Temp)"),
-    use_system_dirs: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("Use OS system directories"),
-    create_subfolders: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("Create organized subfolders"),
-    fallback_to_local: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe(
-        "Fallback to local Organized folder if system dir not writable",
-      ),
-    local_fallback_prefix: z
-      .string()
-      .optional()
-      .default("Organized")
-      .describe("Prefix for local fallback folder"),
-    conflict_strategy: z
-      .enum(["skip", "rename", "overwrite"])
-      .optional()
-      .default("rename")
-      .describe("How to handle file conflicts"),
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("Preview without moving"),
-    copy_instead_of_move: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Copy instead of move"),
-  })
-  .merge(CommonParamsSchema);
 
 export type SystemOrganizationInput = z.infer<
   typeof SystemOrganizationInputSchema
@@ -201,15 +155,21 @@ export async function handleSystemOrganization(
     });
 
     // Create rollback manifest for moved files (not copies, not dry runs)
-    if (!dry_run && !copy_instead_of_move && result.undoManifest && result.undoManifest.operations.length > 0) {
+    if (
+      !dry_run &&
+      !copy_instead_of_move &&
+      result.undoManifest &&
+      result.undoManifest.operations.length > 0
+    ) {
       try {
         const rollbackService = new RollbackService();
-        const rollbackActions: RollbackAction[] = result.undoManifest.operations.map((op) => ({
-          type: "move" as const,
-          originalPath: op.from,
-          currentPath: op.to,
-          timestamp: Date.now(),
-        }));
+        const rollbackActions: RollbackAction[] =
+          result.undoManifest.operations.map((op) => ({
+            type: "move" as const,
+            originalPath: op.from,
+            currentPath: op.to,
+            timestamp: Date.now(),
+          }));
         await rollbackService.createManifest(
           `System organization from ${validatedSourcePath} (${rollbackActions.length} files)`,
           rollbackActions,

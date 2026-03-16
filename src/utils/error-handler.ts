@@ -40,8 +40,18 @@ export function sanitizeErrorMessage(error: Error | string): string {
   // Replace relative paths (e.g., ./foo, ../bar)
   sanitized = sanitized.replace(/(?:^|\s)\.\.?\/[^\s]*/g, "$1[PATH]");
 
-  // Replace Unix paths (start with / and contain path chars)
-  sanitized = sanitized.replace(/(^|\s)\/[^\s]*/g, "$1[PATH]");
+  // Replace Unix absolute paths (e.g., /home/user, /var/log)
+  // Only match paths that look like actual file paths with proper separators
+  sanitized = sanitized.replace(
+    /(?:^|\s)(\/(?:[^\/\0\r\n]+\/)*[^\/\0\r\n]*)/g,
+    "$1[PATH]",
+  );
+
+  // Replace parent directory traversal (../ with path separators)
+  sanitized = sanitized.replace(
+    /(?:^|\s)(?:\.\.)(?:\/(?:[^\/\0\r\n]+)?)*/g,
+    "$1[PATH]",
+  );
 
   return sanitized;
 }
@@ -79,27 +89,6 @@ export function createErrorResponse(error: unknown): ToolResponse {
       },
     ],
   };
-}
-
-/**
- * Format access denied error with helpful guidance
- * @param requestedPath - Path that was denied
- * @returns Formatted error message
- */
-function formatAccessDeniedError(requestedPath: string): string {
-  const sanitizedPath = sanitizeErrorMessage(requestedPath);
-
-  return `❌ Access Denied: ${sanitizedPath}
-
-This directory is not allowed in STRICT mode.
-STRICT mode only allows access to the current working directory.
-
-Options:
-1. Switch to SANDBOXED mode and add this directory to the allow-list
-2. Navigate to this directory and run the server from there
-3. Enable UNRESTRICTED mode (advanced users only)
-
-Learn more: https://github.com/kridaydave/File-Organizer-MCP#security-modes`;
 }
 
 /**

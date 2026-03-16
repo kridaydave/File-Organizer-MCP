@@ -12,6 +12,8 @@ export class RateLimiter {
   private readonly MAX_IDENTIFIERS = 10000;
   private lastCleanup = Date.now();
   private readonly CLEANUP_INTERVAL = 60 * 1000; // 1 minute
+  private readonly MAX_IDENTIFIER_LENGTH = 256;
+  private readonly IDENTIFIER_PATTERN = /^[a-zA-Z0-9_\-:.]+$/;
 
   constructor(
     private maxRequestsPerMinute: number = 60,
@@ -53,6 +55,15 @@ export class RateLimiter {
 
   checkLimit(identifier: string): { allowed: boolean; resetIn?: number } {
     const now = Date.now();
+
+    // Validate identifier
+    if (
+      identifier.length > this.MAX_IDENTIFIER_LENGTH ||
+      !this.IDENTIFIER_PATTERN.test(identifier)
+    ) {
+      return { allowed: false, resetIn: 60 };
+    }
+
     this.cleanupOldIdentifiers(now);
 
     // Enforce max identifiers limit

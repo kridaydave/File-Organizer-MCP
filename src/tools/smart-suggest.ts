@@ -12,55 +12,8 @@ import type { ToolDefinition, ToolResponse } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { SmartSuggestService } from "../services/smart-suggest.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { SmartSuggestInputSchema } from "../schemas/smart.schemas.js";
 import { loadUserConfig } from "../config.js";
-
-export const SmartSuggestInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Directory to analyze"),
-    include_subdirs: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("Include subdirectories"),
-    include_duplicates: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("Check for duplicates (slower)"),
-    max_files: z
-      .number()
-      .min(1)
-      .max(100000)
-      .optional()
-      .default(10000)
-      .describe("Maximum files to scan"),
-    timeout_seconds: z
-      .number()
-      .min(10)
-      .max(300)
-      .optional()
-      .default(60)
-      .describe("Timeout in seconds"),
-    sample_rate: z
-      .number()
-      .min(0.01)
-      .max(1)
-      .optional()
-      .default(1)
-      .describe("Sample rate for large dirs"),
-    use_cache: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("Use cached results"),
-  })
-  .merge(CommonParamsSchema);
-
-export type SmartSuggestInput = z.infer<typeof SmartSuggestInputSchema>;
 
 export const smartSuggestToolDefinition: ToolDefinition = {
   name: "file_organizer_smart_suggest",
