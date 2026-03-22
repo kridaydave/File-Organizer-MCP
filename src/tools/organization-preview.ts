@@ -15,7 +15,7 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { globalOrganizerService } from "../services/index.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { PreviewOrganizationInputSchema } from "../schemas/preview.schemas.js";
 import { loadUserConfig } from "../config.js";
 
 export interface MoveItem {
@@ -30,25 +30,6 @@ export interface SkippedFile {
   path: string;
   reason: string;
 }
-
-export const PreviewOrganizationInputSchema = z
-  .object({
-    directory: z
-      .string()
-      .min(1, "Directory path cannot be empty")
-      .describe("Full path to the directory to preview organization for"),
-    show_conflicts_only: z
-      .boolean()
-      .default(false)
-      .describe("Only show files that will cause naming conflicts"),
-    conflict_strategy: z
-      .enum(["rename", "skip", "overwrite"])
-      .optional()
-      .describe(
-        "How to handle file conflicts for preview. Uses config default if not specified",
-      ),
-  })
-  .merge(CommonParamsSchema);
 
 export const previewOrganizationToolDefinition: ToolDefinition = {
   name: "file_organizer_preview_organization",

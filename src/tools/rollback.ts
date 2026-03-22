@@ -9,21 +9,10 @@ import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
 import { RollbackService } from "../services/rollback.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { UndoLastOperationInputSchema } from "../schemas/rollback.schemas.js";
 
 // Singleton for now, or just new instance since it reads from disk
 const rollbackService = new RollbackService();
-
-export const UndoLastOperationInputSchema = z
-  .object({
-    manifest_id: z
-      .string()
-      .optional()
-      .describe(
-        "ID of the operation to undo. if omitted, undoes the last operation.",
-      ),
-  })
-  .merge(CommonParamsSchema);
 
 export const undoLastOperationToolDefinition: ToolDefinition = {
   name: "file_organizer_undo_last_operation",

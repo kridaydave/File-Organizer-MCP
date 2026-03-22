@@ -51,11 +51,27 @@ export interface PaginatedResult<T> {
   next_offset?: number;
 }
 
+// Forward declaration for ScreeningReport - actual type defined in content-screening.service.ts
+export interface ScreeningReport {
+  totalFiles: number;
+  passedCount: number;
+  failedCount: number;
+  threatSummary: {
+    none: number;
+    low: number;
+    medium: number;
+    high: number;
+  };
+  issuesByType: Record<string, number>;
+  timestamp: Date;
+  results: ScreenResult[];
+}
+
 export interface ScanResult extends PaginatedResult<FileInfo> {
   directory: string;
   total_size: number;
   total_size_readable: string;
-  screening_report?: unknown;
+  screening_report?: ScreeningReport;
 }
 
 export interface CustomRule {
@@ -238,7 +254,7 @@ export interface ToolResponse {
     type: "text";
     text: string;
   }>;
-  [key: string]: unknown;
+  [key: string]: unknown; // Dynamic properties validated at runtime
 }
 
 export interface ToolDefinition {
@@ -246,7 +262,7 @@ export interface ToolDefinition {
   description: string;
   inputSchema: {
     type: "object";
-    properties: Record<string, unknown>;
+    properties: Record<string, unknown>; // Tool-specific properties validated via input schema
     required: string[];
   };
   annotations?: {
@@ -260,9 +276,20 @@ export interface ToolDefinition {
 
 // ==================== Error Types ====================
 
+/**
+ * Validated error value types - primitives and simple arrays
+ * Excludes: functions, objects, symbols, undefined
+ */
+export type ValidationErrorValue =
+  | string
+  | number
+  | boolean
+  | null
+  | Array<string | number | boolean | null>;
+
 export interface ValidationErrorDetails {
   field?: string;
-  value?: unknown;
+  value?: ValidationErrorValue;
   constraint?: string;
 }
 
@@ -329,11 +356,24 @@ export interface ScreenResult {
 
 export type ThreatLevel = "none" | "low" | "medium" | "high" | "critical";
 
+/**
+ * Serializable value type for ScreenIssue details
+ * Allows: strings, numbers, booleans, null, arrays, and nested objects
+ * Excludes: functions, symbols, undefined
+ */
+export type SerializableValue =
+  | string
+  | number
+  | boolean
+  | null
+  | SerializableValue[]
+  | Record<string, SerializableValue>;
+
 export interface ScreenIssue {
   type: IssueType;
   severity: "warning" | "error";
   message: string;
-  details?: Record<string, unknown>;
+  details?: Record<string, SerializableValue>;
 }
 
 export type IssueType =
@@ -582,13 +622,13 @@ export interface DirectoryHealthReport {
     priority: "high" | "medium" | "low";
     message: string;
     suggestedTool?: string;
-    suggestedArgs?: Record<string, unknown>;
+    suggestedArgs?: Record<string, unknown>; // Validated by caller
   }>;
   quickWins?: Array<{
     action: string;
     estimatedScoreImprovement: number;
     tool: string;
-    args: Record<string, unknown>;
+    args: Record<string, unknown>; // Validated via Zod schema in tool handlers
   }>;
 }
 

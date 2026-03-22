@@ -5,24 +5,16 @@
  * @module tools/duplicate-management
  */
 
-import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { DuplicateFinderService } from "../services/duplicate-finder.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
-
-export const AnalyzeDuplicatesInputSchema = z
-  .object({
-    directory: z.string().min(1, "Directory path cannot be empty"),
-    recommendation_strategy: z
-      .enum(["newest", "oldest", "best_location", "best_name"])
-      .default("best_location"),
-    auto_select_keep: z.boolean().default(false),
-  })
-  .merge(CommonParamsSchema);
+import {
+  AnalyzeDuplicatesInputSchema,
+  DeleteDuplicatesInputSchema,
+} from "../schemas/duplicate.schemas.js";
 
 export const analyzeDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_analyze_duplicates",
@@ -54,13 +46,6 @@ export const analyzeDuplicatesToolDefinition: ToolDefinition = {
     openWorldHint: true,
   },
 };
-
-export const DeleteDuplicatesInputSchema = z
-  .object({
-    files_to_delete: z.array(z.string()).min(1),
-    create_backup_manifest: z.boolean().default(true),
-  })
-  .merge(CommonParamsSchema);
 
 export const deleteDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_delete_duplicates",

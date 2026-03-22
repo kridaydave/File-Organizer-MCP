@@ -21,43 +21,15 @@ import { RollbackService } from "../services/rollback.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { escapeMarkdown } from "../utils/index.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import {
+  OrganizeByContentInputSchema,
+  type OrganizeByContentInput,
+} from "../schemas/content.schemas.js";
 import { logger } from "../utils/logger.js";
 
-export const OrganizeByContentInputSchema = z
-  .object({
-    source_dir: z
-      .string()
-      .min(1, "Source directory path cannot be empty")
-      .describe("Full path to the directory containing document files"),
-    target_dir: z
-      .string()
-      .min(1, "Target directory path cannot be empty")
-      .describe(
-        "Full path to the directory where organized documents will be placed",
-      ),
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("If true, only preview changes without moving files"),
-    create_shortcuts: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe(
-        "For multi-topic documents, create shortcuts/symlinks in additional topic folders",
-      ),
-    recursive: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("Scan subdirectories recursively"),
-  })
-  .merge(CommonParamsSchema);
-
-export type OrganizeByContentInput = z.infer<
-  typeof OrganizeByContentInputSchema
->;
+// Re-export for module consumers
+export { OrganizeByContentInputSchema };
+export type { OrganizeByContentInput };
 
 const DOCUMENT_EXTENSIONS = [
   ".pdf",
@@ -263,7 +235,8 @@ export async function handleOrganizeByContent(
     // Track rollback actions for undo support
     const rollbackActions: RollbackAction[] = [];
 
-    const topicExtractor = services?.topicExtractor ?? new TopicExtractorService();
+    const topicExtractor =
+      services?.topicExtractor ?? new TopicExtractorService();
 
     for (const file of documentFiles) {
       try {

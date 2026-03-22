@@ -9,11 +9,11 @@ import { z } from "zod";
 import type { ToolDefinition, ToolResponse, CustomRule } from "../types.js";
 import { CATEGORIES } from "../constants.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { CommonParamsSchema } from "../schemas/common.schemas.js";
-// We need a singleton service to persist rules across calls in this process
+import {
+  GetCategoriesInputSchema,
+  SetCustomRulesInputSchema,
+} from "../schemas/file-management.schemas.js";
 import { globalCategorizerService } from "../services/index.js";
-
-export const GetCategoriesInputSchema = z.object({}).merge(CommonParamsSchema);
 
 export const getCategoriesToolDefinition: ToolDefinition = {
   name: "file_organizer_get_categories",
@@ -37,17 +37,6 @@ export const getCategoriesToolDefinition: ToolDefinition = {
     openWorldHint: false,
   },
 };
-
-export const SetCustomRulesInputSchema = z.object({
-  rules: z.array(
-    z.object({
-      category: z.string(),
-      extensions: z.array(z.string()).optional(),
-      filename_pattern: z.string().optional(),
-      priority: z.number().int().min(0).default(0),
-    }),
-  ),
-});
 
 export const setCustomRulesToolDefinition: ToolDefinition = {
   name: "file_organizer_set_custom_rules",

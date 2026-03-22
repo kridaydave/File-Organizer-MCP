@@ -21,70 +21,8 @@ import { textExtractionService } from "../services/text-extraction.service.js";
 import { topicExtractorService } from "../services/topic-extractor.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
+import { OrganizeSmartInputSchema } from "../schemas/smart.schemas.js";
 import { logger } from "../utils/logger.js";
-
-export const OrganizeSmartInputSchema = z
-  .object({
-    source_dir: z
-      .string()
-      .min(1, "Source directory path cannot be empty")
-      .describe(
-        "Full path to the directory containing mixed files (music, photos, documents)",
-      ),
-    target_dir: z
-      .string()
-      .min(1, "Target directory path cannot be empty")
-      .describe(
-        "Full path to the directory where organized files will be placed",
-      ),
-    // Music options
-    music_structure: z
-      .enum(["artist/album", "album", "genre/artist", "flat"])
-      .optional()
-      .default("artist/album")
-      .describe("Folder structure for music files"),
-    // Photo options
-    photo_date_format: z
-      .enum(["YYYY/MM/DD", "YYYY-MM-DD", "YYYY/MM", "YYYY"])
-      .optional()
-      .default("YYYY/MM")
-      .describe("Date format for photo folder structure"),
-    photo_group_by_camera: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Group photos by camera model within date folders"),
-    strip_gps: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Strip GPS location data from photos for privacy"),
-    // Document options
-    create_shortcuts: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe(
-        "For multi-topic documents, create shortcuts in additional topic folders",
-      ),
-    // Common options
-    dry_run: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("If true, only preview changes without moving files"),
-    copy_instead_of_move: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe("Copy files instead of moving them"),
-    recursive: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe("Scan subdirectories recursively"),
-  })
-  .merge(CommonParamsSchema);
 
 export type OrganizeSmartInput = z.infer<typeof OrganizeSmartInputSchema>;
 
@@ -168,7 +106,11 @@ interface SmartOrganizationResult {
     errors: Array<{ file: string; error: string }>;
   };
   /** Aggregated moved files from all sub-organizers for rollback support */
-  movedFiles: Array<{ originalPath: string; currentPath: string; isSymlink?: boolean }>;
+  movedFiles: Array<{
+    originalPath: string;
+    currentPath: string;
+    isSymlink?: boolean;
+  }>;
 }
 
 export const organizeSmartToolDefinition: ToolDefinition = {
@@ -459,10 +401,18 @@ class SmartOrganizerService {
     organized: number;
     skipped: number;
     errors: Array<{ file: string; error: string }>;
-    movedFiles: Array<{ originalPath: string; currentPath: string; isSymlink?: boolean }>;
+    movedFiles: Array<{
+      originalPath: string;
+      currentPath: string;
+      isSymlink?: boolean;
+    }>;
   }> {
     const errors: Array<{ file: string; error: string }> = [];
-    const movedFiles: Array<{ originalPath: string; currentPath: string; isSymlink?: boolean }> = [];
+    const movedFiles: Array<{
+      originalPath: string;
+      currentPath: string;
+      isSymlink?: boolean;
+    }> = [];
     let organized = 0;
     let skipped = 0;
 
@@ -657,12 +607,14 @@ export async function handleOrganizeSmart(
     if (!dry_run && !copy_instead_of_move && result.movedFiles.length > 0) {
       try {
         const rollbackService = new RollbackService();
-        const rollbackActions: RollbackAction[] = result.movedFiles.map((f) => ({
-          type: f.isSymlink ? "copy" as const : "move" as const,
-          originalPath: f.originalPath,
-          currentPath: f.currentPath,
-          timestamp: Date.now(),
-        }));
+        const rollbackActions: RollbackAction[] = result.movedFiles.map(
+          (f) => ({
+            type: f.isSymlink ? ("copy" as const) : ("move" as const),
+            originalPath: f.originalPath,
+            currentPath: f.currentPath,
+            timestamp: Date.now(),
+          }),
+        );
         await rollbackService.createManifest(
           `Smart organization from ${validatedSource} to ${validatedTarget} (${rollbackActions.length} files)`,
           rollbackActions,
