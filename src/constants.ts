@@ -14,7 +14,7 @@ export const CATEGORIES: Record<CategoryName, readonly string[]> = {
   Documents: [".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt", ".md", ".tex"],
   Presentations: [".ppt", ".pptx", ".odp", ".key"],
   Spreadsheets: [".xls", ".xlsx", ".csv", ".ods"],
-  Images: [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".ico", ".webp"],
+  Images: [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".ico", ".webp", ".tiff"],
   Audio: [".mp3", ".flac", ".aac", ".ogg", ".wma", ".m4a", ".wav"],
   Music: [".flac", ".wav"], // For music organization (exclusive formats)
   Photos: [".tiff", ".heic"], // For photo organization (exclusive formats)
@@ -23,6 +23,8 @@ export const CATEGORIES: Record<CategoryName, readonly string[]> = {
     ".py",
     ".js",
     ".ts",
+    ".jsx",
+    ".tsx",
     ".java",
     ".cpp",
     ".c",
