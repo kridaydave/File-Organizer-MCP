@@ -113,6 +113,7 @@ interface SmartOrganizationResult {
   }>;
 }
 
+export { OrganizeSmartInputSchema } from "../schemas/smart.schemas.js";
 export const organizeSmartToolDefinition: ToolDefinition = {
   name: "file_organizer_organize_smart",
   title: "Smart Organize Files",

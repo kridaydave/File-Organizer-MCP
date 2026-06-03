@@ -36,6 +36,7 @@ export interface FileReadResult {
   error?: string;
 }
 
+export { BatchReadFilesInputSchema } from "../schemas/batch.schemas.js";
 export const batchReadFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_batch_read_files",
   title: "Batch Read Files for LLM Context",

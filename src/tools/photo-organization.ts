@@ -16,6 +16,7 @@ import { logger } from "../utils/logger.js";
 
 export type OrganizePhotosInput = z.infer<typeof OrganizePhotosInputSchema>;
 
+export { OrganizePhotosInputSchema } from "../schemas/media.schemas.js";
 export const organizePhotosToolDefinition: ToolDefinition = {
   name: "file_organizer_organize_photos",
   title: "Organize Photo Files",

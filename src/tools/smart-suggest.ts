@@ -15,6 +15,8 @@ import { createErrorResponse } from "../utils/error-handler.js";
 import { SmartSuggestInputSchema } from "../schemas/smart.schemas.js";
 import { loadUserConfig } from "../config.js";
 
+export { SmartSuggestInputSchema };
+export type { SmartSuggestInput } from "../schemas/smart.schemas.js";
 export const smartSuggestToolDefinition: ToolDefinition = {
   name: "file_organizer_smart_suggest",
   title: "Smart Suggest",

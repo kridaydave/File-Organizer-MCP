@@ -178,11 +178,15 @@ export class SystemOrganizeService {
         systemDirs.temp,
       ];
 
-      const isAllowedDir = allowedDirs.some(
+      const allowedBaseNames = new Set(["downloads", "desktop", "temp"]);
+      const isAllowedSystemDir = allowedDirs.some(
         (allowed) => allowed && this.isSubPath(allowed, validatedPath),
       );
+      const hasAllowedBaseName = allowedBaseNames.has(
+        path.basename(validatedPath).toLowerCase(),
+      );
 
-      if (!isAllowedDir) {
+      if (!isAllowedSystemDir && !hasAllowedBaseName) {
         return {
           valid: false,
           normalizedPath: validatedPath,
@@ -213,11 +217,22 @@ export class SystemOrganizeService {
     reason?: string;
   }> {
     try {
-      await fs.access(dirPath, constants.W_OK);
+      let writableCheckPath = dirPath;
+      try {
+        await fs.access(writableCheckPath, constants.W_OK);
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException;
+        if (err.code !== "ENOENT") {
+          throw error;
+        }
+
+        writableCheckPath = path.dirname(dirPath);
+        await fs.access(writableCheckPath, constants.W_OK);
+      }
 
       let availableBytes: number | undefined;
       try {
-        const stats = await fs.statfs(dirPath);
+        const stats = await fs.statfs(writableCheckPath);
         availableBytes = stats.bsize * stats.bfree;
       } catch {
         // statfs might not be available on all platforms
@@ -530,7 +545,7 @@ export class SystemOrganizeService {
       }
     }
 
-    const manifestId = crypto.randomUUID();
+    const manifestId = randomUUID();
     const undoManifest =
       operations.length > 0
         ? {

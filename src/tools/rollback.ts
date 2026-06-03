@@ -14,6 +14,8 @@ import { UndoLastOperationInputSchema } from "../schemas/rollback.schemas.js";
 // Singleton for now, or just new instance since it reads from disk
 const rollbackService = new RollbackService();
 
+export { UndoLastOperationInputSchema } from "../schemas/rollback.schemas.js";
+export type { UndoLastOperationInput } from "../schemas/rollback.schemas.js";
 export const undoLastOperationToolDefinition: ToolDefinition = {
   name: "file_organizer_undo_last_operation",
   title: "Undo Last Organization Operation",

@@ -361,13 +361,16 @@ export type ThreatLevel = "none" | "low" | "medium" | "high" | "critical";
  * Allows: strings, numbers, booleans, null, arrays, and nested objects
  * Excludes: functions, symbols, undefined
  */
+export type SerializablePrimitive = string | number | boolean | null;
+
+export interface SerializableObject {
+  [key: string]: SerializableValue;
+}
+
 export type SerializableValue =
-  | string
-  | number
-  | boolean
-  | null
+  | SerializablePrimitive
   | SerializableValue[]
-  | Record<string, SerializableValue>;
+  | SerializableObject;
 
 export interface ScreenIssue {
   type: IssueType;
