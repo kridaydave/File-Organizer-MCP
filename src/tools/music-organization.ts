@@ -16,6 +16,7 @@ import { logger } from "../utils/logger.js";
 
 export type OrganizeMusicInput = z.infer<typeof OrganizeMusicInputSchema>;
 
+export { OrganizeMusicInputSchema } from "../schemas/media.schemas.js";
 export const organizeMusicToolDefinition: ToolDefinition = {
   name: "file_organizer_organize_music",
   title: "Organize Music Files",

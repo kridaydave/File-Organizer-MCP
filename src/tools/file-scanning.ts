@@ -6,7 +6,12 @@
  */
 
 import fs from "fs/promises";
-import type { ToolDefinition, ToolResponse, ScanResult } from "../types.js";
+import type {
+  ToolDefinition,
+  ToolResponse,
+  ScanResult,
+  ScreeningReport,
+} from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../services/file-scanner.service.js";
 import { contentScreeningService } from "../services/content-screening.service.js";
@@ -125,7 +130,7 @@ export async function handleScanDirectory(
       maxDepth: max_depth,
     });
 
-    let screeningReport = null;
+    let screeningReport: ScreeningReport | undefined;
     if (screen_files) {
       const filePaths = allFiles.map((f) => f.path);
       const screeningResults =

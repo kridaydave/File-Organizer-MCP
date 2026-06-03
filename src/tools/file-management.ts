@@ -15,6 +15,10 @@ import {
 } from "../schemas/file-management.schemas.js";
 import { globalCategorizerService } from "../services/index.js";
 
+export {
+  GetCategoriesInputSchema,
+  SetCustomRulesInputSchema,
+} from "../schemas/file-management.schemas.js";
 export const getCategoriesToolDefinition: ToolDefinition = {
   name: "file_organizer_get_categories",
   title: "Get Available File Categories",

@@ -24,6 +24,16 @@ import {
   type ListWatchesInput,
 } from "../schemas/watch.schemas.js";
 
+export {
+  WatchDirectoryInputSchema,
+  UnwatchDirectoryInputSchema,
+  ListWatchesInputSchema,
+} from "../schemas/watch.schemas.js";
+export type {
+  WatchDirectoryInput,
+  UnwatchDirectoryInput,
+  ListWatchesInput,
+} from "../schemas/watch.schemas.js";
 export const watchDirectoryToolDefinition: ToolDefinition = {
   name: "file_organizer_watch_directory",
   title: "Watch Directory",

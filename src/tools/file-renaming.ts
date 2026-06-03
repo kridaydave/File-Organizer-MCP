@@ -16,6 +16,7 @@ import { createErrorResponse } from "../utils/error-handler.js";
 
 export type BatchRenameInput = z.infer<typeof BatchRenameInputSchema>;
 
+export { BatchRenameInputSchema } from "../schemas/batch-rename.schemas.js";
 export const batchRenameToolDefinition: ToolDefinition = {
   name: "file_organizer_batch_rename",
   title: "Batch Rename Files",

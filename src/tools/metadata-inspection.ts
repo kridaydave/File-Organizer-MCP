@@ -42,6 +42,7 @@ export interface MetadataInspectionResult {
   warnings?: string[];
 }
 
+export { InspectMetadataInputSchema } from "../schemas/metadata.schemas.js";
 export const inspectMetadataToolDefinition: ToolDefinition = {
   name: "file_organizer_inspect_metadata",
   title: "Inspect File Metadata",

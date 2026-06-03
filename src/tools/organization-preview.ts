@@ -31,6 +31,8 @@ export interface SkippedFile {
   reason: string;
 }
 
+export { PreviewOrganizationInputSchema } from "../schemas/preview.schemas.js";
+export type { PreviewOrganizationInput } from "../schemas/preview.schemas.js";
 export const previewOrganizationToolDefinition: ToolDefinition = {
   name: "file_organizer_preview_organization",
   title: "Preview File Organization Plan",

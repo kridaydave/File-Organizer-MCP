@@ -41,6 +41,7 @@ interface ExtendedCacheEntry {
   ttl: number | null; // null means no expiration
   filePath?: string;
   fileMtime?: number;
+  fileSize?: number;
 }
 
 // ==================== Metadata Cache Service ====================
@@ -265,12 +266,14 @@ export class MetadataCacheService {
 
     await this.acquireLock(async () => {
       let fileMtime: number | undefined;
+      let fileSize: number | undefined;
 
-      // If filePath is provided, get the file's modification time
+      // If filePath is provided, get the file's modification time and size
       if (options?.filePath) {
         try {
           const stats = await fs.stat(options.filePath);
           fileMtime = stats.mtimeMs;
+          fileSize = stats.size;
         } catch {
           // File doesn't exist, store without file tracking
         }
@@ -287,6 +290,7 @@ export class MetadataCacheService {
         ttl: options?.ttl !== undefined ? options.ttl : this.maxAge,
         filePath: options?.filePath,
         fileMtime,
+        fileSize,
       };
 
       this.memoryCache.set(key, entry);
@@ -348,8 +352,15 @@ export class MetadataCacheService {
 
     try {
       const stats = await fs.stat(entry.filePath);
-      // If file has been modified since cache was created, it's stale
-      if (entry.fileMtime && Math.abs(stats.mtimeMs - entry.fileMtime) > 1) {
+      // If file size changed, it is stale even when coarse filesystem
+      // timestamp resolution leaves mtime unchanged.
+      if (entry.fileSize !== undefined && stats.size !== entry.fileSize) {
+        return true;
+      }
+
+      // If file has been modified since cache was created, it's stale.
+      // Use exact mtime comparison so fast same-process rewrites invalidate reliably.
+      if (entry.fileMtime !== undefined && stats.mtimeMs !== entry.fileMtime) {
         return true;
       }
     } catch {

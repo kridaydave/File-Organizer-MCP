@@ -55,16 +55,16 @@ export type { OrganizeFilesInput } from "../schemas/organize.schemas.js";
 export {
   organizeMusicToolDefinition,
   handleOrganizeMusic,
-  OrganizeMusicInputSchema,
 } from "./music-organization.js";
-export type { OrganizeMusicInput } from "./music-organization.js";
+export { OrganizeMusicInputSchema } from "../schemas/media.schemas.js";
+export type { OrganizeMusicInput } from "../schemas/media.schemas.js";
 
 export {
   organizePhotosToolDefinition,
   handleOrganizePhotos,
-  OrganizePhotosInputSchema,
 } from "./photo-organization.js";
-export type { OrganizePhotosInput } from "./photo-organization.js";
+export { OrganizePhotosInputSchema } from "../schemas/media.schemas.js";
+export type { OrganizePhotosInput } from "../schemas/media.schemas.js";
 
 // ==================== Content Organization ====================
 
@@ -80,16 +80,16 @@ export type { OrganizeByContentInput } from "./content-organization.js";
 export {
   organizeSmartToolDefinition,
   handleOrganizeSmart,
-  OrganizeSmartInputSchema,
 } from "./smart-organization.js";
-export type { OrganizeSmartInput } from "./smart-organization.js";
+export { OrganizeSmartInputSchema } from "../schemas/smart.schemas.js";
+export type { OrganizeSmartInput } from "../schemas/smart.schemas.js";
 
 export {
   smartSuggestToolDefinition,
   handleSmartSuggest,
-  SmartSuggestInputSchema,
 } from "./smart-suggest.js";
-export type { SmartSuggestInput } from "./smart-suggest.js";
+export { SmartSuggestInputSchema } from "../schemas/smart.schemas.js";
+export type { SmartSuggestInput } from "../schemas/smart.schemas.js";
 
 export {
   systemOrganizationToolDefinition,
@@ -101,12 +101,10 @@ export {
 export {
   batchReadFilesToolDefinition,
   handleBatchReadFiles,
-  BatchReadFilesInputSchema,
 } from "./batch-file-reader.js";
-export type {
-  BatchReadFilesInput,
-  FileReadResult,
-} from "./batch-file-reader.js";
+export { BatchReadFilesInputSchema } from "../schemas/batch.schemas.js";
+export type { BatchReadFilesInput } from "../schemas/batch.schemas.js";
+export type { FileReadResult } from "./batch-file-reader.js";
 
 // ==================== Tool Registry ====================
 
@@ -146,68 +144,82 @@ import { viewHistoryToolDefinition } from "./view-history.js";
 export {
   undoLastOperationToolDefinition,
   handleUndoLastOperation,
-  UndoLastOperationInputSchema,
 } from "./rollback.js";
+export { UndoLastOperationInputSchema } from "../schemas/rollback.schemas.js";
+export type { UndoLastOperationInput } from "../schemas/rollback.schemas.js";
 
 export {
   previewOrganizationToolDefinition,
   handlePreviewOrganization,
-  PreviewOrganizationInputSchema,
 } from "./organization-preview.js";
+export { PreviewOrganizationInputSchema } from "../schemas/preview.schemas.js";
+export type { PreviewOrganizationInput } from "../schemas/preview.schemas.js";
 
 export {
   getCategoriesToolDefinition,
   handleGetCategories,
-  GetCategoriesInputSchema,
   setCustomRulesToolDefinition,
   handleSetCustomRules,
-  SetCustomRulesInputSchema,
 } from "./file-management.js";
+export {
+  GetCategoriesInputSchema,
+  SetCustomRulesInputSchema,
+} from "../schemas/file-management.schemas.js";
 
 export {
   analyzeDuplicatesToolDefinition,
   handleAnalyzeDuplicates,
-  AnalyzeDuplicatesInputSchema,
   deleteDuplicatesToolDefinition,
   handleDeleteDuplicates,
-  DeleteDuplicatesInputSchema,
 } from "./duplicate-management.js";
+export {
+  AnalyzeDuplicatesInputSchema,
+  DeleteDuplicatesInputSchema,
+} from "../schemas/duplicate.schemas.js";
+export type {
+  AnalyzeDuplicatesInput,
+  DeleteDuplicatesInput,
+} from "../schemas/duplicate.schemas.js";
 
 export {
   batchRenameToolDefinition,
   handleBatchRename,
-  BatchRenameInputSchema,
 } from "./file-renaming.js";
+export { BatchRenameInputSchema } from "../schemas/batch-rename.schemas.js";
+export type { BatchRenameInput } from "../schemas/batch-rename.schemas.js";
 
 export {
   inspectMetadataToolDefinition,
   handleInspectMetadata,
-  InspectMetadataInputSchema,
 } from "./metadata-inspection.js";
+export { InspectMetadataInputSchema } from "../schemas/metadata.schemas.js";
+export type { InspectMetadataInput } from "../schemas/metadata.schemas.js";
 
 export {
   watchDirectoryToolDefinition,
   handleWatchDirectory,
-  WatchDirectoryInputSchema,
   unwatchDirectoryToolDefinition,
   handleUnwatchDirectory,
-  UnwatchDirectoryInputSchema,
   listWatchesToolDefinition,
   handleListWatches,
-  ListWatchesInputSchema,
 } from "./watch.tool.js";
+export {
+  WatchDirectoryInputSchema,
+  UnwatchDirectoryInputSchema,
+  ListWatchesInputSchema,
+} from "../schemas/watch.schemas.js";
 export type {
   WatchDirectoryInput,
   UnwatchDirectoryInput,
   ListWatchesInput,
-} from "./watch.tool.js";
+} from "../schemas/watch.schemas.js";
 
 export {
   fileReaderToolDefinition,
   handleReadFile,
-  ReadFileInputSchema,
 } from "./file-reader.tool.js";
-export type { ReadFileInput } from "./file-reader.tool.js";
+export { ReadFileInputSchema } from "../schemas/reader.schemas.js";
+export type { ReadFileInput } from "../schemas/reader.schemas.js";
 
 export {
   viewHistoryToolDefinition,

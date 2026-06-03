@@ -29,6 +29,8 @@ import {
  * Tool definition for file_organizer_read_file
  * Registered with the MCP server
  */
+export { ReadFileInputSchema } from "../schemas/reader.schemas.js";
+export type { ReadFileInput } from "../schemas/reader.schemas.js";
 export const fileReaderToolDefinition: ToolDefinition = {
   name: "file_organizer_read_file",
   title: "Read File Contents",

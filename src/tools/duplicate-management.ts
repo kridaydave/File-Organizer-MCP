@@ -16,6 +16,14 @@ import {
   DeleteDuplicatesInputSchema,
 } from "../schemas/duplicate.schemas.js";
 
+export {
+  AnalyzeDuplicatesInputSchema,
+  DeleteDuplicatesInputSchema,
+} from "../schemas/duplicate.schemas.js";
+export type {
+  AnalyzeDuplicatesInput,
+  DeleteDuplicatesInput,
+} from "../schemas/duplicate.schemas.js";
 export const analyzeDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_analyze_duplicates",
   title: "Analyze Duplicate Files with Smart Recommendations",
