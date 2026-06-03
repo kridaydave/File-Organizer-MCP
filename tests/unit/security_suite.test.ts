@@ -108,6 +108,25 @@ describe('Security Hardening Suite', () => {
             await fs.mkdir(testDir);
             await expect(validator.openAndValidateFile(testDir)).rejects.toThrow(/not a file/);
         });
+
+        it('should reject sibling directories that share the same base path prefix', async () => {
+            const baseDir = path.join(TEST_DIR, 'prefix-base');
+            const siblingDir = `${baseDir}-outside`;
+            const siblingFile = path.join(siblingDir, 'secret.txt');
+            const prefixValidator = new PathValidatorService(baseDir);
+
+            await fs.mkdir(baseDir, { recursive: true });
+            await fs.mkdir(siblingDir, { recursive: true });
+            await fs.writeFile(siblingFile, 'secret data');
+
+            try {
+                await expect(prefixValidator.openAndValidateFile(siblingFile)).rejects.toThrow(
+                    /outside allowed directory/,
+                );
+            } finally {
+                await fs.rm(siblingDir, { recursive: true, force: true });
+            }
+        });
     });
 
     describe('3. Symlink Attacks (O_NOFOLLOW)', () => {

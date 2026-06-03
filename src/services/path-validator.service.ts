@@ -428,10 +428,7 @@ export class PathValidatorService {
     // Pre-check: Verify path is within basePath before attempting open
     // This prevents OS-level permission errors from leaking through
     const normalizedBasePath = path.resolve(this.basePath);
-    if (
-      !absolutePath.startsWith(normalizedBasePath) &&
-      !absolutePath.toLowerCase().startsWith(normalizedBasePath.toLowerCase())
-    ) {
+    if (!isSubPath(normalizedBasePath, absolutePath)) {
       // Check if we have allowedPaths for more precise validation
       if (this.allowedPaths !== null) {
         if (!checkContainment(absolutePath, this.allowedPaths)) {
