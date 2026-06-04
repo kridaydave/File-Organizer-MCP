@@ -4,7 +4,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import { handleFindDuplicateFiles } from '../../../src/tools/file-duplicates.js'; // Check import path
 import { handleDeleteDuplicates } from '../../../src/tools/duplicate-management.js'; // Check import path
-import { DuplicateFinderService } from '../../../src/services/duplicate-finder.service.js';
 
 describe('Duplicate Management Tools', () => {
     let testDir: string;
@@ -59,10 +58,6 @@ describe('Duplicate Management Tools', () => {
             files_to_delete: [fileToDelete]
             // verify_duplicates removed from schema
         });
-
-        if (result.content[0].text.includes('Failed')) {
-            console.log('DEBUG_DUPE_FAIL:', result.content[0].text);
-        }
 
         const deleted = await fs.access(fileToDelete).then(() => false).catch(() => true);
         expect(deleted).toBe(true);

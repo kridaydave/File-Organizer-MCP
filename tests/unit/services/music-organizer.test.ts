@@ -56,7 +56,7 @@ describe("MusicOrganizerService", () => {
     const filePath = path.join(sourceDir, fileName);
 
     // Create minimal ID3v2 header
-    let id3Data = Buffer.from([
+    const id3Data = Buffer.from([
       0x49,
       0x44,
       0x33, // ID3

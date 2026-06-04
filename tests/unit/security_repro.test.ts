@@ -1,14 +1,11 @@
 
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { validateStrictPath } from '../../src/services/path-validator.service.js';
 import { DuplicateFinderService } from '../../src/services/duplicate-finder.service.js';
 import { handleScanDirectory } from '../../src/tools/file-scanning.js';
-
-// Console usage unmocked to verify output
-// global.console = { ... } as any;
 
 describe('Security Repro Suite (Refactored)', () => {
 
@@ -35,7 +32,6 @@ describe('Security Repro Suite (Refactored)', () => {
                 max_depth: 101,
                 include_subdirs: true
             });
-            console.log('DEBUG_MAX_DEPTH:', JSON.stringify(result.content[0].text));
             expect(result.content[0].text).toMatch(/^Error:/);
         });
     });
