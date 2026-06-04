@@ -1,6 +1,4 @@
-import { jest } from "@jest/globals";
 import fs from "fs/promises";
-import { open } from "fs/promises";
 import path from "path";
 import { performance } from "perf_hooks";
 import { handleScanDirectory } from "../../src/tools/file-scanning.js";
@@ -65,7 +63,6 @@ describe("Performance", () => {
         ? (memoryAfter - memoryBefore) / 1024 / 1024
         : 0;
 
-    console.log(`Memory increase: ${memoryIncrease.toFixed(2)} MB`);
     expect(memoryIncrease).toBeLessThan(100); // 100MB margin
   });
 });

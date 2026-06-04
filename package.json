@@ -23,8 +23,8 @@
     "prepare": "node scripts/prepare.cjs",
     "prepublishOnly": "npm run clean && npm run build && npm test",
     "test:phase1": "node dist/tests/test-phase1.js",
-    "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix",
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --no-warn-ignored",
+    "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix --no-warn-ignored",
     "format": "prettier --write src/**/*.ts",
     "docs:generate": "node scripts/generate-docs.js",
     "clean": "rimraf dist"
