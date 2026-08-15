@@ -18,8 +18,16 @@ import {
 } from "../services/topic-extractor.service.js";
 import { textExtractionService } from "../services/text-extraction.service.js";
 import { RollbackService } from "../services/rollback.service.js";
-import { createErrorResponse } from "../utils/error-handler.js";
+import {
+  ProjectDetectorService,
+  sanitizeProjectName,
+} from "../services/project-detector.service.js";
+import {
+  createErrorResponse,
+  sanitizeErrorMessage,
+} from "../utils/error-handler.js";
 import { escapeMarkdown } from "../utils/index.js";
+import { fileExists } from "../utils/file-utils.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
 import {
   OrganizeByContentInputSchema,
@@ -62,7 +70,7 @@ export const organizeByContentToolDefinition: ToolDefinition = {
   name: "file_organizer_organize_by_content",
   title: "Organize Documents by Content",
   description:
-    "Organize document files into topic-based folders using content analysis. Supports PDF, DOCX, TXT, MD, RTF, ODT. Use dry_run=true to preview changes.",
+    "Organize files based on content analysis. strategy='topic' groups documents (PDF, DOCX, TXT, MD, RTF, ODT) into topic-based folders. strategy='project' groups files across all types (documents, code, images) into detected project folders using shared name tokens, content terms, and identifiers. Use dry_run=true to preview changes.",
   inputSchema: {
     type: "object",
     properties: {
@@ -89,6 +97,13 @@ export const organizeByContentToolDefinition: ToolDefinition = {
         type: "boolean",
         description: "Scan subdirectories recursively",
         default: true,
+      },
+      strategy: {
+        type: "string",
+        enum: ["topic", "project"],
+        default: "topic",
+        description:
+          "'topic' groups documents by detected topic; 'project' groups files across types into detected project folders",
       },
       response_format: {
         type: "string",
@@ -128,6 +143,7 @@ export async function handleOrganizeByContent(
   services?: {
     scanner?: FileScannerService;
     topicExtractor?: TopicExtractorService;
+    projectDetector?: ProjectDetectorService;
   },
 ): Promise<ToolResponse> {
   try {
@@ -184,6 +200,17 @@ export async function handleOrganizeByContent(
           },
         ],
       };
+    }
+
+    if (parsed.data.strategy === "project") {
+      return await handleProjectOrganization(
+        validatedSourcePath,
+        validatedTargetPath,
+        dry_run,
+        recursive,
+        response_format,
+        services,
+      );
     }
 
     const scanner = services?.scanner ?? new FileScannerService();
@@ -397,4 +424,227 @@ ${result.errors.length > 0 ? `**Errors:**\n${result.errors.map((e) => `- \`${esc
   } catch (error) {
     return createErrorResponse(error);
   }
+}
+
+/**
+ * Move a file safely, resolving destination conflicts and cross-device moves.
+ * @returns the final destination path actually used
+ */
+async function moveFileSafely(source: string, target: string): Promise<string> {
+  let dest = target;
+  let counter = 2;
+  while (await fileExists(dest)) {
+    const ext = path.extname(target);
+    const base = target.slice(0, target.length - ext.length);
+    dest = `${base}-${counter}${ext}`;
+    counter++;
+  }
+
+  try {
+    await fs.rename(source, dest);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EXDEV") {
+      await fs.copyFile(source, dest, fs.constants.COPYFILE_EXCL);
+      await fs.unlink(source);
+    } else {
+      throw error;
+    }
+  }
+  return dest;
+}
+
+/**
+ * Project strategy: detect related files across types, group them into
+ * project folders, and move them (or preview the proposed structure).
+ */
+async function handleProjectOrganization(
+  sourceDir: string,
+  targetDir: string,
+  dryRun: boolean,
+  recursive: boolean,
+  responseFormat: OrganizeByContentInput["response_format"],
+  services?: {
+    scanner?: FileScannerService;
+    projectDetector?: ProjectDetectorService;
+  },
+): Promise<ToolResponse> {
+  const scanner = services?.scanner ?? new FileScannerService();
+  const files = await scanner.getAllFiles(sourceDir, recursive);
+
+  const result: OrganizationResult = {
+    success: true,
+    organizedFiles: 0,
+    skippedFiles: 0,
+    errors: [],
+    results: [],
+    structure: {},
+  };
+
+  if (files.length === 0) {
+    if (responseFormat === "json") {
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
+    }
+    return {
+      content: [
+        { type: "text", text: "No files found in the source directory." },
+      ],
+    };
+  }
+
+  const detector = services?.projectDetector ?? new ProjectDetectorService();
+  const projects = await detector.detect(
+    files.map((f) => ({ path: f.path, name: f.name })),
+  );
+
+  const rollbackActions: RollbackAction[] = [];
+
+  const usedFolders = new Set<string>();
+
+  for (const project of projects) {
+    let folder = sanitizeProjectName(project.name);
+    const folderBase = folder;
+    let folderCounter = 2;
+    while (usedFolders.has(folder)) {
+      folder = `${folderBase}-${folderCounter}`;
+      folderCounter++;
+    }
+    usedFolders.add(folder);
+
+    const targetFolder = path.join(targetDir, folder);
+    const resolvedTargetRoot = path.resolve(targetDir);
+
+    if (!result.structure[folder]) {
+      result.structure[folder] = [];
+    }
+
+    for (const file of project.files) {
+      const targetPath = path.join(targetFolder, file.name);
+
+      // Defense-in-depth: reject names that could escape the target directory
+      // (e.g. ".." or names containing path separators from a hostile source).
+      if (
+        file.name === "." ||
+        file.name === ".." ||
+        path.basename(file.name) !== file.name
+      ) {
+        result.skippedFiles++;
+        result.errors.push({
+          file: file.name,
+          error: "Unsafe file name rejected",
+        });
+        continue;
+      }
+
+      if (!path.resolve(targetPath).startsWith(resolvedTargetRoot + path.sep)) {
+        result.skippedFiles++;
+        result.errors.push({
+          file: file.name,
+          error: "Unsafe destination path rejected",
+        });
+        continue;
+      }
+
+      const docResult: DocumentOrganizationResult = {
+        file: file.name,
+        topics: [],
+        primaryTopic: folder,
+        targetPath,
+        shortcuts: [],
+      };
+
+      if (dryRun) {
+        result.structure[folder]!.push(file.name);
+        result.results.push(docResult);
+        result.organizedFiles++;
+        continue;
+      }
+
+      try {
+        await fs.mkdir(targetFolder, { recursive: true });
+        const finalPath = await moveFileSafely(file.path, targetPath);
+        rollbackActions.push({
+          type: "move",
+          originalPath: file.path,
+          currentPath: finalPath,
+          timestamp: Date.now(),
+        });
+        result.structure[folder]!.push(file.name);
+        result.results.push({ ...docResult, targetPath: finalPath });
+        result.organizedFiles++;
+      } catch (error) {
+        result.skippedFiles++;
+        result.errors.push({
+          file: file.name,
+          error: sanitizeErrorMessage(
+            error instanceof Error ? error : String(error),
+          ),
+        });
+      }
+    }
+  }
+
+  // Files that no project claimed are neither moved nor counted elsewhere;
+  // surface them as skipped so the summary accounts for every scanned file.
+  const claimedPaths = new Set<string>();
+  for (const project of projects) {
+    for (const f of project.files) {
+      claimedPaths.add(f.path);
+    }
+  }
+  result.skippedFiles += files.length - claimedPaths.size;
+
+  if (!dryRun && rollbackActions.length > 0) {
+    try {
+      const rollbackService = new RollbackService();
+      await rollbackService.createManifest(
+        `Project organization from ${sourceDir} to ${targetDir} (${rollbackActions.length} files)`,
+        rollbackActions,
+      );
+    } catch (manifestErr) {
+      logger.error(
+        `Failed to create rollback manifest: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
+      );
+    }
+  }
+
+  if (responseFormat === "json") {
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      structuredContent: result as unknown as Record<string, unknown>,
+    };
+  }
+
+  const dryRunText = dryRun ? "(Dry Run - No files were moved)" : "";
+  const markdown = `### Project Organization Result ${dryRunText}
+
+**Source:** \`${sourceDir}\`
+**Target:** \`${targetDir}\`
+
+**Summary:**
+- **Success:** ${result.success ? "✅" : "❌"}
+- **Projects Detected:** ${Object.keys(result.structure).length}
+- **Organized Files:** ${result.organizedFiles}
+- **Skipped Files:** ${result.skippedFiles}
+- **Errors:** ${result.errors.length}
+
+**Detected Projects:**
+${Object.entries(result.structure)
+  .map(
+    ([folder, fileNames]) =>
+      `- **${escapeMarkdown(folder)}**: ${fileNames.length} file(s)\n  ${fileNames.map((f) => `  - \`${escapeMarkdown(f)}\``).join("\n")}`,
+  )
+  .join("\n")}
+
+${
+  result.errors.length > 0
+    ? `**Errors:**\n${result.errors.map((e) => `- \`${escapeMarkdown(e.file)}\`: ${e.error}`).join("\n")}`
+    : ""
+}`;
+
+  return {
+    content: [{ type: "text", text: markdown }],
+  };
 }

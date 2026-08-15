@@ -38,19 +38,22 @@ export function sanitizeErrorMessage(error: Error | string): string {
   );
 
   // Replace relative paths (e.g., ./foo, ../bar)
-  sanitized = sanitized.replace(/(?:^|\s)\.\.?\/[^\s]*/g, "$1[PATH]");
+  sanitized = sanitized.replace(
+    /(?:^|[\s"']+)(\.\.?\/[^\s"'\/\0\r\n]+(?:\/[^\s"'\/\0\r\n]+)*)/g,
+    (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
+  );
 
   // Replace Unix absolute paths (e.g., /home/user, /var/log)
   // Only match paths that look like actual file paths with proper separators
   sanitized = sanitized.replace(
-    /(?:^|\s)(\/(?:[^\/\0\r\n]+\/)*[^\/\0\r\n]*)/g,
-    "$1[PATH]",
+    /(?:^|[\s"']+)(\/(?:[^\s"'\/\0\r\n]+\/)*[^\s"'\/\0\r\n]*)/g,
+    (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
   );
 
   // Replace parent directory traversal (../ with path separators)
   sanitized = sanitized.replace(
-    /(?:^|\s)(?:\.\.)(?:\/(?:[^\/\0\r\n]+)?)*/g,
-    "$1[PATH]",
+    /(?:^|[\s"']+)(\.\.(?:\/[^\s"'\/\0\r\n]+)*)/g,
+    (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
   );
 
   return sanitized;
