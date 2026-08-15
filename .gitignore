@@ -56,6 +56,8 @@ test-fixtures*/
 coverage/
 .hidden_test/
 lint_output.txt
+tests/temp/
+tests/sandbox/
 
 # Security gate outputs
 security-gate-output/
@@ -67,6 +69,10 @@ benchmark-results/
 # Debug and verification scripts (may expose internal paths)
 verify_*.js
 debug_*.js
+analyze-tpos-frame.*
+calculate-frame-size.js
+content_diff.txt
+debug-analyze-temp/
 
 # Logs
 *.log
@@ -94,6 +100,9 @@ debug_output.txt
 mestuff/
 .temp/
 .temp
+
+# Runtime telemetry identifier
+telemetry-id
 
 # Windows artifacts
 nul
