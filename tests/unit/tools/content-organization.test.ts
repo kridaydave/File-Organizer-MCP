@@ -62,20 +62,6 @@ jest.unstable_mockModule(
   }),
 );
 
-jest.unstable_mockModule(
-  "../../../src/services/project-detector.service.js",
-  () => ({
-    ProjectDetectorService: jest.fn().mockImplementation(() => ({
-      detect: mockDetectProjects,
-    })),
-    projectDetectorService: {
-      detect: mockDetectProjects,
-    },
-    sanitizeProjectName: (raw: string) =>
-      raw.replace(/[<>:"/\\|?*]/g, "_").replace(/\s+/g, "_"),
-  }),
-);
-
 jest.unstable_mockModule("../../../src/services/rollback.service.js", () => ({
   RollbackService: jest.fn().mockImplementation(() => ({
     createManifest: mockCreateManifest,
@@ -105,6 +91,9 @@ describe("organize_by_content Tool", () => {
       },
       topicExtractor: {
         extractTopics: mockExtractTopics,
+      },
+      projectDetector: {
+        detect: mockDetectProjects,
       },
     };
 
