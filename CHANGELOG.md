@@ -9,15 +9,24 @@
   across types (documents, code, images) are grouped into detected project folders
   using deterministic local signals: rarity-weighted shared filename tokens (the
   primary cross-type anchor), IDF-filtered shared content terms, and explicit
-  identifier markers (`[A-Z]{2,3}\d{3,7}`) with a min-occurrence floor. Content-blind
+  identifier markers (`[A-Z]{2,3}[-_]?\d{3,7}`) with a min-occurrence floor. Content-blind
   files (binary, images, failed extraction) only join a project via a shared rare
-  name token or marker, never on time alone. Groups are formed with union-find
-  clustering and dropped if their average edge weight falls below the configured
-  floor. New `ProjectDetectorService` in `src/services/project-detector.service.ts`.
+  name token or marker; mtime proximity alone never forms or joins a group. Groups
+  are formed with union-find clustering and dropped if their average edge weight
+  falls below the configured floor. New `ProjectDetectorService` in
+  `src/services/project-detector.service.ts`.
   Edge building uses an inverted index over name tokens, markers, and content
   terms (cost = sum of `C(df, 2)` per signal instead of `O(n^2)` pairwise), with
   a differential test proving byte-for-byte identical results to the pairwise
   approach.
+- **Project organization hardening** - colliding project names get distinct
+  destination folders (`Name`, `Name-2`, ...), file moves are routed through
+  `sanitizeErrorMessage` so internal paths are scrubbed from error output, and
+  files that no project claims are counted as skipped instead of disappearing from
+  the summary. Content-term filtering now applies a pure absolute document-frequency
+  cap (`contentTermMaxDf`), and group naming falls back to lexical tie-breaks for
+  deterministic results. Cross-device copy fallback uses `COPYFILE_EXCL` to avoid
+  clobbering a concurrently created destination.
 
 ## [3.5.0] - 2026-08-15
 

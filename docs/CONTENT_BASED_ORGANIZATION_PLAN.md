@@ -186,15 +186,15 @@ Project_X_Website_Relaunch/ (detected project)
 **Detection Methods (implemented):**
 - Common naming patterns: rare shared filename tokens (rarity-weighted, so generic prefixes like `IMG_`/`Copy` are ignored) - the primary cross-type signal
 - Shared keywords across files: IDF-filtered rare content terms for text-bearing documents
-- Explicit project markers in content: identifier tokens (`[A-Z]{2,3}\d{3,7}`) with a min-occurrence floor
+- Explicit project markers in content: identifier tokens (`[A-Z]{2,3}[-_]?\d{3,7}`) with a min-occurrence floor
 - Temporal clustering: mtime gap is a weak co-factor only, never a primary signal
 
 **Implementation:** `strategy="project"` on the `file_organizer_organize_by_content`
 tool, backed by `ProjectDetectorService` (`src/services/project-detector.service.ts`).
 Content-blind files (images, binaries, failed extraction) only join a project via a
-shared rare name token or marker, never on time alone (two-signal rule). Groups are
-formed with union-find clustering; a group is dropped if its average edge weight
-falls below the configured floor.
+shared rare name token or marker; mtime proximity alone never forms or joins a
+group. Groups are formed with union-find clustering; a group is dropped if its
+average edge weight falls below the configured floor.
 
 <!-- 
 ### REMOVED: ML-Based Smart Suggestions

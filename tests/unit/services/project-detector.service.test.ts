@@ -11,6 +11,7 @@ import {
   tokenizeContent,
   tokenizeName,
   type DetectedProject,
+  type ProjectDetectionOptions,
 } from "../../../src/services/project-detector.service.js";
 import { STOP_WORDS } from "../../../src/services/topic-extractor.service.js";
 
@@ -22,9 +23,9 @@ interface TestFile {
 function createService(
   textByPath: Map<string, string>,
   mtimeByPath: Map<string, number>,
-  options?: Record<string, unknown>,
+  options?: ProjectDetectionOptions,
 ): ProjectDetectorService {
-  return new ProjectDetectorService(options as never, {
+  return new ProjectDetectorService(options, {
     extractText: async (p: string) => ({ text: textByPath.get(p) ?? "" }),
     getMtime: async (p: string) => mtimeByPath.get(p) ?? 0,
   });
@@ -172,11 +173,9 @@ describe("ProjectDetectorService", () => {
     });
 
     it("should skip detection above maxFilesToPair", async () => {
-      const service = createService(
-        new Map(),
-        new Map(),
-        { maxFilesToPair: 3 },
-      );
+      const service = createService(new Map(), new Map(), {
+        maxFilesToPair: 3,
+      });
       const files = fileList(["a_1.txt", "a_2.txt", "a_3.txt", "a_4.txt"]);
       expect(await service.detect(files)).toEqual([]);
     });
@@ -206,6 +205,72 @@ describe("sanitizeProjectName", () => {
   it("should fall back to Project for empty input", () => {
     expect(sanitizeProjectName("")).toBe("Project");
     expect(sanitizeProjectName("   ")).toBe("Project");
+  });
+});
+
+describe("tokenizer functions", () => {
+  it("tokenizeName splits camelCase and letter/digit boundaries", () => {
+    expect(tokenizeName("ApolloPlanV2.docx")).toEqual(["apollo", "plan"]);
+  });
+
+  it("tokenizeName drops digit-only and short tokens", () => {
+    expect(tokenizeName("2024.pdf")).toEqual([]);
+    expect(tokenizeName("a_b.txt")).toEqual([]);
+  });
+
+  it("tokenizeContent keeps words of 3+ chars and removes stop words", () => {
+    expect(tokenizeContent("the quick brown fox")).toEqual([
+      "quick",
+      "brown",
+      "fox",
+    ]);
+    expect(tokenizeContent("i am a")).toEqual([]);
+  });
+});
+
+describe("maxEdgeTargets", () => {
+  const cliqueNames = [
+    "alpha_beta_zeta_f0.txt",
+    "alpha_beta_eta_f1.txt",
+    "gamma_delta_zeta_f2.txt",
+    "gamma_delta_eta_f3.txt",
+  ];
+
+  it("limits the edges kept per file, splitting the group", async () => {
+    const service = createService(new Map(), new Map(), { maxEdgeTargets: 1 });
+    const projects = await service.detect(fileList(cliqueNames));
+
+    expect(projects).toHaveLength(2);
+    const sizes = projects.map((p) => p.files.length).sort((a, b) => a - b);
+    expect(sizes).toEqual([2, 2]);
+  });
+
+  it("keeps all edges by default, forming one group", async () => {
+    const service = createService(new Map(), new Map());
+    const projects = await service.detect(fileList(cliqueNames));
+
+    expect(projects).toHaveLength(1);
+    expect(projects[0]!.files).toHaveLength(4);
+  });
+});
+
+describe("minGroupConfidence", () => {
+  it("rejects a group whose average edge weight is below the floor", async () => {
+    const service = createService(new Map(), new Map(), {
+      minGroupConfidence: 5,
+    });
+    const projects = await service.detect(
+      fileList(["zeta_one.txt", "zeta_two.txt"]),
+    );
+    expect(projects).toHaveLength(0);
+  });
+
+  it("keeps the group when the average meets the floor", async () => {
+    const service = createService(new Map(), new Map());
+    const projects = await service.detect(
+      fileList(["zeta_one.txt", "zeta_two.txt"]),
+    );
+    expect(projects).toHaveLength(1);
   });
 });
 
@@ -321,8 +386,7 @@ async function refCollectSignals(
         termDf.set(term, (termDf.get(term) ?? 0) + 1);
       }
     }
-    const dfFloor = Math.max(1, Math.floor(contentFileCount * 0.5));
-    const maxDf = Math.max(opts.contentTermMaxDf, dfFloor);
+    const maxDf = opts.contentTermMaxDf;
     for (const s of signals) {
       if (!s.contentTerms) continue;
       const rare = Array.from(s.contentTerms).filter(
@@ -389,9 +453,9 @@ function refBuildEdgesPairwise(
   const edges: RefEdge[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < n; i++) {
-    const top = candidates[i]!
-      .sort((x, y) => y.weight - x.weight)
-      .slice(0, opts.maxEdgeTargets);
+    const top = candidates[i]!.sort(
+      (x, y) => y.weight - x.weight || x.to - y.to,
+    ).slice(0, opts.maxEdgeTargets);
     for (const e of top) {
       const from = Math.min(e.from, e.to);
       const to = Math.max(e.from, e.to);
@@ -415,7 +479,7 @@ function refNameGroup(group: RefSignal[]): string {
   let bestName = "";
   let bestCount = 0;
   for (const [token, count] of nameCount) {
-    if (count > bestCount) {
+    if (count > bestCount || (count === bestCount && token < bestName)) {
       bestName = token;
       bestCount = count;
     }
@@ -435,7 +499,10 @@ function refNameGroup(group: RefSignal[]): string {
   let bestMarker = "";
   let bestMarkerCount = 0;
   for (const [marker, count] of markerCount) {
-    if (count > bestMarkerCount) {
+    if (
+      count > bestMarkerCount ||
+      (count === bestMarkerCount && marker < bestMarker)
+    ) {
       bestMarker = marker;
       bestMarkerCount = count;
     }
@@ -452,7 +519,7 @@ function refNameGroup(group: RefSignal[]): string {
   let bestTerm = "";
   let bestTermCount = 0;
   for (const [term, count] of termCount) {
-    if (count > bestTermCount) {
+    if (count > bestTermCount || (count === bestTermCount && term < bestTerm)) {
       bestTerm = term;
       bestTermCount = count;
     }
@@ -512,8 +579,7 @@ function refCluster(
     if (ra !== rb) parent[rb] = ra;
   };
 
-  const usableEdges = edges.filter((e) => e.weight >= opts.minGroupConfidence);
-  for (const e of usableEdges) {
+  for (const e of edges) {
     union(e.from, e.to);
   }
 
@@ -525,7 +591,7 @@ function refCluster(
   }
 
   const rootEdgeWeights = new Map<number, number[]>();
-  for (const e of usableEdges) {
+  for (const e of edges) {
     const root = find(e.from);
     if (find(e.to) !== root) continue;
     if (!rootEdgeWeights.has(root)) rootEdgeWeights.set(root, []);

@@ -22,7 +22,10 @@ import {
   ProjectDetectorService,
   sanitizeProjectName,
 } from "../services/project-detector.service.js";
-import { createErrorResponse } from "../utils/error-handler.js";
+import {
+  createErrorResponse,
+  sanitizeErrorMessage,
+} from "../utils/error-handler.js";
 import { escapeMarkdown } from "../utils/index.js";
 import { fileExists } from "../utils/file-utils.js";
 import { CommonParamsSchema } from "../schemas/common.schemas.js";
@@ -200,7 +203,7 @@ export async function handleOrganizeByContent(
     }
 
     if (parsed.data.strategy === "project") {
-      return handleProjectOrganization(
+      return await handleProjectOrganization(
         validatedSourcePath,
         validatedTargetPath,
         dry_run,
@@ -441,7 +444,7 @@ async function moveFileSafely(source: string, target: string): Promise<string> {
     await fs.rename(source, dest);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EXDEV") {
-      await fs.copyFile(source, dest);
+      await fs.copyFile(source, dest, fs.constants.COPYFILE_EXCL);
       await fs.unlink(source);
     } else {
       throw error;
@@ -459,7 +462,7 @@ async function handleProjectOrganization(
   targetDir: string,
   dryRun: boolean,
   recursive: boolean,
-  responseFormat: string,
+  responseFormat: OrganizeByContentInput["response_format"],
   services?: {
     scanner?: FileScannerService;
     projectDetector?: ProjectDetectorService;
@@ -498,9 +501,20 @@ async function handleProjectOrganization(
 
   const rollbackActions: RollbackAction[] = [];
 
+  const usedFolders = new Set<string>();
+
   for (const project of projects) {
-    const folder = sanitizeProjectName(project.name);
+    let folder = sanitizeProjectName(project.name);
+    const folderBase = folder;
+    let folderCounter = 2;
+    while (usedFolders.has(folder)) {
+      folder = `${folderBase}-${folderCounter}`;
+      folderCounter++;
+    }
+    usedFolders.add(folder);
+
     const targetFolder = path.join(targetDir, folder);
+    const resolvedTargetRoot = path.resolve(targetDir);
 
     if (!result.structure[folder]) {
       result.structure[folder] = [];
@@ -508,6 +522,30 @@ async function handleProjectOrganization(
 
     for (const file of project.files) {
       const targetPath = path.join(targetFolder, file.name);
+
+      // Defense-in-depth: reject names that could escape the target directory
+      // (e.g. ".." or names containing path separators from a hostile source).
+      if (
+        file.name === "." ||
+        file.name === ".." ||
+        path.basename(file.name) !== file.name
+      ) {
+        result.skippedFiles++;
+        result.errors.push({
+          file: file.name,
+          error: "Unsafe file name rejected",
+        });
+        continue;
+      }
+
+      if (!path.resolve(targetPath).startsWith(resolvedTargetRoot + path.sep)) {
+        result.skippedFiles++;
+        result.errors.push({
+          file: file.name,
+          error: "Unsafe destination path rejected",
+        });
+        continue;
+      }
 
       const docResult: DocumentOrganizationResult = {
         file: file.name,
@@ -540,11 +578,23 @@ async function handleProjectOrganization(
         result.skippedFiles++;
         result.errors.push({
           file: file.name,
-          error: error instanceof Error ? error.message : String(error),
+          error: sanitizeErrorMessage(
+            error instanceof Error ? error : String(error),
+          ),
         });
       }
     }
   }
+
+  // Files that no project claimed are neither moved nor counted elsewhere;
+  // surface them as skipped so the summary accounts for every scanned file.
+  const claimedPaths = new Set<string>();
+  for (const project of projects) {
+    for (const f of project.files) {
+      claimedPaths.add(f.path);
+    }
+  }
+  result.skippedFiles += files.length - claimedPaths.size;
 
   if (!dryRun && rollbackActions.length > 0) {
     try {

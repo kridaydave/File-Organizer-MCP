@@ -134,6 +134,13 @@ interface Edge {
   weight: number;
 }
 
+/**
+ * Split a file name into lowercase tokens.
+ * Strips the extension, splits camelCase and letter/digit boundaries, and
+ * drops tokens shorter than 2 characters or made only of digits.
+ * @param name - file name including extension
+ * @returns lowercase name tokens
+ */
 export function tokenizeName(name: string): string[] {
   const stem = name.replace(/\.[^.]+$/, "");
   let s = stem;
@@ -147,6 +154,12 @@ export function tokenizeName(name: string): string[] {
     .filter((token) => token.length >= 2 && !/^\d+$/.test(token));
 }
 
+/**
+ * Split extracted text into lowercase content terms.
+ * Keeps words of 3 or more characters and removes stop words.
+ * @param text - extracted document text
+ * @returns lowercase content terms
+ */
 export function tokenizeContent(text: string): string[] {
   const words = text.toLowerCase().match(/[a-z][a-z0-9]{2,}/g) ?? [];
   return words.filter((word) => !STOP_WORDS.has(word));
@@ -300,13 +313,17 @@ export class ProjectDetectorService {
 
       let contentTerms: Set<string> | null = null;
       let mtimeMs = 0;
-      let extracted: string;
+      let extracted = "";
       try {
         mtimeMs = await this.getMtime(file.path);
+      } catch {
+        // keep default mtime 0
+      }
+      try {
         const result = await this.extractText(file.path);
         extracted = result?.text ?? "";
       } catch {
-        extracted = "";
+        // keep default extracted text ""
       }
 
       if (extracted && extracted.trim().length >= 30) {
@@ -337,8 +354,7 @@ export class ProjectDetectorService {
           termDf.set(term, (termDf.get(term) ?? 0) + 1);
         }
       }
-      const dfFloor = Math.max(1, Math.floor(contentFileCount * 0.5));
-      const maxDf = Math.max(this.options.contentTermMaxDf, dfFloor);
+      const maxDf = this.options.contentTermMaxDf;
       for (const s of signals) {
         if (!s.contentTerms) continue;
         const rare = Array.from(s.contentTerms).filter(
@@ -440,9 +456,9 @@ export class ProjectDetectorService {
     const edges: Edge[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < n; i++) {
-      const top = candidates[i]!
-        .sort((x, y) => y.weight - x.weight || x.to - y.to)
-        .slice(0, this.options.maxEdgeTargets);
+      const top = candidates[i]!.sort(
+        (x, y) => y.weight - x.weight || x.to - y.to,
+      ).slice(0, this.options.maxEdgeTargets);
       for (const e of top) {
         const from = Math.min(e.from, e.to);
         const to = Math.max(e.from, e.to);
@@ -456,10 +472,7 @@ export class ProjectDetectorService {
     return edges;
   }
 
-  private cluster(
-    signals: FileSignals[],
-    edges: Edge[],
-  ): DetectedProject[] {
+  private cluster(signals: FileSignals[], edges: Edge[]): DetectedProject[] {
     const n = signals.length;
     const parent = Array.from({ length: n }, (_, i) => i);
     const find = (x: number): number => {
@@ -477,10 +490,9 @@ export class ProjectDetectorService {
       if (ra !== rb) parent[rb] = ra;
     };
 
-    const usableEdges = edges.filter(
-      (e) => e.weight >= this.options.minGroupConfidence,
-    );
-    for (const e of usableEdges) {
+    // All edges participate in the union-find clustering. A group is later
+    // rejected if its average edge weight falls below minGroupConfidence.
+    for (const e of edges) {
       union(e.from, e.to);
     }
 
@@ -492,7 +504,7 @@ export class ProjectDetectorService {
     }
 
     const rootEdgeWeights = new Map<number, number[]>();
-    for (const e of usableEdges) {
+    for (const e of edges) {
       const root = find(e.from);
       if (find(e.to) !== root) continue;
       if (!rootEdgeWeights.has(root)) rootEdgeWeights.set(root, []);
@@ -504,7 +516,8 @@ export class ProjectDetectorService {
       if (members.length < 2) continue;
       const weights = rootEdgeWeights.get(root) ?? [];
       if (weights.length === 0) continue;
-      const confidence = weights.reduce((sum, w) => sum + w, 0) / weights.length;
+      const confidence =
+        weights.reduce((sum, w) => sum + w, 0) / weights.length;
       if (confidence < this.options.minGroupConfidence) continue;
 
       const groupSignals = members.map((i) => signals[i]!);
@@ -532,7 +545,7 @@ export class ProjectDetectorService {
     let bestName = "";
     let bestCount = 0;
     for (const [token, count] of nameCount) {
-      if (count > bestCount) {
+      if (count > bestCount || (count === bestCount && token < bestName)) {
         bestName = token;
         bestCount = count;
       }
@@ -552,7 +565,10 @@ export class ProjectDetectorService {
     let bestMarker = "";
     let bestMarkerCount = 0;
     for (const [marker, count] of markerCount) {
-      if (count > bestMarkerCount) {
+      if (
+        count > bestMarkerCount ||
+        (count === bestMarkerCount && marker < bestMarker)
+      ) {
         bestMarker = marker;
         bestMarkerCount = count;
       }
@@ -569,7 +585,10 @@ export class ProjectDetectorService {
     let bestTerm = "";
     let bestTermCount = 0;
     for (const [term, count] of termCount) {
-      if (count > bestTermCount) {
+      if (
+        count > bestTermCount ||
+        (count === bestTermCount && term < bestTerm)
+      ) {
         bestTerm = term;
         bestTermCount = count;
       }
@@ -596,8 +615,8 @@ export class ProjectDetectorService {
           return `shared marker "${marker}"`;
         }
       }
-      if (file.hasText && other.hasText && other.contentTerms) {
-        for (const term of file.contentTerms!) {
+      if (file.contentTerms && other.contentTerms) {
+        for (const term of file.contentTerms) {
           if (other.contentTerms.has(term)) {
             return `shared content term "${term}"`;
           }
