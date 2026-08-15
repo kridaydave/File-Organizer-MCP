@@ -399,7 +399,7 @@ const TOPIC_DEFINITIONS: TopicDefinition[] = [
   },
 ];
 
-const STOP_WORDS = new Set([
+export const STOP_WORDS = new Set([
   "the",
   "a",
   "an",

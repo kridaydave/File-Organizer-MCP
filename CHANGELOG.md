@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### ✨ New Features
+
+- **Project/Context-based organization (Phase 3)** - `file_organizer_organize_by_content`
+  now supports `strategy="project"` in addition to the existing topic strategy. Files
+  across types (documents, code, images) are grouped into detected project folders
+  using deterministic local signals: rarity-weighted shared filename tokens (the
+  primary cross-type anchor), IDF-filtered shared content terms, and explicit
+  identifier markers (`[A-Z]{2,3}\d{3,7}`) with a min-occurrence floor. Content-blind
+  files (binary, images, failed extraction) only join a project via a shared rare
+  name token or marker, never on time alone. Groups are formed with union-find
+  clustering and dropped if their average edge weight falls below the configured
+  floor. New `ProjectDetectorService` in `src/services/project-detector.service.ts`.
+  Edge building uses an inverted index over name tokens, markers, and content
+  terms (cost = sum of `C(df, 2)` per signal instead of `O(n^2)` pairwise), with
+  a differential test proving byte-for-byte identical results to the pairwise
+  approach.
+
 ## [3.5.0] - 2026-08-15
 
 ### 🧹 Maintenance & Modernization

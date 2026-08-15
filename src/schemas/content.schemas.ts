@@ -39,6 +39,13 @@ export const OrganizeByContentInputSchema = z
       .optional()
       .default(true)
       .describe("Scan subdirectories recursively"),
+    strategy: z
+      .enum(["topic", "project"])
+      .optional()
+      .default("topic")
+      .describe(
+        '"topic" groups documents by detected topic; "project" groups files across types into detected project folders',
+      ),
   })
   .merge(CommonParamsSchema);
 

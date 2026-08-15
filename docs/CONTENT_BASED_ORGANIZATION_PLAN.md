@@ -164,7 +164,7 @@ Photos/
 ```
 -->
 
-### Phase 3: Project/Context-Based Organization 📝 (Planned)
+### Phase 3: Project/Context-Based Organization ✅ (Implemented)
 
 **Goal:** Detect related files across types and group by project.
 
@@ -183,11 +183,18 @@ Project_X_Website_Relaunch/ (detected project)
     └── competitor_analysis.pdf
 ```
 
-**Detection Methods:**
-- Common naming patterns
-- Shared keywords across files
-- Temporal clustering (files created together)
-- Explicit project markers in content
+**Detection Methods (implemented):**
+- Common naming patterns: rare shared filename tokens (rarity-weighted, so generic prefixes like `IMG_`/`Copy` are ignored) - the primary cross-type signal
+- Shared keywords across files: IDF-filtered rare content terms for text-bearing documents
+- Explicit project markers in content: identifier tokens (`[A-Z]{2,3}\d{3,7}`) with a min-occurrence floor
+- Temporal clustering: mtime gap is a weak co-factor only, never a primary signal
+
+**Implementation:** `strategy="project"` on the `file_organizer_organize_by_content`
+tool, backed by `ProjectDetectorService` (`src/services/project-detector.service.ts`).
+Content-blind files (images, binaries, failed extraction) only join a project via a
+shared rare name token or marker, never on time alone (two-signal rule). Groups are
+formed with union-find clustering; a group is dropped if its average edge weight
+falls below the configured floor.
 
 <!-- 
 ### REMOVED: ML-Based Smart Suggestions
@@ -275,13 +282,19 @@ New tool: `organize_by_content`
    - `ContentAnalyzerService` for file type detection
    - Security screening for suspicious files
 
+4. **Document Topic Extraction**
+   - `TopicExtractorService` with 12 topic categories
+   - `organize_by_content` strategy="topic" (Phase 1)
+
+5. **Project Detection** (Phase 3)
+   - `ProjectDetectorService` with rare-name-token + rare-content-term + marker signals
+   - `organize_by_content` strategy="project" groups files across types
+
 ### 🚧 In Progress
-1. Document text extraction for major formats
-2. Topic extraction heuristics
+1. Music mood/genre classification (audio feature analysis, deferred)
 
 ### 📝 Planned
-1. Project detection algorithms
-2. Keyword-based document classification
+1. None (Phase 3 complete)
 
 ### ❌ Excluded
 1. **Image content analysis** (object detection, face recognition) - Too complex

@@ -17,6 +17,7 @@ import type { FileWithSize } from "../../../src/types.js";
 const mockGetAllFiles = jest.fn();
 const mockExtractTopics = jest.fn();
 const mockTextExtract = jest.fn();
+const mockDetectProjects = jest.fn();
 
 jest.unstable_mockModule(
   "../../../src/services/file-scanner.service.js",
@@ -37,6 +38,7 @@ jest.unstable_mockModule(
       extractTopics: mockExtractTopics,
     },
     TopicMatch: {} as any,
+    STOP_WORDS: new Set<string>(),
   }),
 );
 
@@ -56,6 +58,20 @@ jest.unstable_mockModule(
     textExtractionService: {
       extract: mockTextExtract,
     },
+  }),
+);
+
+jest.unstable_mockModule(
+  "../../../src/services/project-detector.service.js",
+  () => ({
+    ProjectDetectorService: jest.fn().mockImplementation(() => ({
+      detect: mockDetectProjects,
+    })),
+    projectDetectorService: {
+      detect: mockDetectProjects,
+    },
+    sanitizeProjectName: (raw: string) =>
+      raw.replace(/[<>:"/\\|?*]/g, "_").replace(/\s+/g, "_"),
   }),
 );
 
@@ -205,6 +221,102 @@ describe("organize_by_content Tool", () => {
       const targetFile = path.join(targetDir, "TestTopic", "doc.pdf");
       await expect(fs.access(targetFile)).resolves.not.toThrow();
       await expect(fs.access(docPath)).rejects.toThrow();
+    });
+  });
+
+  describe("Project strategy", () => {
+    it("should preview project groups without moving files on dry run", async () => {
+      const planPath = path.join(testDir, "apollo_plan.md");
+      const logoPath = path.join(testDir, "apollo_logo.png");
+      await fs.writeFile(planPath, "content");
+      await fs.writeFile(logoPath, "content");
+
+      mockGetAllFiles.mockResolvedValue([
+        { name: "apollo_plan.md", path: planPath, size: 100 },
+        { name: "apollo_logo.png", path: logoPath, size: 100 },
+      ]);
+
+      mockDetectProjects.mockResolvedValue([
+        {
+          name: "Apollo",
+          confidence: 1.5,
+          files: [
+            { path: planPath, name: "apollo_plan.md", signal: 'shared name token "apollo"' },
+            { path: logoPath, name: "apollo_logo.png", signal: 'shared name token "apollo"' },
+          ],
+        },
+      ]);
+
+      const result = await handleOrganizeByContent({
+        source_dir: testDir,
+        target_dir: targetDir,
+        dry_run: true,
+        strategy: "project",
+      }, services);
+
+      const text = result.content[0].text;
+      expect(text).toContain("Project Organization Result");
+      expect(text).toContain("Dry Run");
+      expect(text).toContain("Apollo");
+      expect(text).toContain("apollo\\_plan.md");
+
+      await expect(fs.access(planPath)).resolves.not.toThrow();
+      await expect(fs.access(logoPath)).resolves.not.toThrow();
+    });
+
+    it("should move files into project folders when dry_run is false", async () => {
+      const planPath = path.join(testDir, "apollo_plan.md");
+      const logoPath = path.join(testDir, "apollo_logo.png");
+      await fs.writeFile(planPath, "content");
+      await fs.writeFile(logoPath, "content");
+
+      mockGetAllFiles.mockResolvedValue([
+        { name: "apollo_plan.md", path: planPath, size: 100 },
+        { name: "apollo_logo.png", path: logoPath, size: 100 },
+      ]);
+
+      mockDetectProjects.mockResolvedValue([
+        {
+          name: "Apollo",
+          confidence: 1.5,
+          files: [
+            { path: planPath, name: "apollo_plan.md", signal: 'shared name token "apollo"' },
+            { path: logoPath, name: "apollo_logo.png", signal: 'shared name token "apollo"' },
+          ],
+        },
+      ]);
+
+      await handleOrganizeByContent({
+        source_dir: testDir,
+        target_dir: targetDir,
+        dry_run: false,
+        strategy: "project",
+      }, services);
+
+      const targetPlan = path.join(targetDir, "Apollo", "apollo_plan.md");
+      const targetLogo = path.join(targetDir, "Apollo", "apollo_logo.png");
+      await expect(fs.access(targetPlan)).resolves.not.toThrow();
+      await expect(fs.access(targetLogo)).resolves.not.toThrow();
+      await expect(fs.access(planPath)).rejects.toThrow();
+      await expect(fs.access(logoPath)).rejects.toThrow();
+    });
+
+    it("should report no projects when detection returns empty", async () => {
+      mockGetAllFiles.mockResolvedValue([
+        { name: "solo.txt", path: path.join(testDir, "solo.txt"), size: 100 },
+      ]);
+      mockDetectProjects.mockResolvedValue([]);
+
+      const result = await handleOrganizeByContent({
+        source_dir: testDir,
+        target_dir: targetDir,
+        dry_run: true,
+        strategy: "project",
+      }, services);
+
+      const text = result.content[0].text;
+      expect(text).toContain("Project Organization Result");
+      expect(text).toContain("**Projects Detected:** 0");
     });
   });
 });

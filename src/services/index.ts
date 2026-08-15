@@ -20,6 +20,16 @@ export * from "./content-analyzer.service.js";
 export * from "./content-screening.service.js";
 export * from "./topic-extractor.service.js";
 
+// Project Detection Services (Phase 3)
+export {
+  ProjectDetectorService,
+  projectDetectorService,
+  sanitizeProjectName,
+  type DetectedProject,
+  type DetectedProjectFile,
+  type ProjectDetectionOptions,
+} from "./project-detector.service.js";
+
 // Metadata Services (Phase 2.2)
 export {
   AudioMetadataService,
