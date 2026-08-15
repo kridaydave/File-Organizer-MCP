@@ -84,7 +84,7 @@ describe('Watch Mode Integration', () => {
       try {
         watchData = JSON.parse(watchResult.content[0].text);
       } catch (e) {
-        throw new Error(`Failed to parse watch add response: ${watchResult.content[0].text}`);
+        throw new Error(`Failed to parse watch add response: ${watchResult.content[0].text}`, { cause: e });
       }
       expect(watchData.success).toBe(true);
 
@@ -94,7 +94,7 @@ describe('Watch Mode Integration', () => {
       try {
         listData = JSON.parse(listResult.content[0].text);
       } catch (e) {
-        throw new Error(`Failed to parse list response: ${listResult.content[0].text}`);
+        throw new Error(`Failed to parse list response: ${listResult.content[0].text}`, { cause: e });
       }
       expect(listData.count).toBe(1);
       expect(listData.watches[0].directory).toBe(testDir);
@@ -114,7 +114,7 @@ describe('Watch Mode Integration', () => {
       try {
         finalListData = JSON.parse(finalListResult.content[0].text);
       } catch (e) {
-        throw new Error(`Failed to parse final list response: ${finalListResult.content[0].text}`);
+        throw new Error(`Failed to parse final list response: ${finalListResult.content[0].text}`, { cause: e });
       }
       expect(finalListData.count).toBe(0);
     });
@@ -139,7 +139,7 @@ describe('Watch Mode Integration', () => {
       try {
         updateData = JSON.parse(updateResult.content[0].text);
       } catch (e) {
-        throw new Error(`Failed to parse update response: ${updateResult.content[0].text}`);
+        throw new Error(`Failed to parse update response: ${updateResult.content[0].text}`, { cause: e });
       }
       expect(updateData.action).toBe('Updated');
 
@@ -149,7 +149,7 @@ describe('Watch Mode Integration', () => {
       try {
         listData = JSON.parse(listResult.content[0].text);
       } catch (e) {
-        throw new Error(`Failed to parse updated list response: ${listResult.content[0].text}`);
+        throw new Error(`Failed to parse updated list response: ${listResult.content[0].text}`, { cause: e });
       }
       expect(listData.count).toBe(1);
       expect(listData.watches[0].schedule).toBe('*/30 * * * *');
@@ -261,7 +261,8 @@ describe('Watch Mode Integration', () => {
           listData = JSON.parse(listResult.content[0].text);
         } catch (e) {
           throw new Error(
-            `Failed to parse multiple watches list response: ${listResult.content[0].text}`
+            `Failed to parse multiple watches list response: ${listResult.content[0].text}`,
+            { cause: e }
           );
         }
 
@@ -303,7 +304,7 @@ describe('Watch Mode Integration', () => {
         try {
           listData = JSON.parse(listResult.content[0].text);
         } catch (e) {
-          throw new Error(`Failed to parse filtered list response: ${listResult.content[0].text}`);
+          throw new Error(`Failed to parse filtered list response: ${listResult.content[0].text}`, { cause: e });
         }
 
         expect(listData.count).toBe(1);

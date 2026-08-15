@@ -426,7 +426,7 @@ async function promptUser(): Promise<SetupAnswers> {
     );
   }
 
-  let selectedFolders: string[] = [];
+  let selectedFolders: string[];
   try {
     selectedFolders = await checkbox({
       message: "Select folders to organize:",

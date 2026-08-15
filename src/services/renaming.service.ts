@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Renaming Service
  */
 
@@ -324,9 +324,12 @@ export class RenamingService {
           if (err.code === "EEXIST") {
             throw new Error(
               `Destination file already exists: ${path.basename(item.new)}`,
+              { cause: renameError },
             );
           } else if (err.code === "EPERM" || err.code === "EBUSY") {
-            throw new Error(`Operation failed: ${err.message}`);
+            throw new Error(`Operation failed: ${err.message}`, {
+              cause: renameError,
+            });
           }
           // Re-throw other errors
           throw renameError;

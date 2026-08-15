@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Security Amendments - Security Constants & Limits
  *
  * These security limits are mandatory for all archive operations

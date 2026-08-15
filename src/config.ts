@@ -11,7 +11,7 @@ import { isSubPath } from "./utils/file-utils.js";
 import type { PrivacyMode } from "./types.js";
 
 export const CONFIG = {
-  VERSION: "3.4.2",
+  VERSION: "3.5.0",
 
   // Security Settings
   security: {
@@ -501,7 +501,10 @@ function getAlwaysBlockedPatterns(): RegExp[] {
       /^[A-Z]:[\/\\]Program Files[\/\\]/i,
       /^[A-Z]:[\/\\]Program Files \(x86\)[\/\\]/i,
       /^[A-Z]:[\/\\]ProgramData[\/\\]/i,
-      /[\/\\]AppData[\/\\]/i,
+      // AppData holds user credentials/cache data, but %TEMP% lives under
+      // AppData\Local\Temp and must stay usable when explicitly whitelisted.
+      // Block Local (except Temp), LocalLow and Roaming instead of all of AppData.
+      /[\/\\]AppData[\/\\](?:(?!Local[\/\\]Temp[\/\\])Local|LocalLow|Roaming)[\/\\]/i,
       /^[A-Z]:[\/\\]\$Recycle\.Bin[\/\\]/i,
       /^[A-Z]:[\/\\]System Volume Information[\/\\]/i,
     ];
@@ -511,7 +514,13 @@ function getAlwaysBlockedPatterns(): RegExp[] {
       /^\/System[\/]/,
       /^\/Library[\/]/,
       /^\/Applications[\/]/,
-      /^\/private[\/]/,
+      // /System, /Library, /Applications, /usr, /bin, /sbin and /opt are
+      // symlinked INTO /private on macOS, and /var resolves to /private/var.
+      // Block the canonical sensitive dirs explicitly instead of all of
+      // /private, so per-user temp dirs (/private/var/folders) remain usable
+      // when explicitly whitelisted.
+      /^\/private\/(etc|tmp)[\/]/,
+      /^\/private\/var\/(db|root|vm|at|run|log|spool|audit|tmp)[\/]/,
       /^\/usr[\/]/,
       /^\/bin[\/]/,
       /^\/sbin[\/]/,

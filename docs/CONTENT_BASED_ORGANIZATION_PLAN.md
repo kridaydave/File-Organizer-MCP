@@ -72,12 +72,13 @@ export class DocumentAnalyzerService {
 }
 ```
 
-3. **Topic Extraction**
+1. **Topic Extraction**
    - Use keyword matching for common subjects (Math, History, Science, etc.)
    - TF-IDF for important term extraction
    - Simple heuristic rules for document classification
 
 **Example Results:**
+
 | File | Detected Topics | Document Type |
 |------|----------------|---------------|
 | linear_algebra_basics.pdf | Mathematics, Linear Algebra, Education | Educational |

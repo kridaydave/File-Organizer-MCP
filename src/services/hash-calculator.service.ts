@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Hash Calculator Service
  */
 
@@ -66,7 +66,9 @@ export class HashCalculatorService {
       return hash.digest("hex");
     } catch (error) {
       if (controller.signal.aborted) {
-        throw new Error(`Hash calculation timed out after ${timeoutMs}ms`);
+        throw new Error(`Hash calculation timed out after ${timeoutMs}ms`, {
+          cause: error,
+        });
       }
       throw error;
     } finally {

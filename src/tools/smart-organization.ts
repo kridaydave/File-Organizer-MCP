@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * organize_smart Tool
  *
  * Unified organization tool that auto-detects file types and applies

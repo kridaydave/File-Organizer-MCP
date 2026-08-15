@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Path Security Utilities
  *
  * Whitelist/blacklist checking for path access control
@@ -27,17 +27,39 @@ export function isPathBlocked(normalizedPath: string): boolean {
 }
 
 /**
- * Check if a path is within allowed directories
+ * Resolve symlinks in a path. When the path does not exist yet (e.g. a
+ * destination that will be created), fall back to the normalized absolute form.
  */
-export function isPathInAllowedDirectories(normalizedPath: string): boolean {
+async function canonicalizePath(inputPath: string): Promise<string> {
+  try {
+    return await fs.realpath(inputPath);
+  } catch {
+    return path.resolve(inputPath);
+  }
+}
+
+/**
+ * Check if a path is within allowed directories.
+ * Compares canonical forms so symlinked prefixes (e.g. /var -> /private/var
+ * on macOS) do not cause false negatives.
+ */
+async function isPathInAllowedDirectories(
+  normalizedPath: string,
+): Promise<boolean> {
   const allowedDirs = [
     ...CONFIG.paths.defaultAllowed,
     ...CONFIG.paths.customAllowed,
   ];
 
-  return allowedDirs.some((allowedDir) =>
-    isSubPath(allowedDir, normalizedPath),
-  );
+  const canonicalPath = await canonicalizePath(normalizedPath);
+
+  for (const allowedDir of allowedDirs) {
+    const canonicalDir = await canonicalizePath(allowedDir);
+    if (isSubPath(canonicalDir, canonicalPath)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -51,53 +73,14 @@ export async function isPathAllowed(
   // First, normalize the requested path
   const normalizedRequestPath = path.resolve(normalizePath(requestedPath));
 
-  // Check if blocked first (always takes priority)
-  if (isPathBlocked(normalizedRequestPath)) {
-    return {
-      allowed: false,
-      reason:
-        "Path matches blocked pattern (system directory or protected location)",
-    };
-  }
-
-  // Check if path is within allowed directories
-  if (!isPathInAllowedDirectories(normalizedRequestPath)) {
-    return {
-      allowed: false,
-      reason: "Path is outside allowed directories",
-      hint: "Add this directory to your configuration file to grant access",
-    };
-  }
-
-  // Atomic symlink detection and validation
+  // Resolve symlinks (including intermediate ones such as /var -> /private/var
+  // on macOS) so blacklist and containment checks compare canonical forms.
+  // ATOMIC symlink handling: the canonical form is the ground truth for
+  // blacklist/whitelist decisions, preventing TOCTOU symlink escapes.
+  let canonicalRequestPath: string;
   try {
-    // Use lstat to check if path is a symlink (without following)
-    const lstats = await fs.lstat(normalizedRequestPath);
-
-    if (lstats.isSymbolicLink()) {
-      // Resolve symlink to real path
-      const realPath = await fs.realpath(normalizedRequestPath);
-      const normalizedRealPath = path.resolve(normalizePath(realPath));
-
-      // Validate the real path (follow symlink only if real path is also allowed)
-      if (isPathBlocked(normalizedRealPath)) {
-        return {
-          allowed: false,
-          reason: "Symlink resolves to blocked path",
-        };
-      }
-
-      if (!isPathInAllowedDirectories(normalizedRealPath)) {
-        return {
-          allowed: false,
-          reason: "Symlink resolves to path outside allowed directories",
-          hint: "Ensure symlink target is within allowed directories",
-        };
-      }
-    }
+    canonicalRequestPath = await fs.realpath(normalizedRequestPath);
   } catch (err) {
-    // If path doesn't exist (ENOENT), skip symlink validation - path is still valid for access control
-    // Non-existent paths can't be symlinks, so we allow them if they pass whitelist/blacklist checks
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
       logger.error("Path validation failed unexpectedly", {
         path: normalizedRequestPath,
@@ -108,6 +91,30 @@ export async function isPathAllowed(
         reason: "Path validation failed due to system error",
       };
     }
+    // Non-existent paths can't be symlinks, so fall back to the normalized form.
+    canonicalRequestPath = normalizedRequestPath;
+  }
+
+  // Check if blocked first (always takes priority). Both the user-facing path
+  // and its canonical form are checked.
+  if (
+    isPathBlocked(normalizedRequestPath) ||
+    isPathBlocked(canonicalRequestPath)
+  ) {
+    return {
+      allowed: false,
+      reason:
+        "Path matches blocked pattern (system directory or protected location)",
+    };
+  }
+
+  // Check if path is within allowed directories (canonical comparison)
+  if (!(await isPathInAllowedDirectories(canonicalRequestPath))) {
+    return {
+      allowed: false,
+      reason: "Path is outside allowed directories",
+      hint: "Add this directory to your configuration file to grant access",
+    };
   }
 
   return { allowed: true };

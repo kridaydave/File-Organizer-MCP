@@ -2101,4 +2101,4 @@ const ROLLBACK_CONFIG = {
 
 ---
 
-_End of Phase 2 Implementation Plan_
+End of Phase 2 Implementation Plan

@@ -261,7 +261,7 @@ function isVSCodeExtensionInstalled(extensionId: string): boolean {
  */
 function detectClaudeDesktop(): MCPClient | null {
   const configDir = path.join(getPlatformConfigDir(), "Claude");
-  let installed = false;
+  let installed;
 
   try {
     const configPath = path.join(configDir, "claude_desktop_config.json");
@@ -288,7 +288,7 @@ function detectClaudeDesktop(): MCPClient | null {
 function detectCursor(): MCPClient | null {
   const platform = os.platform();
   const home = os.homedir();
-  let configDir: string | null = null;
+  let configDir: string | null;
 
   if (platform === "win32") {
     configDir = path.join(home, ".cursor");
@@ -322,7 +322,7 @@ function detectCursor(): MCPClient | null {
     // Ignore
   }
 
-  let installed = false;
+  let installed;
 
   try {
     installed =
@@ -349,7 +349,7 @@ function detectCursor(): MCPClient | null {
 function detectWindsurf(): MCPClient | null {
   const platform = os.platform();
   const home = os.homedir();
-  let configDir: string | null = null;
+  let configDir: string | null;
 
   if (platform === "win32") {
     configDir = path.join(home, ".windsurf");

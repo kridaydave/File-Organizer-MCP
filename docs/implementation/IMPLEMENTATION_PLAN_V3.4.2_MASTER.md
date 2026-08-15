@@ -583,6 +583,6 @@ Every new feature requires:
 
 ---
 
-**End of Document**
+End of Document
 
 _This implementation plan is a living document. Updates should be tracked in the Change Log section above._

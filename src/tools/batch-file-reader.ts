@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * batch_read_files Tool
  *
  * @module tools/batch-file-reader
