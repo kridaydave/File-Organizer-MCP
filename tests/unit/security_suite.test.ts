@@ -135,6 +135,15 @@ describe('Security Hardening Suite', () => {
 
     describe('3. Symlink Attacks (O_NOFOLLOW)', () => {
         it('should reject opening a symlink directly via openAndValidateFile', async () => {
+            if (process.platform === 'win32') {
+                // UV_FS_O_NOFOLLOW is not supported on Windows (libuv ignores
+                // the flag), so a symlink open resolves instead of failing.
+                // Symlink escapes are still blocked there by the post-open
+                // realpath containment check.
+                console.log('Skipping O_NOFOLLOW symlink test on Windows');
+                return;
+            }
+
             const target = path.join(TEST_DIR, 'target.txt');
             await fs.writeFile(target, 'target data');
 

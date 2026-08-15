@@ -42,6 +42,15 @@
   unreferenced artifact `docs/IMPLEMENTATION_PLAN_V3.4.2_UPDATED.md`.
 - **CI: Windows test job** - The `Clean Jest cache` step ran bash syntax under
   PowerShell; added `shell: bash` in `.github/workflows/ci.yml`.
+- **Windows whitelist access under %TEMP%** - The win32 always-blocked
+  `AppData` pattern rejected paths under `AppData\Local\Temp` (where
+  `os.tmpdir()` points), making whitelisted temp dirs unusable. The pattern now
+  blocks `Local` (except `Temp`), `LocalLow` and `Roaming` instead of all of
+  `AppData`.
+- **Windows symlink test** - `UV_FS_O_NOFOLLOW` is not supported on Windows
+  (libuv ignores it); symlink escapes are still prevented by the post-open
+  realpath containment check. The O_NOFOLLOW rejection test now skips on
+  Windows with a comment explaining the platform difference.
 
 ### ⚠️ Intentionally held dependency versions
 

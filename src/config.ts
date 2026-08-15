@@ -501,7 +501,10 @@ function getAlwaysBlockedPatterns(): RegExp[] {
       /^[A-Z]:[\/\\]Program Files[\/\\]/i,
       /^[A-Z]:[\/\\]Program Files \(x86\)[\/\\]/i,
       /^[A-Z]:[\/\\]ProgramData[\/\\]/i,
-      /[\/\\]AppData[\/\\]/i,
+      // AppData holds user credentials/cache data, but %TEMP% lives under
+      // AppData\Local\Temp and must stay usable when explicitly whitelisted.
+      // Block Local (except Temp), LocalLow and Roaming instead of all of AppData.
+      /[\/\\]AppData[\/\\](?:(?!Local[\/\\]Temp[\/\\])Local|LocalLow|Roaming)[\/\\]/i,
       /^[A-Z]:[\/\\]\$Recycle\.Bin[\/\\]/i,
       /^[A-Z]:[\/\\]System Volume Information[\/\\]/i,
     ];
