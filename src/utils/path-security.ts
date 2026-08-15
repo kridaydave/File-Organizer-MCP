@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Path Security Utilities
  *
  * Whitelist/blacklist checking for path access control

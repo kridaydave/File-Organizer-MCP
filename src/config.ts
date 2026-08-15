@@ -11,7 +11,7 @@ import { isSubPath } from "./utils/file-utils.js";
 import type { PrivacyMode } from "./types.js";
 
 export const CONFIG = {
-  VERSION: "3.4.2",
+  VERSION: "3.5.0",
 
   // Security Settings
   security: {

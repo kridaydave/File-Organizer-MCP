@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Organizer Service
  */
 
@@ -399,6 +399,7 @@ export class OrganizerService {
                 );
                 throw new Error(
                   `Source file integrity check failed for ${sourcePath}: File not accessible before retry`,
+                  { cause: accessErr },
                 );
               }
 
@@ -444,6 +445,7 @@ export class OrganizerService {
                   throw new Error(
                     `CRITICAL: Source file ${sourcePath} unlink failed after successful copy. ` +
                       `Source file integrity compromised. Error: ${errMessage}`,
+                    { cause: unlinkErr },
                   );
                 }
               } catch (err: unknown) {

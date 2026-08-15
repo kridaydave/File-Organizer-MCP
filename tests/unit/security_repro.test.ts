@@ -44,7 +44,7 @@ describe('Security Repro Suite (Refactored)', () => {
         });
 
         it('should block deletion of files outside allowed directories', async () => {
-            let forbiddenPath = '';
+            let forbiddenPath;
             if (process.platform === 'win32') {
                 forbiddenPath = 'C:\\Windows\\System32\\calc.exe';
             } else {

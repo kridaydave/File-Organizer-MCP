@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Cron Utility Functions
  *
  * Utilities for parsing cron expressions and calculating run times.

@@ -1,5 +1,13 @@
 # Codebase Improvement and Refactoring Plan
 
+> [!IMPORTANT]
+> **Status: SUPERSEDED — NOT EXECUTED.** This plan was drafted for v3.4.2 but never
+> implemented. The maintainers decided to skip the refactor: it offers no functional
+> gain (YAGNI) and overlaps with refactoring that was attempted and later abandoned on
+> the `beta` branch. The reserved-name regex it proposed centralizing is intentionally
+> left duplicated across services. This document is kept for historical context only;
+> any future refactor should be re-planned from the current `main` state, not from here.
+
 This plan outlines the refactoring and improvements for the `File-Organizer-MCP` project to enhance maintainability, consistency, and robustness.
 
 ## User Review Required

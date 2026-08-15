@@ -494,6 +494,7 @@ export class ImageMetadataService {
     } catch (error) {
       throw new Error(
         `Failed to read image file: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
       );
     }
   }

@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Categorizer Service
  */
 
@@ -224,6 +224,7 @@ export class CategorizerService {
     } catch (error) {
       throw new Error(
         `Filename pattern for category '${category}' is not a valid regular expression`,
+        { cause: error },
       );
     }
   }
@@ -241,7 +242,7 @@ export class CategorizerService {
       return false;
     }
 
-    let result = false;
+    let result: boolean;
 
     try {
       result = regex.test(string);
@@ -495,7 +496,7 @@ export class CategorizerService {
     metadata?: AudioMetadata | ImageMetadata;
   }> {
     const warnings: string[] = [];
-    let confidence = 0.5;
+    let confidence: number;
     let metadata: AudioMetadata | ImageMetadata | undefined;
 
     // First get extension-based category as fallback

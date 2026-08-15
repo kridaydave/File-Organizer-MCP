@@ -1,5 +1,37 @@
 # Changelog
 
+## [3.5.0] - 2026-08-15
+
+### 🧹 Maintenance & Modernization
+
+- **MCP SDK upgraded** `1.26.0` → `1.30.0` (v1 line, low-level `Server` API
+  unchanged — stdio buffer limits, Zod 3.25 support, stricter Content-Type
+  validation upstream).
+- **Jest upgraded to v30** (`jest@30`, `@types/jest@30`) with `ts-jest@29.4.x`
+  which already supports Jest 30 and TypeScript <7.
+- **ESLint upgraded to v10** with `typescript-eslint@8.67` (supports ESLint 10).
+- **Tooling**: `rimraf@6`, plus minors/patches for `node-cron`, `mammoth`,
+  `zod`, `globals`, `@inquirer/prompts`, `prettier`, `ts-jest`, `@eslint/js`.
+- **node-cron 4.6 type fix** - `ScheduledTask` moved from a namespace member to
+  a named export; updated the import in `auto-organize.service.ts`.
+- **Fixed 29 new ESLint 10 violations** across 12 files: `preserve-caught-error`
+  (rethrown errors now carry `{ cause }`) and `no-useless-assignment` (dead
+  initializers removed). No behavior change.
+
+### 🧪 Testing
+
+- Added unit tests for four previously untested services: `file-tracker`,
+  `manifest-integrity`, `text-extraction`, `photo-organizer` (+62 tests, 69
+  suites / 1199 tests total).
+
+### ⚠️ Intentionally held dependency versions
+
+- `typescript` held at `5.9` - TS 7 has no stable programmatic API; upgrading
+  would break `ts-jest` and `typescript-eslint`.
+- `chalk` held at `5` - v6 requires Node >=22, conflicting with the declared
+  `engines: >=18`.
+- `@types/node` held at `20` - tracks the supported runtime target, not latest.
+
 ## [3.4.2] - 2026-02-25
 
 ### 🐛 Bug Fixes

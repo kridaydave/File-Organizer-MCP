@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Smart Suggest Service - Directory Health Scoring
  */
 
@@ -128,7 +128,9 @@ export class SmartSuggestService {
       return report;
     } catch (error) {
       if (error instanceof Error && error.message === "Analysis timed out") {
-        throw new Error(`Analysis timed out after ${opts.timeoutSeconds}s`);
+        throw new Error(`Analysis timed out after ${opts.timeoutSeconds}s`, {
+          cause: error,
+        });
       }
       throw error;
     }

@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Rollback Service
  *
  * Manages operation manifests and performs undo operations.
@@ -143,6 +143,7 @@ export class RollbackService {
     } catch (error) {
       throw new Error(
         `Failed to parse manifest ${manifestId}: ${(error as Error).message}`,
+        { cause: error },
       );
     }
 
@@ -202,6 +203,7 @@ export class RollbackService {
             if ((e as NodeJS.ErrnoException).code === "EEXIST") {
               throw new Error(
                 `Destination already exists, would overwrite: ${action.originalPath}`,
+                { cause: e },
               );
             }
             throw e;
@@ -244,6 +246,7 @@ export class RollbackService {
               if (err.code === "EEXIST") {
                 throw new Error(
                   `Cannot restore backup, destination occupied: ${action.currentPath}`,
+                  { cause: e },
                 );
               }
               throw e;
@@ -319,6 +322,7 @@ export class RollbackService {
             if (err.code === "EEXIST") {
               throw new Error(
                 `Cannot restore, destination already exists: ${action.originalPath}`,
+                { cause: e },
               );
             }
             throw e;
@@ -393,6 +397,7 @@ export class RollbackService {
       } catch (e) {
         throw new Error(
           `Rollback completed but failed to delete manifest ${manifestId}: ${(e as Error).message}`,
+          { cause: e },
         );
       }
     } else {

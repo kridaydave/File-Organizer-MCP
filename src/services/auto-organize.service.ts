@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * Auto-Organize Scheduler Service
  *
  * Smart scheduling with cron-based per-directory configuration.
@@ -7,7 +7,7 @@
  * Includes smart catchup for missed schedules.
  */
 
-import cron from "node-cron";
+import cron, { type ScheduledTask } from "node-cron";
 import fs, { existsSync } from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
@@ -29,7 +29,7 @@ export type ConfigLoader = () => UserConfig;
  * Manages cron-based scheduled tasks for multiple directories
  */
 export class AutoOrganizeService {
-  private tasks: Map<string, cron.ScheduledTask> = new Map();
+  private tasks: Map<string, ScheduledTask> = new Map();
   private runningDirectories: Set<string> = new Set();
   private stateService: SchedulerStateService | null = null;
   private missedSchedulesLock: Promise<void> | null = null;

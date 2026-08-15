@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.4.2
+ * File Organizer MCP Server v3.5.0
  * File Tracker Service
  *
  * Tracks file changes and manages organization rules.
@@ -88,7 +88,9 @@ export class FileTracker {
       } as FileTrackerConfig;
     } catch (error) {
       logger.error("Config load error:", error);
-      throw new Error("Invalid configuration - please check config.json");
+      throw new Error("Invalid configuration - please check config.json", {
+        cause: error,
+      });
     }
   }
 
