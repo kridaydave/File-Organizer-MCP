@@ -412,6 +412,7 @@ const template = templateManager.getTemplate("duplicate_management");
 - **User Experience** (weight: 1.2) - Intuitive organization
 
 **Decision Criteria:**
+
 | Factor | Weight | Description |
 |--------|--------|-------------|
 | Accuracy | 0.35 | How well files are categorized |
@@ -430,6 +431,7 @@ const template = templateManager.getTemplate("duplicate_management");
 3. **Hybrid Approach** - Balanced accuracy and speed
 
 **Decision Matrix:**
+
 | Algorithm | Accuracy | Speed | Resource Usage |
 |-----------|----------|-------|----------------|
 | SHA-256 | 99.9% | Slow | High |
@@ -743,4 +745,4 @@ To extend this framework:
 
 ---
 
-_Framework generated from Multi-Shepherd Debate System_
+Framework generated from Multi-Shepherd Debate System

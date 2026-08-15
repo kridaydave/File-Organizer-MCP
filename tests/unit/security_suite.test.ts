@@ -205,5 +205,52 @@ describe('Security Hardening Suite', () => {
                 /outside allowed directory/,
             );
         });
+
+        it('should allow a file reached through a symlinked whitelist prefix', async () => {
+            // Simulates platforms where a whitelisted dir sits behind a symlinked
+            // prefix (e.g. /var -> /private/var on macOS). Canonicalization must
+            // not cause a false "outside allowed directory" denial.
+            const realDir = await fs.mkdtemp(
+                path.join(os.tmpdir(), 'mcp-wl-real-'),
+            );
+            const linkBase = path.join(
+                os.tmpdir(),
+                `mcp-wl-link-${Date.now()}`,
+            );
+            const symlinkDir = path.join(linkBase, 'whitelist');
+            try {
+                await fs.mkdir(linkBase, { recursive: true });
+                try {
+                    await fs.symlink(realDir, symlinkDir, 'dir');
+                } catch (e) {
+                    // Symlinks might require admin on Windows. Skip if EPERM.
+                    if ((e as any).code === 'EPERM') {
+                        console.log(
+                            'Skipping symlink test due to lack of permissions',
+                        );
+                        return;
+                    }
+                    throw e;
+                }
+
+                await fs.writeFile(
+                    path.join(realDir, 'doc.txt'),
+                    'content',
+                );
+
+                CONFIG.paths.customAllowed = [...originalCustomAllowed, symlinkDir];
+                const whitelistValidator = new PathValidatorService(serverCwd);
+
+                const file = path.join(symlinkDir, 'doc.txt');
+                const handle = await whitelistValidator.openAndValidateFile(file);
+                const content = await handle.readFile({ encoding: 'utf8' });
+                expect(content).toBe('content');
+                await handle.close();
+            } finally {
+                CONFIG.paths.customAllowed = originalCustomAllowed;
+                await fs.rm(realDir, { recursive: true, force: true });
+                await fs.rm(linkBase, { recursive: true, force: true });
+            }
+        });
     });
 });

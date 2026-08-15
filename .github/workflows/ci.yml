@@ -59,6 +59,7 @@ jobs:
         run: npm run build
 
       - name: Clean Jest cache (if exists)
+        shell: bash
         run: |
           if [ -d ".jest-cache" ]; then
             echo "Clearing existing Jest cache..."

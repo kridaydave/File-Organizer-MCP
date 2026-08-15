@@ -24,6 +24,25 @@
   `manifest-integrity`, `text-extraction`, `photo-organizer` (+62 tests, 69
   suites / 1199 tests total).
 
+### 🐛 Bug Fixes
+
+- **macOS whitelist access through symlinked prefixes** - On macOS `/var` is a
+  symlink to `/private/var`, so `fs.realpath` canonicalizes temp-dir paths to
+  `/private/var/folders/...`. The darwin always-blocked `/^\/private[\/]/`
+  pattern rejected those paths even when explicitly whitelisted, and whitelist
+  containment compared non-canonical config paths against canonical real paths.
+  `isPathAllowed()` now resolves symlinks (including intermediate ones) and
+  compares canonical forms for both blacklist and containment checks. The
+  darwin blacklist now blocks specific sensitive dirs (`/private/etc`,
+  `/private/tmp`, `/private/var/{db,root,vm,at,run,log,spool,audit,tmp}`) rather
+  than all of `/private`, keeping per-user temp dirs usable.
+- **CI: markdownlint failures** - Fixed pre-existing violations in
+  `docs/FRAMEWORK.md`, `docs/CONTENT_BASED_ORGANIZATION_PLAN.md`, `CHANGELOG.md`,
+  `AGENTS.md`, `README.md`, and several plan docs; removed an empty
+  unreferenced artifact `docs/IMPLEMENTATION_PLAN_V3.4.2_UPDATED.md`.
+- **CI: Windows test job** - The `Clean Jest cache` step ran bash syntax under
+  PowerShell; added `shell: bash` in `.github/workflows/ci.yml`.
+
 ### ⚠️ Intentionally held dependency versions
 
 - `typescript` held at `5.9` - TS 7 has no stable programmatic API; upgrading
@@ -254,7 +273,7 @@
 
 ### 🚨 CRITICAL FIX: MCP Protocol Compatibility
 
-**Fixed stdout pollution breaking Claude connection**
+#### Fixed stdout pollution breaking Claude connection
 
 - **prepare.cjs**: Changed all `console.log` → `console.error`
 - **postinstall.cjs**: Changed all `console.log` → `console.error`

@@ -511,7 +511,13 @@ function getAlwaysBlockedPatterns(): RegExp[] {
       /^\/System[\/]/,
       /^\/Library[\/]/,
       /^\/Applications[\/]/,
-      /^\/private[\/]/,
+      // /System, /Library, /Applications, /usr, /bin, /sbin and /opt are
+      // symlinked INTO /private on macOS, and /var resolves to /private/var.
+      // Block the canonical sensitive dirs explicitly instead of all of
+      // /private, so per-user temp dirs (/private/var/folders) remain usable
+      // when explicitly whitelisted.
+      /^\/private\/(etc|tmp)[\/]/,
+      /^\/private\/var\/(db|root|vm|at|run|log|spool|audit|tmp)[\/]/,
       /^\/usr[\/]/,
       /^\/bin[\/]/,
       /^\/sbin[\/]/,

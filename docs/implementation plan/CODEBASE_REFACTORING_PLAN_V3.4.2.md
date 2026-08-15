@@ -15,6 +15,8 @@ This plan outlines the refactoring and improvements for the `File-Organizer-MCP`
 > [!NOTE]
 > This refactoring focuses on internal code structure and does not change the external API or behavior of the MCP tools. However, it will improve the reliability of large-scale operations.
 
+<!-- -->
+
 > [!IMPORTANT]
 > The refactoring of `OrganizerService.organize` involves changing how files are moved atomically. While the goal is to improve robustness, thorough verification is required to ensure no regressions in file handling.
 
@@ -35,13 +37,13 @@ This plan outlines the refactoring and improvements for the `File-Organizer-MCP`
 
 #### [MODIFY] [organizer.service.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/organizer.service.ts)
 - **Refactor `organize` method**:
-    - Extract `handleConflictResolution()`
-    - Extract `executeBatchMove()`
-    - Use `FileUtils.performAtomicMove()` instead of inline move logic.
-    - Use `FileUtils.isWindowsReservedName()` for destination validation.
+  - Extract `handleConflictResolution()`
+  - Extract `executeBatchMove()`
+  - Use `FileUtils.performAtomicMove()` instead of inline move logic.
+  - Use `FileUtils.isWindowsReservedName()` for destination validation.
 - **Improve `generateOrganizationPlan`**:
-    - Update collision detection to handle all `ConflictStrategy` types consistently.
-    - Improve estimating duration logic.
+  - Update collision detection to handle all `ConflictStrategy` types consistently.
+  - Improve estimating duration logic.
 
 #### [MODIFY] [metadata.service.ts](file:///c:/Users/NewAdmin/Desktop/File-Organizer-MCP/src/services/metadata.service.ts)
 - Use centralized `isWindowsReservedName` in `sanitizeMetadataValue`.
