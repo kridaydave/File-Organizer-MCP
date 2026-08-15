@@ -171,17 +171,15 @@ Photos/
 **Example:**
 ```
 Project_X_Website_Relaunch/ (detected project)
-├── Design/
-│   ├── logo_mockup.png
-│   └── wireframe.pdf
-├── Content/
-│   ├── website_copy.docx
-│   └── seo_keywords.txt
-├── Code/
-│   └── component_library.tsx
-└── Research/
-    └── competitor_analysis.pdf
+├── logo_mockup.png
+├── website_copy.docx
+├── seo_keywords.txt
+└── component_library.tsx
 ```
+
+Files are placed directly in the project folder (no nested per-type
+subfolders); `moveFileSafely` resolves name collisions with `-2`, `-3`, ...
+suffixes.
 
 **Detection Methods (implemented):**
 - Common naming patterns: rare shared filename tokens (rarity-weighted, so generic prefixes like `IMG_`/`Copy` are ignored) - the primary cross-type signal
@@ -224,17 +222,22 @@ src/services/content-analysis/
 
 ### Tool Integration
 
-New tool: `organize_by_content`
+New tool: `file_organizer_organize_by_content` with `strategy="project"`
 
-```typescript
+```json
 {
-  directory: string,
-  strategy: 'topic' | 'project' | 'mixed',
-  include_media_metadata: boolean,
-  create_project_folders: boolean,
-  dry_run: boolean
+  "source_dir": "/path/to/projects",
+  "target_dir": "/path/to/organized",
+  "strategy": "project",
+  "recursive": false,
+  "dry_run": true
 }
 ```
+
+Supported fields (from `content.schemas.ts`): `source_dir`, `target_dir`,
+`dry_run`, `create_shortcuts`, `recursive`, and `strategy: "topic" | "project"`,
+plus the common `response_format` (`"markdown"` | `"json"`). No other options
+are accepted for this tool.
 
 ### Configuration Options
 
