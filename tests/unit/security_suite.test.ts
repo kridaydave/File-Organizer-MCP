@@ -6,6 +6,7 @@ import path from 'path';
 import os from 'os';
 import { PathValidatorService } from '../../src/services/path-validator.service.js';
 import { normalizePath } from '../../src/utils/file-utils.js';
+import { CONFIG } from '../../src/config.js';
 
 // Helper to create test files
 const TEST_DIR = path.join(process.cwd(), 'tests', 'temp', 'security_test');
@@ -113,7 +114,10 @@ describe('Security Hardening Suite', () => {
             const baseDir = path.join(TEST_DIR, 'prefix-base');
             const siblingDir = `${baseDir}-outside`;
             const siblingFile = path.join(siblingDir, 'secret.txt');
-            const prefixValidator = new PathValidatorService(baseDir);
+            // Explicit allowedPaths tests prefix-boundary containment directly;
+            // in whitelist mode (allowedPaths = null) containment is delegated
+            // to the configured whitelist instead.
+            const prefixValidator = new PathValidatorService(baseDir, [baseDir]);
 
             await fs.mkdir(baseDir, { recursive: true });
             await fs.mkdir(siblingDir, { recursive: true });
@@ -148,6 +152,58 @@ describe('Security Hardening Suite', () => {
 
             // Implementation uses O_NOFOLLOW
             await expect(validator.openAndValidateFile(link)).rejects.toThrow(/Symlink/);
+        });
+    });
+
+    describe('openAndValidateFile in whitelist mode (allowedPaths = null)', () => {
+        let base: string;
+        let serverCwd: string;
+        let whitelistDir: string;
+        let blockedDir: string;
+        const originalCustomAllowed = CONFIG.paths.customAllowed;
+
+        beforeEach(async () => {
+            // Use os.tmpdir() so the directories sit outside process.cwd().
+            // Test mode auto-adds process.cwd() to the whitelist, which would
+            // otherwise make every path under it allowed.
+            base = await fs.mkdtemp(path.join(os.tmpdir(), 'mcp-wl-'));
+            serverCwd = path.join(base, 'server-cwd');
+            whitelistDir = path.join(base, 'whitelist');
+            blockedDir = path.join(base, 'blocked');
+            await fs.mkdir(serverCwd, { recursive: true });
+            await fs.mkdir(whitelistDir, { recursive: true });
+            await fs.mkdir(blockedDir, { recursive: true });
+
+            // Grant whitelist access to whitelistDir only.
+            CONFIG.paths.customAllowed = [...originalCustomAllowed, whitelistDir];
+        });
+
+        afterEach(async () => {
+            CONFIG.paths.customAllowed = originalCustomAllowed;
+            await fs.rm(base, { recursive: true, force: true });
+        });
+
+        it('should allow a file inside a whitelist dir outside the working directory', async () => {
+            const file = path.join(whitelistDir, 'doc.txt');
+            await fs.writeFile(file, 'content');
+
+            const whitelistValidator = new PathValidatorService(serverCwd);
+
+            const handle = await whitelistValidator.openAndValidateFile(file);
+            const content = await handle.readFile({ encoding: 'utf8' });
+            expect(content).toBe('content');
+            await handle.close();
+        });
+
+        it('should reject a file outside the whitelist', async () => {
+            const file = path.join(blockedDir, 'secret.txt');
+            await fs.writeFile(file, 'secret');
+
+            const whitelistValidator = new PathValidatorService(serverCwd);
+
+            await expect(whitelistValidator.openAndValidateFile(file)).rejects.toThrow(
+                /outside allowed directory/,
+            );
         });
     });
 });

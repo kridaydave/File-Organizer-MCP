@@ -417,6 +417,22 @@ export class PathValidatorService {
   }
 
   /**
+   * Validate a candidate path against the configured whitelist/blacklist.
+   * Used when allowedPaths is null (whitelist mode), matching Layer 4.5 in
+   * validatePathBase so containment uses the same source of truth.
+   */
+  private async assertAllowedByWhitelist(
+    candidatePath: string,
+    inputPath: string,
+  ): Promise<void> {
+    const { isPathAllowed } = await import("../utils/path-security.js");
+    const validation = await isPathAllowed(candidatePath);
+    if (!validation.allowed) {
+      throw new AccessDeniedError(inputPath, "File outside allowed directory");
+    }
+  }
+
+  /**
    * securely open a file for reading, returning a FileHandle
    * Mitigates TOCTOU by ensuring the file validated is the one opened
    */
@@ -438,11 +454,9 @@ export class PathValidatorService {
           );
         }
       } else {
-        // In whitelist mode, at minimum check it's under basePath
-        throw new AccessDeniedError(
-          inputPath,
-          "File outside allowed directory",
-        );
+        // Whitelist mode: validate against the configured whitelist instead
+        // of rejecting everything outside the working directory.
+        await this.assertAllowedByWhitelist(absolutePath, inputPath);
       }
     }
 
@@ -463,15 +477,18 @@ export class PathValidatorService {
 
         // Verify containment using realpath after open
         const realPath = await fs.realpath(absolutePath);
-        if (
-          this.allowedPaths !== null &&
-          !checkContainment(realPath, this.allowedPaths)
-        ) {
-          await handle.close();
-          throw new AccessDeniedError(
-            inputPath,
-            "File outside allowed directory",
-          );
+        if (this.allowedPaths !== null) {
+          if (!checkContainment(realPath, this.allowedPaths)) {
+            await handle.close();
+            throw new AccessDeniedError(
+              inputPath,
+              "File outside allowed directory",
+            );
+          }
+        } else {
+          // Whitelist mode: verify the opened file's real path is still
+          // within the configured whitelist (TOCTOU-safe symlink containment).
+          await this.assertAllowedByWhitelist(realPath, inputPath);
         }
 
         return handle;
