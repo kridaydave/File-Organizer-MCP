@@ -59,7 +59,7 @@ File-Organizer-MCP/
 ├── examples/         # Example configs
 ├── reports/          # Analysis reports
 ├── scripts/          # Build and utility scripts
-└── skills/           # Dev skills
+└── docs/skills/      # Dev skills (Kimi/opencode)
 ```
 
 `dist/`, `node_modules/`, and `coverage/` are generated and gitignored.
