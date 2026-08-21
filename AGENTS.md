@@ -20,7 +20,7 @@ The core is `scan -> categorize -> plan -> move`. Prefer a straight `fs` call an
 
 The MCP server is request/response. No in-memory session, no global singletons, no watchers inside the server. Tools are pure `(args, ctx) -> result`. We stream large files, batch operations, and limit concurrency. Performance regressions often come from loading whole files or holding handles too long — audit those first.
 
-## A note from kriday
+## A note from kriday — creator
 
 I like ambitious ideas, simple systems, and software that feels obvious. YAGNI is not a slogan — it's how we keep this small. Fight scope creep. If the churn makes the correct behavior more surprising, undo it.
 
@@ -38,7 +38,7 @@ Use this language so we stay on the same page:
 - **service** means business logic behind a tool (scanner, categorizer, organizer).
 - **environment** means one running MCP server + its allowed directories + OS.
 - **turn** means one tool call cycle, including validation and response.
-- **T3 home** analogy: for us it's the OS config dir (`~/.config/file-organizer-mcp` / `%APPDATA%`) where `config.json` and `history.jsonl` live.
+- **K5 home** analogy: for us it's the OS config dir (`~/.config/file-organizer-mcp` / `%APPDATA%`) where `config.json` and `history.jsonl` live.
 
 ## The three ways to hurt yourself
 
@@ -72,7 +72,7 @@ The most common defect here is a change that works for one tool and is missing e
 
 An empty directory is a bad test. Seed with real shapes, but keep them in the sandbox:
 
-- Use `tests/sandbox/` or `await fs.mkdtemp(path.join(os.tmpdir(), 'test-'))` — never `~/Documents` or `~/.t3`.
+- Use `tests/sandbox/` or `await fs.mkdtemp(path.join(os.tmpdir(), 'test-'))` — never `~/Documents` or `~/.k5`.
 - Copy real fixtures only if needed; `src/constants/file-signatures.ts:1` has canonical signatures. Don't invent magic bytes.
 - Bring `operations.jsonl` or `config.json` only if the flow under test needs them. Copy in, never symlink. Data flows one way: into your sandbox, never back out.
 - On Windows, add a 100ms delay before `fs.rm` in `afterEach` to avoid file-lock flakes:
