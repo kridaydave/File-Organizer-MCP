@@ -1,16 +1,13 @@
 /**
  * File Organizer MCP Server v3.5.0
- * Tools Registry
+ * Tools Registry — barrel re-exports + registry source of truth
  *
- * @module tools
- * @description Central registry and exports for all MCP tools.
- * Each tool has its own file with Zod schema validation and JSDoc documentation.
+ * Individual tool modules remain the owners of definition + handler.
+ * TOOLS[] and handler Map live in src/mcp/registry.ts (single source).
+ * This file is a thin barrel for backwards-compat imports.
  */
 
-import type { ToolDefinition } from "../types.js";
-
-// ==================== Tool Definitions ====================
-
+// ── barrel: keep existing public imports working ──
 export { listFilesToolDefinition, handleListFiles } from "./file-listing.js";
 export { ListFilesInputSchema } from "../schemas/scan.schemas.js";
 export type { ListFilesInput } from "../schemas/scan.schemas.js";
@@ -50,8 +47,6 @@ export {
 export { OrganizeFilesInputSchema } from "../schemas/organize.schemas.js";
 export type { OrganizeFilesInput } from "../schemas/organize.schemas.js";
 
-// ==================== Music & Photo Organization ====================
-
 export {
   organizeMusicToolDefinition,
   handleOrganizeMusic,
@@ -66,16 +61,12 @@ export {
 export { OrganizePhotosInputSchema } from "../schemas/media.schemas.js";
 export type { OrganizePhotosInput } from "../schemas/media.schemas.js";
 
-// ==================== Content Organization ====================
-
 export {
   organizeByContentToolDefinition,
   handleOrganizeByContent,
   OrganizeByContentInputSchema,
 } from "./content-organization.js";
 export type { OrganizeByContentInput } from "./content-organization.js";
-
-// ==================== Smart Organization ====================
 
 export {
   organizeSmartToolDefinition,
@@ -96,8 +87,6 @@ export {
   handleSystemOrganization,
 } from "./system-organization.js";
 
-// ==================== Batch File Reader ====================
-
 export {
   batchReadFilesToolDefinition,
   handleBatchReadFiles,
@@ -105,41 +94,6 @@ export {
 export { BatchReadFilesInputSchema } from "../schemas/batch.schemas.js";
 export type { BatchReadFilesInput } from "../schemas/batch.schemas.js";
 export type { FileReadResult } from "./batch-file-reader.js";
-
-// ==================== Tool Registry ====================
-
-import { listFilesToolDefinition } from "./file-listing.js";
-import { scanDirectoryToolDefinition } from "./file-scanning.js";
-import { categorizeByTypeToolDefinition } from "./file-categorization.js";
-import { findLargestFilesToolDefinition } from "./file-analysis.js";
-import { findDuplicateFilesToolDefinition } from "./file-duplicates.js";
-import { organizeFilesToolDefinition } from "./file-organization.js";
-import { previewOrganizationToolDefinition } from "./organization-preview.js";
-import {
-  getCategoriesToolDefinition,
-  setCustomRulesToolDefinition,
-} from "./file-management.js";
-import {
-  analyzeDuplicatesToolDefinition,
-  deleteDuplicatesToolDefinition,
-} from "./duplicate-management.js";
-import { undoLastOperationToolDefinition } from "./rollback.js";
-import { batchRenameToolDefinition } from "./file-renaming.js";
-import { inspectMetadataToolDefinition } from "./metadata-inspection.js";
-import { organizeMusicToolDefinition } from "./music-organization.js";
-import { organizePhotosToolDefinition } from "./photo-organization.js";
-import { organizeByContentToolDefinition } from "./content-organization.js";
-import { organizeSmartToolDefinition } from "./smart-organization.js";
-import { smartSuggestToolDefinition } from "./smart-suggest.js";
-import { systemOrganizationToolDefinition } from "./system-organization.js";
-import { batchReadFilesToolDefinition } from "./batch-file-reader.js";
-import {
-  watchDirectoryToolDefinition,
-  unwatchDirectoryToolDefinition,
-  listWatchesToolDefinition,
-} from "./watch.tool.js";
-import { fileReaderToolDefinition } from "./file-reader.tool.js";
-import { viewHistoryToolDefinition } from "./view-history.js";
 
 export {
   undoLastOperationToolDefinition,
@@ -226,36 +180,10 @@ export {
   handleViewHistory,
 } from "./view-history.js";
 
-/**
- * All available tools for MCP registration
- * @description Array of all tool definitions that can be registered with the MCP server.
- * Each tool includes name, description, and JSON Schema for input validation.
- */
-export const TOOLS: ToolDefinition[] = [
-  listFilesToolDefinition,
-  scanDirectoryToolDefinition,
-  categorizeByTypeToolDefinition,
-  findLargestFilesToolDefinition,
-  findDuplicateFilesToolDefinition,
-  organizeFilesToolDefinition,
-  previewOrganizationToolDefinition,
-  organizeMusicToolDefinition,
-  organizePhotosToolDefinition,
-  organizeByContentToolDefinition,
-  organizeSmartToolDefinition,
-  smartSuggestToolDefinition,
-  systemOrganizationToolDefinition,
-  batchReadFilesToolDefinition,
-  getCategoriesToolDefinition,
-  setCustomRulesToolDefinition,
-  analyzeDuplicatesToolDefinition,
-  deleteDuplicatesToolDefinition,
-  undoLastOperationToolDefinition,
-  batchRenameToolDefinition,
-  inspectMetadataToolDefinition,
-  watchDirectoryToolDefinition,
-  unwatchDirectoryToolDefinition,
-  listWatchesToolDefinition,
-  fileReaderToolDefinition,
-  viewHistoryToolDefinition,
-];
+// ── registry: single source of truth (TOOLS + handler map) ──
+export {
+  TOOLS,
+  toolHandlers,
+  getToolHandler,
+  hasTool,
+} from "../mcp/registry.js";
