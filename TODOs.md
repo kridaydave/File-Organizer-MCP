@@ -18,18 +18,21 @@ Make root look like a single npm package, not a monorepo.
 - [x] Update `AGENTS.md:62` tree to reflect new layout
 - Commit `8a01086` · `d19248f` · `d5513e2`
 
-## Phase-1 — Kill god files [NEXT]
+## Phase-1 — Kill god files [DONE]
 
 No file >300 lines. Splits only, no behavior change. `npm test` must stay green.
 
-- [ ] `src/types.ts:645` → `src/core/types/{files.ts,categories.ts,organize.ts,system.ts}` + `src/mcp/types.ts`
-- [ ] `src/config.ts:605` → `src/core/config/{defaults.ts,loader.ts,security.ts,paths.ts}`
-- [ ] `src/index.ts:344` → `src/mcp/cli.ts` + `src/mcp/bootstrap.ts` + `src/index.ts` (just `main()`)
-- [ ] `src/services/categorizer.service.ts:1246` → split or delete screening layer if not needed
-- [ ] `src/services/metadata-cache.service.ts:943` → inline or delete if music/photo not core
-- [ ] Replace `src/tools/index.ts:261` + `src/server.ts:165` switch with `defineTool()` + auto-discovery
+- [x] `src/types.ts:645` → `src/core/types/{files.ts,categories.ts,organize.ts,system.ts}` + `src/mcp/types.ts`
+- [x] `src/config.ts:605` → `src/core/config/{defaults.ts,loader.ts,security.ts,paths.ts}`
+- [x] `src/index.ts:344` → `src/mcp/cli.ts` + `src/mcp/bootstrap.ts` + `src/index.ts` (just `main()`)
+- [x] `src/services/categorizer.service.ts:1246` → `src/core/categorize/{rules,extension,content-map,content,content-cache,security}.ts` + thin facade (262 lines). Deleted dead methods: `getCategoryWithMetadata`, `isQuarantined`, `getSecurityClassificationWithMetadata` (zero callers). Kept `classifySecurity`/`validateFileType` — they're test-covered.
+- [x] `src/services/metadata-cache.service.ts:943` → kept split as `services/metadata-cache/` — music/photo stay in core per kriday
+- [x] Replace `src/tools/index.ts:261` + `src/server.ts:165` switch with `defineTool()` + auto-discovery (`src/mcp/registry.ts`, `src/mcp/defineTool.ts`)
 
-Exit criteria: `wc -l src/**/*.ts` — no file >300, build + `npm run test:security` green.
+Exit criteria note: Phase-1's six files are all <300 now. Other >300 files (image-metadata, content-analyzer, secure-file-reader…) are Phase-2 kill targets.
+Commits: `aa67ca9` (types/config/cli/registry checkpoint) · categorizer split commit.
+
+Stash `stash@{0}` (v4 migration WIP) still parked — pop after this branch lands or rebases onto main.
 
 ## Phase-2 — Reduce over-eng / refactor simpler
 

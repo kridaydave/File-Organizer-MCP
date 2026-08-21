@@ -1,116 +1,66 @@
 /**
  * File Organizer MCP Server v3.5.0
- * Categorizer Service
+ * Categorizer Service - thin facade over core/categorize modules.
+ *
+ * The actual logic lives in src/core/categorize/:
+ * rules (validation), extension (pattern matching), content-map,
+ * content (background analysis cache), security (screening).
  */
 
-import path from "path";
-import { logger } from "../utils/logger.js";
 import type {
-  FileWithSize,
-  CategoryStats,
   CategoryName,
+  CategoryStats,
   CustomRule,
-  AudioMetadata,
-  ImageMetadata,
-  MetadataCacheEntry,
+  FileWithSize,
 } from "../types.js";
-import { CATEGORIES, getCategory } from "../constants.js";
+import { CATEGORIES } from "../constants.js";
 import { formatBytes } from "../utils/formatters.js";
-import { ContentAnalyzerService } from "./content-analyzer.service.js";
-import { isExecutableSignature } from "../constants/file-signatures.js";
 import { PathValidatorService } from "./path-validator.service.js";
+import { ContentAnalyzerService } from "./content-analyzer.service.js";
 import { MetadataCacheService } from "./metadata-cache.service.js";
+import { validateCategoryName, validateRegexPattern } from "../core/categorize/rules.js";
+import { getCategoryByExtension } from "../core/categorize/extension.js";
+import {
+  getCategoryByContent,
+} from "../core/categorize/content.js";
+import { ContentAnalysisCache } from "../core/categorize/content-cache.js";
+import {
+  classifySecurity as classifySecurityFn,
+  validateFileType as validateFileTypeFn,
+} from "../core/categorize/security.js";
+import { logger } from "../utils/logger.js";
 
 /**
  * Categorizer Service - file categorization by type
- * Now with content-based detection for enhanced security
  */
 export class CategorizerService {
   private customRules: CustomRule[] = [];
   private pathValidator: PathValidatorService;
-  private contentAnalysisPromises: Map<string, Promise<CategoryName>> =
-    new Map();
-  private contentAnalysisResults: Map<string, CategoryName> = new Map();
-  private contentAnalysisTimestamps: Map<string, number> = new Map();
-  private static readonly CONTENT_ANALYSIS_TTL_MS = 5 * 60 * 1000;
-  private static readonly CONTENT_ANALYSIS_CLEANUP_INTERVAL_MS = 60 * 1000;
-  private cleanupInterval: NodeJS.Timeout | null = null;
-  private regexCache = new Map<string, RegExp>();
-
-  private getCachedRegex(pattern: string): RegExp {
-    if (!this.regexCache.has(pattern)) {
-      this.regexCache.set(pattern, new RegExp(pattern, "i"));
-    }
-    return this.regexCache.get(pattern)!;
-  }
+  private contentCache: ContentAnalysisCache;
 
   constructor(
     private contentAnalyzer?: ContentAnalyzerService,
     private metadataCache?: MetadataCacheService,
   ) {
     this.pathValidator = new PathValidatorService();
-    this.startCleanupInterval();
-  }
-
-  /**
-   * Start periodic cleanup interval for stale content analysis entries
-   */
-  private startCleanupInterval(): void {
-    this.cleanupInterval = setInterval(async () => {
-      try {
-        await this.cleanupStaleContentAnalysis();
-      } catch (error) {
-        logger.error("Content analysis cleanup failed:", error);
-      }
-    }, CategorizerService.CONTENT_ANALYSIS_CLEANUP_INTERVAL_MS);
-
-    this.cleanupInterval.unref();
-  }
-
-  /**
-   * Clean up stale entries from content analysis Maps
-   */
-  private cleanupStaleContentAnalysis(): void {
-    const now = Date.now();
-    const keysToDelete: string[] = [];
-
-    for (const [key, timestamp] of this.contentAnalysisTimestamps.entries()) {
-      if (now - timestamp > CategorizerService.CONTENT_ANALYSIS_TTL_MS) {
-        keysToDelete.push(key);
-      }
-    }
-
-    for (const key of keysToDelete) {
-      this.contentAnalysisPromises.delete(key);
-      this.contentAnalysisResults.delete(key);
-      this.contentAnalysisTimestamps.delete(key);
-    }
-
-    if (keysToDelete.length > 0) {
-      logger.debug(
-        `Cleaned up ${keysToDelete.length} stale content analysis entries`,
-      );
-    }
+    this.contentCache = new ContentAnalysisCache(
+      (filePath) => this.getCategoryByContent(filePath),
+      (name) => this.getCategoryByExtension(name),
+    );
   }
 
   /**
    * Stop cleanup interval (for testing)
    */
   public stopCleanupInterval(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
+    this.contentCache.stopCleanupInterval();
   }
 
   /**
    * Clean up resources - stops the cleanup interval
    */
   public destroy(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
+    this.contentCache.destroy();
   }
 
   /**
@@ -143,144 +93,17 @@ export class CategorizerService {
   }
 
   /**
-   * Get real extension from files with double extensions
-   * Note: timeout parameter is not currently implemented - regex execution is synchronous
-   */
-  private getRealExtension(fileName: string): string {
-    const match = /^.*?\.(.+)$/.exec(fileName);
-
-    if (match && match[1]) {
-      const extension = match[1].toLowerCase();
-      const doubleExtensionMatch = /^.*?(\.[a-z0-9]{2,4})$/.exec(extension);
-
-      if (doubleExtensionMatch && doubleExtensionMatch[1]) {
-        return doubleExtensionMatch[1];
-      }
-      return `.${extension}`;
-    }
-    return "";
-  }
-
-  /**
    * Validate regex pattern for security (prevent ReDoS)
    */
   validateRegexPattern(pattern: string, category: string): void {
-    // 1. Length check (more restrictive than before)
-    if (pattern.length > 30) {
-      throw new Error(
-        `Filename pattern for category '${category}' exceeds 30 characters`,
-      );
-    }
-
-    // 2. Block patterns that can cause catastrophic backtracking
-    const catastrophicPatterns = [
-      // Nested quantifiers with overlap (e.g., (a+)+)
-      /\(\s*\w*\s*\+\s*\)\+/,
-      /\(\s*\w*\s*\*\s*\)\+/,
-      /\(\s*\w*\s*\+\s*\)\*/,
-      // Repeated groups with alternations
-      /\(\w+\|\w+\)\+/,
-      /\(\w\|\w+\)\+/,
-      // Deeply nested groups with quantifiers
-      /\(\s*\(\s*\w*\s*[+*]\s*\)\s*[+*]\s*\)/,
-    ];
-
-    for (const catPattern of catastrophicPatterns) {
-      if (catPattern.test(pattern)) {
-        throw new Error(
-          `Filename pattern for category '${category}' contains potentially harmful regex patterns`,
-        );
-      }
-    }
-
-    // 3. Limit allowed regex features to prevent complex patterns
-    const disallowedFeatures = [
-      // Backreferences
-      /\\\d/,
-      // Lookahead/lookbehind assertions
-      /\(\?=.*?\)/,
-      /\(\?!.*?\)/,
-      /\(\?<=.*?\)/,
-      /\(\?<!.*?\)/,
-      // Atomic groups
-      /\(?>.*?\)/,
-      // Comments
-      /\(\?#.*?\)/,
-      // Conditional patterns
-      /\(\?\(.*?\)/,
-    ];
-
-    for (const disallowed of disallowedFeatures) {
-      if (disallowed.test(pattern)) {
-        throw new Error(
-          `Filename pattern for category '${category}' contains disallowed regex features`,
-        );
-      }
-    }
-
-    // 4. Test pattern validity
-    try {
-      new RegExp(pattern);
-    } catch (error) {
-      throw new Error(
-        `Filename pattern for category '${category}' is not a valid regular expression`,
-        { cause: error },
-      );
-    }
+    validateRegexPattern(pattern, category);
   }
 
-  /**
-   * Safe regex test with ReDoS protection
-   * Note: timeout parameter is not currently implemented - uses string length limiting instead
-   */
-  private safeRegexTest(
-    regex: RegExp,
-    string: string,
-    timeout: number = 100,
-  ): boolean {
-    if (string.length > 1000) {
-      return false;
-    }
-
-    let result: boolean;
-
-    try {
-      result = regex.test(string);
-    } catch (error) {
-      logger.warn(`Regex test failed: ${(error as Error).message}`);
-      result = false;
-    }
-
-    return result;
-  }
-
-  /**
-   * Get real extension from files with double extensions
-   */
   /**
    * Validate category name for security
    */
   validateCategoryName(name: string): void {
-    // 1. Block HTML/JS (XSS)
-    if (/<[^>]*>|javascript:/i.test(name)) {
-      throw new Error("Category name contains HTML/JS patterns");
-    }
-
-    // 2. Block Shell characters (Command Injection)
-    // Block $, backticks, |, &, ;
-    if (/[\$`|&;]/.test(name)) {
-      throw new Error("Category name contains shell injection characters");
-    }
-
-    // 3. Block Path Separators & Absolute Paths
-    if (/[\/\\]|:/.test(name)) {
-      throw new Error("Category name contains path separators");
-    }
-
-    // 4. Block Windows Reserved Names
-    if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(name)) {
-      throw new Error("Category name is a reserved Windows filename");
-    }
+    validateCategoryName(name);
   }
 
   /**
@@ -298,191 +121,41 @@ export class CategorizerService {
     const extensionCategory = this.getCategoryByExtension(name);
 
     if (useContentAnalysis && this.contentAnalyzer && filePath) {
-      this.triggerContentAnalysis(name, filePath);
+      this.contentCache.trigger(name, filePath);
     }
 
     return extensionCategory;
   }
 
   /**
-   * Trigger async content analysis in the background
-   * @param name - File name (used as key for result retrieval)
-   * @param filePath - Full file path for analysis
-   */
-  private async triggerContentAnalysis(
-    name: string,
-    filePath: string,
-  ): Promise<CategoryName> {
-    const key = `${filePath}:${name}`;
-
-    if (this.contentAnalysisPromises.has(key)) {
-      return this.contentAnalysisPromises.get(key)!;
-    }
-
-    const analysisPromise = (async (): Promise<CategoryName> => {
-      try {
-        const result = await this.getCategoryByContent(filePath);
-
-        if (result.confidence >= 0.7) {
-          this.contentAnalysisResults.set(key, result.category);
-          logger.info("Content analysis updated category", {
-            filePath,
-            name,
-            oldCategory: this.getCategoryByExtension(name),
-            newCategory: result.category,
-            confidence: result.confidence,
-          });
-          return result.category;
-        }
-
-        return this.getCategoryByExtension(name);
-      } catch (error) {
-        logger.error("Content analysis failed", {
-          filePath,
-          name,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return this.getCategoryByExtension(name);
-      } finally {
-        this.contentAnalysisPromises.delete(key);
-        this.contentAnalysisTimestamps.delete(key);
-      }
-    })();
-
-    this.contentAnalysisPromises.set(key, analysisPromise);
-    this.contentAnalysisTimestamps.set(key, Date.now());
-    return analysisPromise;
-  }
-
-  /**
    * Get the updated category from background content analysis (if available)
-   * @param name - File name
-   * @param filePath - Full file path
-   * @returns Updated category or undefined if analysis not yet complete
    */
   getUpdatedCategory(name: string, filePath: string): CategoryName | undefined {
-    const key = `${filePath}:${name}`;
-    return this.contentAnalysisResults.get(key);
+    return this.contentCache.getUpdated(name, filePath);
   }
 
   /**
    * Wait for content analysis to complete and get the final category
-   * @param name - File name
-   * @param filePath - Full file path
-   * @returns Category after content analysis completes
    */
   async waitForContentAnalysis(
     name: string,
     filePath: string,
   ): Promise<CategoryName> {
-    const key = `${filePath}:${name}`;
-    const promise = this.contentAnalysisPromises.get(key);
-
-    if (promise) {
-      return promise;
-    }
-
-    const cachedResult = this.contentAnalysisResults.get(key);
-    return cachedResult || this.getCategoryByExtension(name);
+    return this.contentCache.waitFor(name, filePath);
   }
 
   /**
    * Clear content analysis cache for a specific file
-   * @param filePath - File path to clear
    */
   clearContentAnalysisCache(filePath?: string): void {
-    if (filePath) {
-      for (const key of this.contentAnalysisResults.keys()) {
-        if (key.startsWith(filePath)) {
-          this.contentAnalysisResults.delete(key);
-          this.contentAnalysisPromises.delete(key);
-          this.contentAnalysisTimestamps.delete(key);
-        }
-      }
-    } else {
-      this.contentAnalysisResults.clear();
-      this.contentAnalysisPromises.clear();
-      this.contentAnalysisTimestamps.clear();
-    }
+    this.contentCache.clear(filePath);
   }
 
   /**
    * Get category by extension only (original logic)
    */
   private getCategoryByExtension(name: string): CategoryName {
-    const ext = path.extname(name).toLowerCase();
-
-    const lowerName = name.toLowerCase();
-
-    // Check custom rules first (highest priority)
-    for (const rule of this.customRules) {
-      // Check extension match
-      if (
-        rule.extensions &&
-        rule.extensions.some((e) => e.toLowerCase() === ext)
-      ) {
-        return rule.category as CategoryName;
-      }
-
-      // Check regex pattern match
-      if (rule.filenamePattern) {
-        try {
-          const regex = this.getCachedRegex(rule.filenamePattern);
-          if (this.safeRegexTest(regex, name)) {
-            return rule.category as CategoryName;
-          }
-        } catch (e) {
-          // Ignore invalid regex
-        }
-      }
-    }
-
-    // Check Pattern-Based Rules (Hardcoded fallback)
-    // Tests
-    if (
-      lowerName.includes("test") ||
-      lowerName.includes("spec") ||
-      lowerName.endsWith(".test.ts") ||
-      lowerName.endsWith(".spec.ts")
-    ) {
-      // or create a new 'Tests' category if allowed? Re-reading task: "organize as test/debug code/script".
-      // The user wants sub-organization or main categories?
-      // "organize as test/debug code/script".
-      // If I return a new string, it will create a new folder. Ideally I should allow it.
-      // Actually, let's map them to subfolders of Code? Or just top level folders?
-      // "test/debug code/script" implies maybe:
-      // - Tests/
-      // - Scripts/
-      // - Debug/
-      // But these are in CategoryName now.
-      return "Tests";
-    }
-
-    if (
-      lowerName.includes("debug") ||
-      lowerName.includes("log") ||
-      lowerName.endsWith(".log")
-    ) {
-      return "Logs";
-    }
-
-    if (
-      lowerName.includes("demo") ||
-      lowerName.includes("sample") ||
-      lowerName.includes("example")
-    ) {
-      return "Demos";
-    }
-
-    if (
-      lowerName.includes("script") ||
-      lowerName.endsWith(".sh") ||
-      lowerName.endsWith(".bat")
-    ) {
-      return "Scripts";
-    }
-
-    return getCategory(ext);
+    return getCategoryByExtension(name, this.customRules);
   }
 
   /**
@@ -493,335 +166,15 @@ export class CategorizerService {
     category: CategoryName;
     confidence: number;
     warnings: string[];
-    metadata?: AudioMetadata | ImageMetadata;
+    metadata?: import("../types.js").AudioMetadata | import("../types.js").ImageMetadata;
   }> {
-    const warnings: string[] = [];
-    let confidence: number;
-    let metadata: AudioMetadata | ImageMetadata | undefined;
-
-    // First get extension-based category as fallback
-    const fileName = path.basename(filePath);
-    const extensionCategory = this.getCategoryByExtension(fileName);
-
-    // Check metadata cache first if available
-    if (this.metadataCache) {
-      const cacheEntry = (await this.metadataCache.get(
-        filePath,
-      )) as MetadataCacheEntry | null;
-      if (cacheEntry) {
-        metadata = cacheEntry.audioMetadata || cacheEntry.imageMetadata;
-      }
-    }
-
-    // If content analyzer is not available, fall back to extension
-    if (!this.contentAnalyzer) {
-      warnings.push(
-        "Content analyzer not available - using extension-based detection",
-      );
-      return {
-        category: extensionCategory,
-        confidence: 0.5,
-        warnings,
-        metadata,
-      };
-    }
-
-    try {
-      // Validate path first
-      const validatedPath = await this.pathValidator.validatePath(filePath, {
-        requireExists: true,
-      });
-
-      // Perform content analysis
-      const analysis = await this.contentAnalyzer.analyze(validatedPath);
-
-      // Map content type to category
-      const contentCategory = this.mapContentTypeToCategory(
-        analysis.detectedType,
-        analysis.mimeType,
-      );
-
-      // Check for extension mismatch
-      if (!analysis.extensionMatch) {
-        warnings.push(
-          `Extension mismatch: file claims to be "${path.extname(fileName)}" but content is "${analysis.detectedType}"`,
-        );
-
-        // High severity if executable disguised as document
-        if (
-          this.isExecutableDisguisedAsDocument(analysis.detectedType, fileName)
-        ) {
-          warnings.push(
-            "CRITICAL: Executable content disguised as document - potential security threat",
-          );
-          return {
-            category: "Suspicious",
-            confidence: 0.95,
-            warnings,
-            metadata,
-          };
-        }
-      }
-
-      // Check for suspicious patterns
-      if (this.hasDoubleExtension(fileName)) {
-        warnings.push("Double extension detected - potential spoofing attempt");
-      }
-
-      // Determine confidence
-      confidence = analysis.confidence;
-
-      // Return content-detected category if high confidence, otherwise extension
-      if (confidence >= 0.7) {
-        logger.logMetadata(
-          "info",
-          "File categorized by content",
-          metadata as unknown as Record<string, unknown>,
-          {
-            filePath,
-            category: contentCategory,
-            confidence,
-            detectedType: analysis.detectedType,
-            mimeType: analysis.mimeType,
-            warnings,
-          },
-        );
-        return { category: contentCategory, confidence, warnings, metadata };
-      } else {
-        warnings.push(
-          "Low content confidence - falling back to extension-based categorization",
-        );
-        logger.logMetadata(
-          "warn",
-          "File categorized by extension (low content confidence)",
-          metadata as unknown as Record<string, unknown>,
-          {
-            filePath,
-            category: extensionCategory,
-            confidence: 0.6,
-            detectedType: analysis.detectedType,
-            mimeType: analysis.mimeType,
-            warnings,
-          },
-        );
-        return {
-          category: extensionCategory,
-          confidence: 0.6,
-          warnings,
-          metadata,
-        };
-      }
-    } catch (error) {
-      // On error, fall back to extension-based
-      warnings.push(
-        `Content analysis failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      logger.logMetadata(
-        "error",
-        "Content analysis failed",
-        metadata as unknown as Record<string, unknown>,
-        {
-          filePath,
-          category: extensionCategory,
-          confidence: 0.4,
-          warnings,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      );
-      return {
-        category: extensionCategory,
-        confidence: 0.4,
-        warnings,
-        metadata,
-      };
-    }
-  }
-
-  /**
-   * Get category with metadata for enhanced security detection
-   */
-  async getCategoryWithMetadata(filePath: string): Promise<{
-    category: CategoryName;
-    confidence: number;
-    warnings: string[];
-    metadata?: AudioMetadata | ImageMetadata;
-  }> {
-    return this.getCategoryByContent(filePath);
-  }
-
-  /**
-   * Check if file should be in quarantine based on metadata + security
-   */
-  async isQuarantined(filePath: string): Promise<boolean> {
-    const securityResult =
-      await this.getSecurityClassificationWithMetadata(filePath);
-    return (
-      securityResult.threatLevel === "high" ||
-      securityResult.threatLevel === "medium"
+    return getCategoryByContent(
+      this.pathValidator,
+      this.contentAnalyzer,
+      this.metadataCache,
+      filePath,
+      (name) => this.getCategoryByExtension(name),
     );
-  }
-
-  /**
-   * Get enhanced security classification with metadata context
-   */
-  async getSecurityClassificationWithMetadata(filePath: string): Promise<{
-    isExecutable: boolean;
-    isSuspicious: boolean;
-    threatLevel: "none" | "low" | "medium" | "high";
-    reason?: string;
-    metadata?: AudioMetadata | ImageMetadata;
-  }> {
-    const fileName = path.basename(filePath);
-    const extension = path.extname(fileName).toLowerCase();
-
-    // Get metadata from cache if available
-    let metadata: AudioMetadata | ImageMetadata | undefined;
-    if (this.metadataCache) {
-      const cacheEntry = (await this.metadataCache.get(
-        filePath,
-      )) as MetadataCacheEntry | null;
-      if (cacheEntry) {
-        metadata = cacheEntry.audioMetadata || cacheEntry.imageMetadata;
-      }
-    }
-
-    // Default: no threat
-    let result: {
-      isExecutable: boolean;
-      isSuspicious: boolean;
-      threatLevel: "none" | "low" | "medium" | "high";
-      reason?: string;
-      metadata?: AudioMetadata | ImageMetadata;
-    } = {
-      isExecutable: false,
-      isSuspicious: false,
-      threatLevel: "none",
-      metadata,
-    };
-
-    // Check for double extensions
-    if (this.hasDoubleExtension(fileName)) {
-      result = {
-        isExecutable: this.isExecutableExtension(
-          this.getRealExtension(fileName),
-        ),
-        isSuspicious: true,
-        threatLevel: "high",
-        reason: "Double extension detected - possible spoofing attempt",
-        metadata,
-      };
-    }
-
-    // If content analyzer available, do deeper analysis
-    if (this.contentAnalyzer) {
-      try {
-        const validatedPath = await this.pathValidator.validatePath(filePath, {
-          requireExists: true,
-        });
-
-        const analysis = await this.contentAnalyzer.analyze(validatedPath);
-
-        // Check if executable disguised as document
-        if (
-          this.isExecutableDisguisedAsDocument(analysis.detectedType, fileName)
-        ) {
-          return {
-            isExecutable: true,
-            isSuspicious: true,
-            threatLevel: "high",
-            reason: `Executable content (${analysis.detectedType}) disguised as ${extension} document`,
-            metadata,
-          };
-        }
-
-        // Check for mismatch
-        if (!analysis.extensionMatch) {
-          const severity: "high" | "medium" | "low" = analysis.warnings.some(
-            (w) => w.includes("CRITICAL"),
-          )
-            ? "high"
-            : analysis.warnings.some((w) => w.includes("HIGH"))
-              ? "medium"
-              : "low";
-
-          return {
-            isExecutable: this.isExecutableType(analysis.detectedType),
-            isSuspicious: true,
-            threatLevel: severity,
-            reason: `Extension mismatch: declared ${extension}, actual ${analysis.detectedType}`,
-            metadata,
-          };
-        }
-
-        // Check if content is executable
-        if (this.isExecutableType(analysis.detectedType)) {
-          return {
-            isExecutable: true,
-            isSuspicious: false,
-            threatLevel: "low",
-            reason: `Executable file detected: ${analysis.detectedType}`,
-            metadata,
-          };
-        }
-      } catch (error) {
-        // Fall through to extension-based check
-      }
-    }
-
-    // Extension-based fallback
-    if (this.isExecutableExtension(extension) && !result.isSuspicious) {
-      result = {
-        isExecutable: true,
-        isSuspicious: false,
-        threatLevel: "low",
-        reason: `Executable extension: ${extension}`,
-        metadata,
-      };
-    }
-
-    return result;
-  }
-
-  /**
-   * Check if file extension matches actual content
-   */
-  async validateFileType(filePath: string): Promise<{
-    valid: boolean;
-    declaredExtension: string;
-    actualType: string;
-    mismatch: boolean;
-  }> {
-    const declaredExtension = path.extname(filePath).toLowerCase();
-
-    // Default response if analysis fails
-    const defaultResponse = {
-      valid: true,
-      declaredExtension,
-      actualType: "unknown",
-      mismatch: false,
-    };
-
-    if (!this.contentAnalyzer) {
-      return defaultResponse;
-    }
-
-    try {
-      const validatedPath = await this.pathValidator.validatePath(filePath, {
-        requireExists: true,
-      });
-
-      const analysis = await this.contentAnalyzer.analyze(validatedPath);
-      const mismatch = !analysis.extensionMatch;
-
-      return {
-        valid: !mismatch,
-        declaredExtension,
-        actualType: analysis.detectedType,
-        mismatch,
-      };
-    } catch (error) {
-      return defaultResponse;
-    }
   }
 
   /**
@@ -833,356 +186,29 @@ export class CategorizerService {
     threatLevel: "none" | "low" | "medium" | "high";
     reason?: string;
   }> {
-    const fileName = path.basename(filePath);
-    const extension = path.extname(fileName).toLowerCase();
-
-    // Default: no threat
-    let result: {
-      isExecutable: boolean;
-      isSuspicious: boolean;
-      threatLevel: "none" | "low" | "medium" | "high";
-      reason?: string;
-    } = {
-      isExecutable: false,
-      isSuspicious: false,
-      threatLevel: "none",
-    };
-
-    // Check for double extensions
-    if (this.hasDoubleExtension(fileName)) {
-      result = {
-        isExecutable: this.isExecutableExtension(
-          this.getRealExtension(fileName),
-        ),
-        isSuspicious: true,
-        threatLevel: "high",
-        reason: "Double extension detected - possible spoofing attempt",
-      };
-    }
-
-    // If content analyzer available, do deeper analysis
-    if (this.contentAnalyzer) {
-      try {
-        const validatedPath = await this.pathValidator.validatePath(filePath, {
-          requireExists: true,
-        });
-
-        const analysis = await this.contentAnalyzer.analyze(validatedPath);
-
-        // Check if executable disguised as document
-        if (
-          this.isExecutableDisguisedAsDocument(analysis.detectedType, fileName)
-        ) {
-          return {
-            isExecutable: true,
-            isSuspicious: true,
-            threatLevel: "high",
-            reason: `Executable content (${analysis.detectedType}) disguised as ${extension} document`,
-          };
-        }
-
-        // Check for mismatch
-        if (!analysis.extensionMatch) {
-          const severity: "high" | "medium" | "low" = analysis.warnings.some(
-            (w) => w.includes("CRITICAL"),
-          )
-            ? "high"
-            : analysis.warnings.some((w) => w.includes("HIGH"))
-              ? "medium"
-              : "low";
-
-          return {
-            isExecutable: this.isExecutableType(analysis.detectedType),
-            isSuspicious: true,
-            threatLevel: severity,
-            reason: `Extension mismatch: declared ${extension}, actual ${analysis.detectedType}`,
-          };
-        }
-
-        // Check if content is executable
-        if (this.isExecutableType(analysis.detectedType)) {
-          return {
-            isExecutable: true,
-            isSuspicious: false,
-            threatLevel: "low",
-            reason: `Executable file detected: ${analysis.detectedType}`,
-          };
-        }
-      } catch (error) {
-        // Fall through to extension-based check
-      }
-    }
-
-    // Extension-based fallback
-    if (this.isExecutableExtension(extension) && !result.isSuspicious) {
-      result = {
-        isExecutable: true,
-        isSuspicious: false,
-        threatLevel: "low",
-        reason: `Executable extension: ${extension}`,
-      };
-    }
-
-    return result;
-  }
-
-  /**
-   * Map content-detected type to file organizer category
-   */
-  private mapContentTypeToCategory(
-    detectedType: string,
-    mimeType: string,
-  ): CategoryName {
-    const type = detectedType.toUpperCase();
-    const mime = mimeType.toLowerCase();
-
-    // Images
-    if (
-      mime.startsWith("image/") ||
-      ["PNG", "JPEG", "GIF", "BMP", "WEBP", "TIFF", "ICO", "SVG"].includes(type)
-    ) {
-      return "Images";
-    }
-
-    // Videos
-    if (
-      mime.startsWith("video/") ||
-      ["MP4", "AVI", "MKV", "MOV", "WMV", "FLV", "WEBM"].includes(type)
-    ) {
-      return "Videos";
-    }
-
-    // Audio
-    if (
-      mime.startsWith("audio/") ||
-      ["MP3", "WAV", "FLAC", "OGG", "AAC", "MIDI"].includes(type)
-    ) {
-      return "Audio";
-    }
-
-    // Documents
-    if (
-      mime.includes("pdf") ||
-      mime.includes("document") ||
-      [
-        "PDF",
-        "DOC",
-        "DOCX",
-        "RTF",
-        "ODT",
-        "HTML",
-        "XML",
-        "TEXT",
-        "MARKDOWN",
-      ].includes(type)
-    ) {
-      return "Documents";
-    }
-
-    // Spreadsheets
-    if (
-      mime.includes("spreadsheet") ||
-      mime.includes("excel") ||
-      ["XLS", "XLSX", "CSV", "ODS"].includes(type)
-    ) {
-      return "Spreadsheets";
-    }
-
-    // Presentations
-    if (
-      mime.includes("presentation") ||
-      mime.includes("powerpoint") ||
-      ["PPT", "PPTX", "ODP"].includes(type)
-    ) {
-      return "Presentations";
-    }
-
-    // Archives
-    if (
-      mime.includes("archive") ||
-      mime.includes("compressed") ||
-      ["ZIP", "RAR", "7Z", "TAR", "GZIP", "BZ2", "XZ"].includes(type)
-    ) {
-      return "Archives";
-    }
-
-    // Executables
-    if (
-      [
-        "EXE",
-        "ELF",
-        "MACHO",
-        "MSI",
-        "PE",
-        "MACHO_32",
-        "MACHO_64",
-        "MACHO_SWAP",
-        "CLASS",
-        "WASM",
-        "SWF",
-      ].includes(type)
-    ) {
-      return "Executables";
-    }
-
-    // Code (including scripts)
-    if (
-      mime.includes("script") ||
-      mime.includes("javascript") ||
-      mime.includes("json") ||
-      mime.includes("xml") ||
-      mime.includes("css") ||
-      [
-        "JS",
-        "NODE",
-        "PYTHON",
-        "SHELL",
-        "BASH",
-        "PERL",
-        "RUBY",
-        "JAR",
-        "JSON",
-        "CSS",
-        "TS",
-      ].includes(type)
-    ) {
-      return "Code";
-    }
-
-    // Fonts
-    if (
-      mime.includes("font") ||
-      ["TTF", "OTF", "WOFF", "WOFF2"].includes(type)
-    ) {
-      return "Fonts";
-    }
-
-    // Ebooks
-    if (["EPUB", "MOBI", "AZW", "AZW3"].includes(type)) {
-      return "Ebooks";
-    }
-
-    // Unknown
-    return "Others";
-  }
-
-  /**
-   * Check if detected type is an executable disguised as document
-   */
-  private isExecutableDisguisedAsDocument(
-    detectedType: string,
-    fileName: string,
-  ): boolean {
-    const documentExtensions = [
-      ".pdf",
-      ".doc",
-      ".docx",
-      ".xls",
-      ".xlsx",
-      ".ppt",
-      ".pptx",
-      ".txt",
-      ".jpg",
-      ".jpeg",
-      ".png",
-      ".gif",
-    ];
-    const extension = path.extname(fileName).toLowerCase();
-
-    if (!documentExtensions.includes(extension)) {
-      return false;
-    }
-
-    const executableTypes = [
-      "EXE",
-      "ELF",
-      "MACHO",
-      "MSI",
-      "PE",
-      "MACHO_32",
-      "MACHO_64",
-      "MACHO_SWAP",
-      "CLASS",
-      "WASM",
-    ];
-    return executableTypes.some((t) => detectedType.toUpperCase().includes(t));
-  }
-
-  /**
-   * Check if type represents executable content
-   */
-  private isExecutableType(detectedType: string): boolean {
-    const executableTypes = [
-      "EXE",
-      "ELF",
-      "MACHO",
-      "MSI",
-      "PE",
-      "MACHO_32",
-      "MACHO_64",
-      "MACHO_SWAP",
-      "CLASS",
-      "WASM",
-      "SWF",
-      "SHELL",
-      "BASH",
-      "PYTHON",
-      "PERL",
-      "RUBY",
-      "NODE",
-    ];
-    return (
-      executableTypes.some((t) => detectedType.toUpperCase().includes(t)) ||
-      isExecutableSignature(detectedType)
+    return classifySecurityFn(
+      this.pathValidator,
+      this.contentAnalyzer,
+      filePath,
     );
   }
 
   /**
-   * Check if extension is executable
+   * Check if file extension matches actual content
    */
-  private isExecutableExtension(extension: string): boolean {
-    const exeExtensions = [
-      ".exe",
-      ".dll",
-      ".bat",
-      ".cmd",
-      ".sh",
-      ".msi",
-      ".com",
-      ".scr",
-      ".pif",
-    ];
-    return exeExtensions.includes(extension.toLowerCase());
+  async validateFileType(filePath: string): Promise<{
+    valid: boolean;
+    declaredExtension: string;
+    actualType: string;
+    mismatch: boolean;
+  }> {
+    return validateFileTypeFn(
+      this.pathValidator,
+      this.contentAnalyzer,
+      filePath,
+    );
   }
 
-  /**
-   * Check for double extension patterns (e.g., file.jpg.exe)
-   */
-  private hasDoubleExtension(fileName: string): boolean {
-    const timeout = 100;
-    const startTime = Date.now();
-
-    const name = path.basename(fileName).toLowerCase();
-    if (name.length > 1000) {
-      return false;
-    }
-
-    const result =
-      /\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|txt|zip|rar)\.(exe|bat|cmd|scr|pif|com|msi|sh)$/i.test(
-        name,
-      );
-
-    if (Date.now() - startTime > timeout) {
-      return false;
-    }
-
-    return result;
-  }
-
-  /**
-   * Get the real executable extension from files with double extensions
-   * For example, returns '.exe' for 'file.jpg.exe'
-   */
   /**
    * Categorize files by their type
    */
@@ -1203,17 +229,7 @@ export class CategorizerService {
       };
     }
 
-    // Initialize custom categories if any encountered in rules?
-    // Actually, custom rules might introduce NEW categories not in CATEGORIES enum/object.
-    // We should allow dynamic keys in 'categorized'.
-    // But Typescript says Record<CategoryName...>.
-    // For now, let's cast or assume CategoryName is string for custom ones.
-    // But strict typing might bite us.
-    // Let's stick to known categories OR allow string keys.
-    // If the user adds "WorkProjects", we need to handle that.
-    // For now, let's just initialize on demand for non-standard categories.
-
-    // Categorize each file
+    // Categorize each file (custom rules may introduce non-standard categories)
     for (const file of files) {
       const category = this.getCategory(file.name);
 
@@ -1231,7 +247,7 @@ export class CategorizerService {
     }
 
     // Remove empty categories and add readable size
-    const result: Partial<Record<string, CategoryStats>> = {}; // Changed to string to allow custom
+    const result: Partial<Record<string, CategoryStats>> = {};
     for (const [category, stats] of Object.entries(categorized)) {
       if (stats.count > 0) {
         result[category] = {
