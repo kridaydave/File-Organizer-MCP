@@ -1,9 +1,9 @@
 /**
  * File Reader MCP Tool
  *
- * MCP Tool integration for the SecureFileReader.
  * Provides the `file_organizer_read_file` tool for reading file contents
- * with comprehensive security checks.
+ * via core/io readFile: path validation, sensitive-file blocking,
+ * size limits, checksum.
  *
  * @module tools/file-reader
  * @version 3.2.0
@@ -11,15 +11,13 @@
 
 import path from "path";
 import type { ToolDefinition, ToolResponse } from "../types.js";
-import { FileReaderFactory } from "../readers/factory.js";
-import { SecureFileReader } from "../readers/secure-file-reader.js";
-import { isOk, isErr } from "../readers/result.js";
+import { readFile } from "../core/io/index.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import {
   ReadFileInputSchema,
   type ReadFileInput,
-} from "../schemas/reader.schemas.js";
+} from "../schemas/scan.js";
 
 // ============================================================================
 // Tool Definition
@@ -29,8 +27,8 @@ import {
  * Tool definition for file_organizer_read_file
  * Registered with the MCP server
  */
-export { ReadFileInputSchema } from "../schemas/reader.schemas.js";
-export type { ReadFileInput } from "../schemas/reader.schemas.js";
+export { ReadFileInputSchema } from "../schemas/scan.js";
+export type { ReadFileInput } from "../schemas/scan.js";
 export const fileReaderToolDefinition: ToolDefinition = {
   name: "file_organizer_read_file",
   title: "Read File Contents",
@@ -92,24 +90,6 @@ export const fileReaderToolDefinition: ToolDefinition = {
 // Tool Handler
 // ============================================================================
 
-// Singleton reader instance for reuse across tool calls
-let fileReaderInstance: SecureFileReader | null = null;
-
-/**
- * Get or create the SecureFileReader instance
- * Uses factory pattern for consistent configuration
- */
-function getFileReader(): SecureFileReader {
-  if (!fileReaderInstance) {
-    fileReaderInstance = FileReaderFactory.createWithOptions({
-      maxReadSize: 100 * 1024 * 1024, // 100MB max
-      maxRequestsPerMinute: 120,
-      maxRequestsPerHour: 2000,
-    });
-  }
-  return fileReaderInstance;
-}
-
 /**
  * Handle file_organizer_read_file tool calls
  *
@@ -135,37 +115,28 @@ export async function handleReadFile(
     }
 
     const input = parseResult.data;
-    const reader = getFileReader();
 
-    // Map encoding to BufferEncoding
-    const encoding: BufferEncoding | null =
-      input.encoding === "binary" ? null : (input.encoding as BufferEncoding);
+    const { data, bytesRead, totalSize, checksum, mimeType } = await readFile(
+      input.path,
+      {
+        encoding:
+          input.encoding === "binary"
+            ? null
+            : (input.encoding as BufferEncoding),
+        maxBytes: input.maxBytes,
+        offset: input.offset,
+        checksum: input.calculateChecksum,
+      },
+    );
 
-    // Read the file
-    const readResult = await reader.read(input.path, {
-      encoding,
-      maxBytes: input.maxBytes,
-      offset: input.offset,
-    });
-
-    // Handle result
-    if (isErr(readResult)) {
-      const error = readResult.error;
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error reading file: ${error.message}${
-              error.suggestion ? `\nSuggestion: ${error.suggestion}` : ""
-            }`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    const { value } = readResult;
-    const { data, bytesRead, metadata } = value;
+    const metadata = {
+      path: input.path,
+      mimeType,
+      size: totalSize,
+      readAt: new Date(),
+      checksum,
+      encoding: input.encoding,
+    };
 
     // Format response based on requested format
     switch (input.response_format) {
@@ -315,10 +286,3 @@ function formatMarkdownResponse(
     content: [{ type: "text", text: lines.join("\n") }],
   };
 }
-
-// ============================================================================
-// Utilities
-// ============================================================================
-
-// Export for testing
-export { getFileReader };

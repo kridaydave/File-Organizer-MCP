@@ -8,11 +8,9 @@
  * @module scripts/security-gates/path-traversal-fuzz
  */
 
-import { SecureFileReader } from "../../src/readers/secure-file-reader.js";
+import { readFile } from "../../src/core/io/index.js";
 import { PathValidatorService } from "../../src/services/path-validator.service.js";
-import { RateLimiter } from "../../src/services/security/rate-limiter.service.js";
-import { IAuditLogger } from "../../src/readers/secure-file-reader.js";
-import { isSensitiveFile } from "../../src/readers/security/sensitive-file-patterns.js";
+import { isSensitiveFile } from "../../src/core/io/sensitive-files.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -50,13 +48,6 @@ const stats: FuzzStats = {
   errors: 0,
   byCategory: new Map(),
 };
-
-// Mock audit logger
-class MockAuditLogger implements IAuditLogger {
-  logOperationStart(): void {}
-  logOperationSuccess(): void {}
-  logOperationFailure(): void {}
-}
 
 /**
  * Generate comprehensive path traversal payloads
@@ -456,23 +447,19 @@ function generatePathTraversalPayloads(): Array<{
  * Test a single payload against security controls
  */
 async function testPayload(
-  reader: SecureFileReader,
+  validator: PathValidatorService,
   payload: string,
-  category: string,
 ): Promise<boolean> {
   try {
-    // First check: Path validation layer
-    const pathValidator = new PathValidatorService(ALLOWED_READ_PATH);
-
-    // Second check: Sensitive file patterns
+    // First check: Sensitive file patterns
     if (isSensitiveFile(payload)) {
       return true; // Correctly blocked
     }
 
     // Attempt to read (should fail validation before actual read)
-    const result = await reader.read(payload);
+    const result = await readFile(payload, { validator });
 
-    if (result.ok === true) {
+    if (result) {
       // CRITICAL: Payload was NOT blocked - this is a security failure
       return false;
     } else {
@@ -586,18 +573,11 @@ async function runFuzzing(): Promise<number> {
 
   await setup();
 
-  // Initialize SecureFileReader
-  const pathValidator = new PathValidatorService(ALLOWED_READ_PATH, [
+  // Reads are scoped to the sandbox dir so only containment decisions
+  // decide the outcome.
+  const validator = new PathValidatorService(ALLOWED_READ_PATH, [
     ALLOWED_READ_PATH,
   ]);
-  const rateLimiter = new RateLimiter(10000, 100000);
-  const auditLogger = new MockAuditLogger();
-  const reader = new SecureFileReader(
-    pathValidator,
-    rateLimiter,
-    auditLogger,
-    1024 * 1024,
-  );
 
   // Generate payloads
   const payloads = generatePathTraversalPayloads();
@@ -620,7 +600,7 @@ async function runFuzzing(): Promise<number> {
     const testCase = payloads[i];
     if (!testCase) continue;
     const { payload, category, description } = testCase;
-    const blocked = await testPayload(reader, payload, category);
+    const blocked = await testPayload(validator, payload);
     updateStats(category, blocked);
 
     if (!blocked) {

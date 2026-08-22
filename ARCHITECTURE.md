@@ -303,74 +303,38 @@ class RollbackService {
 }
 ```
 
-### 4. File Reader Module (`readers/`) ⭐ NEW in v3.2.0
+### 4. File I/O Module (`core/io/`)
 
-**Responsibility:** Secure file reading with comprehensive security controls
+**Responsibility:** Secure file reads for the `file_organizer_read_file` tool
 
-**Architecture:** 3-layer security architecture with Result-based error handling
-
-#### SecureFileReader
+One function, two files:
 
 ```typescript
-class SecureFileReader {
-  // Read file with full security validation
-  async read(
-    filePath: string,
-    options?: Partial<FileReadOptions>,
-  ): Promise<Result<FileReadResult, FileReadError>>;
-
-  // Create readable stream for large files
-  async readStream(
-    filePath: string,
-    options?: Partial<FileReadOptions>,
-  ): Promise<Result<Readable, FileReadError>>;
-
-  // Read raw buffer (binary data)
-  async readBuffer(
-    filePath: string,
-    options?: Partial<FileReadOptions>,
-  ): Promise<Result<Buffer, FileReadError>>;
-}
+// core/io/read-file.ts
+async function readFile(
+  filePath: string,
+  options?: ReadFileOptions,
+): Promise<ReadFileResult>;
+// ReadFileOptions: encoding (utf-8 | null for Buffer), maxBytes (default
+// 10MB, cap 100MB), offset, checksum (default true), validator (scoped,
+// for tests/gates).
 ```
 
-**Security Layers:**
+**Check order:**
 
-1. **Layer 1 - Input Validation:**
-   - Path validation using PathValidatorService
-   - Sensitive file pattern checking (47+ patterns)
-   - Zod schema validation for inputs
+1. Sensitive pattern match (`core/io/sensitive-files.ts`) — denies before any
+   filesystem touch. Error names the matched pattern, never the path.
+2. TOCTOU-safe open via `PathValidatorService.openAndValidateFile()` —
+   `O_NOFOLLOW`, containment re-checked on the opened handle's realpath.
+3. Size/offset bounds (`E_FILE_TOO_LARGE`, `E_READ_OFFSET`).
+4. Single buffered read + SHA-256 of the returned bytes.
 
-2. **Layer 2 - Security Controls:**
-   - Rate limiting (120 req/min, 2000 req/hour)
-   - Audit logging (all operations logged)
-   - Size limits (default 10MB, max 100MB)
+Errors are thrown as `FileOrganizerError` / `AccessDeniedError` and formatted
+by `createErrorResponse` (path-sanitized). There is no rate limiting or audit
+logging at this layer; clients rate-limit and history lives in the MCP layer.
 
-3. **Layer 3 - Execution:**
-   - TOCTOU-safe file opening with O_NOFOLLOW
-   - SHA-256 checksum calculation
-   - Streaming for large files (>100KB)
-
-**Error Types:**
-
-- `FileNotFoundError` - File doesn't exist
-- `FileAccessDeniedError` - Permission denied or sensitive file
-- `FileTooLargeError` - Exceeds size limit
-- `PathValidationError` - Security check failed
-- `RateLimitError` - Too many requests
-
-#### FileReaderFactory
-
-```typescript
-class FileReaderFactory {
-  // Create with default settings
-  static createDefault(): SecureFileReader;
-
-  // Create with custom options
-  static createWithOptions(options: ReaderOptions): SecureFileReader;
-}
-```
-
-**Integration:** The File Reader is exposed via the `file_organizer_read_file` MCP tool with Zod schema validation.
+**Integration:** Exposed via the `file_organizer_read_file` MCP tool with Zod
+schema validation.
 
 ### 5. Utils Layer (`utils/`)
 

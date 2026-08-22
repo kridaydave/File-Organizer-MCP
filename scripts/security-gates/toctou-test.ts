@@ -8,10 +8,8 @@
  * @module scripts/security-gates/toctou-test
  */
 
-import { SecureFileReader } from "../../src/readers/secure-file-reader.js";
+import { readFile } from "../../src/core/io/index.js";
 import { PathValidatorService } from "../../src/services/path-validator.service.js";
-import { RateLimiter } from "../../src/services/security/rate-limiter.service.js";
-import { IAuditLogger } from "../../src/readers/secure-file-reader.js";
 import fs from "fs/promises";
 import { constants } from "fs";
 import path from "path";
@@ -53,11 +51,18 @@ const stats: TOCTOUStats = {
   byTest: new Map(),
 };
 
-// Mock audit logger
-class MockAuditLogger implements IAuditLogger {
-  logOperationStart(): void {}
-  logOperationSuccess(): void {}
-  logOperationFailure(): void {}
+// Scoped validator + Result-shaped read so attack outcomes are easy to classify.
+let validator: PathValidatorService;
+
+async function safeRead(
+  filePath: string,
+): Promise<{ ok: true; data: string | Buffer } | { ok: false }> {
+  try {
+    const result = await readFile(filePath, { validator });
+    return { ok: true, data: result.data };
+  } catch {
+    return { ok: false };
+  }
 }
 
 /**
@@ -98,10 +103,7 @@ function updateStats(
  * Test 1: Rapid file replacement attack
  * Swaps file content between validation and read
  */
-async function testRapidFileReplacement(
-  reader: SecureFileReader,
-  pathValidator: PathValidatorService,
-): Promise<void> {
+async function testRapidFileReplacement(): Promise<void> {
   const testFile = path.join(ALLOWED_DIR, "swap-test.txt");
   const secretFile = path.join(ATTACK_DIR, "secret.txt");
 
@@ -116,7 +118,7 @@ async function testRapidFileReplacement(
   for (let i = 0; i < NUM_RACE_ATTEMPTS; i++) {
     try {
       // Start a read operation
-      const readPromise = reader.read(testFile);
+      const readPromise = safeRead(testFile);
 
       // Immediately try to swap the file (simulating race)
       const swapPromise = (async () => {
@@ -131,7 +133,7 @@ async function testRapidFileReplacement(
       await fs.writeFile(testFile, "safe content");
 
       if (result.status === "fulfilled" && result.value.ok) {
-        const content = String(result.value.value?.data || "");
+        const content = String(result.value.data || "");
         if (content.includes("SECRET")) {
           updateStats("rapid-replacement", "succeeded");
         } else {
@@ -152,10 +154,7 @@ async function testRapidFileReplacement(
  * Test 2: Symlink swap attack
  * Creates symlink to safe file, then swaps to sensitive file
  */
-async function testSymlinkSwap(
-  reader: SecureFileReader,
-  pathValidator: PathValidatorService,
-): Promise<void> {
+async function testSymlinkSwap(): Promise<void> {
   const safeFile = path.join(ALLOWED_DIR, "safe-target.txt");
   const secretFile = path.join(ATTACK_DIR, "secret-target.txt");
   const symlinkPath = path.join(ALLOWED_DIR, "symlink-swap");
@@ -178,7 +177,7 @@ async function testSymlinkSwap(
       })();
 
       // Try to read through the symlink
-      const readPromise = reader.read(symlinkPath);
+      const readPromise = safeRead(symlinkPath);
 
       const [result] = await Promise.allSettled([readPromise, swapPromise]);
 
@@ -186,7 +185,7 @@ async function testSymlinkSwap(
       await fs.unlink(symlinkPath).catch(() => {});
 
       if (result.status === "fulfilled" && result.value.ok) {
-        const content = String(result.value.value?.data || "");
+        const content = String(result.value.data || "");
         if (content.includes("SECRET")) {
           updateStats("symlink-swap", "succeeded");
         } else {
@@ -208,10 +207,7 @@ async function testSymlinkSwap(
  * Test 3: Concurrent symlink creation
  * Multiple concurrent attempts to create symlink during validation
  */
-async function testConcurrentSymlink(
-  reader: SecureFileReader,
-  pathValidator: PathValidatorService,
-): Promise<void> {
+async function testConcurrentSymlink(): Promise<void> {
   const targetFile = path.join(ATTACK_DIR, "concurrent-target.txt");
   const symlinkPath = path.join(ALLOWED_DIR, "concurrent-symlink");
 
@@ -229,7 +225,7 @@ async function testConcurrentSymlink(
         try {
           // Try to create symlink and read simultaneously
           const createPromise = fs.symlink(targetFile, `${symlinkPath}-${i}`);
-          const readPromise = reader.read(`${symlinkPath}-${i}`);
+          const readPromise = safeRead(`${symlinkPath}-${i}`);
 
           await Promise.allSettled([createPromise, readPromise]);
 
@@ -252,10 +248,7 @@ async function testConcurrentSymlink(
  * Test 4: Directory traversal via symlink
  * Creates symlink that points outside allowed directory
  */
-async function testDirectoryTraversalSymlink(
-  reader: SecureFileReader,
-  pathValidator: PathValidatorService,
-): Promise<void> {
+async function testDirectoryTraversalSymlink(): Promise<void> {
   const outsideFile = path.join(TEST_DIR, "outside-secret.txt");
   const symlinkInAllowed = path.join(ALLOWED_DIR, "traverse-link");
 
@@ -271,13 +264,13 @@ async function testDirectoryTraversalSymlink(
       await fs.symlink(outsideFile, symlinkInAllowed);
 
       // Try to read through traversal symlink
-      const result = await reader.read(symlinkInAllowed);
+      const result = await safeRead(symlinkInAllowed);
 
       // Cleanup
       await fs.unlink(symlinkInAllowed).catch(() => {});
 
       if (result.ok) {
-        const content = String(result.value?.data || "");
+        const content = String(result.data || "");
         if (content.includes("OUTSIDE SECRET")) {
           updateStats("directory-traversal-symlink", "succeeded");
         } else {
@@ -298,10 +291,7 @@ async function testDirectoryTraversalSymlink(
  * Test 5: TOCTOU with file handle validation
  * Tests that O_NOFOLLOW prevents symlink following
  */
-async function testONOFollowProtection(
-  reader: SecureFileReader,
-  pathValidator: PathValidatorService,
-): Promise<void> {
+async function testONOFollowProtection(): Promise<void> {
   const safeFile = path.join(ALLOWED_DIR, "ono-safe.txt");
   const secretFile = path.join(ATTACK_DIR, "ono-secret.txt");
   const symlinkFile = path.join(ALLOWED_DIR, "ono-link");
@@ -342,7 +332,7 @@ async function testONOFollowProtection(
       await fs.symlink(secretFile, symlinkFile);
 
       // Try to read through reader (should be blocked by validation layer)
-      const result = await reader.read(symlinkFile);
+      const result = await safeRead(symlinkFile);
 
       if (!result.ok) {
         onoFollowBlocked++;
@@ -366,10 +356,7 @@ async function testONOFollowProtection(
  * Test 6: Hard link attacks
  * Tests hard link behavior (should be allowed if pointing to same filesystem)
  */
-async function testHardLinkAttacks(
-  reader: SecureFileReader,
-  pathValidator: PathValidatorService,
-): Promise<void> {
+async function testHardLinkAttacks(): Promise<void> {
   const originalFile = path.join(ALLOWED_DIR, "hardlink-original.txt");
   const hardLinkPath = path.join(ALLOWED_DIR, "hardlink-link.txt");
 
@@ -382,7 +369,7 @@ async function testHardLinkAttacks(
     await fs.link(originalFile, hardLinkPath);
 
     // Try to read through hard link
-    const result = await reader.read(hardLinkPath);
+    const result = await safeRead(hardLinkPath);
 
     if (result.ok) {
       // Hard links to allowed files should work
@@ -405,10 +392,7 @@ async function testHardLinkAttacks(
  * Test 7: File descriptor exhaustion
  * Tests handling of many concurrent file operations
  */
-async function testConcurrentAccessPatterns(
-  reader: SecureFileReader,
-  pathValidator: PathValidatorService,
-): Promise<void> {
+async function testConcurrentAccessPatterns(): Promise<void> {
   const testFiles: string[] = [];
 
   // Create test files
@@ -432,7 +416,7 @@ async function testConcurrentAccessPatterns(
     operations.push(
       (async () => {
         try {
-          const result = await reader.read(file);
+          const result = await safeRead(file);
           if (result.ok) {
             successCount++;
           } else {
@@ -527,25 +511,17 @@ ${colors.blue}╔═════════════════════
 
   await setup();
 
-  // Initialize SecureFileReader with TOCTOU protection
-  const pathValidator = new PathValidatorService(ALLOWED_DIR, [ALLOWED_DIR]);
-  const rateLimiter = new RateLimiter(10000, 100000);
-  const auditLogger = new MockAuditLogger();
-  const reader = new SecureFileReader(
-    pathValidator,
-    rateLimiter,
-    auditLogger,
-    1024 * 1024,
-  );
+  // Reads are scoped to the sandbox dir, same containment rules as prod.
+  validator = new PathValidatorService(ALLOWED_DIR, [ALLOWED_DIR]);
 
   // Run all tests
-  await testRapidFileReplacement(reader, pathValidator);
-  await testSymlinkSwap(reader, pathValidator);
-  await testConcurrentSymlink(reader, pathValidator);
-  await testDirectoryTraversalSymlink(reader, pathValidator);
-  await testONOFollowProtection(reader, pathValidator);
-  await testHardLinkAttacks(reader, pathValidator);
-  await testConcurrentAccessPatterns(reader, pathValidator);
+  await testRapidFileReplacement();
+  await testSymlinkSwap();
+  await testConcurrentSymlink();
+  await testDirectoryTraversalSymlink();
+  await testONOFollowProtection();
+  await testHardLinkAttacks();
+  await testConcurrentAccessPatterns();
 
   printFinalStats();
   await cleanup();
