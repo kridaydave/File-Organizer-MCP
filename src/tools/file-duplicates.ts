@@ -12,7 +12,7 @@ import type {
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
-import { HashCalculatorService } from "../services/hash-calculator.service.js";
+import { HashCalculatorService } from "../core/hash/hasher.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import {

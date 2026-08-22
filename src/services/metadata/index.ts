@@ -1,7 +1,9 @@
+export type {
+  AudioMetadata,
+  AudioMetadataOptions,
+  ImageMetadata,
+  ImageMetadataOptions,
+} from "./types.js";
 export * from "./image.js";
-export {
-  AudioMetadataService,
-  type AudioMetadata,
-  type AudioMetadataOptions,
-} from "./audio.js";
+export { AudioMetadataService } from "./audio.js";
 export * from "./service.js";

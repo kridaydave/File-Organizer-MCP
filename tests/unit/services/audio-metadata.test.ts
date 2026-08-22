@@ -118,10 +118,10 @@ describe("AudioMetadataService", () => {
       // TALB frame (Album) with UTF-16 encoding
       const talbFrame = Buffer.concat([
         Buffer.from("TALB"),
-        Buffer.from([0x00, 0x00, 0x00, 0x14]), // Size
+        Buffer.from([0x00, 0x00, 0x00, 0x16]), // Size: BOM (2) + "Test Album" in utf16le (20)
         Buffer.from([0x00, 0x00]), // Flags
         Buffer.from([0x01]), // UTF-16 with BOM
-        Buffer.from([0xfe, 0xff]), // BOM
+        Buffer.from([0xff, 0xfe]), // BOM (little-endian, matching the utf16le payload)
         Buffer.from("Test Album", "utf16le"),
       ]);
 
@@ -265,7 +265,7 @@ describe("AudioMetadataService", () => {
       const comments = Buffer.concat([
         vendorLength,
         vendorString,
-        Buffer.from([0x02, 0x00, 0x00, 0x00]), // User comment list length: 2
+        Buffer.from([0x03, 0x00, 0x00, 0x00]), // User comment list length: 3
         Buffer.from([comment1.length, 0, 0, 0]),
         comment1,
         Buffer.from([comment2.length, 0, 0, 0]),

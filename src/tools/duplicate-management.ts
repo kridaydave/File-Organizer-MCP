@@ -8,7 +8,7 @@
 import type { ToolDefinition, ToolResponse } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
-import { DuplicateFinderService } from "../services/duplicate-finder.service.js";
+import { DuplicateFinderService } from "../core/hash/duplicate-finder.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import {
