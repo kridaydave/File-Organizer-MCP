@@ -20,7 +20,7 @@ describe('RenamingService Integration', () => {
     await fs.mkdir(sandboxRoot, { recursive: true });
     testDir = await fs.mkdtemp(path.join(sandboxRoot, 'test-'));
 
-    rollbackService = new RollbackService();
+    rollbackService = new RollbackService(testDir);
     service = new RenamingService(rollbackService);
   });
 

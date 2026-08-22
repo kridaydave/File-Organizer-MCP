@@ -10,7 +10,7 @@ import {
   handleWatchDirectory,
   handleUnwatchDirectory,
   handleListWatches,
-} from '../../src/extensions/scheduler/watch.tool.js';
+} from '../../src/extensions/scheduler/watch-manager.js';
 import { loadUserConfig, updateUserConfig, getUserConfigPath } from '../../src/config.js';
 
 describe('Watch Mode Integration', () => {

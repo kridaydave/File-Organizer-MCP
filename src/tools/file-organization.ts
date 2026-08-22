@@ -8,14 +8,20 @@
 import type { ToolDefinition, ToolResponse, OrganizeResult } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
-import { globalOrganizerService } from "../services/index.js";
+import {
+  OrganizerService,
+} from "../core/organize/organizer.js";
+import { CategorizerService } from "../services/categorizer.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { escapeMarkdown } from "../utils/index.js";
 import {
   OrganizeFilesInputSchema,
   type OrganizeFilesInput,
 } from "../schemas/organize.js";
-import { loadUserConfig } from "../config.js";
+import {
+  createRequestContext,
+  type ToolContext,
+} from "../mcp/context.js";
 
 export const organizeFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_organize_files",
@@ -59,16 +65,9 @@ export const organizeFilesToolDefinition: ToolDefinition = {
   },
 };
 
-/**
- * Get conflict strategy from user config or return default
- */
-function getConflictStrategy(): "rename" | "skip" | "overwrite" {
-  const userConfig = loadUserConfig();
-  return userConfig.conflictStrategy ?? "rename";
-}
-
 export async function handleOrganizeFiles(
   args: Record<string, unknown>,
+  ctx: ToolContext = createRequestContext(),
 ): Promise<ToolResponse> {
   try {
     const parsed = OrganizeFilesInputSchema.safeParse(args);
@@ -102,12 +101,14 @@ export async function handleOrganizeFiles(
       };
     }
     const scanner = new FileScannerService();
-    // Use global organizer service which has content analyzer enabled
-    const organizer = globalOrganizerService;
+    // Organizer is pure — construct per request from config rules.
+    const organizer = new OrganizerService(
+      new CategorizerService(ctx.config.customRules ?? []),
+    );
 
     // Use provided strategy, or fall back to config, or default to 'rename'
     const effectiveConflictStrategy =
-      conflict_strategy ?? getConflictStrategy();
+      conflict_strategy ?? ctx.config.conflictStrategy ?? "rename";
 
     const files = await scanner.getAllFiles(validatedPath, false);
 

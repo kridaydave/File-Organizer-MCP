@@ -74,16 +74,30 @@ Notes:
 - `smart-suggest` + `system-organize`: untouched this phase (small enough, not on kill list). Revisit if phase-3 wants them gone.
 - Kill list for step 2 is ~6 services ≈ 5k lines deleted, plus readers ~2k in step 1.
 
-## Phase-3 — Stateless + new MCP DX (v4.0.0)
+## Phase-3 — Stateless + new MCP DX
 
-MCP 2026-07-28 `ttlMs` / `cacheScope` already added in `src/server.ts:49`. Finish statelessness.
+Decisions locked with kriday:
+- Scheduler gets its **own process**: `bin/file-organizer-watch.mjs`. Core stdio server drops the watch tools; feature survives standalone.
+- `stash@{0}` (v4 migration WIP) **pops first** — it touches `server.ts`/`index.ts`, which this phase rewrites. Resolve once, build on top.
+- No fs-based tool auto-discovery (`import.meta.glob` is Vite-only; fs-scanning `dist/` is magic, not DX). Registry stays explicit, one line per tool.
+- RateLimiter dies outright — clients rate-limit themselves; the `name.includes("scan")` heuristic goes with it.
 
-- [ ] No globals — `src/services/index.ts:44` `global*` → per-request `ctx` (`config`, `logger`)
-- [ ] `src/server.ts:119` `new RateLimiter()` → per-request or remove (client rate-limits)
-- [ ] `historyLogger.log:272` → file append only, no batch queue in memory
-- [ ] `watch`/`scheduler` → remove from MCP core or separate `bin/file-organizer-watch.mjs`
-- [ ] New DX: `defineTool({ name, schema, handler })` — add file = auto registered, no 4-file edit
-- [ ] Verify stateless: `createServer()` pure, `handleToolCall` `(args, ctx) -> result`
+Steps — build + targeted tests green after each; `npm run test:security` not needed unless path validation changes (it shouldn't).
+
+- [x] **0. Pop stash.** Stash was based on phase-0 tip (`8a01086`) — 11 commits stale, ~40 of 101 files pointed at paths phase-1/2 deleted. Hand-carried the valuable diffs instead of popping: `@modelcontextprotocol/server@2.0.0` swap (sdk removed), `server.ts` → `McpServer` + `registerTool` + `fromJsonSchema` + `cacheHints`, import re-points in `bootstrap.ts`/`cli.ts`/`setup-wizard.ts`/bin. Build + full suite (842) green; stdio smoke test passed (initialize, tools/list ×24 with titles+annotations, tool call). Stash dropped; its MIGRATION.md §1 (wire-level protocol notes) + CHANGELOG salvaged to `/tmp/opencode/stash-salvage/` for the phase-4 docs pass.
+- [x] **1. Delete RateLimiter.** Removed `services/security/rate-limiter.service.ts` (+ `services/security/` dir), the `name.includes(...)` limit block in `server.ts`, and the re-export in `services/index.ts`. Zero references left in src/tests. Full suite green.
+- [x] **2. History logger: kill the batch queue.** `log()` = direct append behind the in-process write chain; no `pendingEntries` / flush timer / `flushAndClose` (zero external callers). Lockfile kept for cross-process safety (server + watch bin share one file). Two real bugs found and fixed while testing: (a) staleness was judged on the same window as the wait, so a waiter could steal a live lock at its deadline — stale threshold is now `lockTimeoutMs * 2`; (b) fixed retry sleep so tiny lock windows can't wake past the staleness line. `DEFAULT_CONFIG.dataDir` now uses `getHistoryDirectory()` from `core/config/paths` (was hardcoded `process.cwd()/data`). Test suite rewritten around immediate-persist semantics; rotation tests use dedicated small services. Full suite green (834).
+- [x] **3. Extract scheduler to its own bin.** New `src/extensions/scheduler/watch-cli.ts` + `bin/file-organizer-watch.mjs` with `add`/`remove`/`list` subcommands (replaces the old MCP watch tools as the management UX) and daemon mode as default. Handlers moved verbatim to `watch-manager.ts` (minus the in-process scheduler reload call). Core side: watch tools unregistered from `registry.ts`, all scheduler wiring deleted from `bootstrap.ts`, diagnostics check 7 now reads config only (no extension import). Dead files removed: `watch.tool.ts`, `tools/index.ts` barrel (zero importers). `package.json`: added `bin.file-organizer-watch`. Docs: API.md tool entries replaced by a note pointing at the bin; README has a "Scheduled organization" section. Scheduler's internal singletons are fine — dedicated process now. Smoke-tested: bin `list` works; core server lists 21 tools (was 24); full suite green.
+- [x] **4. Thread `ctx`.** `ToolHandler = (args, ctx?) => Promise<ToolResponse>`; `ctx = { config, history }` built fresh per request (`src/mcp/context.ts` → `createRequestContext()`); server passes it, handlers default to it so direct calls in tests keep working. Logger stays a plain util import — threading it bought nothing. `view-history` reads history via `ctx.history`.
+- [x] **5. Kill global* service singletons.** `globalCategorizerService`/`globalOrganizerService` deleted from barrel; categorize/organize/preview construct pure instances per request. `smartSuggestService` singleton (zero consumers, held a cache Map) deleted. **Scope call made with kriday:** custom rules now persist to user config (`customRules` field) instead of living in the singleton — set_custom_rules validates via a scratch instance and writes only valid rules; every request's CategorizerService loads them. This also flushed out a pre-existing bug: the Zod schema uses `filename_pattern` but the old code cast straight to `CustomRule` (`filenamePattern`) — filename patterns from set_custom_rules had never actually matched. Handler now normalizes snake→camel. New integration suite `tests/integration/tools/custom-rules.test.ts` covers persist→fresh-request-apply with an isolated config path (other suites hit the real user config in parallel workers — sharing it was racy). Also hardened `validateCategoryName` to reject empty names. Scheduler/system-organize always built their own instances without global rules — left at parity.
+- [x] **6. Registry DX polish.** Skipped the defineTool-consolidation rewrite, deliberately: the goal ("1 new file + 1 registry line") is already met — phase-2's schema collapse removed the other edits, and folding defs+handlers would still need dual exports for tests that import handlers directly. 21-file churn for zero behavior change fails the taste test. Instead: registry header now documents the add-a-tool convention and why auto-discovery is rejected.
+- [x] **7. Verify stateless.** `createServer()` builds a fresh `McpServer` per call and holds no mutable module state; `handleToolCall(name, args, ctx)` is pure routing; zero module-level service instances left in the core path (`tools/rollback.ts` singleton found in the audit and killed — per-request construction). Bonus fix: rollback manifests moved from `process.cwd()/.file-organizer-rollbacks` (another baked-cwd bug — undo broke on npx/global installs) to the platform config dir via `getRollbackDirectory()`, with guarded one-time migration of legacy manifests; test mode keeps cwd storage so suites never touch real home (caught 32 leaked test manifests in `~/.config/file-organizer-mcp/rollbacks/` from an earlier run — removed). Verified: build + lint + full suite (53/835) + security suite green; live stdio probe OK (initialize, tools/list ×21, tool call); watch bin `list` works.
+
+Phase-3 complete. Docs scrub (ARCHITECTURE.md diagram, README DX section, version bump) stays Phase-4 scope per plan. Salvaged stash docs live at `/tmp/opencode/stash-salvage/`.
+
+Cleanup notes:
+- Version string: TODO said v4.0.0 here but branch targets v5.0.0 — bump happens in Phase-4 scrub, one version story total.
+- `smart-suggest` + `system-organize` survive (decided in phase-2); they just lose their singleton.
 
 ## Phase-4 — Final scrub
 

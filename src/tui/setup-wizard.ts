@@ -206,7 +206,7 @@ function checkDependencies(): boolean {
   const packageRoot = getPackageRoot();
   const nodeModulesPath = path.join(packageRoot, "node_modules");
 
-  const criticalDeps = ["@modelcontextprotocol/sdk", "chalk", "node-cron"];
+  const criticalDeps = ["@modelcontextprotocol/server", "chalk", "node-cron"];
 
   for (const dep of criticalDeps) {
     const depPath = path.join(nodeModulesPath, dep);

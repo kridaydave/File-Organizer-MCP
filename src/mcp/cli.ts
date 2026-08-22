@@ -88,7 +88,7 @@ export function checkCriticalDependencies(): void {
     "node_modules",
   );
   const criticalDeps = [
-    "@modelcontextprotocol/sdk",
+    "@modelcontextprotocol/server",
     "chalk",
     "node-cron",
     "zod",

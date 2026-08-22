@@ -8,6 +8,7 @@ import fs from "fs";
 import { logger } from "../../utils/logger.js";
 import { isSubPath } from "../../utils/file-utils.js";
 import type { PrivacyMode } from "../../types.js";
+import type { CustomRule } from "../../core/types/categories.js";
 import { getUserConfigPath } from "./paths.js";
 import { isExternalVolumePath } from "./security.js";
 
@@ -18,6 +19,8 @@ export interface UserConfig {
   autoOrganize?: { enabled: boolean; schedule?: "hourly" | "daily" | "weekly"; };
   settings?: { maxScanDepth?: number; logAccess?: boolean; enablePathValidation?: boolean; allowCustomDirectories?: boolean; };
   rules?: Array<{ pattern: string; destination: string; overwrite?: boolean; }>;
+  /** Custom categorization rules (set via set_custom_rules); loaded by every request. */
+  customRules?: CustomRule[];
   watchList?: WatchConfig[];
   historyLogging?: { enabled?: boolean; maxFileSizeMB?: number; keepRotatedFiles?: number; privacyMode?: PrivacyMode; };
 }

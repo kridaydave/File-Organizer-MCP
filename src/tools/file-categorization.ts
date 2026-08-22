@@ -19,8 +19,12 @@ import type {
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
-import { globalCategorizerService } from "../services/index.js";
+import { CategorizerService } from "../services/categorizer.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
+import {
+  createRequestContext,
+  type ToolContext,
+} from "../mcp/context.js";
 
 export const categorizeByTypeToolDefinition: ToolDefinition = {
   name: "file_organizer_categorize_by_type",
@@ -63,6 +67,7 @@ export const categorizeByTypeToolDefinition: ToolDefinition = {
 
 export async function handleCategorizeByType(
   args: Record<string, unknown>,
+  ctx: ToolContext = createRequestContext(),
 ): Promise<ToolResponse> {
   try {
     const parsed = CategorizeByTypeInputSchema.safeParse(args);
@@ -85,8 +90,8 @@ export async function handleCategorizeByType(
     } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
     const scanner = new FileScannerService();
-    // Use global categorizer which has content analyzer and metadata cache
-    const categorizer = globalCategorizerService;
+    // Categorizer is pure — construct per request from config rules.
+    const categorizer = new CategorizerService(ctx.config.customRules ?? []);
 
     const files = await scanner.getAllFiles(validatedPath, include_subdirs);
 

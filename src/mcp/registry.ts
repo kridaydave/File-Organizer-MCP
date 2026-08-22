@@ -1,12 +1,13 @@
 /**
  * Tool Registry — single source of truth for TOOLS + handler map
  *
- * Imports every tool module, wraps via defineTool(), builds:
- *  - TOOLS: ToolDefinition[] for ListTools
- *  - handlerMap: Map<string, ToolHandler> for CallTool (replaces switch)
+ * Adding a tool = create src/tools/my-tool.ts exporting its
+ * ToolDefinition + handler (typed args, optional ToolContext), then add one
+ * import + one reg() entry here. No other file needs touching: schemas live
+ * in src/schemas/, and server.ts routes purely through this registry.
  *
- * Phase-1: explicit imports (no magic). Phase-2 can switch to
- * import.meta.glob auto-discovery — DX stays identical.
+ * Deliberately explicit (no fs auto-discovery): import.meta.glob is Vite-only,
+ * fs-scanning dist/ at runtime trades a one-line edit for invisible wiring.
  */
 
 import { defineTool, type ToolHandler } from "./defineTool.js";
@@ -86,14 +87,6 @@ import {
   handleBatchReadFiles,
 } from "../tools/batch-file-reader.js";
 import {
-  watchDirectoryToolDefinition,
-  handleWatchDirectory,
-  unwatchDirectoryToolDefinition,
-  handleUnwatchDirectory,
-  listWatchesToolDefinition,
-  handleListWatches,
-} from "../extensions/scheduler/watch.tool.js";
-import {
   fileReaderToolDefinition,
   handleReadFile,
 } from "../tools/file-reader.tool.js";
@@ -133,9 +126,6 @@ const entries = [
   reg(undoLastOperationToolDefinition, handleUndoLastOperation),
   reg(batchRenameToolDefinition, handleBatchRename),
   reg(inspectMetadataToolDefinition, handleInspectMetadata),
-  reg(watchDirectoryToolDefinition, handleWatchDirectory),
-  reg(unwatchDirectoryToolDefinition, handleUnwatchDirectory),
-  reg(listWatchesToolDefinition, handleListWatches),
   reg(fileReaderToolDefinition, handleReadFile),
   reg(viewHistoryToolDefinition, handleViewHistory),
 ];

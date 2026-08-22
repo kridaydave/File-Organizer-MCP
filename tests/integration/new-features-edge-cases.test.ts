@@ -31,15 +31,12 @@ describe("History Logger Edge Cases", () => {
     testDir = path.resolve("./test-history-edge-cases");
     historyLogger = new HistoryLoggerService({
       dataDir: testDir,
-      batchSize: 5,
-      batchTimeoutMs: 100,
     });
     await fs.rm(testDir, { recursive: true, force: true });
     await fs.mkdir(testDir, { recursive: true });
   });
 
   afterEach(async () => {
-    await historyLogger.flushAndClose();
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
@@ -64,7 +61,6 @@ describe("History Logger Edge Cases", () => {
         });
       }
 
-      await historyLogger.flushAndClose();
 
       const result = await historyLogger.getHistory();
       expect(result.entries).toHaveLength(unicodeDetails.length);
@@ -86,7 +82,6 @@ describe("History Logger Edge Cases", () => {
         },
       });
 
-      await historyLogger.flushAndClose();
 
       const result = await historyLogger.getHistory();
       expect(result.entries).toHaveLength(1);
@@ -106,7 +101,6 @@ describe("History Logger Edge Cases", () => {
         durationMs: 100,
       });
 
-      await historyLogger.flushAndClose();
 
       const result = await historyLogger.getHistory();
       expect(result.entries).toHaveLength(1);
@@ -124,7 +118,6 @@ describe("History Logger Edge Cases", () => {
         details: longDetails,
       });
 
-      await historyLogger.flushAndClose();
 
       const result = await historyLogger.getHistory();
       expect(result.entries).toHaveLength(1);
@@ -136,18 +129,12 @@ describe("History Logger Edge Cases", () => {
     it("should handle concurrent log entries with lock mechanism", async () => {
       const logger1 = new HistoryLoggerService({
         dataDir: testDir,
-        batchSize: 1,
-        batchTimeoutMs: 10,
       });
       const logger2 = new HistoryLoggerService({
         dataDir: testDir,
-        batchSize: 1,
-        batchTimeoutMs: 10,
       });
       const logger3 = new HistoryLoggerService({
         dataDir: testDir,
-        batchSize: 1,
-        batchTimeoutMs: 10,
       });
 
       await Promise.all([
@@ -171,12 +158,6 @@ describe("History Logger Edge Cases", () => {
         }),
       ]);
 
-      await Promise.all([
-        logger1.flushAndClose(),
-        logger2.flushAndClose(),
-        logger3.flushAndClose(),
-      ]);
-
       const result = await historyLogger.getHistory();
       expect(result.entries.length).toBeGreaterThanOrEqual(1);
     });
@@ -196,7 +177,6 @@ describe("History Logger Edge Cases", () => {
       }
 
       await Promise.all(promises);
-      await historyLogger.flushAndClose();
 
       const result = await historyLogger.getHistory();
       expect(result.entries.length).toBe(100);
@@ -211,7 +191,6 @@ describe("History Logger Edge Cases", () => {
         status: "success",
         durationMs: 100,
       });
-      await historyLogger.flushAndClose();
 
       const historyFile = historyLogger.getHistoryFilePath();
       await fs.unlink(historyFile);
@@ -231,7 +210,6 @@ describe("History Logger Edge Cases", () => {
         status: "success",
         durationMs: 100,
       });
-      await historyLogger.flushAndClose();
 
       const fileExists = await fs
         .access(historyFile)
@@ -269,7 +247,6 @@ describe("History Logger Edge Cases", () => {
         status: "success",
         durationMs: 100,
       });
-      await historyLogger.flushAndClose();
 
       expect(callCount).toBeGreaterThanOrEqual(1);
       (fs as any).appendFile = originalAppendFile;

@@ -8,12 +8,13 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse, CustomRule } from "../types.js";
 import { CATEGORIES } from "../constants.js";
+import { CategorizerService } from "../services/categorizer.service.js";
+import { updateUserConfig } from "../config.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import {
   GetCategoriesInputSchema,
   SetCustomRulesInputSchema,
 } from "../schemas/system.js";
-import { globalCategorizerService } from "../services/index.js";
 
 export {
   GetCategoriesInputSchema,
@@ -87,7 +88,7 @@ export async function handleGetCategories(
       : "markdown";
 
     const categories = { ...CATEGORIES }; // Static defaults
-    // In future we might fetch dynamic categories from globalCategorizerService if needed
+    // Custom rules affect categorization results, not the category list.
 
     if (response_format === "json") {
       return {
@@ -127,12 +128,26 @@ export async function handleSetCustomRules(
 
     const { rules } = parsed.data;
 
-    // Apply to singleton
-    const appliedCount = globalCategorizerService.setCustomRules(
-      rules as CustomRule[],
+    // Schema is snake_case on the wire; CustomRule is camelCase internally.
+    // (The old singleton path cast these straight through, so filename
+    // patterns from this tool never actually matched.)
+    const normalized: CustomRule[] = rules.map((rule) => ({
+      category: rule.category,
+      ...(rule.extensions !== undefined && { extensions: rule.extensions }),
+      ...(rule.filename_pattern !== undefined && {
+        filenamePattern: rule.filename_pattern,
+      }),
+      priority: rule.priority,
+    }));
+
+    // Validate against a scratch instance, then persist the valid subset so
+    // every future request loads them from config (stateless, survives restarts).
+    const probe = new CategorizerService();
+    const validRules = normalized.filter(
+      (rule) => probe.setCustomRules([rule]) === 1,
     );
 
-    if (appliedCount === 0) {
+    if (validRules.length === 0) {
       return {
         content: [
           { type: "text", text: "No valid Custom Rules were applied." },
@@ -140,11 +155,13 @@ export async function handleSetCustomRules(
       };
     }
 
+    updateUserConfig({ customRules: validRules });
+
     return {
       content: [
         {
           type: "text",
-          text: `✅ Applied ${appliedCount} custom organization rules`,
+          text: `✅ Applied ${validRules.length} custom organization rules`,
         },
       ],
     };

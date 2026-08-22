@@ -585,5 +585,3 @@ export class SmartSuggestService {
     return quickWins;
   }
 }
-
-export const smartSuggestService = new SmartSuggestService();

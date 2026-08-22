@@ -101,7 +101,6 @@ You can ask the assistant things like:
 - `file_organizer_get_categories`
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`
-- `file_organizer_list_watches`
 - `file_organizer_organize_files`
 - `file_organizer_organize_music`
 - `file_organizer_organize_photos`
@@ -112,11 +111,23 @@ You can ask the assistant things like:
 - `file_organizer_smart_suggest`
 - `file_organizer_system_organize`
 - `file_organizer_undo_last_operation`
-- `file_organizer_unwatch_directory`
 - `file_organizer_view_history`
-- `file_organizer_watch_directory`
 
 For parameters and return shapes, see [API.md](API.md).
+
+### Scheduled organization (separate process)
+
+The stdio MCP server stays stateless — cron-based watching runs as its own
+process:
+
+```bash
+file-organizer-watch add ~/Downloads "0 10 * * *"   # daily at 10am
+file-organizer-watch list
+file-organizer-watch                                # start the daemon
+```
+
+Watches are stored in the shared user config, so `add`/`remove` work even
+while the daemon is running (restart it to pick up changes).
 
 ---
 
@@ -312,7 +323,7 @@ For a simple hourly, daily, or weekly schedule:
 }
 ```
 
-For anything more granular, use the `file_organizer_watch_directory` tool.
+For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 
 ### Defenses
 

@@ -17,9 +17,11 @@
  */
 
 import type { ToolDefinition, ToolResponse } from "./types.js";
+import type { ToolContext } from "./context.js";
 
 export type ToolHandler = (
   args: Record<string, unknown>,
+  ctx?: ToolContext,
 ) => Promise<ToolResponse>;
 
 export interface DefineToolOptions {

@@ -1,145 +1,28 @@
 /**
  * File Organizer MCP Server v3.5.0
- * Watch Directory Tool
+ * Watch Manager
  *
- * @module tools/watch
+ * Watch-list management extracted from the former watch tools. The stdio MCP
+ * server no longer registers watch tools — scheduled organization lives in
+ * its own process (`bin/file-organizer-watch.mjs`). These functions back that
+ * CLI's add/remove/list subcommands and keep the same result shapes the old
+ * tool handlers returned, so tests re-point without churn.
  */
 
 import cron from "node-cron";
-import type { ToolDefinition, ToolResponse } from "../../types.js";
+import type { ToolResponse } from "../../types.js";
 import { validateStrictPath } from "../../services/path-validator.service.js";
 import {
   loadUserConfig,
   updateUserConfig,
   type WatchConfig,
 } from "../../config.js";
-import { reloadAutoOrganizeScheduler } from "./auto-organize.service.js";
 import { createErrorResponse } from "../../utils/error-handler.js";
 import {
   WatchDirectoryInputSchema,
   UnwatchDirectoryInputSchema,
   ListWatchesInputSchema,
-  type WatchDirectoryInput,
-  type UnwatchDirectoryInput,
-  type ListWatchesInput,
 } from "./watch.schemas.js";
-
-export {
-  WatchDirectoryInputSchema,
-  UnwatchDirectoryInputSchema,
-  ListWatchesInputSchema,
-} from "./watch.schemas.js";
-export type {
-  WatchDirectoryInput,
-  UnwatchDirectoryInput,
-  ListWatchesInput,
-} from "./watch.schemas.js";
-export const watchDirectoryToolDefinition: ToolDefinition = {
-  name: "file_organizer_watch_directory",
-  title: "Watch Directory",
-  description:
-    "Add a directory to the watch list with a cron-based schedule for automatic organization. " +
-    'When the user specifies a schedule in natural language (e.g., "every day at 10am"), ' +
-    'convert it to a standard cron expression. Cron format: "minute hour day month weekday". ' +
-    'Common conversions: "every day at 10am" → "0 10 * * *", "every 30 minutes" → "*/30 * * * *", ' +
-    '"every Monday at 9am" → "0 9 * * 1", "every hour" → "0 * * * *".',
-  inputSchema: {
-    type: "object",
-    properties: {
-      directory: {
-        type: "string",
-        description:
-          'Full path to the directory to watch (e.g., "C:\\Users\\John\\Desktop\\Work-Notes")',
-      },
-      schedule: {
-        type: "string",
-        description:
-          'Cron expression. Convert natural language to cron: "every day at 10am" → "0 10 * * *", "every 30 minutes" → "*/30 * * * *", "every Monday at 9am" → "0 9 * * 1", "every hour" → "0 * * * *", "daily at midnight" → "0 0 * * *"',
-      },
-      auto_organize: {
-        type: "boolean",
-        description: "Enable auto-organization",
-        default: true,
-      },
-      response_format: {
-        type: "string",
-        enum: ["json", "markdown"],
-        default: "markdown",
-      },
-      min_file_age_minutes: {
-        type: "number",
-        description: "Minimum file age in minutes before organizing",
-        minimum: 0,
-      },
-      max_files_per_run: {
-        type: "number",
-        description: "Maximum files to process per run",
-        minimum: 1,
-      },
-    },
-    required: ["directory", "schedule"],
-  },
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-};
-
-/**
- * Remove a directory from the watch list
- */
-export const unwatchDirectoryToolDefinition: ToolDefinition = {
-  name: "file_organizer_unwatch_directory",
-  title: "Unwatch Directory",
-  description: "Remove a directory from the watch list.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      directory: { type: "string", description: "Full path to the directory" },
-      response_format: {
-        type: "string",
-        enum: ["json", "markdown"],
-        default: "markdown",
-      },
-    },
-    required: ["directory"],
-  },
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-};
-
-/**
- * List all watched directories
- */
-export const listWatchesToolDefinition: ToolDefinition = {
-  name: "file_organizer_list_watches",
-  title: "List Watched Directories",
-  description:
-    "List all directories currently being watched with their schedules.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      response_format: {
-        type: "string",
-        enum: ["json", "markdown"],
-        default: "markdown",
-      },
-    },
-    required: [],
-  },
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-};
 
 export async function handleWatchDirectory(
   args: Record<string, unknown>,
@@ -213,9 +96,6 @@ export async function handleWatchDirectory(
     // Save config
     updateUserConfig({ watchList });
 
-    // Reload scheduler to pick up changes
-    reloadAutoOrganizeScheduler();
-
     const action = existingIndex >= 0 ? "Updated" : "Added";
     const result = {
       success: true,
@@ -239,7 +119,7 @@ export async function handleWatchDirectory(
 ${min_file_age_minutes !== undefined ? `**Min File Age:** ${min_file_age_minutes} minutes` : ""}
 ${max_files_per_run !== undefined ? `**Max Files Per Run:** ${max_files_per_run}` : ""}
 
-The scheduler has been reloaded with the new configuration.`;
+Run \`file-organizer-watch\` to start (or restart) the watcher with this configuration.`;
 
     return {
       content: [{ type: "text", text: markdown }],
@@ -290,9 +170,6 @@ export async function handleUnwatchDirectory(
     // Save config
     updateUserConfig({ watchList });
 
-    // Reload scheduler
-    reloadAutoOrganizeScheduler();
-
     const result = {
       success: true,
       action: "Removed",
@@ -310,7 +187,7 @@ export async function handleUnwatchDirectory(
       content: [
         {
           type: "text",
-          text: `Removed "${directory}" from watch list. The scheduler has been updated.`,
+          text: `Removed "${directory}" from watch list.`,
         },
       ],
     };
@@ -362,7 +239,7 @@ export async function handleListWatches(
         content: [
           {
             type: "text",
-            text: "No directories are currently being watched. Use `file_organizer_watch_directory` to add one.",
+            text: "No directories are currently being watched. Use `file-organizer-watch add <directory> <cron>` to add one.",
           },
         ],
       };

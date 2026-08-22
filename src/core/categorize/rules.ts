@@ -9,6 +9,11 @@ import { logger } from "../../utils/logger.js";
  * Validate category name for security
  */
 export function validateCategoryName(name: string): void {
+  // 0. Reject empty/whitespace names
+  if (!name || !name.trim()) {
+    throw new Error("Category name is empty");
+  }
+
   // 1. Block HTML/JS (XSS)
   if (/<[^>]*>|javascript:/i.test(name)) {
     throw new Error("Category name contains HTML/JS patterns");

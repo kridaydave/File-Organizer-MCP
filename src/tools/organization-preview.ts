@@ -13,10 +13,14 @@ import type {
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
-import { globalOrganizerService } from "../services/index.js";
+import { OrganizerService } from "../core/organize/organizer.js";
+import { CategorizerService } from "../services/categorizer.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { PreviewOrganizationInputSchema } from "../schemas/organize.js";
-import { loadUserConfig } from "../config.js";
+import {
+  createRequestContext,
+  type ToolContext,
+} from "../mcp/context.js";
 
 export interface MoveItem {
   source: string;
@@ -65,16 +69,9 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
   },
 };
 
-/**
- * Get conflict strategy from user config or return default
- */
-function getConflictStrategy(): "rename" | "skip" | "overwrite" {
-  const userConfig = loadUserConfig();
-  return userConfig.conflictStrategy ?? "rename";
-}
-
 export async function handlePreviewOrganization(
   args: Record<string, unknown>,
+  ctx: ToolContext = createRequestContext(),
 ): Promise<ToolResponse> {
   try {
     const parsed = PreviewOrganizationInputSchema.safeParse(args);
@@ -98,11 +95,13 @@ export async function handlePreviewOrganization(
     const validatedPath = await validateStrictPath(directory);
 
     const scanner = new FileScannerService();
-    const organizer = globalOrganizerService;
+    const organizer = new OrganizerService(
+      new CategorizerService(ctx.config.customRules ?? []),
+    );
 
     // Use provided strategy, or fall back to config, or default to 'rename'
     const effectiveConflictStrategy =
-      conflict_strategy ?? getConflictStrategy();
+      conflict_strategy ?? ctx.config.conflictStrategy ?? "rename";
 
     const files = await scanner.getAllFiles(validatedPath, false);
     const plan = await organizer.generateOrganizationPlan(

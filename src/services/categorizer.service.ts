@@ -36,12 +36,15 @@ export class CategorizerService {
   private pathValidator: PathValidatorService;
   private contentCache: ContentAnalysisCache;
 
-  constructor() {
+  constructor(customRules: CustomRule[] = []) {
     this.pathValidator = new PathValidatorService();
     this.contentCache = new ContentAnalysisCache(
       (filePath) => this.getCategoryByContent(filePath),
       (name) => this.getCategoryByExtension(name),
     );
+    if (customRules.length > 0) {
+      this.setCustomRules(customRules);
+    }
   }
 
   /**

@@ -7,10 +7,12 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
-import { historyLogger } from "../services/history-logger.service.js";
 import { ViewHistoryInputSchema } from "../schemas/system.js";
-import { loadUserConfig } from "../config.js";
 import { createErrorResponse } from "../utils/error-handler.js";
+import {
+  createRequestContext,
+  type ToolContext,
+} from "../mcp/context.js";
 
 export type ViewHistoryInput = z.infer<typeof ViewHistoryInputSchema>;
 
@@ -76,6 +78,7 @@ export const viewHistoryToolDefinition: ToolDefinition = {
 
 export async function handleViewHistory(
   args: Record<string, unknown>,
+  ctx: ToolContext = createRequestContext(),
 ): Promise<ToolResponse> {
   try {
     const parsed = ViewHistoryInputSchema.safeParse(args);
@@ -101,11 +104,10 @@ export async function handleViewHistory(
       response_format,
     } = parsed.data;
 
-    const userConfig = loadUserConfig();
     const effectivePrivacyMode =
-      privacy_mode ?? userConfig.historyLogging?.privacyMode ?? "full";
+      privacy_mode ?? ctx.config.historyLogging?.privacyMode ?? "full";
 
-    const result = await historyLogger.getHistory({
+    const result = await ctx.history.getHistory({
       limit,
       startDate: since,
       endDate: until,
