@@ -94,6 +94,7 @@ You can ask the assistant things like:
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
+- `file_organizer_batch_rename`
 - `file_organizer_categorize_by_type`
 - `file_organizer_delete_duplicates`
 - `file_organizer_find_duplicate_files`
@@ -362,9 +363,11 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 
 ## Architecture
 
-The server runs a screen-then-enrich pipeline: an MCP protocol handler passes every request through security screening (path validation, sensitive-file detection, rate limiting), then metadata enrichment (EXIF, ID3, document properties), then the service layer that performs the operation. All file operations go through validated paths and support rollback.
+The server is stateless: each JSON-RPC request gets a fresh context (`config`, history logger) routed through an explicit tool registry into pure service modules under `src/core/`. The pipeline is `scan → categorize → plan → move`, every path passes 8-layer validation before any `fs` call, and all side effects are file-backed (history, rollback manifests), so nothing survives a restart except what you can undo.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full diagram and design notes.
+Scheduled organization runs as a separate process (`file-organizer-watch`) so the stdio server stays request/response.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram and design notes.
 
 ---
 
@@ -390,6 +393,13 @@ npm install
 npm run build
 npm test
 ```
+
+### Adding a tool: one file, one line
+
+1. Create `src/tools/my-tool.ts` exporting a `ToolDefinition` (name, Zod input schema, annotations, formats) and its handler.
+2. Add an import and one `reg()` entry in `src/mcp/registry.ts`.
+
+That's it. The registry is the single source of truth: the server registers from it, routing is pure, and no other file changes. Schemas shared across tools live in `src/schemas/` (`common`, `scan`, `organize`, `system`). If your tool takes a path, it goes through `validateStrictPath` before touching `fs`, and errors go through `sanitizeErrorMessage`. See [ARCHITECTURE.md](ARCHITECTURE.md) for the contract details.
 
 Report bugs and feature requests on [GitHub Issues](https://github.com/kridaydave/File-Organizer-MCP/issues). For a security vulnerability, email technocratix902@gmail.com.
 
