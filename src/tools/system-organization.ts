@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * System Organization Tool
  *
  * Organizes files into OS-standard system directories
@@ -10,11 +10,11 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
-import { RollbackService } from "../services/rollback.service.js";
+import { RollbackService } from "../core/organize/rollback.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { SystemOrganizeService } from "../services/system-organize.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { SystemOrganizationInputSchema } from "../schemas/system.schemas.js";
+import { SystemOrganizationInputSchema } from "../schemas/organize.js";
 import { logger } from "../utils/logger.js";
 
 const VALID_SOURCE_DIRS = ["Downloads", "Desktop", "Temp"];

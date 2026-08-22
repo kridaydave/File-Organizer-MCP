@@ -59,7 +59,7 @@ jest.unstable_mockModule("piexifjs", () => ({
   ImageIFD: {},
 }));
 
-jest.unstable_mockModule("../../../src/services/metadata.service.js", () => ({
+jest.unstable_mockModule("../../../src/services/metadata/service.js", () => ({
   MetadataService: jest.fn().mockImplementation(() => ({
     extractMetadata: mockExtractMetadata,
   })),

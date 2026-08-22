@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import fs from "fs/promises";
 import path from "path";
-import { OrganizerService } from "../../../src/services/organizer.service.js";
-import { FileScannerService } from "../../../src/services/file-scanner.service.js";
+import { OrganizerService } from "../../../src/core/organize/organizer.js";
+import { FileScannerService } from "../../../src/core/scan/scanner.js";
 
 describe("Conflict Resolution Strategies", () => {
   let testDir: string;

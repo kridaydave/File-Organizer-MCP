@@ -13,7 +13,6 @@ import {
   getUserConfigPath,
   UserConfig,
 } from "../config.js";
-import { getAutoOrganizeScheduler } from "../services/auto-organize.service.js";
 
 // Try to import chalk, fallback if not available
 let chalk: {
@@ -581,63 +580,43 @@ async function checkClaudeDesktopConfig(): Promise<DiagnosticResult> {
 }
 
 /**
- * Check 7: Auto-organize scheduler status
+ * Check 7: Watch configuration
+ *
+ * The scheduler runs as its own process (file-organizer-watch); diagnostics
+ * only inspects the shared config, never the watcher itself.
  */
 async function checkAutoOrganizeScheduler(): Promise<DiagnosticResult> {
   try {
-    const scheduler = getAutoOrganizeScheduler();
+    const config = loadUserConfig();
+    const watchList = config.watchList ?? [];
 
-    if (!scheduler) {
+    if (watchList.length === 0) {
       return {
-        name: "Auto-Organize Scheduler",
+        name: "Watch Configuration",
         success: true,
-        message: "⚠ Not initialized",
-        details: ["Scheduler not created - will be created on server start"],
-      };
-    }
-
-    const status = scheduler.getStatus();
-
-    if (!status.active) {
-      const config = loadUserConfig();
-      const hasWatchList = config.watchList && config.watchList.length > 0;
-
-      if (!hasWatchList) {
-        return {
-          name: "Auto-Organize Scheduler",
-          success: true,
-          message: "⚠ No directories configured",
-          details: [
-            "Auto-organize is not monitoring any directories",
-            "Run: npx file-organizer-mcp --setup",
-          ],
-        };
-      }
-
-      return {
-        name: "Auto-Organize Scheduler",
-        success: false,
-        message: "✗ Inactive but has configuration",
-        fix: "Check scheduler logs or restart the server",
-        details: [`Configured tasks: ${config.watchList?.length || 0}`],
+        message: "⚠ No directories configured",
+        details: [
+          "Scheduled organization is not configured",
+          'Add a watch: file-organizer-watch add <directory> "<cron>"',
+        ],
       };
     }
 
     return {
-      name: "Auto-Organize Scheduler",
+      name: "Watch Configuration",
       success: true,
-      message: `✓ Active (${status.taskCount} task${status.taskCount !== 1 ? "s" : ""})`,
-      details:
-        status.watchedDirectories.length > 0
-          ? [`Watching: ${status.watchedDirectories.join(", ")}`]
-          : undefined,
+      message: `✓ Configured (${watchList.length} task${watchList.length !== 1 ? "s" : ""})`,
+      details: [
+        `Watching: ${watchList.map((w) => w.directory).join(", ")}`,
+        "Start the watcher: file-organizer-watch",
+      ],
     };
   } catch (error) {
     return {
-      name: "Auto-Organize Scheduler",
+      name: "Watch Configuration",
       success: false,
-      message: `Error checking scheduler: ${(error as Error).message}`,
-      fix: "Restart the server or check configuration",
+      message: `Error checking watch config: ${(error as Error).message}`,
+      fix: "Check the config file or re-run setup",
     };
   }
 }

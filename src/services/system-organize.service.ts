@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * System Organize Service
  *
  * Handles organizing files from system directories (Downloads, Desktop, Temp)

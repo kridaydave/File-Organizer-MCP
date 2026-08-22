@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * categorize_by_type Tool
  *
  * @module tools/file-categorization
@@ -8,9 +8,9 @@
 import {
   CategorizeByTypeInputSchema,
   type CategorizeByTypeInput,
-} from "../schemas/scan.schemas.js";
-export { CategorizeByTypeInputSchema } from "../schemas/scan.schemas.js";
-export type { CategorizeByTypeInput } from "../schemas/scan.schemas.js";
+} from "../schemas/scan.js";
+export { CategorizeByTypeInputSchema } from "../schemas/scan.js";
+export type { CategorizeByTypeInput } from "../schemas/scan.js";
 import type {
   ToolDefinition,
   ToolResponse,
@@ -18,9 +18,13 @@ import type {
   CategoryName,
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
-import { globalCategorizerService } from "../services/index.js";
+import { FileScannerService } from "../core/scan/scanner.js";
+import { CategorizerService } from "../services/categorizer.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
+import {
+  createRequestContext,
+  type ToolContext,
+} from "../mcp/context.js";
 
 export const categorizeByTypeToolDefinition: ToolDefinition = {
   name: "file_organizer_categorize_by_type",
@@ -63,6 +67,7 @@ export const categorizeByTypeToolDefinition: ToolDefinition = {
 
 export async function handleCategorizeByType(
   args: Record<string, unknown>,
+  ctx: ToolContext = createRequestContext(),
 ): Promise<ToolResponse> {
   try {
     const parsed = CategorizeByTypeInputSchema.safeParse(args);
@@ -85,8 +90,8 @@ export async function handleCategorizeByType(
     } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
     const scanner = new FileScannerService();
-    // Use global categorizer which has content analyzer and metadata cache
-    const categorizer = globalCategorizerService;
+    // Categorizer is pure — construct per request from config rules.
+    const categorizer = new CategorizerService(ctx.config.customRules ?? []);
 
     const files = await scanner.getAllFiles(validatedPath, include_subdirs);
 

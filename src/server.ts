@@ -1,43 +1,13 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Server Initialization
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { McpServer, fromJsonSchema } from "@modelcontextprotocol/server";
+import type { JsonSchemaType } from "@modelcontextprotocol/server";
 import { CONFIG } from "./config.js";
-import {
-  TOOLS,
-  handleListFiles,
-  handleScanDirectory,
-  handleCategorizeByType,
-  handleFindLargestFiles,
-  handleFindDuplicateFiles,
-  handleOrganizeFiles,
-  handlePreviewOrganization,
-  handleGetCategories,
-  handleSetCustomRules,
-  handleAnalyzeDuplicates,
-  handleDeleteDuplicates,
-  handleUndoLastOperation,
-  handleBatchRename,
-  handleInspectMetadata,
-  handleWatchDirectory,
-  handleUnwatchDirectory,
-  handleListWatches,
-  handleReadFile,
-  handleOrganizeMusic,
-  handleOrganizePhotos,
-  handleOrganizeByContent,
-  handleOrganizeSmart,
-  handleSystemOrganization,
-  handleBatchReadFiles,
-  handleViewHistory,
-  handleSmartSuggest,
-} from "./tools/index.js";
+import { TOOLS, getToolHandler } from "./mcp/registry.js";
+import { createRequestContext, type ToolContext } from "./mcp/context.js";
 import { sanitizeErrorMessage } from "./utils/error-handler.js";
 import { logger } from "./utils/logger.js";
 
@@ -47,10 +17,17 @@ interface MCPToolResponse {
 }
 
 /**
+ * How long a `tools/list` or `server/discover` result may be cached by the
+ * client. The tool list only changes on server restart, so an hour is
+ * conservative for the 2026-07-28 protocol's `ttlMs` field.
+ */
+const CACHEABLE_LIST_TTL_MS = 60 * 60 * 1000;
+
+/**
  * Create and configure the MCP server
  */
-export function createServer(): Server {
-  const server = new Server(
+export function createServer(): McpServer {
+  const server = new McpServer(
     {
       name: "file-organizer",
       version: CONFIG.VERSION,
@@ -59,75 +36,68 @@ export function createServer(): Server {
       capabilities: {
         tools: {},
       },
+      cacheHints: {
+        "tools/list": { ttlMs: CACHEABLE_LIST_TTL_MS, cacheScope: "private" },
+        "server/discover": {
+          ttlMs: CACHEABLE_LIST_TTL_MS,
+          cacheScope: "private",
+        },
+      },
     },
   );
 
-  // Register tool list handler
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: TOOLS,
-  }));
-
-  // Register tool call handler
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-
-    try {
-      const typedArgs = args && typeof args === "object" ? args : {};
-      return await handleToolCall(name, typedArgs);
-    } catch (error) {
-      const message =
-        error instanceof Error ? sanitizeErrorMessage(error) : "Unknown error";
-      return {
-        content: [{ type: "text" as const, text: `Error: ${message}` }],
-      };
-    }
-  });
+  // Register every tool from the shared registry. Input schemas are plain
+  // JSON Schema; fromJsonSchema converts them so tools/list output stays
+  // identical to before.
+  for (const tool of TOOLS) {
+    server.registerTool(
+      tool.name,
+      {
+        title: tool.title,
+        description: tool.description,
+        inputSchema: fromJsonSchema(
+          tool.inputSchema as unknown as JsonSchemaType,
+        ),
+        annotations: tool.annotations,
+      },
+      async (args) => {
+        try {
+          return await handleToolCall(
+            tool.name,
+            (args ?? {}) as Record<string, unknown>,
+            createRequestContext(),
+          );
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? sanitizeErrorMessage(error)
+              : "Unknown error";
+          return {
+            content: [{ type: "text" as const, text: `Error: ${message}` }],
+            isError: true,
+          };
+        }
+      },
+    );
+  }
 
   return server;
 }
 
 /**
- * Route tool calls to appropriate handlers
- */
-import { RateLimiter } from "./services/security/rate-limiter.service.js";
-import { historyLogger } from "./services/history-logger.service.js";
-
-const rateLimiter = new RateLimiter();
-
-/**
- * Route tool calls to appropriate handlers
+ * Route tool calls via registry lookup.
+ * Audit + history wrapper stays data-driven.
  */
 async function handleToolCall(
   name: string,
   args: Record<string, unknown>,
+  ctx: ToolContext,
 ): Promise<MCPToolResponse> {
-  // Apply Rate Limiter to heavy scanning tools
-  if (
-    name.includes("scan") ||
-    name.includes("list_files") ||
-    name.includes("find_largest") ||
-    name.includes("find_duplicate")
-  ) {
-    const limit = rateLimiter.checkLimit("scan_operations");
-    if (!limit.allowed) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Rate limit exceeded. Please wait ${limit.resetIn} seconds.`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  // Logging Wrapper
   const startTime = Date.now();
   const logEntry = {
     timestamp: new Date().toISOString(),
     tool: name,
-    args: args,
+    args,
     success: false,
     durationMs: 0,
     result: undefined as unknown,
@@ -137,94 +107,14 @@ async function handleToolCall(
   logger.info(`[AUDIT] Tool Call: ${name}`, { args });
 
   try {
-    let response: MCPToolResponse;
-    switch (name) {
-      case "file_organizer_list_files":
-        response = await handleListFiles(args);
-        break;
-      case "file_organizer_scan_directory":
-        response = await handleScanDirectory(args);
-        break;
-      case "file_organizer_categorize_by_type":
-        response = await handleCategorizeByType(args);
-        break;
-      case "file_organizer_find_largest_files":
-        response = await handleFindLargestFiles(args);
-        break;
-      case "file_organizer_find_duplicate_files":
-        response = await handleFindDuplicateFiles(args);
-        break;
-      case "file_organizer_organize_files":
-        response = await handleOrganizeFiles(args);
-        break;
-      case "file_organizer_preview_organization":
-        response = await handlePreviewOrganization(args);
-        break;
-      case "file_organizer_get_categories":
-        response = await handleGetCategories(args);
-        break;
-      case "file_organizer_set_custom_rules":
-        response = await handleSetCustomRules(args);
-        break;
-      case "file_organizer_analyze_duplicates":
-        response = await handleAnalyzeDuplicates(args);
-        break;
-      case "file_organizer_delete_duplicates":
-        response = await handleDeleteDuplicates(args);
-        break;
-      case "file_organizer_undo_last_operation":
-        response = await handleUndoLastOperation(args);
-        break;
-      case "file_organizer_batch_rename":
-        response = await handleBatchRename(args);
-        break;
-      case "file_organizer_inspect_metadata":
-        response = await handleInspectMetadata(args);
-        break;
-      case "file_organizer_watch_directory":
-        response = await handleWatchDirectory(args);
-        break;
-      case "file_organizer_unwatch_directory":
-        response = await handleUnwatchDirectory(args);
-        break;
-      case "file_organizer_view_history":
-        response = await handleViewHistory(args);
-        break;
-      case "file_organizer_list_watches":
-        response = await handleListWatches(args);
-        break;
-      case "file_organizer_read_file":
-        response = await handleReadFile(args);
-        break;
-      case "file_organizer_organize_music":
-        response = await handleOrganizeMusic(args);
-        break;
-      case "file_organizer_organize_photos":
-        response = await handleOrganizePhotos(args);
-        break;
-      case "file_organizer_organize_by_content":
-        response = await handleOrganizeByContent(args);
-        break;
-      case "file_organizer_organize_smart":
-        response = await handleOrganizeSmart(args);
-        break;
-      case "file_organizer_smart_suggest":
-        response = await handleSmartSuggest(args);
-        break;
-      case "file_organizer_system_organize":
-        response = await handleSystemOrganization(args);
-        break;
-      case "file_organizer_batch_read_files":
-        response = await handleBatchReadFiles(args);
-        break;
-      default:
-        throw new Error(`Unknown tool: ${name}`);
-    }
+    const handler = getToolHandler(name);
+    if (!handler) throw new Error(`Unknown tool: ${name}`);
+
+    const response = (await handler(args, ctx)) as MCPToolResponse;
 
     logEntry.success = true;
-    logEntry.result = response; // Be careful if response is huge
+    logEntry.result = response;
 
-    // Log simplified result for audit to avoid spamming console with huge file lists
     const summary = {
       ...response,
       content: response.content.map((c) => ({
@@ -242,11 +132,8 @@ async function handleToolCall(
     throw error;
   } finally {
     logEntry.durationMs = Date.now() - startTime;
-    // Could enable structured JSON logging to file here if Config allowed it
-
-    // Log operation to history (non-blocking, graceful failure)
     try {
-      await historyLogger.log({
+      await ctx.history.log({
         operation: name,
         source: "manual",
         status: logEntry.error ? "error" : "success",

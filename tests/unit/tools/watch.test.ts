@@ -8,7 +8,7 @@ import {
   WatchDirectoryInputSchema,
   UnwatchDirectoryInputSchema,
   ListWatchesInputSchema,
-} from '../../../src/tools/watch.tool.js';
+} from '../../../src/extensions/scheduler/watch.schemas.js';
 
 describe('Watch Tools Input Schemas', () => {
   describe('WatchDirectoryInputSchema', () => {
@@ -151,19 +151,21 @@ describe('Watch Tools Input Schemas', () => {
   });
 });
 
-describe('Watch Tool Definitions', () => {
-  it('should export watch tool with correct name', async () => {
-    const { watchDirectoryToolDefinition } = await import('../../../src/tools/watch.tool.js');
-    expect(watchDirectoryToolDefinition.name).toBe('file_organizer_watch_directory');
+describe('Watch tools are not part of the core MCP server', () => {
+  it('should not register watch tools in the core registry', async () => {
+    const { TOOLS } = await import('../../../src/mcp/registry.js');
+    const names = TOOLS.map((t) => t.name);
+
+    expect(names).not.toContain('file_organizer_watch_directory');
+    expect(names).not.toContain('file_organizer_unwatch_directory');
+    expect(names).not.toContain('file_organizer_list_watches');
   });
 
-  it('should export unwatch tool with correct name', async () => {
-    const { unwatchDirectoryToolDefinition } = await import('../../../src/tools/watch.tool.js');
-    expect(unwatchDirectoryToolDefinition.name).toBe('file_organizer_unwatch_directory');
-  });
+  it('should keep the watch manager handlers available for the standalone CLI', async () => {
+    const manager = await import('../../../src/extensions/scheduler/watch-manager.js');
 
-  it('should export list tool with correct name', async () => {
-    const { listWatchesToolDefinition } = await import('../../../src/tools/watch.tool.js');
-    expect(listWatchesToolDefinition.name).toBe('file_organizer_list_watches');
+    expect(typeof manager.handleWatchDirectory).toBe('function');
+    expect(typeof manager.handleUnwatchDirectory).toBe('function');
+    expect(typeof manager.handleListWatches).toBe('function');
   });
 });

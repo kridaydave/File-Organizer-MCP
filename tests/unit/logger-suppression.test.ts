@@ -4,8 +4,7 @@
  */
 
 import { logger } from "../../src/utils/logger.js";
-import { MetadataCacheService } from "../../src/services/metadata-cache.service.js";
-import { FileScannerService } from "../../src/services/file-scanner.service.js";
+import { FileScannerService } from "../../src/core/scan/scanner.js";
 import {
   suppressLoggerOutput,
   restoreLoggerOutput,
@@ -33,12 +32,12 @@ describe("Logger Suppression", () => {
   describe("Test Environment Detection", () => {
     it("should detect test environment and suppress logs by default", () => {
       // Create a service that would normally log initialization
-      const service = new MetadataCacheService();
+      const service = new FileScannerService();
 
       // Service should be created without any console output
       expect(
         consoleOutput.filter((output) =>
-          output.includes("MetadataCacheService initialized"),
+          output.includes("FileScannerService initialized"),
         ),
       ).toHaveLength(0);
     });
@@ -51,11 +50,11 @@ describe("Logger Suppression", () => {
       logger.info = mockLogger.info;
 
       try {
-        const service = new MetadataCacheService();
+        const service = new FileScannerService();
 
         // Logs should be captured in mock logger when test mode is disabled
         const initLogs = mockLogger.logs.filter((log) =>
-          log.message.includes("MetadataCacheService initialized"),
+          log.message.includes("FileScannerService initialized"),
         );
 
         expect(initLogs.length).toBeGreaterThanOrEqual(0);
@@ -67,11 +66,11 @@ describe("Logger Suppression", () => {
   });
 
   describe("Service Initialization Log Suppression", () => {
-    it("should suppress MetadataCacheService initialization logs", () => {
-      new MetadataCacheService();
+    it("should suppress FileScannerService initialization logs repeatedly", () => {
+      new FileScannerService();
 
       const initLogs = consoleOutput.filter((output) =>
-        output.includes("MetadataCacheService initialized"),
+        output.includes("FileScannerService initialized"),
       );
 
       expect(initLogs).toHaveLength(0);
@@ -90,13 +89,13 @@ describe("Logger Suppression", () => {
 
     it("should suppress multiple service initialization logs", () => {
       // Create multiple services that would normally log
-      new MetadataCacheService();
-      new MetadataCacheService({ cacheDir: "./test-cache" });
+      new FileScannerService();
+      new FileScannerService();
       new FileScannerService();
 
       const initLogs = consoleOutput.filter(
         (output) =>
-          output.includes("MetadataCacheService initialized") ||
+          output.includes("FileScannerService initialized") ||
           output.includes("FileScannerService"),
       );
 

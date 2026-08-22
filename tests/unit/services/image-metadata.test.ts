@@ -5,7 +5,7 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { ImageMetadataService } from "../../../src/services/image-metadata.service.js";
+import { ImageMetadataService } from "../../../src/services/metadata/image.js";
 
 describe("ImageMetadataService", () => {
   let service: ImageMetadataService;
@@ -77,41 +77,23 @@ describe("ImageMetadataService", () => {
     return filePath;
   }
 
+  // Builds a spec-correct EXIF APP1 payload.
+  // All offsets are relative to the TIFF header start (after the 6-byte
+  // "Exif\0\0" identifier), per the TIFF spec.
   function createEXIFData(options: any): Buffer {
-    // TIFF header (little endian)
-    // NOTE: The service has a bug where it uses tiffHeaderOffset as the IFD offset
-    // instead of reading it from the TIFF header. So IFD0 ends up at byte 24 (12+12).
-    // Structure: Exif identifier (6) + TIFF header (8) + padding (4) + IFD0
+    const exifIdentifier = Buffer.from("Exif\x00\x00", "ascii");
+
     const tiffHeader = Buffer.from([
-      0x45,
-      0x78,
-      0x69,
-      0x66,
-      0x00,
-      0x00, // Exif identifier (6 bytes)
-      0x49,
-      0x49, // Little endian
-      0x2a,
-      0x00, // TIFF marker
-      0x0c,
-      0x00,
-      0x00,
-      0x00, // IFD offset = 12 (to match service's expectation)
+      0x49, 0x49, // "II" little endian
+      0x2a, 0x00, // TIFF marker
+      0x08, 0x00, 0x00, 0x00, // IFD0 offset = 8 (right after the header)
     ]);
 
-    // Padding to align IFD0 where the service expects it (byte 24 from JPEG start = byte 12 from TIFF start)
-    const padding = Buffer.alloc(4, 0);
-
-    // IFD0 starts at offset 12 from TIFF header start (byte 24 from JPEG start)
-    // This matches what the service calculates: tiffHeaderOffset + tiffHeaderOffset = 12 + 12 = 24
-    const ifd0Offset = 12;
-
-    // First pass: determine all entries and calculate IFD0 size
     const entryInfos: Array<{
       tag: number;
       type: number;
       count: number;
-      value: number | Buffer;
+      value?: number;
       data?: Buffer;
     }> = [];
 
@@ -119,110 +101,65 @@ describe("ImageMetadataService", () => {
       entryInfos.push({ tag: 0x0100, type: 3, count: 1, value: options.width }); // ImageWidth
     }
     if (options.height) {
-      entryInfos.push({
-        tag: 0x0101,
-        type: 3,
-        count: 1,
-        value: options.height,
-      }); // ImageLength
+      entryInfos.push({ tag: 0x0101, type: 3, count: 1, value: options.height }); // ImageLength
     }
     if (options.cameraMake) {
-      const makeBuffer = Buffer.from(options.cameraMake + "\x00");
       entryInfos.push({
         tag: 0x010f,
         type: 2,
-        count: makeBuffer.length,
-        value: 0,
-        data: makeBuffer,
+        count: options.cameraMake.length + 1,
+        data: Buffer.from(options.cameraMake + "\x00", "ascii"),
       }); // Make
     }
     if (options.cameraModel) {
-      const modelBuffer = Buffer.from(options.cameraModel + "\x00");
       entryInfos.push({
         tag: 0x0110,
         type: 2,
-        count: modelBuffer.length,
-        value: 0,
-        data: modelBuffer,
+        count: options.cameraModel.length + 1,
+        data: Buffer.from(options.cameraModel + "\x00", "ascii"),
       }); // Model
     }
     if (options.orientation) {
-      entryInfos.push({
-        tag: 0x0112,
-        type: 3,
-        count: 1,
-        value: options.orientation,
-      }); // Orientation
+      entryInfos.push({ tag: 0x0112, type: 3, count: 1, value: options.orientation }); // Orientation
     }
 
-    // Calculate IFD0 size: count (2) + entries (N*12) + next IFD pointer (4)
     const numEntries = entryInfos.length + (options.gpsData ? 1 : 0);
+    const ifd0Offset = 8;
     const ifd0Size = 2 + numEntries * 12 + 4;
+    let externalOffset = ifd0Offset + ifd0Size;
 
-    // External data starts after IFD0
-    // Offsets in IFD entries are relative to TIFF header start
-    let externalDataOffset = ifd0Offset + ifd0Size;
-
-    // Build entries with correct offsets for external data
-    const entries: Buffer[] = [];
-    const externalData: Buffer[] = [];
-    let gpsIFDOffset = 0;
-
-    // NOTE: Service has bug where it reads offsets as absolute buffer positions
-    // So we need to add TIFF header offset (12) to all external data offsets
-    const tiffHeaderOffset = 12;
-
+    // Assign TIFF-relative offsets for out-of-line string data
     for (const info of entryInfos) {
       if (info.data) {
-        // External data (strings) - store offset to data (add tiffHeaderOffset for service bug)
-        entries.push(
-          createIFDEntry(
-            info.tag,
-            info.type,
-            info.count,
-            externalDataOffset + tiffHeaderOffset,
-          ),
-        );
-        externalData.push(info.data);
-        externalDataOffset += info.data.length;
-      } else {
-        // Inline value
-        entries.push(
-          createIFDEntry(info.tag, info.type, info.count, info.value as number),
-        );
+        info.value = externalOffset;
+        externalOffset += info.data.length;
       }
     }
 
-    // Add GPS IFD pointer if needed
-    if (options.gpsData) {
-      gpsIFDOffset = externalDataOffset;
-      entries.push(createIFDEntry(0x8825, 4, 1, gpsIFDOffset)); // GPS_IFD_POINTER
-      // Don't increment externalDataOffset here - GPS IFD is separate buffer
-    }
-
-    // IFD0 count
-    const ifdCount = Buffer.alloc(2);
-    ifdCount.writeUInt16LE(entries.length, 0);
-
-    // Next IFD pointer (0 = no more IFDs)
-    const nextIFD = Buffer.from([0x00, 0x00, 0x00, 0x00]);
-
-    // Build IFD0 buffer
-    const ifd0Buffer = Buffer.concat([ifdCount, ...entries, nextIFD]);
-
-    // Build GPS IFD if needed
+    // GPS IFD is placed after the string data; pointer tag points at it
     let gpsIFDBuffer: Buffer | null = null;
-    if (options.gpsData && gpsIFDOffset > 0) {
-      gpsIFDBuffer = createGPSIFD(options.gpsData, gpsIFDOffset);
+    if (options.gpsData) {
+      gpsIFDBuffer = createGPSIFD(options.gpsData, externalOffset);
+      entryInfos.push({ tag: 0x8825, type: 4, count: 1, value: externalOffset });
     }
 
-    // Combine all parts: TIFF header + padding + IFD0 + external data + GPS IFD
-    const parts: Buffer[] = [tiffHeader, padding, ifd0Buffer, ...externalData];
-    if (gpsIFDBuffer) {
-      parts.push(gpsIFDBuffer);
-    }
+    const ifdCount = Buffer.alloc(2);
+    ifdCount.writeUInt16LE(entryInfos.length, 0);
+    const nextIFD = Buffer.alloc(4);
 
-    return Buffer.concat(parts);
+    const entries = entryInfos.map((info) =>
+      createIFDEntry(info.tag, info.type, info.count, info.value ?? 0),
+    );
+
+    return Buffer.concat([
+      exifIdentifier,
+      tiffHeader,
+      ifdCount,
+      ...entries,
+      nextIFD,
+      ...entryInfos.filter((i) => i.data).map((i) => i.data as Buffer),
+      ...(gpsIFDBuffer ? [gpsIFDBuffer] : []),
+    ]);
   }
 
   function createGPSIFD(
@@ -232,73 +169,37 @@ describe("ImageMetadataService", () => {
     // Convert decimal coordinates to DMS (degrees, minutes, seconds)
     const latDMS = decimalToDMS(Math.abs(gpsData.lat));
     const lngDMS = decimalToDMS(Math.abs(gpsData.lng));
-
     const latRef = gpsData.lat >= 0 ? "N" : "S";
     const lngRef = gpsData.lng >= 0 ? "E" : "W";
 
-    // Calculate offsets for GPS data
-    // GPS IFD structure: count (2) + entries (4 * 12) + next IFD (4) = 54 bytes
+    // GPS IFD: count (2) + 4 entries (4 * 12) + next IFD (4); rationals follow
     const gpsIFDSize = 2 + 4 * 12 + 4;
-    const dataOffset = ifdOffset + gpsIFDSize;
+    const rationalBase = ifdOffset + gpsIFDSize;
 
-    // NOTE: The service has a bug where it doesn't add tiffHeaderOffset when reading
-    // data at offsets. It treats entry.valueOffset as absolute buffer offset.
-    // So we need to add 12 (TIFF header offset) to make it work.
-    const tiffHeaderOffset = 12;
+    // Inline ASCII value: byte 0 is the ref char, byte 1 is NUL
+    const refValue = (c: string) => c.charCodeAt(0);
 
-    // GPS entries (4 entries: LatRef, Lat, LngRef, Lng)
-    const gpsEntries: Buffer[] = [];
+    const gpsEntries = [
+      createIFDEntry(0x0001, 2, 2, refValue(latRef)), // GPSLatitudeRef
+      createIFDEntry(0x0002, 5, 3, rationalBase), // GPSLatitude -> rationals
+      createIFDEntry(0x0003, 2, 2, refValue(lngRef)), // GPSLongitudeRef
+      createIFDEntry(0x0004, 5, 3, rationalBase + 24), // GPSLongitude -> rationals
+    ];
 
-    // GPSLatitudeRef (0x0001) - ASCII, 2 bytes (including null)
-    // NOTE: Service reads value as big-endian, so we need to shift char code to high byte
-    const latRefValue = latRef.charCodeAt(0) << 24; // 'N' or 'S' in highest byte
-    gpsEntries.push(createIFDEntry(0x0001, 2, 2, latRefValue));
-
-    // GPSLatitude (0x0002) - RATIONAL, 3 values = 24 bytes
-    // Value is offset to rational array (add tiffHeaderOffset for service bug)
-    gpsEntries.push(
-      createIFDEntry(0x0002, 5, 3, dataOffset + tiffHeaderOffset),
-    );
-
-    // GPSLongitudeRef (0x0003) - ASCII, 2 bytes (including null)
-    // NOTE: Service reads value as big-endian, so we need to shift char code to high byte
-    const lngRefValue = lngRef.charCodeAt(0) << 24; // 'E' or 'W' in highest byte
-    gpsEntries.push(createIFDEntry(0x0003, 2, 2, lngRefValue));
-
-    // GPSLongitude (0x0004) - RATIONAL, 3 values = 24 bytes
-    // Value is offset to rational array (after latitude rationals, add tiffHeaderOffset)
-    gpsEntries.push(
-      createIFDEntry(0x0004, 5, 3, dataOffset + 24 + tiffHeaderOffset),
-    );
-
-    // GPS IFD count
     const gpsCount = Buffer.alloc(2);
     gpsCount.writeUInt16LE(4, 0);
+    const nextIFD = Buffer.alloc(4);
 
-    // Next IFD (0 = no more)
-    const nextIFD = Buffer.from([0x00, 0x00, 0x00, 0x00]);
-
-    // Build latitude rational array (3 rationals = 24 bytes)
-    const latRationals = Buffer.concat([
+    const rationals = Buffer.concat([
       createRational(latDMS.degrees, 1),
       createRational(latDMS.minutes, 1),
       createRational(Math.round(latDMS.seconds * 100), 100),
-    ]);
-
-    // Build longitude rational array (3 rationals = 24 bytes)
-    const lngRationals = Buffer.concat([
       createRational(lngDMS.degrees, 1),
       createRational(lngDMS.minutes, 1),
       createRational(Math.round(lngDMS.seconds * 100), 100),
     ]);
 
-    return Buffer.concat([
-      gpsCount,
-      ...gpsEntries,
-      nextIFD,
-      latRationals,
-      lngRationals,
-    ]);
+    return Buffer.concat([gpsCount, ...gpsEntries, nextIFD, rationals]);
   }
 
   function decimalToDMS(decimal: number): {
@@ -324,20 +225,13 @@ describe("ImageMetadataService", () => {
     tag: number,
     type: number,
     count: number,
-    value: number | Buffer,
+    value: number,
   ): Buffer {
     const entry = Buffer.alloc(12);
     entry.writeUInt16LE(tag, 0);
     entry.writeUInt16LE(type, 2);
     entry.writeUInt32LE(count, 4);
-
-    if (typeof value === "number") {
-      entry.writeUInt32LE(value, 8);
-    } else {
-      // For larger data, value is offset
-      entry.writeUInt32LE(value.length, 8);
-    }
-
+    entry.writeUInt32LE(value, 8);
     return entry;
   }
 

@@ -40,16 +40,15 @@ const EXCLUDED_DIRS = [
 ];
 const EXCLUDED_FILES = [".d.ts", ".test.ts", ".spec.ts"];
 
-// Files with known safe internal operations (already validated paths)
+// Files with known safe internal operations (already validated paths).
+// Matched by basename; keep in sync with the src/ layout when files move.
 const EXCLUDED_FILES_FROM_SECURITY_CHECKS = [
-  "text-extraction.service.ts",
-  "audio-metadata.service.ts",
-  "metadata-cache.service.ts",
-  "file-tracker.service.ts",
-  "rollback.service.ts",
+  "rollback.ts", // core/organize: manifestId is UUID-checked before join
+  "loader.ts", // core/config: startup read of the platform config file
+  "batch-file-reader.ts", // reads scanner output under an already-validated root
+  "system-organize.service.ts", // EXDEV fallback reads files under a validated source dir
   "scheduler-state.service.ts",
   "photo-organizer.service.ts",
-  "rate-limited-reader.ts",
   "config.ts",
   "diagnostics.ts",
   "client-detector.ts",
@@ -181,7 +180,8 @@ const securityRules: SecurityRule[] = [
     name: "Command Execution",
     description: "Child process execution can be dangerous with user input",
     severity: "CRITICAL",
-    pattern: /exec\s*\(|execSync\s*\(|spawn\s*\(/,
+    // bare exec( / child_process call only; skips RegExp.prototype.exec method calls
+    pattern: /(^|[^.\w])exec\s*\(|execSync\s*\(|spawn\s*\(/,
     excludePattern:
       /validateCommand|sanitizeCommand|hardcoded command|no user input|validated cwd/,
     message: "Command execution detected - verify input sanitization",

@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * find_duplicate_files Tool
  *
  * @module tools/file-duplicates
@@ -11,14 +11,14 @@ import type {
   DuplicateResult,
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
-import { HashCalculatorService } from "../services/hash-calculator.service.js";
+import { FileScannerService } from "../core/scan/scanner.js";
+import { HashCalculatorService } from "../core/hash/hasher.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import {
   FindDuplicateFilesInputSchema,
   type FindDuplicateFilesInput,
-} from "../schemas/scan.schemas.js";
+} from "../schemas/scan.js";
 
 export const findDuplicateFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_find_duplicate_files",

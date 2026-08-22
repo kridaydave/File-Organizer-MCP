@@ -1,8 +1,8 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { OrganizerService } from '../../src/services/organizer.service.js';
-import { FileScannerService } from '../../src/services/file-scanner.service.js';
+import { OrganizerService } from '../../src/core/organize/organizer.js';
+import { FileScannerService } from '../../src/core/scan/scanner.js';
 
 describe('OrganizerService Edge Cases', () => {
   let testDir: string;

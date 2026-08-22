@@ -8,7 +8,7 @@ import path from "path";
 import { createReadStream, createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
 import * as piexif from "piexifjs";
-import { MetadataService } from "./metadata.service.js";
+import { MetadataService } from "./metadata/service.js";
 import { PathValidatorService } from "./path-validator.service.js";
 import { logger } from "../utils/logger.js";
 import { isSubPath } from "../utils/file-utils.js";
@@ -375,14 +375,14 @@ export class PhotoOrganizerService {
 
         // Extract date with fallback chain
         if (metadata?.dateTaken) {
-          photoInfo.dateTaken = new Date(metadata.dateTaken);
+          photoInfo.dateTaken = new Date(metadata.dateTaken as string);
         } else if (config.useDateCreated) {
           photoInfo.dateTaken = file.created;
         }
 
         // Extract camera model
         if (metadata?.camera) {
-          photoInfo.cameraModel = metadata.camera;
+          photoInfo.cameraModel = metadata.camera as string;
         }
 
         // Check for GPS data (would need EXIF library with GPS support)

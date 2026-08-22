@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * duplicate-management Tool (Analyze and Delete Duplicates)
  *
  * @module tools/duplicate-management
@@ -7,23 +7,23 @@
 
 import type { ToolDefinition, ToolResponse } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
-import { DuplicateFinderService } from "../services/duplicate-finder.service.js";
+import { FileScannerService } from "../core/scan/scanner.js";
+import { DuplicateFinderService } from "../core/hash/duplicate-finder.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import {
   AnalyzeDuplicatesInputSchema,
   DeleteDuplicatesInputSchema,
-} from "../schemas/duplicate.schemas.js";
+} from "../schemas/scan.js";
 
 export {
   AnalyzeDuplicatesInputSchema,
   DeleteDuplicatesInputSchema,
-} from "../schemas/duplicate.schemas.js";
+} from "../schemas/scan.js";
 export type {
   AnalyzeDuplicatesInput,
   DeleteDuplicatesInput,
-} from "../schemas/duplicate.schemas.js";
+} from "../schemas/scan.js";
 export const analyzeDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_analyze_duplicates",
   title: "Analyze Duplicate Files with Smart Recommendations",

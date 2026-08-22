@@ -107,7 +107,7 @@ if (!fs.existsSync(distIndexPath)) {
 
 // Verify critical dependencies
 const nodeModulesPath = path.join(packageRoot, 'node_modules');
-const criticalDeps = ['@modelcontextprotocol/sdk', 'chalk', 'node-cron'];
+const criticalDeps = ['@modelcontextprotocol/server', 'chalk', 'node-cron'];
 const missingDeps = [];
 
 for (const dep of criticalDeps) {

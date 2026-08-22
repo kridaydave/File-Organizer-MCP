@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * organize_photos Tool
  *
  * @module tools/photo-organization
@@ -9,14 +9,14 @@ import { z } from "zod";
 import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { PhotoOrganizerService } from "../services/photo-organizer.service.js";
-import { RollbackService } from "../services/rollback.service.js";
+import { RollbackService } from "../core/organize/rollback.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { OrganizePhotosInputSchema } from "../schemas/media.schemas.js";
+import { OrganizePhotosInputSchema } from "../schemas/organize.js";
 import { logger } from "../utils/logger.js";
 
 export type OrganizePhotosInput = z.infer<typeof OrganizePhotosInputSchema>;
 
-export { OrganizePhotosInputSchema } from "../schemas/media.schemas.js";
+export { OrganizePhotosInputSchema } from "../schemas/organize.js";
 export const organizePhotosToolDefinition: ToolDefinition = {
   name: "file_organizer_organize_photos",
   title: "Organize Photo Files",

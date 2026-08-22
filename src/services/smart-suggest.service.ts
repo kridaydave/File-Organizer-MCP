@@ -1,13 +1,13 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Smart Suggest Service - Directory Health Scoring
  */
 
 import fs from "fs/promises";
 import path from "path";
 import { logger } from "../utils/logger.js";
-import { HashCalculatorService } from "./hash-calculator.service.js";
-import { FileScannerService } from "./file-scanner.service.js";
+import { HashCalculatorService } from "../core/hash/hasher.js";
+import { FileScannerService } from "../core/scan/scanner.js";
 
 export interface DirectoryHealthReport {
   score: number;
@@ -585,5 +585,3 @@ export class SmartSuggestService {
     return quickWins;
   }
 }
-
-export const smartSuggestService = new SmartSuggestService();

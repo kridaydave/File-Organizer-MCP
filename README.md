@@ -1,11 +1,11 @@
 # File Organizer MCP Server
 
-Version 3.5.0 | MCP protocol 2024-11-05 | Node.js 18+
+Version 5.0.0 | MCP protocol 2026-07-28 (stateless) | Node.js 18+
 
-[![npm version](https://img.shields.io/badge/npm-v3.5.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v5.0.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1135%20passing-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-835%20passing-success.svg)](tests/)
 
 A Model Context Protocol (MCP) server that organizes files. It gives a Claude-style assistant a single atomic operation to categorize, sort, dedupe, and rename files, instead of making it chain dozens of primitive `read`, `write`, and `rename` calls.
 
@@ -73,7 +73,7 @@ You can ask the assistant things like:
 - Categorization into 12 or more file types.
 - Cron-based automatic organization and directory watch mode.
 - Duplicate detection by SHA-256 content hash.
-- Metadata extraction: EXIF for photos, ID3 for audio, topic extraction for documents.
+- Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
 - Dry-run preview, atomic moves, and rollback.
 - Path traversal protection, TOCTOU mitigation, and metadata scrubbing.
@@ -87,7 +87,6 @@ You can ask the assistant things like:
 
 - `file_organizer_scan_directory` - List a directory with detailed file info. `directory` is required; `include_subdirs` toggles recursion.
 - `file_organizer_read_file` - Read a file with 8-layer path validation. `path` is required; `encoding` is utf-8, base64, or binary.
-- `file_organizer_organize_smart` - Handle music, photos, and documents in one pass, choosing the best strategy per file.
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 
@@ -95,6 +94,7 @@ You can ask the assistant things like:
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
+- `file_organizer_batch_rename`
 - `file_organizer_categorize_by_type`
 - `file_organizer_delete_duplicates`
 - `file_organizer_find_duplicate_files`
@@ -102,8 +102,6 @@ You can ask the assistant things like:
 - `file_organizer_get_categories`
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`
-- `file_organizer_list_watches`
-- `file_organizer_organize_by_content`
 - `file_organizer_organize_files`
 - `file_organizer_organize_music`
 - `file_organizer_organize_photos`
@@ -114,11 +112,23 @@ You can ask the assistant things like:
 - `file_organizer_smart_suggest`
 - `file_organizer_system_organize`
 - `file_organizer_undo_last_operation`
-- `file_organizer_unwatch_directory`
 - `file_organizer_view_history`
-- `file_organizer_watch_directory`
 
 For parameters and return shapes, see [API.md](API.md).
+
+### Scheduled organization (separate process)
+
+The stdio MCP server stays stateless — cron-based watching runs as its own
+process:
+
+```bash
+file-organizer-watch add ~/Downloads "0 10 * * *"   # daily at 10am
+file-organizer-watch list
+file-organizer-watch                                # start the daemon
+```
+
+Watches are stored in the shared user config, so `add`/`remove` work even
+while the daemon is running (restart it to pick up changes).
 
 ---
 
@@ -314,7 +324,7 @@ For a simple hourly, daily, or weekly schedule:
 }
 ```
 
-For anything more granular, use the `file_organizer_watch_directory` tool.
+For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 
 ### Defenses
 
@@ -353,9 +363,11 @@ For anything more granular, use the `file_organizer_watch_directory` tool.
 
 ## Architecture
 
-The server runs a screen-then-enrich pipeline: an MCP protocol handler passes every request through security screening (path validation, sensitive-file detection, rate limiting), then metadata enrichment (EXIF, ID3, document properties), then the service layer that performs the operation. All file operations go through validated paths and support rollback.
+The server is stateless: each JSON-RPC request gets a fresh context (`config`, history logger) routed through an explicit tool registry into pure service modules under `src/core/`. The pipeline is `scan → categorize → plan → move`, every path passes 8-layer validation before any `fs` call, and all side effects are file-backed (history, rollback manifests), so nothing survives a restart except what you can undo.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full diagram and design notes.
+Scheduled organization runs as a separate process (`file-organizer-watch`) so the stdio server stays request/response.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram and design notes.
 
 ---
 
@@ -381,6 +393,13 @@ npm install
 npm run build
 npm test
 ```
+
+### Adding a tool: one file, one line
+
+1. Create `src/tools/my-tool.ts` exporting a `ToolDefinition` (name, Zod input schema, annotations, formats) and its handler.
+2. Add an import and one `reg()` entry in `src/mcp/registry.ts`.
+
+That's it. The registry is the single source of truth: the server registers from it, routing is pure, and no other file changes. Schemas shared across tools live in `src/schemas/` (`common`, `scan`, `organize`, `system`). If your tool takes a path, it goes through `validateStrictPath` before touching `fs`, and errors go through `sanitizeErrorMessage`. See [ARCHITECTURE.md](ARCHITECTURE.md) for the contract details.
 
 Report bugs and feature requests on [GitHub Issues](https://github.com/kridaydave/File-Organizer-MCP/issues). For a security vulnerability, email technocratix902@gmail.com.
 
