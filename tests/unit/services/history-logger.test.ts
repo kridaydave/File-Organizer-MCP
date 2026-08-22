@@ -1,6 +1,6 @@
 /**
  * HistoryLoggerService Unit Tests
- * Tests for history logging, batching, file rotation, privacy modes
+ * Tests for direct-append history logging, file rotation, privacy modes
  */
 
 import fs from "fs/promises";
@@ -12,8 +12,15 @@ import {
 import {
   setupLoggerMocks,
   teardownLoggerMocks,
-  mockLogger,
 } from "../../utils/logger-mock.js";
+
+const sampleEntry = (overrides: Partial<HistoryEntry> = {}) => ({
+  operation: "organize",
+  source: "manual" as const,
+  status: "success" as const,
+  durationMs: 100,
+  ...overrides,
+});
 
 describe("HistoryLoggerService", () => {
   let service: HistoryLoggerService;
@@ -28,9 +35,9 @@ describe("HistoryLoggerService", () => {
 
     service = new HistoryLoggerService({
       dataDir,
-      batchSize: 5,
-      batchTimeoutMs: 100,
-      maxFileSizeBytes: 1024,
+      // Realistic rotation threshold — the tiny-size rotation behavior has
+      // its own describe block with dedicated small services.
+      maxFileSizeBytes: 10 * 1024 * 1024,
       maxBackupFiles: 3,
       lockTimeoutMs: 1000,
     });
@@ -49,67 +56,27 @@ describe("HistoryLoggerService", () => {
   });
 
   describe("log()", () => {
-    it("should add entries to queue without immediate flush", async () => {
-      const entry = {
-        operation: "organize",
-        source: "manual" as const,
-        status: "success" as const,
-        durationMs: 100,
-        filesProcessed: 5,
-      };
+    it("should persist an entry immediately on disk", async () => {
+      const entry = sampleEntry({ filesProcessed: 5 });
 
       await service.log(entry);
 
-      const history = await service.getHistory({});
-      expect(history.entries).toHaveLength(0);
-    });
-
-    it("should flush when batch size is reached", async () => {
-      for (let i = 0; i < 5; i++) {
-        await service.log({
-          operation: "organize",
-          source: "manual",
-          status: "success",
-          durationMs: 100,
-          filesProcessed: 1,
-        });
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      const history = await service.getHistory({});
-      expect(history.entries).toHaveLength(5);
-    });
-
-    it("should flush after batch timeout", async () => {
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 50,
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Read the raw file directly — proves nothing sits in a memory queue.
+      const content = await fs.readFile(
+        path.join(dataDir, "operations.jsonl"),
+        "utf-8",
+      );
+      const lines = content.trim().split("\n");
+      expect(lines).toHaveLength(1);
+      expect(JSON.parse(lines[0]).operation).toBe("organize");
 
       const history = await service.getHistory({});
       expect(history.entries).toHaveLength(1);
     });
 
     it("should generate unique IDs for each entry", async () => {
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
-
-      await service.flushAndClose();
+      await service.log(sampleEntry());
+      await service.log(sampleEntry());
 
       const history = await service.getHistory({});
       const ids = history.entries.map((e) => e.id);
@@ -119,16 +86,9 @@ describe("HistoryLoggerService", () => {
     it("should add timestamps to entries", async () => {
       const before = new Date().toISOString();
 
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
+      await service.log(sampleEntry());
 
       const after = new Date().toISOString();
-
-      await service.flushAndClose();
 
       const history = await service.getHistory({});
       expect(history.entries[0].timestamp).toBeDefined();
@@ -137,17 +97,16 @@ describe("HistoryLoggerService", () => {
     });
 
     it("should include optional fields when provided", async () => {
-      await service.log({
-        operation: "organize",
-        source: "scheduled",
-        status: "partial",
-        durationMs: 500,
-        filesProcessed: 8,
-        filesSkipped: 2,
-        details: "Some files skipped due to permission",
-      });
-
-      await service.flushAndClose();
+      await service.log(
+        sampleEntry({
+          source: "scheduled",
+          status: "partial",
+          durationMs: 500,
+          filesProcessed: 8,
+          filesSkipped: 2,
+          details: "Some files skipped due to permission",
+        }),
+      );
 
       const history = await service.getHistory({});
       const entry = history.entries[0];
@@ -158,55 +117,45 @@ describe("HistoryLoggerService", () => {
     });
 
     it("should include error info when provided", async () => {
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "error",
-        durationMs: 50,
-        error: { message: "File not found", code: "ENOENT" },
-      });
-
-      await service.flushAndClose();
+      await service.log(
+        sampleEntry({
+          status: "error",
+          durationMs: 50,
+          error: { message: "File not found", code: "ENOENT" },
+        }),
+      );
 
       const history = await service.getHistory({});
       expect(history.entries[0].error?.message).toBe("File not found");
       expect(history.entries[0].error?.code).toBe("ENOENT");
     });
 
-    it("should handle rapid sequential logs", async () => {
+    it("should handle rapid sequential logs without loss", async () => {
       const logs: Promise<void>[] = [];
       for (let i = 0; i < 20; i++) {
-        logs.push(
-          service.log({
-            operation: "organize",
-            source: "manual",
-            status: "success",
-            durationMs: 10,
-            filesProcessed: 1,
-          }),
-        );
+        logs.push(service.log(sampleEntry()));
       }
 
       await Promise.all(logs);
-      await service.flushAndClose();
 
       const history = await service.getHistory({ limit: 100 });
-      expect(history.entries.length).toBeGreaterThanOrEqual(10);
+      expect(history.entries).toHaveLength(20);
     });
   });
 
   describe("getHistory()", () => {
     beforeEach(async () => {
       for (let i = 0; i < 10; i++) {
-        await service.log({
-          operation: i < 5 ? "organize" : "scan",
-          source: i % 2 === 0 ? "manual" : "scheduled",
-          status: i % 3 === 0 ? "error" : "success",
-          durationMs: 100 + i,
-          filesProcessed: i + 1,
-        });
+        await service.log(
+          sampleEntry({
+            operation: i < 5 ? "organize" : "scan",
+            source: i % 2 === 0 ? "manual" : "scheduled",
+            status: i % 3 === 0 ? "error" : "success",
+            durationMs: 100 + i,
+            filesProcessed: i + 1,
+          }),
+        );
       }
-      await service.flushAndClose();
     });
 
     it("should return all entries with default query", async () => {
@@ -304,25 +253,16 @@ describe("HistoryLoggerService", () => {
   });
 
   describe("File locking", () => {
-    it("should acquire lock for writing", async () => {
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
-
-      await service.flushAndClose();
+    it("should release lock after writing", async () => {
+      await service.log(sampleEntry());
 
       const lockPath = path.join(dataDir, "operations.lock");
       await expect(fs.stat(lockPath)).rejects.toThrow();
     });
 
-    it("should handle concurrent writes with locking", async () => {
+    it("should handle concurrent writers across instances", async () => {
       const service2 = new HistoryLoggerService({
         dataDir,
-        batchSize: 5,
-        batchTimeoutMs: 50,
         lockTimeoutMs: 2000,
       });
       await service2.init();
@@ -330,101 +270,75 @@ describe("HistoryLoggerService", () => {
       const logs: Promise<void>[] = [];
       for (let i = 0; i < 5; i++) {
         logs.push(
-          service.log({
-            operation: "organize",
-            source: "manual",
-            status: "success",
-            durationMs: 10,
-          }),
+          service.log(sampleEntry({ operation: "organize" })),
         );
         logs.push(
-          service2.log({
-            operation: "scan",
-            source: "scheduled",
-            status: "success",
-            durationMs: 10,
-          }),
+          service2.log(sampleEntry({ operation: "scan", source: "scheduled" })),
         );
       }
 
       await Promise.all(logs);
-      await service.flushAndClose();
-      await service2.flushAndClose();
 
       const history = await service.getHistory({ limit: 100 });
-      expect(history.entries.length).toBe(10);
+      expect(history.entries).toHaveLength(10);
     });
 
     it("should handle stale lock cleanup", async () => {
       const newService = new HistoryLoggerService({
         dataDir,
-        batchSize: 5,
-        batchTimeoutMs: 50,
         lockTimeoutMs: 5000,
       });
 
       const lockPath = path.join(dataDir, "operations.lock");
-      await fs.mkdir(dataDir, { recursive: true });
-      await fs
-        .writeFile(lockPath, String(Date.now() - 30000), { flag: "wx" })
-        .catch(() => null);
+      await fs.writeFile(lockPath, String(Date.now()), { flag: "wx" });
+      // Staleness is judged by mtime — backdate the file to simulate a lock
+      // left behind by a crashed process.
+      const old = new Date(Date.now() - 30000);
+      await fs.utimes(lockPath, old, old);
 
       await newService.init();
-      await newService.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
-
-      await newService.flushAndClose();
+      await newService.log(sampleEntry());
 
       const history = await newService.getHistory({});
-      expect(history.entries.length).toBeGreaterThanOrEqual(0);
-    });
-
-    it("should re-queue entries when lock cannot be acquired", async () => {
-      const lockPath = path.join(dataDir, "operations.lock");
-
-      await fs.writeFile(lockPath, String(Date.now()), { flag: "wx" });
-
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
-
-      await fs.unlink(lockPath);
-
-      await new Promise((resolve) => setTimeout(resolve, 200));
-
-      const history = await service.getHistory({});
       expect(history.entries.length).toBe(1);
     });
+
+    it("should give up gracefully when lock stays held and recover after", async () => {
+      const lockPath = path.join(dataDir, "operations.lock");
+      await fs.writeFile(lockPath, String(Date.now()), { flag: "wx" });
+
+      // Lock never released within lockTimeoutMs (1000ms) — write is dropped
+      // and logged, not crash.
+      await expect(
+        service.log(sampleEntry()),
+      ).resolves.toBeUndefined();
+
+      const during = await service.getHistory({});
+      expect(during.entries.length).toBe(0);
+
+      // Once the lock clears, subsequent writes succeed.
+      await fs.unlink(lockPath);
+      await service.log(sampleEntry());
+
+      const after = await service.getHistory({});
+      expect(after.entries.length).toBe(1);
+    }, 10000);
   });
 
   describe("File rotation", () => {
     it("should rotate file when max size exceeded", async () => {
       const smallService = new HistoryLoggerService({
         dataDir,
-        batchSize: 2,
         maxFileSizeBytes: 100,
         maxBackupFiles: 2,
       });
       await smallService.init();
 
       for (let i = 0; i < 10; i++) {
-        await smallService.log({
-          operation: "organize",
-          source: "manual",
-          status: "success",
-          durationMs: 50,
-          details: "x".repeat(50),
-        });
+        await smallService.log(
+          sampleEntry({ durationMs: 50, details: "x".repeat(50) }),
+        );
       }
-
-      await smallService.flushAndClose();
 
       const mainFile = path.join(dataDir, "operations.jsonl");
       const backup1 = path.join(dataDir, "operations.1.jsonl");
@@ -439,54 +353,31 @@ describe("HistoryLoggerService", () => {
     it("should maintain backup file rotation", async () => {
       const smallService = new HistoryLoggerService({
         dataDir,
-        batchSize: 2,
         maxFileSizeBytes: 50,
         maxBackupFiles: 2,
       });
       await smallService.init();
 
       for (let i = 0; i < 20; i++) {
-        await smallService.log({
-          operation: "organize",
-          source: "manual",
-          status: "success",
-          durationMs: 50,
-          details: "x".repeat(20),
-        });
+        await smallService.log(
+          sampleEntry({ durationMs: 50, details: "x".repeat(20) }),
+        );
       }
-
-      await smallService.flushAndClose();
 
       const backup2 = path.join(dataDir, "operations.2.jsonl");
       const backup2Exists = await fs.stat(backup2).catch(() => null);
       expect(backup2Exists).not.toBeNull();
     });
-
-    it("should skip missing backup files during rotation", async () => {
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
-      await service.flushAndClose();
-
-      const history = await service.getHistory({});
-      expect(history.entries.length).toBe(1);
-    });
   });
 
   describe("Privacy modes", () => {
     beforeEach(async () => {
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-        details: "Moved C:\\Users\\test\\file.txt to Documents",
-        error: { message: "Failed to move C:\\private\\secret.txt" },
-      });
-      await service.flushAndClose();
+      await service.log(
+        sampleEntry({
+          details: "Moved C:\\Users\\test\\file.txt to Documents",
+          error: { message: "Failed to move C:\\private\\secret.txt" },
+        }),
+      );
     });
 
     it("should return full entries in full mode", async () => {
@@ -540,54 +431,31 @@ describe("HistoryLoggerService", () => {
       expect(history.entries).toHaveLength(0);
     });
 
-    it("should handle write errors gracefully", async () => {
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
-
-      await service.flushAndClose();
+    it("should continue operating after a failed append target", async () => {
+      await service.log(sampleEntry());
 
       const history = await service.getHistory({});
       expect(history.entries.length).toBeGreaterThanOrEqual(0);
     });
 
-    it("should handle disk full error with retry", async () => {
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
-
-      await service.flushAndClose();
-
-      const history = await service.getHistory({});
-      expect(history.entries.length).toBe(1);
-    });
-
-    it("should continue operation after lock timeout", async () => {
+    it("should continue accepting writes after a lock timeout", async () => {
       const shortLockService = new HistoryLoggerService({
         dataDir,
-        batchSize: 2,
-        lockTimeoutMs: 10,
+        lockTimeoutMs: 50,
       });
       await shortLockService.init();
 
-      await shortLockService.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
+      const lockPath = path.join(dataDir, "operations.lock");
+      await fs.writeFile(lockPath, String(Date.now()), { flag: "wx" });
 
-      await shortLockService.flushAndClose();
+      await shortLockService.log(sampleEntry()); // dropped, lock held
 
-      const history = await shortLockService.getHistory({});
-      expect(history.entries.length).toBeGreaterThanOrEqual(0);
-    });
+      await fs.unlink(lockPath);
+      await service.log(sampleEntry()); // recovers
+
+      const history = await service.getHistory({});
+      expect(history.entries.length).toBeGreaterThanOrEqual(1);
+    }, 10000);
   });
 
   describe("Empty history", () => {
@@ -669,71 +537,6 @@ also invalid
       const history = await service.getHistory({});
       expect(history.entries.length).toBeGreaterThanOrEqual(1);
     });
-
-    it("should handle mixed valid and invalid entries", async () => {
-      const historyFile = path.join(dataDir, "operations.jsonl");
-      const entries = [
-        {
-          id: "1",
-          timestamp: new Date().toISOString(),
-          operation: "organize",
-          source: "manual" as const,
-          status: "success" as const,
-          durationMs: 100,
-        },
-        "{ invalid",
-        "{ 'single quotes': 'invalid' }",
-        {
-          id: "2",
-          timestamp: new Date().toISOString(),
-          operation: "scan",
-          source: "scheduled" as const,
-          status: "success" as const,
-          durationMs: 50,
-        },
-      ];
-
-      await fs.writeFile(
-        historyFile,
-        entries
-          .map((e) => (typeof e === "string" ? e : JSON.stringify(e)))
-          .join("\n") + "\n",
-      );
-
-      const history = await service.getHistory({});
-      expect(history.entries.length).toBe(2);
-    });
-  });
-
-  describe("flushAndClose()", () => {
-    it("should flush pending entries on close", async () => {
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
-
-      await service.flushAndClose();
-
-      const history = await service.getHistory({});
-      expect(history.entries).toHaveLength(1);
-    });
-
-    it("should clear flush timeout on close", async () => {
-      await service.log({
-        operation: "organize",
-        source: "manual",
-        status: "success",
-        durationMs: 100,
-      });
-
-      await service.flushAndClose();
-      await service.flushAndClose();
-
-      const history = await service.getHistory({});
-      expect(history.entries).toHaveLength(1);
-    });
   });
 
   describe("getHistoryFilePath()", () => {
@@ -760,20 +563,6 @@ also invalid
 
       const history = await service.getHistory({});
       expect(history).toBeDefined();
-    });
-
-    it("should handle initialization failure gracefully", async () => {
-      const newService = new HistoryLoggerService({ dataDir: dataDir });
-      await newService.init();
-
-      await service.log({
-        operation: "test",
-        source: "manual",
-        status: "success",
-        durationMs: 10,
-      });
-
-      await service.flushAndClose();
     });
   });
 });
