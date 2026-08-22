@@ -12,7 +12,7 @@
 ## Table of Contents
 
 - [file_organizer_analyze_duplicates](#file_organizer_analyze_duplicates)
-- [file_organizer_batch_read_files](#file_organizer_batch_read_files) ⭐ v3.3.0
+- [file_organizer_batch_read_files](#file_organizer_batch_read_files)
 - [file_organizer_batch_rename](#file_organizer_batch_rename)
 - [file_organizer_categorize_by_type](#file_organizer_categorize_by_type)
 - [file_organizer_delete_duplicates](#file_organizer_delete_duplicates)
@@ -22,13 +22,16 @@
 - [file_organizer_inspect_metadata](#file_organizer_inspect_metadata)
 - [file_organizer_list_files](#file_organizer_list_files)
 - [file_organizer_organize_files](#file_organizer_organize_files)
-- [file_organizer_organize_music](#file_organizer_organize_music) ⭐ v3.3.0
-- [file_organizer_organize_photos](#file_organizer_organize_photos) ⭐ v3.3.0
+- [file_organizer_organize_music](#file_organizer_organize_music)
+- [file_organizer_organize_photos](#file_organizer_organize_photos)
 - [file_organizer_preview_organization](#file_organizer_preview_organization)
 - [file_organizer_read_file](#file_organizer_read_file)
 - [file_organizer_scan_directory](#file_organizer_scan_directory)
 - [file_organizer_set_custom_rules](#file_organizer_set_custom_rules)
+- [file_organizer_smart_suggest](#file_organizer_smart_suggest)
+- [file_organizer_system_organize](#file_organizer_system_organize)
 - [file_organizer_undo_last_operation](#file_organizer_undo_last_operation)
+- [file_organizer_view_history](#file_organizer_view_history)
 
 > **Note:** The watch tools (`file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
 > `file_organizer_list_watches`) are no longer part of the MCP server. Scheduled organization
@@ -409,7 +412,7 @@ file_organizer_scan_directory({
 
 [⬆ Back to Top](#top)
 
-**Description:** Customize how files are categorized. Rules persist for the current session.
+**Description:** Customize how files are categorized. Rules persist to your user config and apply to every future request.
 
 ### Parameters
 
@@ -441,6 +444,66 @@ file_organizer_set_custom_rules({
 
 ---
 
+## file_organizer_smart_suggest
+
+[⬆ Back to Top](#top)
+
+**Description:** Analyze directory health and get actionable suggestions for organization.
+
+### Parameters
+
+| Parameter            | Type    | Description                    | Default   |
+| -------------------- | ------- | ------------------------------ | --------- |
+| `directory`          | string  | Directory to analyze           | -         |
+| `include_subdirs`    | boolean | Include subdirectories         | true      |
+| `include_duplicates` | boolean | Check for duplicates (slower)  | true      |
+| `max_files`          | number  | Maximum files to scan          | 10000     |
+| `timeout_seconds`    | number  | Timeout in seconds             | 60        |
+| `sample_rate`        | number  | Sample rate for large dirs     | 1         |
+| `use_cache`          | boolean | Use cached results             | true      |
+| `response_format`    | string  | 'json' or 'markdown'           | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_smart_suggest({
+  directory: "~/Downloads",
+});
+```
+
+---
+
+## file_organizer_system_organize
+
+[⬆ Back to Top](#top)
+
+**Description:** Organize files into OS-standard system directories (Music, Documents, Pictures, Videos). Source must be Downloads, Desktop, or Temp.
+
+### Parameters
+
+| Parameter               | Type    | Description                                        | Default    |
+| ----------------------- | ------- | -------------------------------------------------- | ---------- |
+| `source_dir`            | string  | Source directory (Downloads, Desktop, or Temp)     | -          |
+| `use_system_dirs`       | boolean | Use OS system directories                          | true       |
+| `create_subfolders`     | boolean | Create organized subfolders                        | true       |
+| `fallback_to_local`     | boolean | Fallback to local folder if system dir not writable| true       |
+| `local_fallback_prefix` | string  | Prefix for local fallback folder                   | 'Organized'|
+| `conflict_strategy`     | string  | 'skip', 'rename', or 'overwrite'                   | 'rename'   |
+| `dry_run`               | boolean | Preview without moving                             | true       |
+| `copy_instead_of_move`  | boolean | Copy instead of move                               | false      |
+| `response_format`       | string  | 'json' or 'markdown'                               | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_system_organize({
+  source_dir: "~/Downloads",
+  dry_run: true,
+});
+```
+
+---
+
 ## file_organizer_undo_last_operation
 
 [⬆ Back to Top](#top)
@@ -460,6 +523,35 @@ file_organizer_set_custom_rules({
 file_organizer_undo_last_operation({
   manifest_id: "value",
   response_format: "value",
+});
+```
+
+---
+
+## file_organizer_view_history
+
+[⬆ Back to Top](#top)
+
+**Description:** View the history of file organization operations. Supports filtering by date range, operation type, status, and source. Use privacy_mode to control output detail level.
+
+### Parameters
+
+| Parameter         | Type   | Description                                                        | Default    |
+| ----------------- | ------ | ------------------------------------------------------------------ | ---------- |
+| `limit`           | number | Maximum number of entries to return (1-1000)                       | 20         |
+| `since`           | string | ISO date string - return entries after this time                   | -          |
+| `until`           | string | ISO date string - return entries before this time                  | -          |
+| `operation`       | string | Filter by operation name                                           | -          |
+| `status`          | string | 'success', 'error', or 'partial'                                   | -          |
+| `source`          | string | 'manual' or 'scheduled'                                            | -          |
+| `privacy_mode`    | string | 'full', 'redacted', or 'none'                                      | -          |
+| `response_format` | string | 'json' or 'markdown'                                               | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_view_history({
+  limit: 20,
 });
 ```
 
