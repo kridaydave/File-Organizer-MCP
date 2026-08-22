@@ -46,18 +46,18 @@ Use this language so we stay on the same page:
 
 2. **Killing by pattern.** Never `pkill -f node`, `pgrep | kill`, or `kill` a PID you matched by name/path. Your own agent has this worktree path in its argv and several dev servers may be running. Kill only a PID you spawned, or the port owner from `ss -H -ltnp` after checking `/proc/<pid>/cwd` is your worktree.
 
-3. **Baking in paths.** Never hardcode `process.cwd()`, `os.homedir()`, or absolute test paths into schemas, tools, or snapshots. Allowed roots are platform-aware and user-configurable via `src/config.ts:100`. Tests that bake `/home/kriday` will fail on Windows/macOS and leak intent. Derive from `CONFIG.paths` or inject via `ValidatePathOptions`.
+3. **Baking in paths.** Never hardcode `process.cwd()`, `os.homedir()`, or absolute test paths into schemas, tools, or snapshots. Allowed roots are platform-aware and user-configurable via `src/core/config/loader.ts:100` (`loadCustomAllowedDirs`). Tests that bake `/home/kriday` will fail on Windows/macOS and leak intent. Derive from `CONFIG.paths` or inject via `ValidatePathOptions`.
 
 ## Hit every surface
 
 The most common defect here is a change that works for one tool and is missing everywhere else. Before calling work done, walk this list:
 
 - **Entry points.** A behavior reachable from one tool is often also reachable from `organize_files`, `preview_organization`, and `undo`. Fixing one is not fixing the feature.
-- **Tools.** `src/tools/*.ts` — each tool needs schema + handler + registration in `src/tools/index.ts:234` + routing in `src/server.ts:124`. Shared logic lives in `src/services/`, `src/schemas/`.
+- **Tools.** `src/tools/*.ts` — each tool needs schema + handler + registration in `src/mcp/registry.ts` (one `reg()` line) + routing in `src/server.ts`. Shared logic lives in `src/core/`, `src/schemas/`.
 - **Schemas.** External input is typed in `src/schemas/`. Change the schema and the server, tests, and `API.md` all follow.
 - **Security.** Anything crossing into `fs` is typed via `PathValidatorService` and Zod. Change the validation and scanner, organizer, reader, and history logger all follow.
 - **Reverse states.** If you added a way in, add the way out and the way to see it. Organize needs preview + undo + history. Watch needs unwatch + list.
-- **Contracts.** Anything crossing the wire is a `ToolDefinition` in `src/types.ts:260`. `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) must be honest or the client will make bad decisions.
+- **Contracts.** Anything crossing the wire is a `ToolDefinition` in `src/mcp/types.ts:16`. `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) must be honest or the client will make bad decisions.
 - **Docs.** Behavior a user notices → `README.md`; structural change → `ARCHITECTURE.md`; tool shape → `API.md` + `config.schema.json`; new vocabulary → `docs/FRAMEWORK.md`.
 
 ## Dev servers
@@ -110,7 +110,7 @@ An empty directory is a bad test. Seed with real shapes, but keep them in the sa
 
 ## How it works
 
-Client sends a JSON-RPC tool call over stdio → `src/server.ts:56` creates the MCP server and registers `TOOLS` → `src/tools/index.ts:234` maps name to handler → handler validates with Zod (`src/schemas/*`) then `validateStrictPath` (`src/services/path-validator.service.ts:239`) → calls a service (`scan`, `categorize`, `organize`, `hash`, `rollback`) → formats `ToolResponse` (`src/types.ts:253`) → server returns it. Services are pure and stateless; per-request `ctx` carries config and logger. Side effects (history, backups, rollback manifests) are file-backed, not in memory.
+Client sends a JSON-RPC tool call over stdio → `src/server.ts` creates the MCP server and registers `TOOLS` from `src/mcp/registry.ts` (name → handler map) → handler validates with Zod (`src/schemas/*`) then `validateStrictPath` (`src/services/path-validator.service.ts:357`) → calls a service (`scan`, `categorize`, `organize`, `hash`, `rollback`) → formats `ToolResponse` (`src/mcp/types.ts:8`) → server returns it. Services are pure and stateless; per-request `ctx` carries config and history logger. Side effects (history, backups, rollback manifests) are file-backed, not in memory.
 
 Full tour: `ARCHITECTURE.md` + `docs/FRAMEWORK.md`.
 
@@ -119,34 +119,32 @@ Full tour: `ARCHITECTURE.md` + `docs/FRAMEWORK.md`.
 ```
 File-Organizer-MCP/
 ├── src/
-│   ├── server.ts              # MCP server, tool registration (stateless)
-│   ├── index.ts               # CLI entry, preflight, graceful shutdown
-│   ├── config.ts              # Platform-aware allowed dirs + user config
-│   ├── types.ts               # Shared ToolResponse / FileInfo / Organize types
-│   ├── constants.ts           # Category maps + limits
-│   ├── services/              # Business logic (each <300 lines after churn)
-│   │   ├── path-validator.service.ts
-│   │   ├── file-scanner.service.ts
-│   │   ├── categorizer.service.ts
-│   │   ├── organizer.service.ts
-│   │   ├── duplicate-finder.service.ts
-│   │   ├── rollback.service.ts
-│   │   └── history-logger.service.ts
-│   ├── tools/                 # MCP tool handlers (one file per tool group)
-│   ├── schemas/               # Zod schemas (one per tool group)
-│   ├── readers/               # Secure file reading (thin wrapper, not a framework)
-│   ├── tui/                   # Setup wizard
-│   └── utils/                 # logger, error-handler, file-utils, path-security
+│   ├── server.ts              # createServer() + handleToolCall() (stateless routing)
+│   ├── index.ts               # CLI entry: main() only
+│   ├── mcp/                   # registry (tool map), defineTool, context, bootstrap, cli
+│   ├── tools/                 # one file per tool group: ToolDefinition + handler
+│   ├── schemas/               # Zod input schemas: common, scan, organize, system
+│   ├── core/                  # business logic, pure + stateless
+│   │   ├── io/                # readFile(): validate → sensitive gate → fs
+│   │   ├── scan/              # scanner
+│   │   ├── categorize/        # rules, extension map, magic-byte sniff
+│   │   ├── organize/          # organizer, rename, rollback (+ manifest integrity)
+│   │   ├── hash/              # hasher, duplicate-finder
+│   │   ├── config/            # platform-aware defaults, loader, paths
+│   │   └── types/             # shared FileInfo / Organize / category types
+│   ├── services/              # facades + metadata/{image,audio} + history-logger
+│   ├── extensions/scheduler/  # cron watch daemon + watch-cli (own bin)
+│   ├── security/              # archive validation, security constants
+│   ├── tui/                   # setup wizard
+│   └── utils/                 # logger, error-handler, path-security, formatters
 ├── tests/
 │   ├── unit/                  # service + util tests
 │   ├── integration/           # tool wiring tests
 │   └── performance/           # benchmarks
-├── bin/                       # file-organizer-mcp, file-organizer-setup
+├── bin/                       # file-organizer-mcp, file-organizer-setup, file-organizer-watch
 ├── docs/                      # FRAMEWORK.md, implementation notes, docs/skills/
-│   └── skills/                # Kimi/opencode dev skill (not product)
 ├── examples/                  # config.strict.json, config.sandboxed.json, mcp-clients/
-├── scripts/                   # postinstall, prepare, benchmarks
-└── reports/                   # phase reports
+└── scripts/                   # postinstall, prepare, benchmarks, security-gates/
 ```
 
 `dist/`, `node_modules/`, `coverage/`, `.jest-cache/`, `.file-organizer-*` are gitignored and generated.
@@ -157,7 +155,7 @@ File-Organizer-MCP/
 - Inferred types over annotations. `any` is the enemy — use `unknown` + Zod.
 - Comments describe how a thing is used and move when the code moves. Use them to describe functions, not to narrate every line.
 - Don't preserve complexity just because it already exists. Don't ship machinery that looks impressive but doesn't change the answer.
-- Errors are part of the interface. Never leak internal paths; use `sanitizeErrorMessage()` (`src/utils/error-handler.ts:1`). Throw `ValidationError` / `AccessDeniedError` (`src/types.ts:296`) and let `createErrorResponse` format them.
+- Errors are part of the interface. Never leak internal paths; use `sanitizeErrorMessage()` (`src/utils/error-handler.ts:1`). Throw `ValidationError` / `AccessDeniedError` (`src/mcp/types.ts:63`) and let `createErrorResponse` format them.
 - If a schema or tool adds a new field, grep `tests/` and `API.md` before calling it done.
 
 ## Commands
