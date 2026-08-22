@@ -1,7 +1,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { FileScannerService } from '../../../src/services/file-scanner.service.js';
+import { FileScannerService } from '../../../src/core/scan/scanner.js';
 import { FileInfo } from '../../../src/types.js';
 
 describe('FileScannerService', () => {

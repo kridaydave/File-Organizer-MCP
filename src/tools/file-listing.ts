@@ -18,7 +18,7 @@ import { createErrorResponse } from "../utils/error-handler.js";
 import {
   ListFilesInputSchema,
   type ListFilesInput,
-} from "../schemas/scan.schemas.js";
+} from "../schemas/scan.js";
 
 export const listFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_list_files",

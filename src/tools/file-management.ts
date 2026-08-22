@@ -12,13 +12,13 @@ import { createErrorResponse } from "../utils/error-handler.js";
 import {
   GetCategoriesInputSchema,
   SetCustomRulesInputSchema,
-} from "../schemas/file-management.schemas.js";
+} from "../schemas/system.js";
 import { globalCategorizerService } from "../services/index.js";
 
 export {
   GetCategoriesInputSchema,
   SetCustomRulesInputSchema,
-} from "../schemas/file-management.schemas.js";
+} from "../schemas/system.js";
 export const getCategoriesToolDefinition: ToolDefinition = {
   name: "file_organizer_get_categories",
   title: "Get Available File Categories",

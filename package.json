@@ -58,11 +58,9 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "chalk": "^5.6.2",
     "exif-parser": "^0.1.12",
-    "mammoth": "^1.12.1",
     "minimatch": "^10.1.2",
     "music-metadata": "^11.11.2",
     "node-cron": "^4.6.0",
-    "pdf-parse": "^2.4.5",
     "piexifjs": "^1.0.6",
     "zod": "^4.4.3"
   },

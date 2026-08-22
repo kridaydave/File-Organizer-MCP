@@ -9,14 +9,14 @@ import { z } from "zod";
 import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { MusicOrganizerService } from "../services/music-organizer.service.js";
-import { RollbackService } from "../services/rollback.service.js";
+import { RollbackService } from "../core/organize/rollback.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { OrganizeMusicInputSchema } from "../schemas/media.schemas.js";
+import { OrganizeMusicInputSchema } from "../schemas/organize.js";
 import { logger } from "../utils/logger.js";
 
 export type OrganizeMusicInput = z.infer<typeof OrganizeMusicInputSchema>;
 
-export { OrganizeMusicInputSchema } from "../schemas/media.schemas.js";
+export { OrganizeMusicInputSchema } from "../schemas/organize.js";
 export const organizeMusicToolDefinition: ToolDefinition = {
   name: "file_organizer_organize_music",
   title: "Organize Music Files",

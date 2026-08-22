@@ -2,7 +2,7 @@ import fs from "fs/promises";
 
 import path from "path";
 import os from "os";
-import { OrganizerService } from "../../../src/services/organizer.service.js";
+import { OrganizerService } from "../../../src/core/organize/organizer.js";
 import { CategorizerService } from "../../../src/services/categorizer.service.js";
 import { FileWithSize } from "../../../src/types.js";
 

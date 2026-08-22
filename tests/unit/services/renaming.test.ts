@@ -21,7 +21,7 @@ jest.unstable_mockModule('fs/promises', () => ({
 }));
 
 // Mock RollbackService
-jest.unstable_mockModule('../../../src/services/rollback.service', () => ({
+jest.unstable_mockModule('../../../src/core/organize/rollback', () => ({
     RollbackService: class {
         createManifest = jest.fn();
     }
@@ -29,7 +29,7 @@ jest.unstable_mockModule('../../../src/services/rollback.service', () => ({
 
 
 // Import after mocking
-const { RenamingService } = await import('../../../src/services/renaming.service');
+const { RenamingService } = await import('../../../src/core/organize/rename');
 const fs = (await import('fs/promises')).default;
 
 

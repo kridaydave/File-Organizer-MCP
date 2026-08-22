@@ -4,7 +4,6 @@
  */
 
 import type { CategoryDefinition, CustomRule } from "./categories.js";
-import type { ScreeningReport } from "./system.js";
 
 // ==================== Configuration Types ====================
 
@@ -58,7 +57,6 @@ export interface ScanResult extends PaginatedResult<FileInfo> {
   directory: string;
   total_size: number;
   total_size_readable: string;
-  screening_report?: ScreeningReport;
 }
 
 export interface ListResult extends PaginatedResult<BasicFileInfo> {

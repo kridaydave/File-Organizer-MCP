@@ -5,7 +5,7 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { ImageMetadataService } from "../../../src/services/image-metadata.service.js";
+import { ImageMetadataService } from "../../../src/services/metadata/image.js";
 
 describe("ImageMetadataService", () => {
   let service: ImageMetadataService;

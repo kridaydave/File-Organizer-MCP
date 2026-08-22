@@ -9,14 +9,14 @@ import { z } from "zod";
 import path from "path";
 import type { ToolDefinition, ToolResponse } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
-import { RenamingService } from "../services/renaming.service.js";
-import { BatchRenameInputSchema } from "../schemas/batch-rename.schemas.js";
+import { FileScannerService } from "../core/scan/scanner.js";
+import { RenamingService } from "../core/organize/rename.js";
+import { BatchRenameInputSchema } from "../schemas/organize.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 
 export type BatchRenameInput = z.infer<typeof BatchRenameInputSchema>;
 
-export { BatchRenameInputSchema } from "../schemas/batch-rename.schemas.js";
+export { BatchRenameInputSchema } from "../schemas/organize.js";
 export const batchRenameToolDefinition: ToolDefinition = {
   name: "file_organizer_batch_rename",
   title: "Batch Rename Files",

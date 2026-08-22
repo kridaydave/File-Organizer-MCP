@@ -7,15 +7,15 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
-import { RollbackService } from "../services/rollback.service.js";
+import { RollbackService } from "../core/organize/rollback.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { UndoLastOperationInputSchema } from "../schemas/rollback.schemas.js";
+import { UndoLastOperationInputSchema } from "../schemas/organize.js";
 
 // Singleton for now, or just new instance since it reads from disk
 const rollbackService = new RollbackService();
 
-export { UndoLastOperationInputSchema } from "../schemas/rollback.schemas.js";
-export type { UndoLastOperationInput } from "../schemas/rollback.schemas.js";
+export { UndoLastOperationInputSchema } from "../schemas/organize.js";
+export type { UndoLastOperationInput } from "../schemas/organize.js";
 export const undoLastOperationToolDefinition: ToolDefinition = {
   name: "file_organizer_undo_last_operation",
   title: "Undo Last Organization Operation",

@@ -13,7 +13,7 @@ import {
   getUserConfigPath,
   UserConfig,
 } from "../config.js";
-import { getAutoOrganizeScheduler } from "../services/auto-organize.service.js";
+import { getAutoOrganizeScheduler } from "../extensions/scheduler/auto-organize.service.js";
 
 // Try to import chalk, fallback if not available
 let chalk: {

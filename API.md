@@ -22,11 +22,9 @@
 - [file_organizer_inspect_metadata](#file_organizer_inspect_metadata)
 - [file_organizer_list_files](#file_organizer_list_files)
 - [file_organizer_list_watches](#file_organizer_list_watches)
-- [file_organizer_organize_by_content](#file_organizer_organize_by_content) ⭐ v3.3.0
 - [file_organizer_organize_files](#file_organizer_organize_files)
 - [file_organizer_organize_music](#file_organizer_organize_music) ⭐ v3.3.0
 - [file_organizer_organize_photos](#file_organizer_organize_photos) ⭐ v3.3.0
-- [file_organizer_organize_smart](#file_organizer_organize_smart) ⭐ v3.3.0
 - [file_organizer_preview_organization](#file_organizer_preview_organization)
 - [file_organizer_read_file](#file_organizer_read_file)
 - [file_organizer_scan_directory](#file_organizer_scan_directory)
@@ -543,42 +541,6 @@ file_organizer_watch_directory({
 
 ---
 
-## file_organizer_organize_smart
-
-[⬆ Back to Top](#top)
-
-**Description:** Automatically organizes mixed folders by detecting file types and applying the appropriate strategy. Routes music files to Music/Artist/Album, photos to Photos/YYYY/MM, and documents to Documents/Topic.
-
-### Parameters
-
-| Parameter               | Type    | Description                                                                 | Default        |
-| ----------------------- | ------- | --------------------------------------------------------------------------- | -------------- |
-| `source_dir`            | string  | Full path to directory with mixed files                                     | -              |
-| `target_dir`            | string  | Full path where organized folders will be created                           | -              |
-| `music_structure`       | string  | Folder structure for music: 'artist/album', 'album', 'genre/artist', 'flat' | 'artist/album' |
-| `photo_date_format`     | string  | Date format for photos: 'YYYY/MM/DD', 'YYYY-MM-DD', 'YYYY/MM', 'YYYY'       | 'YYYY/MM'      |
-| `photo_group_by_camera` | boolean | Group photos by camera model within date folders                            | false          |
-| `strip_gps`             | boolean | Strip GPS location data from photos for privacy                             | false          |
-| `create_shortcuts`      | boolean | Create shortcuts for multi-topic documents                                  | false          |
-| `dry_run`               | boolean | Preview changes without moving files                                        | true           |
-| `copy_instead_of_move`  | boolean | Copy files instead of moving them                                           | false          |
-| `recursive`             | boolean | Scan subdirectories recursively                                             | true           |
-| `response_format`       | string  | Output format                                                               | 'markdown'     |
-
-### Example
-
-```typescript
-file_organizer_organize_smart({
-  source_dir: "/Users/Downloads",
-  target_dir: "/Users/Organized",
-  music_structure: "artist/album",
-  photo_date_format: "YYYY/MM",
-  strip_gps: true,
-  dry_run: true,
-});
-```
-
----
 
 ## file_organizer_organize_music
 
@@ -646,35 +608,6 @@ file_organizer_organize_photos({
 
 ---
 
-## file_organizer_organize_by_content
-
-[⬆ Back to Top](#top)
-
-**Description:** Organize documents by extracting topics from content. Supports PDF, DOCX, DOC, TXT, MD, RTF, ODT formats.
-
-### Parameters
-
-| Parameter          | Type    | Description                                        | Default    |
-| ------------------ | ------- | -------------------------------------------------- | ---------- |
-| `source_dir`       | string  | Full path to directory containing documents        | -          |
-| `target_dir`       | string  | Full path where organized documents will be placed | -          |
-| `create_shortcuts` | boolean | Create shortcuts for multi-topic documents         | false      |
-| `dry_run`          | boolean | Preview changes without moving files               | true       |
-| `recursive`        | boolean | Scan subdirectories recursively                    | true       |
-| `response_format`  | string  | Output format                                      | 'markdown' |
-
-### Example
-
-```typescript
-file_organizer_organize_by_content({
-  source_dir: "/Users/Documents/Unsorted",
-  target_dir: "/Users/Documents/Organized",
-  create_shortcuts: true,
-  dry_run: true,
-});
-```
-
----
 
 ## file_organizer_batch_read_files
 

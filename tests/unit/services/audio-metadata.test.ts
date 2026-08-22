@@ -5,7 +5,7 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { AudioMetadataService } from "../../../src/services/audio-metadata.service.js";
+import { AudioMetadataService } from "../../../src/services/metadata/audio.js";
 
 describe("AudioMetadataService", () => {
   let service: AudioMetadataService;

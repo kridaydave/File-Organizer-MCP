@@ -8,7 +8,7 @@ import {
   WatchDirectoryInputSchema,
   UnwatchDirectoryInputSchema,
   ListWatchesInputSchema,
-} from '../../../src/tools/watch.tool.js';
+} from '../../../src/extensions/scheduler/watch.tool.js';
 
 describe('Watch Tools Input Schemas', () => {
   describe('WatchDirectoryInputSchema', () => {
@@ -153,17 +153,17 @@ describe('Watch Tools Input Schemas', () => {
 
 describe('Watch Tool Definitions', () => {
   it('should export watch tool with correct name', async () => {
-    const { watchDirectoryToolDefinition } = await import('../../../src/tools/watch.tool.js');
+    const { watchDirectoryToolDefinition } = await import('../../../src/extensions/scheduler/watch.tool.js');
     expect(watchDirectoryToolDefinition.name).toBe('file_organizer_watch_directory');
   });
 
   it('should export unwatch tool with correct name', async () => {
-    const { unwatchDirectoryToolDefinition } = await import('../../../src/tools/watch.tool.js');
+    const { unwatchDirectoryToolDefinition } = await import('../../../src/extensions/scheduler/watch.tool.js');
     expect(unwatchDirectoryToolDefinition.name).toBe('file_organizer_unwatch_directory');
   });
 
   it('should export list tool with correct name', async () => {
-    const { listWatchesToolDefinition } = await import('../../../src/tools/watch.tool.js');
+    const { listWatchesToolDefinition } = await import('../../../src/extensions/scheduler/watch.tool.js');
     expect(listWatchesToolDefinition.name).toBe('file_organizer_list_watches');
   });
 });

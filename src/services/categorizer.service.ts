@@ -16,8 +16,6 @@ import type {
 import { CATEGORIES } from "../constants.js";
 import { formatBytes } from "../utils/formatters.js";
 import { PathValidatorService } from "./path-validator.service.js";
-import { ContentAnalyzerService } from "./content-analyzer.service.js";
-import { MetadataCacheService } from "./metadata-cache.service.js";
 import { validateCategoryName, validateRegexPattern } from "../core/categorize/rules.js";
 import { getCategoryByExtension } from "../core/categorize/extension.js";
 import {
@@ -38,10 +36,7 @@ export class CategorizerService {
   private pathValidator: PathValidatorService;
   private contentCache: ContentAnalysisCache;
 
-  constructor(
-    private contentAnalyzer?: ContentAnalyzerService,
-    private metadataCache?: MetadataCacheService,
-  ) {
+  constructor() {
     this.pathValidator = new PathValidatorService();
     this.contentCache = new ContentAnalysisCache(
       (filePath) => this.getCategoryByContent(filePath),
@@ -120,7 +115,7 @@ export class CategorizerService {
   ): CategoryName {
     const extensionCategory = this.getCategoryByExtension(name);
 
-    if (useContentAnalysis && this.contentAnalyzer && filePath) {
+    if (useContentAnalysis && filePath) {
       this.contentCache.trigger(name, filePath);
     }
 
@@ -159,19 +154,16 @@ export class CategorizerService {
   }
 
   /**
-   * Get category using content analysis (more secure than extension-only)
-   * Falls back to extension-based if content analysis fails
+   * Get category using content sniffing (more secure than extension-only)
+   * Falls back to extension-based if content sniffing fails
    */
   async getCategoryByContent(filePath: string): Promise<{
     category: CategoryName;
     confidence: number;
     warnings: string[];
-    metadata?: import("../types.js").AudioMetadata | import("../types.js").ImageMetadata;
   }> {
     return getCategoryByContent(
       this.pathValidator,
-      this.contentAnalyzer,
-      this.metadataCache,
       filePath,
       (name) => this.getCategoryByExtension(name),
     );
@@ -186,11 +178,7 @@ export class CategorizerService {
     threatLevel: "none" | "low" | "medium" | "high";
     reason?: string;
   }> {
-    return classifySecurityFn(
-      this.pathValidator,
-      this.contentAnalyzer,
-      filePath,
-    );
+    return classifySecurityFn(this.pathValidator, filePath);
   }
 
   /**
@@ -202,11 +190,7 @@ export class CategorizerService {
     actualType: string;
     mismatch: boolean;
   }> {
-    return validateFileTypeFn(
-      this.pathValidator,
-      this.contentAnalyzer,
-      filePath,
-    );
+    return validateFileTypeFn(this.pathValidator, filePath);
   }
 
   /**

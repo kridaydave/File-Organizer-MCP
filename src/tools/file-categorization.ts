@@ -8,9 +8,9 @@
 import {
   CategorizeByTypeInputSchema,
   type CategorizeByTypeInput,
-} from "../schemas/scan.schemas.js";
-export { CategorizeByTypeInputSchema } from "../schemas/scan.schemas.js";
-export type { CategorizeByTypeInput } from "../schemas/scan.schemas.js";
+} from "../schemas/scan.js";
+export { CategorizeByTypeInputSchema } from "../schemas/scan.js";
+export type { CategorizeByTypeInput } from "../schemas/scan.js";
 import type {
   ToolDefinition,
   ToolResponse,
@@ -18,7 +18,7 @@ import type {
   CategoryName,
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
+import { FileScannerService } from "../core/scan/scanner.js";
 import { globalCategorizerService } from "../services/index.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 

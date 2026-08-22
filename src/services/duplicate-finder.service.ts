@@ -12,13 +12,13 @@ import type { FileWithSize, DuplicateGroup } from "../types.js";
 import { fileExists } from "../utils/file-utils.js";
 import { logger } from "../utils/logger.js";
 import path from "path";
-import { RollbackService } from "./rollback.service.js";
+import { RollbackService } from "../core/organize/rollback.js";
 import type { RollbackAction } from "../types.js";
 import {
   validateStrictPath,
   PathValidatorService,
 } from "./path-validator.service.js";
-import { FileScannerService } from "./file-scanner.service.js";
+import { FileScannerService } from "../core/scan/scanner.js";
 
 export type RecommendationStrategy =
   | "newest"

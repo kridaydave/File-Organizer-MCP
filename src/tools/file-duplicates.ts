@@ -11,14 +11,14 @@ import type {
   DuplicateResult,
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
+import { FileScannerService } from "../core/scan/scanner.js";
 import { HashCalculatorService } from "../services/hash-calculator.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import {
   FindDuplicateFilesInputSchema,
   type FindDuplicateFilesInput,
-} from "../schemas/scan.schemas.js";
+} from "../schemas/scan.js";
 
 export const findDuplicateFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_find_duplicate_files",

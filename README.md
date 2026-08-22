@@ -73,7 +73,7 @@ You can ask the assistant things like:
 - Categorization into 12 or more file types.
 - Cron-based automatic organization and directory watch mode.
 - Duplicate detection by SHA-256 content hash.
-- Metadata extraction: EXIF for photos, ID3 for audio, topic extraction for documents.
+- Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
 - Dry-run preview, atomic moves, and rollback.
 - Path traversal protection, TOCTOU mitigation, and metadata scrubbing.
@@ -87,7 +87,6 @@ You can ask the assistant things like:
 
 - `file_organizer_scan_directory` - List a directory with detailed file info. `directory` is required; `include_subdirs` toggles recursion.
 - `file_organizer_read_file` - Read a file with 8-layer path validation. `path` is required; `encoding` is utf-8, base64, or binary.
-- `file_organizer_organize_smart` - Handle music, photos, and documents in one pass, choosing the best strategy per file.
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 
@@ -103,7 +102,6 @@ You can ask the assistant things like:
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`
 - `file_organizer_list_watches`
-- `file_organizer_organize_by_content`
 - `file_organizer_organize_files`
 - `file_organizer_organize_music`
 - `file_organizer_organize_photos`

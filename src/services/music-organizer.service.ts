@@ -8,7 +8,7 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { AudioMetadataService } from "./audio-metadata.service.js";
+import { AudioMetadataService } from "./metadata/audio.js";
 import { PathValidatorService } from "./path-validator.service.js";
 import { logger } from "../utils/logger.js";
 import { isSubPath } from "../utils/file-utils.js";

@@ -12,11 +12,11 @@ import type { ToolDefinition, ToolResponse } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { SmartSuggestService } from "../services/smart-suggest.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { SmartSuggestInputSchema } from "../schemas/smart.schemas.js";
+import { SmartSuggestInputSchema } from "../schemas/organize.js";
 import { loadUserConfig } from "../config.js";
 
 export { SmartSuggestInputSchema };
-export type { SmartSuggestInput } from "../schemas/smart.schemas.js";
+export type { SmartSuggestInput } from "../schemas/organize.js";
 export const smartSuggestToolDefinition: ToolDefinition = {
   name: "file_organizer_smart_suggest",
   title: "Smart Suggest",

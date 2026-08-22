@@ -6,11 +6,9 @@
 import fs from "fs/promises";
 import path from "path";
 import { CategorizerService } from "../../../src/services/categorizer.service.js";
-import { ContentAnalyzerService } from "../../../src/services/content-analyzer.service.js";
 
 describe("CategorizerService with Content Analysis", () => {
   let categorizer: CategorizerService;
-  let contentAnalyzer: ContentAnalyzerService;
   let testDir: string;
   let baseTempDir: string;
 
@@ -20,8 +18,7 @@ describe("CategorizerService with Content Analysis", () => {
     testDir = await fs.mkdtemp(
       path.join(baseTempDir, "test-categorizer-content-"),
     );
-    contentAnalyzer = new ContentAnalyzerService();
-    categorizer = new CategorizerService(contentAnalyzer);
+    categorizer = new CategorizerService();
   });
 
   afterEach(async () => {
@@ -168,17 +165,16 @@ describe("CategorizerService with Content Analysis", () => {
       expect(result.warnings.length).toBeGreaterThan(0);
     });
 
-    it("should warn when content analyzer is not available", async () => {
-      const categorizerWithoutAnalyzer = new CategorizerService();
-      const filePath = await createFile("test.txt", "content");
+    it("should fall back to extension when content sniff fails", async () => {
+      const filePath = path.join(testDir, "missing.pdf");
 
-      const result =
-        await categorizerWithoutAnalyzer.getCategoryByContent(filePath);
+      const result = await categorizer.getCategoryByContent(filePath);
 
-      expect(result.warnings.some((w) => w.includes("not available"))).toBe(
-        true,
-      );
-      expect(result.confidence).toBe(0.5);
+      expect(result.category).toBe("Documents");
+      expect(result.confidence).toBe(0.4);
+      expect(
+        result.warnings.some((w) => w.includes("sniff failed")),
+      ).toBe(true);
     });
   });
 

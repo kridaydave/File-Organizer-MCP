@@ -5,7 +5,7 @@ import os from 'os';
 import path from 'path';
 // Assuming RollbackService exists. If not, I'll find it.
 // The task says "tests/unit/services/rollback.test.ts".
-import { RollbackService } from '../../../src/services/rollback.service.js';
+import { RollbackService } from '../../../src/core/organize/rollback.js';
 
 describe('Rollback Service', () => {
     let rollbackService: RollbackService;

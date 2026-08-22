@@ -52,16 +52,6 @@ export interface CategorizedResult {
 
 // ==================== Content Analysis Types ====================
 
-export interface ContentAnalysisResult {
-  filePath: string;
-  detectedType: string;
-  mimeType: string;
-  confidence: number; // 0-1 score
-  extensionMatch: boolean;
-  warnings: string[];
-  scannedAt: Date;
-}
-
 export interface FileTypeDetection {
   type: string;
   mimeType: string;

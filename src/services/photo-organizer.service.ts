@@ -8,7 +8,7 @@ import path from "path";
 import { createReadStream, createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
 import * as piexif from "piexifjs";
-import { MetadataService } from "./metadata.service.js";
+import { MetadataService } from "./metadata/service.js";
 import { PathValidatorService } from "./path-validator.service.js";
 import { logger } from "../utils/logger.js";
 import { isSubPath } from "../utils/file-utils.js";

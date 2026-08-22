@@ -8,7 +8,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
 import { historyLogger } from "../services/history-logger.service.js";
-import { ViewHistoryInputSchema } from "../schemas/history.schemas.js";
+import { ViewHistoryInputSchema } from "../schemas/system.js";
 import { loadUserConfig } from "../config.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 

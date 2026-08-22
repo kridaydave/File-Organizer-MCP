@@ -18,7 +18,7 @@ import {
 } from "../../src/services/history-logger.service.js";
 import { SystemOrganizeService } from "../../src/services/system-organize.service.js";
 import { SmartSuggestService } from "../../src/services/smart-suggest.service.js";
-import { FileScannerService } from "../../src/services/file-scanner.service.js";
+import { FileScannerService } from "../../src/core/scan/scanner.js";
 import { globalLoggerSetup } from "../utils/logger-mock.js";
 
 globalLoggerSetup();

@@ -19,7 +19,7 @@ import path from "path";
 import { AccessDeniedError, ValidationError } from "../types.js";
 import { normalizePath, isSubPath } from "../utils/file-utils.js";
 import { sanitizeErrorMessage } from "../utils/error-handler.js";
-import { PathSchema } from "../schemas/security.schemas.js";
+import { PathSchema } from "../schemas/system.js";
 import { logger } from "../utils/logger.js";
 import { CONFIG } from "../config.js";
 

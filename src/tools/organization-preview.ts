@@ -12,10 +12,10 @@ import type {
   OrganizationPlan,
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
+import { FileScannerService } from "../core/scan/scanner.js";
 import { globalOrganizerService } from "../services/index.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { PreviewOrganizationInputSchema } from "../schemas/preview.schemas.js";
+import { PreviewOrganizationInputSchema } from "../schemas/organize.js";
 import { loadUserConfig } from "../config.js";
 
 export interface MoveItem {
@@ -31,8 +31,8 @@ export interface SkippedFile {
   reason: string;
 }
 
-export { PreviewOrganizationInputSchema } from "../schemas/preview.schemas.js";
-export type { PreviewOrganizationInput } from "../schemas/preview.schemas.js";
+export { PreviewOrganizationInputSchema } from "../schemas/organize.js";
+export type { PreviewOrganizationInput } from "../schemas/organize.js";
 export const previewOrganizationToolDefinition: ToolDefinition = {
   name: "file_organizer_preview_organization",
   title: "Preview File Organization Plan",

@@ -74,14 +74,6 @@ import {
   handleOrganizePhotos,
 } from "../tools/photo-organization.js";
 import {
-  organizeByContentToolDefinition,
-  handleOrganizeByContent,
-} from "../tools/content-organization.js";
-import {
-  organizeSmartToolDefinition,
-  handleOrganizeSmart,
-} from "../tools/smart-organization.js";
-import {
   smartSuggestToolDefinition,
   handleSmartSuggest,
 } from "../tools/smart-suggest.js";
@@ -100,7 +92,7 @@ import {
   handleUnwatchDirectory,
   listWatchesToolDefinition,
   handleListWatches,
-} from "../tools/watch.tool.js";
+} from "../extensions/scheduler/watch.tool.js";
 import {
   fileReaderToolDefinition,
   handleReadFile,
@@ -131,8 +123,6 @@ const entries = [
   reg(previewOrganizationToolDefinition, handlePreviewOrganization),
   reg(organizeMusicToolDefinition, handleOrganizeMusic),
   reg(organizePhotosToolDefinition, handleOrganizePhotos),
-  reg(organizeByContentToolDefinition, handleOrganizeByContent),
-  reg(organizeSmartToolDefinition, handleOrganizeSmart),
   reg(smartSuggestToolDefinition, handleSmartSuggest),
   reg(systemOrganizationToolDefinition, handleSystemOrganization),
   reg(batchReadFilesToolDefinition, handleBatchReadFiles),

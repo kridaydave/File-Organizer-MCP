@@ -1,76 +1,7 @@
 /**
  * System Types
- * History, rollback, screening, metadata extraction, health and privacy
+ * History, rollback, metadata extraction, health and privacy
  */
-
-// ==================== Content Screening Types ====================
-
-export type ThreatLevel = "none" | "low" | "medium" | "high" | "critical";
-
-/**
- * Serializable value type for ScreenIssue details
- * Allows: strings, numbers, booleans, null, arrays, and nested objects
- * Excludes: functions, symbols, undefined
- */
-export type SerializablePrimitive = string | number | boolean | null;
-
-export interface SerializableObject {
-  [key: string]: SerializableValue;
-}
-
-export type SerializableValue =
-  | SerializablePrimitive
-  | SerializableValue[]
-  | SerializableObject;
-
-export interface ScreenIssue {
-  type: IssueType;
-  severity: "warning" | "error";
-  message: string;
-  details?: Record<string, SerializableValue>;
-}
-
-export type IssueType =
-  | "extension_mismatch"
-  | "executable_disguised"
-  | "suspicious_pattern"
-  | "unknown_type"
-  | "malicious_content"
-  | "policy_violation";
-
-export interface ScreenResult {
-  filePath: string;
-  passed: boolean;
-  threatLevel: ThreatLevel;
-  detectedType: string;
-  declaredExtension: string;
-  issues: ScreenIssue[];
-  timestamp: Date;
-}
-
-export interface ScreeningReport {
-  totalFiles: number;
-  passedCount: number;
-  failedCount: number;
-  threatSummary: {
-    none: number;
-    low: number;
-    medium: number;
-    high: number;
-  };
-  issuesByType: Record<string, number>;
-  timestamp: Date;
-  results: ScreenResult[];
-}
-
-export interface ContentScreeningConfig {
-  checkExtensionMismatch: boolean;
-  checkExecutableContent: boolean;
-  checkSuspiciousPatterns: boolean;
-  strictMode: boolean;
-  allowedTypes?: string[];
-  blockedTypes?: string[];
-}
 
 // ==================== Metadata Extraction Types ====================
 

@@ -7,14 +7,14 @@
 
 import type { ToolDefinition, ToolResponse, OrganizeResult } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
+import { FileScannerService } from "../core/scan/scanner.js";
 import { globalOrganizerService } from "../services/index.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { escapeMarkdown } from "../utils/index.js";
 import {
   OrganizeFilesInputSchema,
   type OrganizeFilesInput,
-} from "../schemas/organize.schemas.js";
+} from "../schemas/organize.js";
 import { loadUserConfig } from "../config.js";
 
 export const organizeFilesToolDefinition: ToolDefinition = {

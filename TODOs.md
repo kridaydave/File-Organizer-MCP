@@ -36,22 +36,39 @@ Stash `stash@{0}` (v4 migration WIP) still parked — pop after this branch land
 
 ## Phase-2 — Reduce over-eng / refactor simpler
 
-27 services → ~7-8, 22 schemas → ~4-5. Keep `scan -> categorize -> plan -> move`.
+27 services → ~8 units. 22 schemas → 4. Keep `scan -> categorize -> plan -> move`.
 
-Keep:
-- `core/path` (validator + `path-security`)
-- `core/scan` (merge `file-scanner` + `streaming-scanner` + `file-tracker`)
-- `core/categorize` (simple map from `src/constants.ts:6`)
-- `core/organize` (plan + execute + rollback)
-- `core/hash` (duplicate finder)
-- `core/io` (one `readFile`, ditch `readers/` Result/factory/audit layering)
+Decisions locked with kriday:
+- Music/photo organizers **stay in core** (so image/audio-metadata survive, collapsed).
+- Categorization keeps a slim content-sniff inside `core/categorize` (magic bytes from
+  `file-signatures.ts`, no cache, no topic extraction). Extension map stays primary.
+  `content-analyzer`, `topic-extractor`, `metadata-cache` die.
+- New io layer must keep the sensitive-file pattern check (`E_SENSITIVE_FILE`) before any read.
 
-Kill / merge:
-- [ ] `readers/secure-file-reader.ts:855` → simple `readFile()` via `validateStrictPath` + `fs.readFile`
-- [ ] `metadata-cache` / `content-analyzer` / `topic-extractor` / `text-extraction` / `image-metadata` / `audio-metadata` → single `metadata/` or delete if music/photo out of core
-- [ ] `renaming.service.ts:503` + `scheduler-state` + `manifest-integrity` → inline into `organize`
-- [ ] `auto-organize.service.ts:649` + `watch.tool.ts:389` → move to `src/extensions/scheduler/` or delete (main stateful culprit)
-- [ ] Collapse `src/schemas/*:1187` → `common.ts`, `scan.ts`, `organize.ts`, `system.ts`
+End state: `core/{path,io,scan,categorize,organize,hash}` + `history-logger` + `extensions/scheduler`.
+
+Steps — build + targeted tests green after each; run `npm run test:security`
+after steps that touch path validation (1 and 5).
+
+- [x] **1. Kill `readers/` → `src/core/io/readFile()`.** One function: `validateStrictPath` + sensitive-pattern check + `fs.readFile`. Delete factory/Result/audit/errors/interfaces (~2000 lines incl. tests). Update `tools/file-reader.tool.ts`, move its tests to unit/integration.
+  - Done: `core/io/{read-file,sensitive-files,index}.ts`. Gates ported (`sensitive-file-test`, `toctou-test`, `path-traversal-fuzz` all PASS), benchmark.ts re-pointed. Rate limiter + audit logger dropped. Old reader's hidden pattern list (config.json, secrets., system32, unanchored id_rsa) merged into `sensitive-files.ts`. Tests: `tests/unit/core/io/read-file.test.ts` (23).
+- [x] **2. Collapse metadata stack → `src/services/metadata/`.** Merge `image-metadata` + `audio-metadata` + `metadata.service` facade into one module. Delete `metadata-cache/`, `content-analyzer`, `topic-extractor`, `text-extraction`, `content-screening`.
+  - Done with kriday's call: kill the content tools entirely. Deleted `organize_smart` + `organize_by_content` tools, `screen_files` flag, text-preview now raw fs read (no pdf/docx extraction). Dropped deps: `pdf-parse`, `mammoth`. Metadata stack lives in `services/metadata/{image,audio,service}.ts`. Screening types + schemas deleted.
+- [x] **3. Slim `core/categorize` content sniff.** Replace `contentAnalyzer.analyze()` calls in `core/categorize/content.ts` + `security.ts` with a local magic-byte sniffer using `constants/file-signatures.ts`. Delete analyzer imports. Tests for `classifySecurity` must stay green.
+  - Done: `core/categorize/sniff.ts` (58 lines, TOCTOU-safe open + matchSignature). `CategorizerService()` takes no analyzer/cache args anymore. Globals `globalContentAnalyzer`/`globalMetadataCache` removed from barrel.
+- [x] **4. Move scheduler out:** `auto-organize.service` + `scheduler-state.service` + `tools/watch.tool.ts` → `src/extensions/scheduler/`. Registry stops importing them.
+  - Done as a pure move: `extensions/scheduler/{auto-organize,scheduler-state,watch.tool,watch.schemas}.ts`. Watch tools stay registered (they're how users create tasks) — imports re-pointed. Bootstrap/diagnostics import from the extension path. Zero behavior change. Full deletion or separate bin is phase-3's call.
+- [x] **5. Inline into organize:** `renaming.service` → `core/organize/rename.ts`; `manifest-integrity` → rollback internals inside `core/organize`. No tool API change.
+  - Done: `core/organize/{organizer,rename,rollback,manifest-integrity}.ts`. Kept manifest-integrity as a small private module next to rollback (folding 101 lines into the class forced test churn for zero gain). Services barrel re-exports from core.
+- [x] **6. Merge scan trio:** `file-scanner` + `streaming-scanner` + `file-tracker` → `core/scan/`.
+  - Done differently, simpler: `file-scanner` → `core/scan/scanner.ts`. `streaming-scanner` + `file-tracker` had zero consumers outside the export barrel — deleted instead of merged (~220 lines + 2 test files gone).
+- [x] **7. Collapse schemas** 22 files → `common.ts`, `scan.ts`, `organize.ts`, `system.ts`. Grep `tests/` + update `API.md`.
+  - Done: 18 schema files → 4 (+ index barrel). Dead `OrganizeSmartInputSchema` dropped during the collapse. Tool/schema import paths re-pointed across 25 files; API.md tool tables unchanged (schema shapes didn't change).
+
+Notes:
+- Leave `global*` singletons in `services/index.ts` alone — that's Phase-3 scope. Barrel just re-points imports as files move.
+- `smart-suggest` + `system-organize`: untouched this phase (small enough, not on kill list). Revisit if phase-3 wants them gone.
+- Kill list for step 2 is ~6 services ≈ 5k lines deleted, plus readers ~2k in step 1.
 
 ## Phase-3 — Stateless + new MCP DX (v4.0.0)
 

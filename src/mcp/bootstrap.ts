@@ -10,7 +10,7 @@ import {
   startAutoOrganizeScheduler,
   stopAutoOrganizeScheduler,
   getAutoOrganizeScheduler,
-} from "../services/auto-organize.service.js";
+} from "../extensions/scheduler/auto-organize.service.js";
 import { logger } from "../utils/logger.js";
 
 /**

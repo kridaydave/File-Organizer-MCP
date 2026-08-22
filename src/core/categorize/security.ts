@@ -7,7 +7,7 @@
 import path from "path";
 import { isExecutableSignature } from "../../constants/file-signatures.js";
 import type { PathValidatorService } from "../../services/path-validator.service.js";
-import type { ContentAnalyzerService } from "../../services/content-analyzer.service.js";
+import { sniffFileType } from "./sniff.js";
 import { getRealExtension } from "./extension.js";
 
 export interface SecurityClassification {
@@ -132,11 +132,10 @@ export function hasDoubleExtension(fileName: string): boolean {
 
 /**
  * Get security classification for a file.
- * Extension-based first, then content analysis when a analyzer is provided.
+ * Extension-based first, then magic-byte content sniff.
  */
 export async function classifySecurity(
   pathValidator: PathValidatorService,
-  contentAnalyzer: ContentAnalyzerService | undefined,
   filePath: string,
 ): Promise<SecurityClassification> {
   const fileName = path.basename(filePath);
@@ -159,55 +158,40 @@ export async function classifySecurity(
     };
   }
 
-  // If content analyzer available, do deeper analysis
-  if (contentAnalyzer) {
-    try {
-      const validatedPath = await pathValidator.validatePath(filePath, {
-        requireExists: true,
-      });
+  try {
+    const sniff = await sniffFileType(pathValidator, filePath);
 
-      const analysis = await contentAnalyzer.analyze(validatedPath);
-
-      // Check if executable disguised as document
-      if (isExecutableDisguisedAsDocument(analysis.detectedType, fileName)) {
-        return {
-          isExecutable: true,
-          isSuspicious: true,
-          threatLevel: "high",
-          reason: `Executable content (${analysis.detectedType}) disguised as ${extension} document`,
-        };
-      }
-
-      // Check for mismatch
-      if (!analysis.extensionMatch) {
-        const severity: "high" | "medium" | "low" = analysis.warnings.some(
-          (w) => w.includes("CRITICAL"),
-        )
-          ? "high"
-          : analysis.warnings.some((w) => w.includes("HIGH"))
-            ? "medium"
-            : "low";
-
-        return {
-          isExecutable: isExecutableType(analysis.detectedType),
-          isSuspicious: true,
-          threatLevel: severity,
-          reason: `Extension mismatch: declared ${extension}, actual ${analysis.detectedType}`,
-        };
-      }
-
-      // Check if content is executable
-      if (isExecutableType(analysis.detectedType)) {
-        return {
-          isExecutable: true,
-          isSuspicious: false,
-          threatLevel: "low",
-          reason: `Executable file detected: ${analysis.detectedType}`,
-        };
-      }
-    } catch (error) {
-      // Fall through to extension-based check
+    // Check if executable disguised as document
+    if (isExecutableDisguisedAsDocument(sniff.detectedType, fileName)) {
+      return {
+        isExecutable: true,
+        isSuspicious: true,
+        threatLevel: "high",
+        reason: `Executable content (${sniff.detectedType}) disguised as ${extension} document`,
+      };
     }
+
+    // Check for mismatch
+    if (!sniff.extensionMatch && sniff.detectedType !== "UNKNOWN") {
+      return {
+        isExecutable: isExecutableType(sniff.detectedType),
+        isSuspicious: true,
+        threatLevel: "low",
+        reason: `Extension mismatch: declared ${extension}, actual ${sniff.detectedType}`,
+      };
+    }
+
+    // Check if content is executable
+    if (isExecutableType(sniff.detectedType)) {
+      return {
+        isExecutable: true,
+        isSuspicious: false,
+        threatLevel: "low",
+        reason: `Executable file detected: ${sniff.detectedType}`,
+      };
+    }
+  } catch (error) {
+    // Fall through to extension-based check
   }
 
   // Extension-based fallback
@@ -225,11 +209,10 @@ export async function classifySecurity(
 
 /**
  * Check if file extension matches actual content.
- * Returns valid=true when no analyzer is available or analysis fails.
+ * Returns valid=true when the sniff fails or the type is unknown.
  */
 export async function validateFileType(
   pathValidator: PathValidatorService,
-  contentAnalyzer: ContentAnalyzerService | undefined,
   filePath: string,
 ): Promise<{
   valid: boolean;
@@ -239,7 +222,6 @@ export async function validateFileType(
 }> {
   const declaredExtension = path.extname(filePath).toLowerCase();
 
-  // Default response if analysis fails
   const defaultResponse = {
     valid: true,
     declaredExtension,
@@ -247,23 +229,16 @@ export async function validateFileType(
     mismatch: false,
   };
 
-  if (!contentAnalyzer) {
-    return defaultResponse;
-  }
-
   try {
-    const validatedPath = await pathValidator.validatePath(filePath, {
-      requireExists: true,
-    });
-
-    const analysis = await contentAnalyzer.analyze(validatedPath);
-    const mismatch = !analysis.extensionMatch;
-
+    const sniff = await sniffFileType(pathValidator, filePath);
+    if (sniff.detectedType === "UNKNOWN") {
+      return defaultResponse;
+    }
     return {
-      valid: !mismatch,
+      valid: sniff.extensionMatch,
       declaredExtension,
-      actualType: analysis.detectedType,
-      mismatch,
+      actualType: sniff.detectedType,
+      mismatch: !sniff.extensionMatch,
     };
   } catch (error) {
     return defaultResponse;

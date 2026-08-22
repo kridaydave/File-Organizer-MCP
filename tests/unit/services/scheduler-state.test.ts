@@ -7,7 +7,7 @@ import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { SchedulerStateService, resetSchedulerStateService } from '../../../src/services/scheduler-state.service.js';
+import { SchedulerStateService, resetSchedulerStateService } from '../../../src/extensions/scheduler/scheduler-state.service.js';
 
 describe('SchedulerStateService', () => {
   let tempDir: string;

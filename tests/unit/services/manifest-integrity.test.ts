@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { ManifestIntegrityService } from '../../../src/services/manifest-integrity.service';
+import { ManifestIntegrityService } from '../../../src/core/organize/manifest-integrity';
 
 const actions = [
     {

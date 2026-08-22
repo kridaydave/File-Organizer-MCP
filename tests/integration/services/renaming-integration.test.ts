@@ -1,8 +1,8 @@
 import path from 'path';
 import fs from 'fs/promises';
-import { RenamingService } from '../../../src/services/renaming.service.js';
-import { RenameRule } from '../../../src/schemas/rename.schemas.js';
-import { RollbackService } from '../../../src/services/rollback.service.js';
+import { RenamingService } from '../../../src/core/organize/rename.js';
+import { RenameRule } from '../../../src/schemas/organize.js';
+import { RollbackService } from '../../../src/core/organize/rollback.js';
 import os from 'os';
 
 describe('RenamingService Integration', () => {

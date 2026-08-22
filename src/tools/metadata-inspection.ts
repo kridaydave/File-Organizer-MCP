@@ -10,8 +10,8 @@ import type { ToolDefinition, ToolResponse, CategoryName } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
-import { InspectMetadataInputSchema } from "../schemas/metadata.schemas.js";
-import { MetadataService } from "../services/metadata.service.js";
+import { InspectMetadataInputSchema } from "../schemas/scan.js";
+import { MetadataService } from "../services/metadata/index.js";
 import * as path from "path";
 
 export type InspectMetadataInput = z.infer<typeof InspectMetadataInputSchema>;
@@ -42,7 +42,7 @@ export interface MetadataInspectionResult {
   warnings?: string[];
 }
 
-export { InspectMetadataInputSchema } from "../schemas/metadata.schemas.js";
+export { InspectMetadataInputSchema } from "../schemas/scan.js";
 export const inspectMetadataToolDefinition: ToolDefinition = {
   name: "file_organizer_inspect_metadata",
   title: "Inspect File Metadata",
