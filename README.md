@@ -1,8 +1,8 @@
 # File Organizer MCP Server
 
-Version 3.5.0 | MCP protocol 2024-11-05 | Node.js 18+
+Version 5.0.0 | MCP protocol 2026-07-28 (stateless) | Node.js 18+
 
-[![npm version](https://img.shields.io/badge/npm-v3.5.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
+[![npm version](https://img.shields.io/badge/npm-v5.0.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-1135%20passing-success.svg)](tests/)

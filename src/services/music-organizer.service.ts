@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Music Organizer Service
  *
  * Organizes audio files into structured folders based on metadata.

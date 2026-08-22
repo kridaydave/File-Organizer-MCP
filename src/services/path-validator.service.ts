@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Path Validator Service
  *
  * Implements 8-layer path validation for security:

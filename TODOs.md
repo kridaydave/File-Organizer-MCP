@@ -101,10 +101,44 @@ Cleanup notes:
 
 ## Phase-4 — Final scrub
 
-- [ ] `npm run build` + `lint` + `test` + `test:security` green on fresh clone
-- [ ] Update `ARCHITECTURE.md:1` to 1-page diagram
-- [ ] `README.md` DX: "how to add a tool in 1 file"
-- [ ] Re-run `scripts/security-gates/*`, `benchmarks` if needed
+Decisions locked with kriday:
+- One version story: `package.json` 3.5.0 → **5.0.0** (branch target). The salvaged
+  CHANGELOG entry says 4.0.0; retitle to 5.0.0 and make it cover all of simplify-v5.
+- ARCHITECTURE.md gets rewritten, not trimmed. It's 646 lines of per-service v3.1.x
+  history pointing at files that don't exist anymore (`config.ts`, flat `services/`,
+  old source tree at :423). Keep the 8-layer path validation pipeline section as-is;
+  that's still the security contract. Emoji headings go too.
+- `docs/FRAMEWORK.md` untouched (audited: zero dead-path references).
+- Salvage dir is `/tmp/opencode/stash-salvage/`, so step 1 happens before any reboot.
+
+Steps — each committed on its own; full gates only at step 6 (docs churn doesn't need
+the suite re-run per step).
+
+- [ ] **1. Version + changelog.** `package.json` → 5.0.0. README header line 3 still
+  reads "Version 3.5.0 | MCP protocol 2024-11-05"; fix version + protocol era (now
+  server@2 / MCP 2026-07-28) and the npm badge. Merge salvage CHANGELOG into
+  CHANGELOG.md as the 5.0.0 entry covering phases 1–3 (scheduler bin, ctx threading,
+  custom-rules persistence fix, history logger rewrite, io collapse).
+- [ ] **2. Rewrite ARCHITECTURE.md to one page.** New diagram: JSON-RPC stdio →
+  `mcp/registry.ts` → tools → `core/{path,io,scan,categorize,organize,hash}` +
+  history-logger + `extensions/scheduler`. Keep security pipeline + TOCTOU sections,
+  drop v3.1.x annotations and the stale "Source Structure" tree. State the new DX
+  contract (add a tool = 1 file + 1 registry line).
+- [ ] **3. README DX section:** "how to add a tool in 1 file". Point at the registry
+  header convention written in phase-3 step 6 (`src/mcp/registry.ts`). Also verify the
+  scheduled-organization section matches the watch bin UX from phase-3 step 3.
+- [ ] **4. Sync AGENTS.md "Where code lives" tree.** Still shows flat `services/*.service.ts`
+  and top-level `types.ts`/`config.ts`. Update to core/mcp/extensions reality so the
+  next agent doesn't chase ghosts.
+- [ ] **5. API.md spot-check.** Watch-tool note at :33 is already correct post phase-3;
+  confirm no other tool tables drifted during schema collapse. Expect minimal work.
+- [ ] **6. Fresh-clone gate.** Clone the branch to `/tmp/opencode`, `npm ci`, then
+  `build` + `lint` + `test` + `test:security` green. This is the release gate.
+- [ ] **7. Security gates + benchmarks.** Re-run `scripts/security-gates/run-all.ts`
+  (all four gates). Benchmark run is optional; io layer changed enough in phase-2 that
+  before/after numbers are nice-to-have for the changelog, not required.
+- [ ] **8. Ship.** Merge `chore/simplify-v5` → main, tag v5.0.0, archive this file to
+  `docs/implementation/` per the note below.
 
 ---
 

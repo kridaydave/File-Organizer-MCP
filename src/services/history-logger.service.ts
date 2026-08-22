@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * History Logger Service
  *
  * Tracks operation history as JSON-lines. Stateless: every log() is a direct

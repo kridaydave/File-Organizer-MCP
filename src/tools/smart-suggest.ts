@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * smart_suggest Tool
  *
  * Analyze directory health and get actionable suggestions for organization

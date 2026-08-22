@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Categorizer Service - thin facade over core/categorize modules.
  *
  * The actual logic lives in src/core/categorize/:

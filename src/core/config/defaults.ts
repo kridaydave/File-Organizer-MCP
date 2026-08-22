@@ -9,7 +9,7 @@ import { getAlwaysBlockedPatterns } from "./security.js";
 import type { PrivacyMode } from "../../types.js";
 
 export const CONFIG = {
-  VERSION: "3.5.0",
+  VERSION: "5.0.0",
 
   // Security Settings
   security: {

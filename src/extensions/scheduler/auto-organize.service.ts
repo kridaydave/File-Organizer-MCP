@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Auto-Organize Scheduler Service
  *
  * Smart scheduling with cron-based per-directory configuration.

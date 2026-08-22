@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Watch Manager
  *
  * Watch-list management extracted from the former watch tools. The stdio MCP

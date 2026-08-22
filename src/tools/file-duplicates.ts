@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * find_duplicate_files Tool
  *
  * @module tools/file-duplicates

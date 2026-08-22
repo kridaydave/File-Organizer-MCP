@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * TypeScript Type Definitions — barrel re-export
  *
  * This file re-exports all types from the split modules under
