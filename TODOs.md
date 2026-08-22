@@ -114,29 +114,56 @@ Decisions locked with kriday:
 Steps — each committed on its own; full gates only at step 6 (docs churn doesn't need
 the suite re-run per step).
 
-- [ ] **1. Version + changelog.** `package.json` → 5.0.0. README header line 3 still
+- [x] **1. Version + changelog.** `package.json` → 5.0.0. README header line 3 still
   reads "Version 3.5.0 | MCP protocol 2024-11-05"; fix version + protocol era (now
   server@2 / MCP 2026-07-28) and the npm badge. Merge salvage CHANGELOG into
   CHANGELOG.md as the 5.0.0 entry covering phases 1–3 (scheduler bin, ctx threading,
   custom-rules persistence fix, history logger rewrite, io collapse).
-- [ ] **2. Rewrite ARCHITECTURE.md to one page.** New diagram: JSON-RPC stdio →
+  - Done: also swept ~60 `v3.5.0` file-header banners and `CONFIG.VERSION` in
+    `core/config/defaults.ts`. `manifest-integrity.ts` `SECRET_SEED` deliberately left
+    at v3.5.0 — it's HMAC material, changing it invalidates existing rollback
+    manifests mid-flight. Commits: `946b1e2`.
+- [x] **2. Rewrite ARCHITECTURE.md to one page.** New diagram: JSON-RPC stdio →
   `mcp/registry.ts` → tools → `core/{path,io,scan,categorize,organize,hash}` +
   history-logger + `extensions/scheduler`. Keep security pipeline + TOCTOU sections,
   drop v3.1.x annotations and the stale "Source Structure" tree. State the new DX
   contract (add a tool = 1 file + 1 registry line).
-- [ ] **3. README DX section:** "how to add a tool in 1 file". Point at the registry
+  - Done: 646 → 120 lines. Commit: `15aa6b6`.
+- [x] **3. README DX section:** "how to add a tool in 1 file". Point at the registry
   header convention written in phase-3 step 6 (`src/mcp/registry.ts`). Also verify the
   scheduled-organization section matches the watch bin UX from phase-3 step 3.
-- [ ] **4. Sync AGENTS.md "Where code lives" tree.** Still shows flat `services/*.service.ts`
+  - Done: DX section under Contributing; stale "screen-then-enrich" architecture blurb
+    rewritten; full tool list was missing batch_rename (20 vs registry's 21) — fixed;
+    watch section already correct. Commit: `a7d3e34`.
+- [x] **4. Sync AGENTS.md "Where code lives" tree.** Still shows flat `services/*.service.ts`
   and top-level `types.ts`/`config.ts`. Update to core/mcp/extensions reality so the
   next agent doesn't chase ghosts.
-- [ ] **5. API.md spot-check.** Watch-tool note at :33 is already correct post phase-3;
+  - Done: tree + all dead line refs re-pointed (`tools/index.ts` → `mcp/registry.ts`,
+    `types.ts:260` → `mcp/types.ts:16`, validator :239 → :357, etc.). Commit: `0edf953`.
+- [x] **5. API.md spot-check.** Watch-tool note at :33 is already correct post phase-3;
   confirm no other tool tables drifted during schema collapse. Expect minimal work.
-- [ ] **6. Fresh-clone gate.** Clone the branch to `/tmp/opencode`, `npm ci`, then
+  - Not minimal: API.md documented only 18 of 21 tools — smart_suggest,
+    system_organize, view_history had no sections (count matched by coincidence with
+    the note's watch-tool mentions). Sections added in house style; TOC updated;
+    set_custom_rules description fixed ("persist for the current session" → persist to
+    user config). The `docs:generate` script is stale (hardcodes v3.0.0, regex-parses
+    old tool format) — not used, flagged for later cleanup. Commit: `21f820b`.
+- [x] **6. Fresh-clone gate.** Clone the branch to `/tmp/opencode`, `npm ci`, then
   `build` + `lint` + `test` + `test:security` green. This is the release gate.
-- [ ] **7. Security gates + benchmarks.** Re-run `scripts/security-gates/run-all.ts`
+  - Done at `06b0862`: build ✓ lint ✓ 53/53 suites, 835 passed (+2 skipped) ✓
+    test:security ✓. Gotcha for next time: `npx jest` directly fails every ESM suite —
+    `npm test` wraps jest with `--experimental-vm-modules`. One early run showed
+    98 failures that vanished on rerun; suspected worker race on the shared user
+    config dir, worth watching.
+- [x] **7. Security gates + benchmarks.** Re-run `scripts/security-gates/run-all.ts`
   (all four gates). Benchmark run is optional; io layer changed enough in phase-2 that
   before/after numbers are nice-to-have for the changelog, not required.
+  - Gates were red before AND after the branch: main already failed static analysis
+    (3 CRITICAL + 1 HIGH), branch showed 8 because the filename-based allowlist still
+    named pre-split files. Fixed: allowlist pruned/re-pointed (rollback.ts, loader.ts,
+    batch-file-reader.ts, system-organize.service.ts), SEC-010 pattern now skips
+    RegExp.prototype.exec, history rotation joins precomputed paths. All four gates
+    PASS on worktree + fresh clone. Commit: `277f745`. Benchmarks skipped per plan.
 - [ ] **8. Ship.** Merge `chore/simplify-v5` → main, tag v5.0.0, archive this file to
   `docs/implementation/` per the note below.
 
