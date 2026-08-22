@@ -196,13 +196,10 @@ export class HistoryLoggerService {
       logger.info("Rotating history file", { currentSize: stat.size });
 
       for (let i = this.config.maxBackupFiles - 1; i >= 1; i--) {
-        const oldPath = path.join(this.config.dataDir, `operations.${i}.jsonl`);
-        const newPath = path.join(
-          this.config.dataDir,
-          `operations.${i + 1}.jsonl`,
-        );
+        const rotatedPath = (n: number) =>
+          path.join(this.config.dataDir, `operations.${n}.jsonl`);
         try {
-          await fs.rename(oldPath, newPath);
+          await fs.rename(rotatedPath(i), rotatedPath(i + 1));
         } catch {
           // File doesn't exist, continue
         }
