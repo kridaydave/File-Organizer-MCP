@@ -7,18 +7,18 @@
 
 import fs from "fs/promises";
 import crypto from "crypto";
-import { HashCalculatorService } from "./hash-calculator.service.js";
-import type { FileWithSize, DuplicateGroup } from "../types.js";
-import { fileExists } from "../utils/file-utils.js";
-import { logger } from "../utils/logger.js";
+import { HashCalculatorService } from "./hasher.js";
+import type { FileWithSize, DuplicateGroup } from "../../types.js";
+import { fileExists } from "../../utils/file-utils.js";
+import { logger } from "../../utils/logger.js";
 import path from "path";
-import { RollbackService } from "../core/organize/rollback.js";
-import type { RollbackAction } from "../types.js";
+import { RollbackService } from "../organize/rollback.js";
+import type { RollbackAction } from "../../types.js";
 import {
   validateStrictPath,
   PathValidatorService,
-} from "./path-validator.service.js";
-import { FileScannerService } from "../core/scan/scanner.js";
+} from "../../services/path-validator.service.js";
+import { FileScannerService } from "../scan/scanner.js";
 
 export type RecommendationStrategy =
   | "newest"

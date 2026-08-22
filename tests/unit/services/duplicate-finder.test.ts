@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { DuplicateFinderService } from "../../../src/services/duplicate-finder.service.js";
+import { DuplicateFinderService } from "../../../src/core/hash/duplicate-finder.js";
 import { FileWithSize } from "../../../src/types.js";
 import { jest } from "@jest/globals";
 import {

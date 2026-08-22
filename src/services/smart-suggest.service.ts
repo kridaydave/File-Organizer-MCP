@@ -6,7 +6,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { logger } from "../utils/logger.js";
-import { HashCalculatorService } from "./hash-calculator.service.js";
+import { HashCalculatorService } from "../core/hash/hasher.js";
 import { FileScannerService } from "../core/scan/scanner.js";
 
 export interface DirectoryHealthReport {

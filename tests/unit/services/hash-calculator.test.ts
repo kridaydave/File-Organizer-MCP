@@ -4,7 +4,7 @@ import { createWriteStream } from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-import { HashCalculatorService } from '../../../src/services/hash-calculator.service.js';
+import { HashCalculatorService } from '../../../src/core/hash/hasher.js';
 
 describe('HashCalculatorService', () => {
     let hashService: HashCalculatorService;

@@ -7,10 +7,10 @@ import fs from "fs/promises";
 import { createReadStream, type ReadStream } from "fs";
 import { pipeline } from "stream/promises";
 import crypto from "crypto";
-import type { FileWithSize, DuplicateGroup } from "../types.js";
-import { CONFIG } from "../config.js";
-import { formatBytes } from "../utils/formatters.js";
-import { logger } from "../utils/logger.js";
+import type { FileWithSize, DuplicateGroup } from "../../types.js";
+import { CONFIG } from "../../config.js";
+import { formatBytes } from "../../utils/formatters.js";
+import { logger } from "../../utils/logger.js";
 
 /**
  * Hash Calculator Service - file hashing and duplicate detection
