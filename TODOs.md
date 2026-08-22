@@ -34,9 +34,13 @@ Commits: `aa67ca9` (types/config/cli/registry checkpoint) · categorizer split c
 
 Stash `stash@{0}` (v4 migration WIP) still parked — pop after this branch lands or rebases onto main.
 
-## Phase-2 — Reduce over-eng / refactor simpler
+## Phase-2 — Reduce over-eng / refactor simpler [DONE]
 
-27 services → ~8 units. 22 schemas → 4. Keep `scan -> categorize -> plan -> move`.
+27 services → 6 core modules + metadata + scheduler extension. 22 schemas → 4.
+Keep `scan -> categorize -> plan -> move`.
+
+Commits: `52757ef` (io) · `6fdbf47` (content stack, organize/scan, schemas) ·
+`79eab6f` (hash) · `0a21920` (parser swap) · `6362286` (MetadataService facade).
 
 Decisions locked with kriday:
 - Music/photo organizers **stay in core** (so image/audio-metadata survive, collapsed).
