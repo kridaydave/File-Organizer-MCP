@@ -11,9 +11,6 @@ import { RollbackService } from "../core/organize/rollback.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { UndoLastOperationInputSchema } from "../schemas/organize.js";
 
-// Singleton for now, or just new instance since it reads from disk
-const rollbackService = new RollbackService();
-
 export { UndoLastOperationInputSchema } from "../schemas/organize.js";
 export type { UndoLastOperationInput } from "../schemas/organize.js";
 export const undoLastOperationToolDefinition: ToolDefinition = {
@@ -58,6 +55,9 @@ export async function handleUndoLastOperation(
     }
 
     const { manifest_id, response_format } = parsed.data;
+
+    // Reads manifests from disk — no shared state to preserve across calls.
+    const rollbackService = new RollbackService();
 
     // Find manifest
     let targetId = manifest_id;

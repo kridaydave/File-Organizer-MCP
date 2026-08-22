@@ -13,6 +13,7 @@ import type { RollbackManifest, RollbackAction } from "../../types.js";
 import { fileExists } from "../../utils/file-utils.js";
 import { logger } from "../../utils/logger.js";
 import { CONFIG } from "../../config.js";
+import { getRollbackDirectory } from "../../core/config/paths.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
 import { manifestIntegrityService } from "./manifest-integrity.js";
 
@@ -20,8 +21,8 @@ export class RollbackService {
   private storageDir: string;
   private pathValidator: PathValidatorService;
 
-  constructor() {
-    this.storageDir = path.join(process.cwd(), ".file-organizer-rollbacks");
+  constructor(storageDir: string = getRollbackDirectory()) {
+    this.storageDir = storageDir;
     // Do not restrict rollback paths to CWD. Manifests may reference any
     // directory that was permitted at organize-time (e.g. Downloads, Desktop).
     // Security is enforced by manifest HMAC integrity and the global
@@ -31,7 +32,34 @@ export class RollbackService {
 
   private async ensureStorage(): Promise<void> {
     if (!(await fileExists(this.storageDir))) {
+      await this.migrateLegacyStorage();
       await fs.mkdir(this.storageDir, { recursive: true });
+    }
+  }
+
+  /**
+   * One-time carry-over of manifests from the legacy cwd-based location.
+   * Without it, undo silently loses history after this change (or whenever
+   * the server's launch directory differs from the last run).
+   */
+  private async migrateLegacyStorage(): Promise<void> {
+    if (process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID) return;
+
+    const legacyDir = path.join(process.cwd(), ".file-organizer-rollbacks");
+    try {
+      const entries = await fs.readdir(legacyDir);
+      await fs.mkdir(this.storageDir, { recursive: true });
+      for (const entry of entries.filter((f) => f.endsWith(".json"))) {
+        const target = path.join(this.storageDir, entry);
+        if (!(await fileExists(target))) {
+          await fs.copyFile(path.join(legacyDir, entry), target);
+        }
+      }
+      if (entries.length > 0) {
+        logger.info(`Migrated rollback manifests from ${legacyDir}`);
+      }
+    } catch {
+      // No legacy storage — nothing to migrate.
     }
   }
 

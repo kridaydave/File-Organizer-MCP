@@ -15,7 +15,7 @@ describe('Rollback Service', () => {
         testDir = path.join(process.cwd(), `test-rollback-${Date.now()}`);
         await fs.mkdir(testDir, { recursive: true });
         // RollbackService might need dependencies or path?
-        rollbackService = new RollbackService();
+        rollbackService = new RollbackService(testDir);
     });
 
     afterEach(async () => {

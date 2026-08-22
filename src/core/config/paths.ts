@@ -141,3 +141,20 @@ export function getHistoryDirectory(): string {
 export function getHistoryFilePath(): string {
   return path.join(getHistoryDirectory(), "operations.jsonl");
 }
+
+/**
+ * Directory holding rollback manifests (undo history).
+ * Platform config dir — NOT process.cwd(), which breaks npx/global installs
+ * where the launch directory changes between runs.
+ *
+ * Under jest, fall back to the legacy cwd location so test manifests stay in
+ * the worktree instead of the developer's real config dir.
+ */
+export function getRollbackDirectory(): string {
+  const isTestMode =
+    process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID !== undefined;
+  if (isTestMode) {
+    return path.join(process.cwd(), ".file-organizer-rollbacks");
+  }
+  return path.join(getHistoryDirectory(), "rollbacks");
+}
