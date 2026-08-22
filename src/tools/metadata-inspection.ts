@@ -143,32 +143,32 @@ export async function handleInspectMetadata(
 
         if (category === "Images" && extractedMetadata) {
           if (extractedMetadata.dateTaken) {
-            result.metadata.dateTaken = extractedMetadata.dateTaken;
+            result.metadata.dateTaken = extractedMetadata.dateTaken as string;
           }
           if (extractedMetadata.camera) {
-            result.metadata.camera = extractedMetadata.camera;
+            result.metadata.camera = extractedMetadata.camera as string;
           }
           if (extractedMetadata.width && extractedMetadata.height) {
             result.metadata.dimensions = {
-              width: extractedMetadata.width,
-              height: extractedMetadata.height,
+              width: extractedMetadata.width as number,
+              height: extractedMetadata.height as number,
             };
           }
         } else if (category === "Audio" && extractedMetadata) {
           if (extractedMetadata.artist) {
-            result.metadata.artist = extractedMetadata.artist;
+            result.metadata.artist = extractedMetadata.artist as string;
           }
           if (extractedMetadata.album) {
-            result.metadata.album = extractedMetadata.album;
+            result.metadata.album = extractedMetadata.album as string;
           }
           if (extractedMetadata.title) {
-            result.metadata.title = extractedMetadata.title;
+            result.metadata.title = extractedMetadata.title as string;
           }
           if (extractedMetadata.year) {
-            result.metadata.year = extractedMetadata.year;
+            result.metadata.year = extractedMetadata.year as number;
           }
           if (extractedMetadata.duration) {
-            result.metadata.duration = extractedMetadata.duration;
+            result.metadata.duration = extractedMetadata.duration as number;
           }
         }
 

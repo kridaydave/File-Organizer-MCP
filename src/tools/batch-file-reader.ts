@@ -252,7 +252,6 @@ export async function handleBatchReadFiles(
     const scanner = new FileScannerService();
     const audioMetadataService = new AudioMetadataService();
     const imageMetadataService = new ImageMetadataService();
-    const metadataService = new MetadataService();
 
     // Get all files
     const allFiles = await scanner.getAllFiles(validatedPath, include_subdirs);

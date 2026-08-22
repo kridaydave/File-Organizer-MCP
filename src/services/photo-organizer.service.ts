@@ -375,14 +375,14 @@ export class PhotoOrganizerService {
 
         // Extract date with fallback chain
         if (metadata?.dateTaken) {
-          photoInfo.dateTaken = new Date(metadata.dateTaken);
+          photoInfo.dateTaken = new Date(metadata.dateTaken as string);
         } else if (config.useDateCreated) {
           photoInfo.dateTaken = file.created;
         }
 
         // Extract camera model
         if (metadata?.camera) {
-          photoInfo.cameraModel = metadata.camera;
+          photoInfo.cameraModel = metadata.camera as string;
         }
 
         // Check for GPS data (would need EXIF library with GPS support)
