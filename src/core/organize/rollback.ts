@@ -6,6 +6,7 @@
  */
 
 import fs from "fs/promises";
+import { constants } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 
@@ -195,17 +196,11 @@ export class RollbackService {
     try {
       for (const action of reverseActions) {
         // Validate paths before operations
-        if (
-          action.originalPath &&
-          !this.pathValidator.isPathAllowed(action.originalPath)
-        ) {
-          throw new Error(`Invalid original path: ${action.originalPath}`);
+        if (action.originalPath) {
+          await this.pathValidator.validatePath(action.originalPath);
         }
-        if (
-          action.currentPath &&
-          !this.pathValidator.isPathAllowed(action.currentPath)
-        ) {
-          throw new Error(`Invalid current path: ${action.currentPath}`);
+        if (action.currentPath) {
+          await this.pathValidator.validatePath(action.currentPath);
         }
 
         if (
@@ -224,9 +219,14 @@ export class RollbackService {
             recursive: true,
           });
 
-          // TOCTOU-safe: Try rename directly, handle EEXIST
+          // TOCTOU-safe: Use atomic exclusive copy to prevent clobbering destination on POSIX/Windows
           try {
-            await fs.rename(action.currentPath, action.originalPath);
+            await fs.copyFile(
+              action.currentPath,
+              action.originalPath,
+              constants.COPYFILE_EXCL,
+            );
+            await fs.unlink(action.currentPath);
           } catch (e) {
             if ((e as NodeJS.ErrnoException).code === "EEXIST") {
               throw new Error(
@@ -246,9 +246,18 @@ export class RollbackService {
 
           // 2. Restore the overwritten file if it exists
           if (action.overwrittenBackupPath) {
-            // TOCTOU-safe: Try rename directly, handle errors
+            // TOCTOU-safe: Try restore directly, handle errors
             try {
-              await fs.rename(action.overwrittenBackupPath, action.currentPath);
+              try {
+                await fs.rename(action.overwrittenBackupPath, action.currentPath);
+              } catch (renameErr) {
+                if ((renameErr as NodeJS.ErrnoException).code === "EXDEV") {
+                  await fs.copyFile(action.overwrittenBackupPath, action.currentPath);
+                  await fs.unlink(action.overwrittenBackupPath);
+                } else {
+                  throw renameErr;
+                }
+              }
             } catch (e) {
               const err = e as NodeJS.ErrnoException;
               if (err.code === "ENOENT") {
@@ -328,9 +337,14 @@ export class RollbackService {
             recursive: true,
           });
 
-          // TOCTOU-safe: Try rename directly, handle errors
+          // TOCTOU-safe: Try restore directly with COPYFILE_EXCL to prevent overwriting destination
           try {
-            await fs.rename(action.backupPath, action.originalPath);
+            await fs.copyFile(
+              action.backupPath,
+              action.originalPath,
+              constants.COPYFILE_EXCL,
+            );
+            await fs.unlink(action.backupPath);
             // Track successful delete undo for potential recovery
             completedActions.push({
               action,

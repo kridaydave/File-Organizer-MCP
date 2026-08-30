@@ -35,8 +35,12 @@ export function detectArchiveFormat(filePath: string): ArchiveValidationResult {
   try {
     const buffer = Buffer.alloc(16);
     const fd = fs.openSync(filePath, "r");
-    const bytesRead = fs.readSync(fd, buffer, 0, 16, 0);
-    fs.closeSync(fd);
+    let bytesRead = 0;
+    try {
+      bytesRead = fs.readSync(fd, buffer, 0, 16, 0);
+    } finally {
+      fs.closeSync(fd);
+    }
 
     if (bytesRead < 4) {
       return { valid: false, error: "File too small to be an archive" };

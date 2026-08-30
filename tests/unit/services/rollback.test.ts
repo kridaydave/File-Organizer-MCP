@@ -4,8 +4,8 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 // Assuming RollbackService exists. If not, I'll find it.
-// The task says "tests/unit/services/rollback.test.ts".
 import { RollbackService } from '../../../src/core/organize/rollback.js';
+import { CONFIG } from '../../../src/config.js';
 
 describe('Rollback Service', () => {
     let rollbackService: RollbackService;
@@ -60,6 +60,8 @@ describe('Rollback Service', () => {
         // Use OS temp dir as a stand-in for an external directory like Downloads
         const externalDir = path.join(os.tmpdir(), `test-undo-external-${Date.now()}`);
         await fs.mkdir(externalDir, { recursive: true });
+        const originalCustomAllowed = CONFIG.paths.customAllowed;
+        CONFIG.paths.customAllowed = [externalDir];
 
         try {
             const src = path.join(externalDir, 'zen.installer.exe');
@@ -86,6 +88,7 @@ describe('Rollback Service', () => {
             expect(await fs.access(src).then(() => true).catch(() => false)).toBe(true);
             expect(await fs.access(dest).then(() => true).catch(() => false)).toBe(false);
         } finally {
+            CONFIG.paths.customAllowed = originalCustomAllowed;
             await fs.rm(externalDir, { recursive: true, force: true }).catch(() => { });
         }
     });
