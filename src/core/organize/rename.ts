@@ -311,9 +311,18 @@ export class RenamingService {
         await validator.validatePath(item.new);
 
         // Attempt rename with exclusive copy to avoid clobbering preexisting target
+        // For case-only renames in same directory (e.g. A.txt -> a.txt on macOS/Windows), use fs.rename
+        const isCaseOnly =
+          path.dirname(item.original) === path.dirname(item.new) &&
+          item.original.toLowerCase() === item.new.toLowerCase();
+
         try {
-          await fs.copyFile(item.original, item.new, constants.COPYFILE_EXCL);
-          await fs.unlink(item.original);
+          if (isCaseOnly) {
+            await fs.rename(item.original, item.new);
+          } else {
+            await fs.copyFile(item.original, item.new, constants.COPYFILE_EXCL);
+            await fs.unlink(item.original);
+          }
         } catch (renameError) {
           const err = renameError as NodeJS.ErrnoException;
           // EEXIST: Destination file already exists
