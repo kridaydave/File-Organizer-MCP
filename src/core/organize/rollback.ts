@@ -196,11 +196,17 @@ export class RollbackService {
     try {
       for (const action of reverseActions) {
         // Validate paths before operations
-        if (action.originalPath) {
-          await this.pathValidator.validatePath(action.originalPath);
+        if (
+          action.originalPath &&
+          !this.pathValidator.isPathAllowed(action.originalPath)
+        ) {
+          throw new Error(`Invalid original path: ${action.originalPath}`);
         }
-        if (action.currentPath) {
-          await this.pathValidator.validatePath(action.currentPath);
+        if (
+          action.currentPath &&
+          !this.pathValidator.isPathAllowed(action.currentPath)
+        ) {
+          throw new Error(`Invalid current path: ${action.currentPath}`);
         }
 
         if (

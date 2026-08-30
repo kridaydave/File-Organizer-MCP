@@ -22,6 +22,7 @@ import { sanitizeErrorMessage } from "../utils/error-handler.js";
 import { PathSchema } from "../schemas/system.js";
 import { logger } from "../utils/logger.js";
 import { CONFIG } from "../config.js";
+import { isPathBlocked } from "../utils/path-security.js";
 
 /**
  * Layer 1: Type validation
@@ -406,8 +407,10 @@ export class PathValidatorService {
         this.basePath,
         normalizePath(inputPath),
       );
-      // If allowedPaths is null (whitelist mode), this checking is skipped here
-      // because strict validation happens in validatePath via Layer 4.5
+      if (isPathBlocked(absolutePath)) {
+        return false;
+      }
+
       if (this.allowedPaths === null) return true;
 
       return checkContainment(absolutePath, this.allowedPaths);
