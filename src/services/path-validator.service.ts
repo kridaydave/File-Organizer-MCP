@@ -478,7 +478,14 @@ export class PathValidatorService {
         // Verify containment using realpath after open
         const realPath = await fs.realpath(absolutePath);
         if (this.allowedPaths !== null) {
-          if (!checkContainment(realPath, this.allowedPaths)) {
+          // Canonicalize allowed roots so symlinked prefixes (e.g.
+          // /var -> /private/var on macOS) don't cause false negatives.
+          const canonicalAllowed = await Promise.all(
+            this.allowedPaths.map((allowed) =>
+              fs.realpath(allowed).catch(() => path.resolve(allowed)),
+            ),
+          );
+          if (!checkContainment(realPath, canonicalAllowed)) {
             await handle.close();
             throw new AccessDeniedError(
               inputPath,

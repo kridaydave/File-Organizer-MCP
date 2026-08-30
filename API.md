@@ -623,7 +623,6 @@ file_organizer_organize_photos({
 
 ---
 
-
 ## file_organizer_batch_read_files
 
 [⬆ Back to Top](#top)
