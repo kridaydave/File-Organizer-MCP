@@ -94,6 +94,10 @@ import {
   viewHistoryToolDefinition,
   handleViewHistory,
 } from "../tools/view-history.js";
+import {
+  organizeByProjectToolDefinition,
+  handleOrganizeByProject,
+} from "../tools/project-organization.js";
 
 function reg(def: ToolDefinition, handler: ToolHandler) {
   return defineTool({
@@ -128,6 +132,7 @@ const entries = [
   reg(inspectMetadataToolDefinition, handleInspectMetadata),
   reg(fileReaderToolDefinition, handleReadFile),
   reg(viewHistoryToolDefinition, handleViewHistory),
+  reg(organizeByProjectToolDefinition, handleOrganizeByProject),
 ];
 
 export const TOOLS: ToolDefinition[] = entries.map((e) => e.definition);

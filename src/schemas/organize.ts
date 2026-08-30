@@ -371,3 +371,34 @@ export const SmartSuggestInputSchema = z
   .merge(CommonParamsSchema);
 
 export type SmartSuggestInput = z.infer<typeof SmartSuggestInputSchema>;
+
+/**
+ * Schema for organize_by_project tool
+ * Groups files across types into detected project folders
+ */
+export const OrganizeByProjectInputSchema = z
+  .object({
+    source_dir: z
+      .string()
+      .min(1, "Source directory path cannot be empty")
+      .describe("Full path to the directory containing files to organize"),
+    target_dir: z
+      .string()
+      .min(1, "Target directory path cannot be empty")
+      .describe(
+        "Full path to the directory where detected projects will be placed",
+      ),
+    dry_run: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("If true, only preview the project grouping without moving files"),
+    recursive: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Scan subdirectories recursively"),
+  })
+  .merge(CommonParamsSchema);
+
+export type OrganizeByProjectInput = z.infer<typeof OrganizeByProjectInputSchema>;

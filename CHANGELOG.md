@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **`file_organizer_organize_by_project`** - project-based content
+  organization, re-added on the v5 architecture (the v3.5 Phase 3 feature,
+  rebuilt). Detection groups files across types using deterministic,
+  local-only signals: rarity-weighted shared name tokens, IDF-filtered
+  content terms from text-like files (read through the hardened
+  `core/io` reader, plain text only, no new dependencies), and identifier
+  markers. Content-blind files join only via a name token or marker.
+  The server serves 22 tools (was 21).
+
 ## [5.0.0] - 2026-08-22
 
 ### ⚠️ Breaking Changes

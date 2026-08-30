@@ -646,3 +646,29 @@ file_organizer_batch_read_files({
   encoding: "utf-8",
 });
 ```
+
+## file_organizer_organize_by_project
+
+[⬆ Back to Top](#top)
+
+**Description:** Group files across all types (documents, code, images) into detected project folders. Detection is deterministic and local-only: rarity-weighted shared name tokens (primary anchor), IDF-filtered shared content terms from text-like files (`.txt`, `.md`, code, `.json`, etc.), and explicit identifier markers (e.g. `ABC123`). Content-blind files (binary, image) join only via a shared name token or marker, never on time alone.
+
+### Parameters
+
+| Parameter         | Type    | Description                                              | Default     |
+| ----------------- | ------- | -------------------------------------------------------- | ----------- |
+| `source_dir`      | string  | Directory containing files to organize                   | -           |
+| `target_dir`      | string  | Directory where detected projects will be placed         | -           |
+| `dry_run`         | boolean | Preview the grouping without moving files                | `true`      |
+| `recursive`       | boolean | Scan subdirectories recursively                          | `true`      |
+| `response_format` | string  | Output format                                            | `'markdown'`|
+
+### Example
+
+```typescript
+file_organizer_organize_by_project({
+  source_dir: "/path/to/source",
+  target_dir: "/path/to/target",
+  dry_run: true,
+});
+```
