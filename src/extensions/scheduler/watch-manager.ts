@@ -9,6 +9,7 @@
  * tool handlers returned, so tests re-point without churn.
  */
 
+import path from "path";
 import cron from "node-cron";
 import type { ToolResponse } from "../../types.js";
 import { validateStrictPath } from "../../services/path-validator.service.js";
@@ -153,7 +154,8 @@ export async function handleUnwatchDirectory(
 
     // Find and remove the watch
     const initialCount = watchList.length;
-    watchList = watchList.filter((w) => w.directory !== directory);
+    const normalizedTarget = path.resolve(directory);
+    watchList = watchList.filter((w) => path.resolve(w.directory) !== normalizedTarget);
 
     if (watchList.length === initialCount) {
       return {

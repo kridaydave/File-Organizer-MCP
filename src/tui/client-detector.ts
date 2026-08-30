@@ -22,17 +22,9 @@ const configWriteLocks = new Map<string, boolean>();
 
 function acquireConfigLock(
   configFilePath: string,
-  timeoutMs: number = 5000,
 ): boolean {
-  const startTime = Date.now();
-  while (configWriteLocks.has(configFilePath)) {
-    if (Date.now() - startTime > timeoutMs) {
-      return false;
-    }
-    const start = Date.now();
-    while (Date.now() - start < 10) {
-      /* spin */
-    }
+  if (configWriteLocks.has(configFilePath)) {
+    return false;
   }
   configWriteLocks.set(configFilePath, true);
   return true;

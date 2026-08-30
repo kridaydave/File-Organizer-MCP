@@ -31,7 +31,7 @@ export interface FileReadResult {
   category: string;
   contentType: "text" | "media" | "binary" | "unknown";
   content?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   error?: string;
 }
 

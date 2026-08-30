@@ -158,3 +158,17 @@ export function getRollbackDirectory(): string {
   }
   return path.join(getHistoryDirectory(), "rollbacks");
 }
+
+/**
+ * Directory holding pre-overwrite backups and duplicate trash.
+ * Platform config dir — NOT process.cwd(), which breaks npx/global installs.
+ */
+export function getBackupDirectory(): string {
+  const isTestMode =
+    process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID !== undefined;
+  if (isTestMode) {
+    return path.join(process.cwd(), ".file-organizer-backups");
+  }
+  return path.join(getHistoryDirectory(), "backups");
+}
+

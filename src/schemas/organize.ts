@@ -18,7 +18,7 @@ export const OrganizeFilesInputSchema = z
     dry_run: z
       .boolean()
       .optional()
-      .default(false)
+      .default(true)
       .describe("If true, only simulate the organization without moving files"),
     conflict_strategy: z
       .enum(["rename", "skip", "overwrite"])

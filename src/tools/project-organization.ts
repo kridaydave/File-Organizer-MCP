@@ -83,26 +83,29 @@ interface ProjectOrganizationResult {
  * @returns the final destination path actually used
  */
 async function moveFileSafely(source: string, target: string): Promise<string> {
-  let dest = target;
-  let counter = 2;
-  while (await fileExists(dest)) {
-    const ext = path.extname(target);
-    const base = target.slice(0, target.length - ext.length);
-    dest = `${base}-${counter}${ext}`;
-    counter++;
-  }
+  const ext = path.extname(target);
+  const base = target.slice(0, target.length - ext.length);
 
-  try {
-    await fs.rename(source, dest);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EXDEV") {
+  let dest = target;
+  let counter = 1;
+
+  while (counter <= 100) {
+    try {
       await fs.copyFile(source, dest, fs.constants.COPYFILE_EXCL);
       await fs.unlink(source);
-    } else {
-      throw error;
+      return dest;
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === "EEXIST") {
+        counter++;
+        dest = `${base}-${counter}${ext}`;
+      } else {
+        throw error;
+      }
     }
   }
-  return dest;
+
+  throw new Error(`Failed to move ${source} after 100 collision retries`);
 }
 
 export async function handleOrganizeByProject(

@@ -16,7 +16,10 @@ import type {
   ToolResponse,
   CategorizedResult,
   CategoryName,
+  CategoryStats,
 } from "../types.js";
+import { CATEGORIES } from "../constants.js";
+import { formatBytes } from "../utils/formatters.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
 import { CategorizerService } from "../services/categorizer.service.js";
@@ -106,7 +109,7 @@ export async function handleCategorizeByType(
 
     if (use_content_analysis) {
       // Perform content-based categorization for each file
-      // Build a map of file paths to their content-analyzed categories
+      // Build a map of exact file paths to their content-analyzed categories
       const fileCategoryMap = new Map<string, string>();
       for (const file of files) {
         const result = await categorizer.getCategoryByContent(file.path);
@@ -119,20 +122,32 @@ export async function handleCategorizeByType(
           });
         }
       }
-      // Create a modified categorizer that uses our content-based categories
-      const originalGetCategory = categorizer.getCategory.bind(categorizer);
-      categorizer.getCategory = (name: string) => {
-        // Find the file in our map
-        for (const [path, cat] of fileCategoryMap.entries()) {
-          if (path.endsWith(name)) {
-            return cat as CategoryName;
-          }
+
+      const categorized: Record<string, CategoryStats> = {};
+      for (const category of Object.keys(CATEGORIES)) {
+        categorized[category] = { count: 0, total_size: 0, files: [] };
+      }
+
+      for (const file of files) {
+        const category = (fileCategoryMap.get(file.path) || categorizer.getCategory(file.name)) as CategoryName;
+        if (!categorized[category]) {
+          categorized[category] = { count: 0, total_size: 0, files: [] };
         }
-        return originalGetCategory(name);
-      };
-      categories = await categorizer.categorizeFiles(files);
-      // Restore original method
-      categorizer.getCategory = originalGetCategory;
+        categorized[category].count++;
+        categorized[category].total_size += file.size;
+        categorized[category].files.push(file.name);
+      }
+
+      const filtered: Partial<Record<string, CategoryStats>> = {};
+      for (const [category, stats] of Object.entries(categorized)) {
+        if (stats.count > 0) {
+          filtered[category] = {
+            ...stats,
+            total_size_readable: formatBytes(stats.total_size),
+          };
+        }
+      }
+      categories = filtered;
     } else {
       categories = await categorizer.categorizeFiles(files);
     }

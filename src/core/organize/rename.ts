@@ -304,21 +304,19 @@ export class RenamingService {
       }
 
       try {
-        // Perform Rename atomically - NO pre-check to avoid TOCTOU race condition
-        // fs.rename() will atomically fail if destination exists (on POSIX)
-        // On Windows, it may overwrite, so we handle that case
-
+        // Perform Rename atomically using COPYFILE_EXCL to prevent overwrites across all platforms
         // Security Check
         const validator = new PathValidatorService();
         await validator.validatePath(item.original);
         await validator.validatePath(item.new);
 
-        // Attempt rename and handle specific errors atomically
+        // Attempt rename with exclusive copy to avoid clobbering preexisting target
         try {
-          await fs.rename(item.original, item.new);
+          await fs.copyFile(item.original, item.new, constants.COPYFILE_EXCL);
+          await fs.unlink(item.original);
         } catch (renameError) {
           const err = renameError as NodeJS.ErrnoException;
-          // EEXIST: Destination file already exists (POSIX)
+          // EEXIST: Destination file already exists
           // EPERM: Permission error or operation not permitted
           // EBUSY: File is busy (Windows)
           if (err.code === "EEXIST") {

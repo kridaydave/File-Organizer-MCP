@@ -21,6 +21,7 @@ import { CategorizerService } from "../../services/categorizer.service.js";
 import { RollbackService } from "./rollback.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
 import { MetadataService } from "../../services/metadata/service.js";
+import { getBackupDirectory } from "../config/paths.js";
 
 export type ConflictStrategy =
   | "rename"
@@ -46,6 +47,22 @@ export interface OrganizeResult {
 
 // BUG-003 FIX: Maximum consecutive errors before aborting to prevent endless processing
 const MAX_CONSECUTIVE_ERRORS = 10;
+
+/**
+ * Move a file across filesystems/devices with EXDEV fallback
+ */
+async function safeMoveFile(src: string, dest: string): Promise<void> {
+  try {
+    await fs.rename(src, dest);
+  } catch (err) {
+    if (isErrnoException(err) && err.code === "EXDEV") {
+      await fs.copyFile(src, dest);
+      await fs.unlink(src);
+    } else {
+      throw err;
+    }
+  }
+}
 
 /**
  * Organizer Service - file organization logic
@@ -246,7 +263,7 @@ export class OrganizerService {
     const rollbackService = new RollbackService();
 
     // 2. Prepare Backup Directory for Overwrites
-    const backupDir = path.join(process.cwd(), ".file-organizer-backups");
+    const backupDir = getBackupDirectory();
     let hasOverwrites = false;
 
     // Check if any move needs overwrite backup
@@ -326,28 +343,27 @@ export class OrganizerService {
             }
           }
 
-          // Check if destination exists and needs backup
-          // TOCTOU-FIX: Don't pre-check - attempt operation and handle errors
-          // This avoids race window between check and rename
+          // Safe atomic move with overwrite backup across POSIX and Windows:
+          // Attempt atomic copyFile with COPYFILE_EXCL first.
+          // If it succeeds, destination did not exist (no overwrite backup needed).
+          // If it fails with EEXIST, destination exists: backup targetPath first, then move.
           try {
-            // First try to rename (will fail if destination exists)
-            await fs.rename(sourcePath, targetPath);
-            // Success - no overwrite needed
-          } catch (renameErr: unknown) {
-            if (isErrnoException(renameErr) && renameErr.code === "EEXIST") {
-              // Destination exists - need to handle overwrite
+            await fs.copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL);
+            await fs.unlink(sourcePath);
+          } catch (copyErr: unknown) {
+            if (isErrnoException(copyErr) && copyErr.code === "EEXIST") {
               const backupName = `${Date.now()}_overwrite_${path.basename(targetPath)}`;
               overwrittenBackupPath = path.join(backupDir, backupName);
 
               try {
-                // Backup existing file
-                await fs.rename(targetPath, overwrittenBackupPath);
-                // Now retry the original move
-                await fs.rename(sourcePath, targetPath);
+                // Backup existing file (with EXDEV cross-device fallback)
+                await safeMoveFile(targetPath, overwrittenBackupPath);
+                // Move source file to target
+                await safeMoveFile(sourcePath, targetPath);
               } catch (backupErr: unknown) {
-                // Restore backup if secondary operation fails
+                // Restore backup if move fails
                 try {
-                  await fs.rename(overwrittenBackupPath!, targetPath);
+                  await safeMoveFile(overwrittenBackupPath, targetPath);
                 } catch (restoreErr) {
                   const criticalMsg = `CRITICAL: Failed to restore backup for ${targetPath}. Original may be lost. Error: ${(restoreErr as Error).message}`;
                   errors.push(criticalMsg);
@@ -356,7 +372,7 @@ export class OrganizerService {
                 throw backupErr;
               }
             } else {
-              throw renameErr;
+              throw copyErr;
             }
           }
         }

@@ -19,6 +19,7 @@ import {
   PathValidatorService,
 } from "../../services/path-validator.service.js";
 import { FileScannerService } from "../scan/scanner.js";
+import { getBackupDirectory } from "../config/paths.js";
 
 export type RecommendationStrategy =
   | "newest"
@@ -215,7 +216,7 @@ export class DuplicateFinderService {
     };
 
     // 1. Prepare Backup Directory
-    const backupDir = path.join(process.cwd(), ".file-organizer-backups");
+    const backupDir = getBackupDirectory();
     if (createBackupManifest) {
       await fs.mkdir(backupDir, { recursive: true });
     }

@@ -139,4 +139,51 @@ describe("OrganizerService", () => {
       expect(move.conflictResolution).toBe("skip");
     });
   });
+
+  describe("executeOrganization", () => {
+    it("should backup existing destination file before overwrite", async () => {
+      const srcFile = path.join(testDir, "report.pdf");
+      await fs.writeFile(srcFile, "new-content");
+
+      const docsDir = path.join(testDir, "Documents");
+      await fs.mkdir(docsDir, { recursive: true });
+      const destFile = path.join(docsDir, "report.pdf");
+      await fs.writeFile(destFile, "old-content");
+
+      const files: FileWithSize[] = [
+        {
+          name: "report.pdf",
+          path: srcFile,
+          size: 11,
+          modified: new Date(),
+        },
+      ];
+
+      const result = await organizer.organize(testDir, files, {
+        dryRun: false,
+        conflictStrategy: "overwrite",
+      });
+      expect(result.errors).toHaveLength(0);
+      expect(result.actions).toHaveLength(1);
+
+      // Verify destination has new content
+      const finalContent = await fs.readFile(destFile, "utf-8");
+      expect(finalContent).toBe("new-content");
+
+      // Verify backup directory contains the old file
+      const backupDir = path.join(process.cwd(), ".file-organizer-backups");
+      const backupFiles = await fs.readdir(backupDir);
+      const overwriteBackup = backupFiles.find((f) => f.includes("overwrite_report.pdf"));
+      expect(overwriteBackup).toBeDefined();
+
+      if (overwriteBackup) {
+        const backupContent = await fs.readFile(
+          path.join(backupDir, overwriteBackup),
+          "utf-8",
+        );
+        expect(backupContent).toBe("old-content");
+      }
+    });
+  });
 });
+
