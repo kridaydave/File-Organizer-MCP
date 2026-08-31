@@ -122,6 +122,7 @@ export const systemOrganizationToolDefinition: ToolDefinition = {
     readOnlyHint: false,
     destructiveHint: true,
     idempotentHint: false,
+    openWorldHint: true,
   },
 };
 

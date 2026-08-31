@@ -36,8 +36,11 @@ export class CategorizerService {
   private pathValidator: PathValidatorService;
   private contentCache: ContentAnalysisCache;
 
-  constructor(customRules: CustomRule[] = []) {
-    this.pathValidator = new PathValidatorService();
+  constructor(
+    customRules: CustomRule[] = [],
+    pathValidator?: PathValidatorService,
+  ) {
+    this.pathValidator = pathValidator ?? new PathValidatorService();
     this.contentCache = new ContentAnalysisCache(
       (filePath) => this.getCategoryByContent(filePath),
       (name) => this.getCategoryByExtension(name),

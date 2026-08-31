@@ -66,6 +66,7 @@ export class HistoryLoggerService {
   private initialized: boolean = false;
   private historyFilePath: string;
   private lockFilePath: string;
+  private currentLockToken: string | null = null;
 
   constructor(config: Partial<HistoryLoggerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -171,9 +172,11 @@ export class HistoryLoggerService {
         }
       }
 
-      await fs.writeFile(this.lockFilePath, String(Date.now()), {
+      const token = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      await fs.writeFile(this.lockFilePath, token, {
         flag: "wx",
       });
+      this.currentLockToken = token;
       return true;
     } catch {
       return false;
@@ -182,7 +185,17 @@ export class HistoryLoggerService {
 
   private async releaseLock(): Promise<void> {
     try {
-      await fs.unlink(this.lockFilePath);
+      if (this.currentLockToken) {
+        const content = await fs
+          .readFile(this.lockFilePath, "utf-8")
+          .catch(() => null);
+        if (content === this.currentLockToken) {
+          await fs.unlink(this.lockFilePath).catch(() => null);
+        }
+        this.currentLockToken = null;
+      } else {
+        await fs.unlink(this.lockFilePath).catch(() => null);
+      }
     } catch {
       // Ignore cleanup errors
     }
@@ -234,20 +247,28 @@ export class HistoryLoggerService {
     const lockAcquired = await this.tryAcquireLock();
 
     try {
-      const content = await fs
-        .readFile(this.historyFilePath, "utf-8")
-        .catch(() => "");
+      const filesToRead = [this.historyFilePath];
+      for (let i = 1; i <= this.config.maxBackupFiles; i++) {
+        filesToRead.push(
+          path.join(this.config.dataDir, `operations.${i}.jsonl`),
+        );
+      }
 
-      const lines = content.split("\n").filter((line) => line.trim());
+      for (const file of filesToRead) {
+        const content = await fs.readFile(file, "utf-8").catch(() => "");
+        if (!content) continue;
 
-      for (const line of lines) {
-        try {
-          const entry = JSON.parse(line) as HistoryEntry;
-          allEntries.push(entry);
-        } catch (error) {
-          logger.debug(
-            `Skipped corrupted history line: ${(error as Error).message}`,
-          );
+        const lines = content.split("\n").filter((line) => line.trim());
+
+        for (const line of lines) {
+          try {
+            const entry = JSON.parse(line) as HistoryEntry;
+            allEntries.push(entry);
+          } catch (error) {
+            logger.debug(
+              `Skipped corrupted history line: ${(error as Error).message}`,
+            );
+          }
         }
       }
     } catch (error) {

@@ -23,6 +23,11 @@ import { stripGPSData } from '../../../src/services/metadata/image-privacy.js';
 import { parseJsonc } from '../../../src/tui/client-detector.js';
 import { PhotoOrganizerService } from '../../../src/services/photo-organizer.service.js';
 import { CONFIG } from '../../../src/core/config/defaults.js';
+import { classifySecurity } from '../../../src/core/categorize/security.js';
+import { OrganizerService } from '../../../src/core/organize/organizer.js';
+import { HistoryLoggerService } from '../../../src/services/history-logger.service.js';
+import { PathSchema } from '../../../src/schemas/system.js';
+import { formatBytes } from '../../../src/utils/formatters.js';
 import type { FileWithSize } from '../../../src/types.js';
 
 describe('v5 Critical Regressions Gate', () => {
@@ -332,6 +337,125 @@ describe('v5 Critical Regressions Gate', () => {
         maxFileSizeMB: 100,
         dryRun: true,
       });
+    });
+  });
+
+  describe('10. Path Validator & Whitelist Enforcement', () => {
+    it('enforces whitelist containment in default PathValidatorService.isPathAllowed', async () => {
+      const validator = new PathValidatorService();
+      // An arbitrary un-allowed directory path outside whitelist
+      const unallowedPath = path.join('/tmp', 'definitely-not-in-allowed-roots', 'file.txt');
+      const isAllowed = await validator.isPathAllowed(unallowedPath);
+      expect(isAllowed).toBe(false);
+    });
+  });
+
+  describe('11. Security Threat Level Preservation', () => {
+    it('preserves high threatLevel when double extension spoofing is detected even with sniff mismatch', async () => {
+      const doubleExtFile = path.join(tempDir, 'invoice.pdf.exe');
+      // Write non-executable text so sniff detects mismatch
+      await fs.writeFile(doubleExtFile, 'Plain text not a real PE binary');
+
+      const validator = new PathValidatorService(tempDir);
+      const security = await classifySecurity(validator, doubleExtFile);
+
+      expect(security.isSuspicious).toBe(true);
+      expect(security.threatLevel).toBe('high');
+      expect(security.reason).toContain('Double extension');
+    });
+  });
+
+  describe('12. Content Analysis in Organizer Planning', () => {
+    it('uses sniffed category when useContentAnalysis is enabled in OrganizerService', async () => {
+      const pngWithTxtExt = path.join(tempDir, 'image_named_txt.txt');
+      // PNG header magic bytes
+      const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]);
+      await fs.writeFile(pngWithTxtExt, pngHeader);
+
+      const files: FileWithSize[] = [
+        { path: pngWithTxtExt, name: 'image_named_txt.txt', size: pngHeader.length, extension: '.txt' },
+      ];
+
+      const validator = new PathValidatorService(tempDir, [tempDir]);
+      const categorizer = new CategorizerService([], validator);
+      const organizer = new OrganizerService(categorizer);
+      const plan = await organizer.generateOrganizationPlan(tempDir, files, 'skip', true);
+
+      // Without content analysis it would be Documents/Text, with content analysis it detects Images
+      expect(plan.moves.length).toBe(1);
+      expect(plan.moves[0].destination).toContain('Images');
+    });
+  });
+
+  describe('13. Cross-Directory Duplicate Verification', () => {
+    it('allows deleting duplicate file when surviving copy lives in a different directory', async () => {
+      const subDirA = path.join(tempDir, 'folderA');
+      const subDirB = path.join(tempDir, 'folderB');
+      await fs.mkdir(subDirA, { recursive: true });
+      await fs.mkdir(subDirB, { recursive: true });
+
+      const fileA = path.join(subDirA, 'doc.txt');
+      const fileB = path.join(subDirB, 'doc_copy.txt');
+      const content = 'Identical content in two separate directories';
+      await fs.writeFile(fileA, content);
+      await fs.writeFile(fileB, content);
+
+      const validator = new PathValidatorService(tempDir, [tempDir]);
+      const finder = new DuplicateFinderService(validator);
+      // Delete fileA with autoVerify=true. fileB in folderB must be recognized as surviving copy
+      const deleteResult = await finder.deleteFiles([fileA], {
+        autoVerify: true,
+        candidateDirectories: [tempDir],
+      });
+
+      expect(deleteResult.deleted).toContain(fileA);
+      expect(deleteResult.failed).toHaveLength(0);
+    });
+  });
+
+  describe('14. Rotated History Reading in HistoryLoggerService', () => {
+    it('reads entries from both operations.jsonl and rotated operations.1.jsonl', async () => {
+      const historyLogger = new HistoryLoggerService({ dataDir: tempDir });
+      await historyLogger.init();
+
+      const entry1 = {
+        id: '1',
+        timestamp: '2026-08-30T10:00:00.000Z',
+        operation: 'organize_files',
+        status: 'success' as const,
+        filesAffected: 5,
+      };
+      const entry2 = {
+        id: '2',
+        timestamp: '2026-08-31T10:00:00.000Z',
+        operation: 'organize_files',
+        status: 'success' as const,
+        filesAffected: 3,
+      };
+
+      // Write entry1 into operations.1.jsonl and entry2 into operations.jsonl
+      await fs.writeFile(path.join(tempDir, 'operations.1.jsonl'), JSON.stringify(entry1) + '\n');
+      await fs.writeFile(path.join(tempDir, 'operations.jsonl'), JSON.stringify(entry2) + '\n');
+
+      const history = await historyLogger.getHistory();
+      expect(history.entries.length).toBe(2);
+      expect(history.entries.map((e) => e.id)).toContain('1');
+      expect(history.entries.map((e) => e.id)).toContain('2');
+    });
+  });
+
+  describe('15. Schema and Formatter Utilities', () => {
+    it('accepts valid filenames with multiple dots in PathSchema', () => {
+      const valid = PathSchema.safeParse('archive..v2.tar.gz');
+      expect(valid.success).toBe(true);
+
+      const traversal = PathSchema.safeParse('../etc/passwd');
+      expect(traversal.success).toBe(false);
+    });
+
+    it('formats sub-byte fractions without negative index in formatBytes', () => {
+      const formatted = formatBytes(0.5);
+      expect(formatted).toBe('0.5 Bytes');
     });
   });
 });

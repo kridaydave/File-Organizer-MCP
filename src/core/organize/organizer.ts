@@ -136,12 +136,14 @@ export class OrganizerService {
 
       try {
         // Use the stateful categorizer (rules aware)
-        // Pass useContentAnalysis to enable content-based type verification
-        const category = await this.categorizer.getCategory(
-          file.name,
-          useContentAnalysis,
-          file.path,
-        );
+        // Await content analysis when useContentAnalysis is enabled
+        const category =
+          useContentAnalysis && file.path
+            ? await this.categorizer.waitForContentAnalysis(
+                file.name,
+                file.path,
+              )
+            : this.categorizer.getCategory(file.name);
 
         if (!categoryCounts[category]) categoryCounts[category] = 0;
         categoryCounts[category]++;

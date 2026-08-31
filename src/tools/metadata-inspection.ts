@@ -198,7 +198,7 @@ export async function handleInspectMetadata(
         }
       } catch (metadataError) {
         result.warnings?.push(
-          `Could not extract metadata: ${metadataError instanceof Error ? metadataError.message : String(metadataError)}`,
+          `Could not extract metadata: ${sanitizeErrorMessage(metadataError instanceof Error ? metadataError : String(metadataError))}`,
         );
       }
     } else {

@@ -15,7 +15,7 @@ import { FileScannerService } from "../core/scan/scanner.js";
 import { AudioMetadataService } from "../services/metadata/index.js";
 import { ImageMetadataService } from "../services/metadata/index.js";
 import { MetadataService } from "../services/metadata/index.js";
-import { createErrorResponse } from "../utils/error-handler.js";
+import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
 import { logger } from "../utils/logger.js";
 import { formatBytes } from "../utils/formatters.js";
 import * as path from "path";
@@ -217,7 +217,7 @@ async function readTextFile(
     }
     return text;
   } catch (error) {
-    return `[Error reading file: ${(error as Error).message}]`;
+    return `[Error reading file: ${sanitizeErrorMessage(error instanceof Error ? error : String(error))}]`;
   }
 }
 
@@ -408,7 +408,7 @@ export async function handleBatchReadFiles(
           }
         }
       } catch (error) {
-        result.error = (error as Error).message;
+        result.error = sanitizeErrorMessage(error instanceof Error ? error : String(error));
       }
 
       results.push(result);

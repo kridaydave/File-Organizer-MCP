@@ -60,7 +60,7 @@ export class ImageMetadataService {
     const extractedAt = new Date();
 
     try {
-      const buffer = await readImageFile(filePath);
+      const buffer = await readImageFile(filePath, 256 * 1024);
       const format = detectImageFormat(buffer);
       const baseMetadata: ImageMetadata = {
         filePath,
@@ -149,7 +149,7 @@ export class ImageMetadataService {
   /** Check whether the file carries GPS data. */
   async hasGPS(filePath: string): Promise<boolean> {
     try {
-      const buffer = await readImageFile(filePath);
+      const buffer = await readImageFile(filePath, 256 * 1024);
       const format = detectImageFormat(buffer);
       if (format !== "jpeg" && format !== "jpg") return false;
       return await detectGpsPresence(buffer);

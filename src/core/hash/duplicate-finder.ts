@@ -49,18 +49,12 @@ export interface DeletionResult {
   manifestPath?: string;
 }
 
-/**
- * Move a file across filesystems/devices with EXDEV fallback
- */
 async function safeMoveFile(src: string, dest: string): Promise<void> {
   try {
     await fs.rename(src, dest);
   } catch (err) {
-    if (
-      err instanceof Error &&
-      "code" in err &&
-      (err as NodeJS.ErrnoException).code === "EXDEV"
-    ) {
+    const error = err as NodeJS.ErrnoException;
+    if (error && (error.code === "EXDEV" || error.message?.includes("EXDEV"))) {
       await fs.copyFile(src, dest);
       await fs.unlink(src);
     } else {
@@ -73,11 +67,13 @@ export class DuplicateFinderService {
   private hashCalculator: HashCalculatorService;
   private rollbackService: RollbackService;
   private fileScanner: FileScannerService;
+  private pathValidator: PathValidatorService;
 
-  constructor() {
+  constructor(pathValidator?: PathValidatorService) {
     this.hashCalculator = new HashCalculatorService();
     this.rollbackService = new RollbackService();
     this.fileScanner = new FileScannerService();
+    this.pathValidator = pathValidator ?? new PathValidatorService();
   }
 
   /**
@@ -218,9 +214,21 @@ export class DuplicateFinderService {
    */
   async deleteFiles(
     filesToDelete: string[],
-    options: { createBackupManifest?: boolean; autoVerify?: boolean } = {},
+    options:
+      | boolean
+      | {
+          createBackupManifest?: boolean;
+          autoVerify?: boolean;
+          candidateDirectories?: string[];
+        } = {},
   ): Promise<DeletionResult> {
-    const { createBackupManifest = true, autoVerify = false } = options;
+    const opts =
+      typeof options === "boolean" ? { autoVerify: options } : options;
+    const {
+      createBackupManifest = true,
+      autoVerify = false,
+      candidateDirectories = [],
+    } = opts;
 
     if (!autoVerify) {
       logger.warn(
@@ -262,7 +270,7 @@ export class DuplicateFinderService {
           continue;
         }
 
-        const validator = new PathValidatorService();
+        const validator = this.pathValidator;
         handle = await validator.openAndValidateFile(filePath);
 
         // Verify file can be read/hashed
@@ -284,7 +292,10 @@ export class DuplicateFinderService {
 
     // Auto-Verification: Ensure duplicates exist before deletion
     if (autoVerify && filesToProcess.length > 0) {
-      const verification = await this.verifyDuplicatesExist(filesToProcess);
+      const verification = await this.verifyDuplicatesExist(
+        filesToProcess,
+        candidateDirectories,
+      );
 
       // Add verification failures to result
       result.failed.push(...verification.invalid);
@@ -301,7 +312,8 @@ export class DuplicateFinderService {
           // and sanitize to prevent path traversal attacks
           const parsed = path.parse(filePath);
           const safeExt = (parsed.ext || ".bin").replace(/[^a-zA-Z0-9.]/g, "");
-          const safeName = parsed.name.replace(/[^a-zA-Z0-9_-]/g, "") || "file";
+          const safeName =
+            parsed.name.replace(/[^a-zA-Z0-9_-]/g, "") || "file";
           const backupName = `${crypto.randomUUID()}_${Date.now()}_${safeName}${safeExt}`;
           const backupPath = path.join(backupDir, backupName);
 
@@ -342,39 +354,39 @@ export class DuplicateFinderService {
    * Scans parent directories to ensure at least one copy remains
    *
    * @param filesToDelete - Files that will be deleted
+   * @param candidateDirectories - Optional additional directories to scan
    * @returns Object with valid files (have duplicates) and invalid files (no duplicates)
    */
   private async verifyDuplicatesExist(
     filesToDelete: string[],
+    candidateDirectories: string[] = [],
   ): Promise<{ valid: string[]; invalid: { path: string; error: string }[] }> {
     const valid: string[] = [];
     const invalid: { path: string; error: string }[] = [];
 
-    // Group files by parent directory to minimize scans
-    const filesByDir = new Map<string, string[]>();
+    // Collect all directories to scan
+    const dirsToScan = new Set<string>(candidateDirectories);
     for (const filePath of filesToDelete) {
-      const dir = path.dirname(filePath);
-      if (!filesByDir.has(dir)) {
-        filesByDir.set(dir, []);
+      const parent = path.dirname(filePath);
+      dirsToScan.add(parent);
+      const grandParent = path.dirname(parent);
+      if (grandParent && grandParent !== parent) {
+        dirsToScan.add(grandParent);
       }
-      filesByDir.get(dir)!.push(filePath);
     }
 
-    // For each directory, scan and verify duplicates
-    for (const [dir, filesInDir] of filesByDir.entries()) {
+    // Build unified map of hash -> surviving file paths across all scanned directories
+    const hashToFiles = new Map<string, string[]>();
+    for (const dir of dirsToScan) {
       try {
-        // Scan directory to find all duplicates
-        const allFilesInDir = await this.fileScanner.getAllFiles(dir, false); // Don't recurse
-
-        // Build map of hash -> file paths (excluding files being deleted)
-        const hashToFiles = new Map<string, string[]>();
+        const allFilesInDir = await this.fileScanner.getAllFiles(dir, true);
         for (const file of allFilesInDir) {
           if (filesToDelete.includes(file.path)) {
             continue;
           }
           let handle: fs.FileHandle | undefined;
           try {
-            const validator = new PathValidatorService();
+            const validator = this.pathValidator;
             handle = await validator.openAndValidateFile(file.path);
             const hash = await this.hashCalculator.calculateHash(handle);
 
@@ -383,7 +395,6 @@ export class DuplicateFinderService {
             }
             hashToFiles.get(hash)!.push(file.path);
           } catch (error) {
-            // Skip files we can't read
             logger.debug(
               `Skipping file during verification: ${file.path}`,
               error as Error,
@@ -401,51 +412,48 @@ export class DuplicateFinderService {
             }
           }
         }
-
-        // Verify each file being deleted has at least one copy remaining
-        for (const filePath of filesInDir) {
-          let handle: fs.FileHandle | undefined;
-          try {
-            const validator = new PathValidatorService();
-            handle = await validator.openAndValidateFile(filePath);
-            const hash = await this.hashCalculator.calculateHash(handle);
-
-            const remainingCopies = hashToFiles.get(hash) || [];
-
-            if (remainingCopies.length === 0) {
-              invalid.push({
-                path: filePath,
-                error:
-                  "Cannot delete: This is the last copy of this file (no duplicates found in directory)",
-              });
-            } else {
-              valid.push(filePath);
-            }
-          } catch (error) {
-            invalid.push({
-              path: filePath,
-              error: `Cannot verify: ${(error as Error).message}`,
-            });
-          } finally {
-            if (handle) {
-              try {
-                await handle.close();
-              } catch (e) {
-                logger.debug(
-                  "Failed to close file handle during verification",
-                  e as Error,
-                );
-              }
-            }
-          }
-        }
       } catch (error) {
-        // If directory scan fails, mark all files in this directory as invalid
-        for (const filePath of filesInDir) {
+        logger.warn(
+          `Could not scan directory during verification: ${dir}`,
+          error as Error,
+        );
+      }
+    }
+
+    // Verify each file being deleted has at least one surviving copy in hashToFiles
+    for (const filePath of filesToDelete) {
+      let handle: fs.FileHandle | undefined;
+      try {
+        const validator = this.pathValidator;
+        handle = await validator.openAndValidateFile(filePath);
+        const hash = await this.hashCalculator.calculateHash(handle);
+
+        const remainingCopies = hashToFiles.get(hash) || [];
+
+        if (remainingCopies.length === 0) {
           invalid.push({
             path: filePath,
-            error: `Verification failed: ${(error as Error).message}`,
+            error:
+              "Cannot delete: This is the last copy of this file (no duplicates found)",
           });
+        } else {
+          valid.push(filePath);
+        }
+      } catch (error) {
+        invalid.push({
+          path: filePath,
+          error: `Cannot verify: ${(error as Error).message}`,
+        });
+      } finally {
+        if (handle) {
+          try {
+            await handle.close();
+          } catch (e) {
+            logger.debug(
+              "Failed to close file handle during verification",
+              e as Error,
+            );
+          }
         }
       }
     }

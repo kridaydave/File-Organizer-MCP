@@ -22,7 +22,7 @@ import { sanitizeErrorMessage } from "../utils/error-handler.js";
 import { PathSchema } from "../schemas/system.js";
 import { logger } from "../utils/logger.js";
 import { CONFIG } from "../config.js";
-import { isPathBlocked } from "../utils/path-security.js";
+import { isPathBlocked, isPathInAllowedDirectories } from "../utils/path-security.js";
 
 /**
  * Layer 1: Type validation
@@ -375,18 +375,23 @@ export class PathValidatorService {
   private readonly basePath: string;
   private readonly allowedPaths: string[] | null;
 
-  constructor(basePath?: string, allowedPaths?: string[]) {
-    this.basePath = basePath ?? process.cwd();
-
-    if (allowedPaths) {
-      this.allowedPaths = allowedPaths;
+  constructor(basePath?: string | string[], allowedPaths?: string[]) {
+    if (Array.isArray(basePath)) {
+      this.allowedPaths = basePath;
+      this.basePath = basePath[0] ?? process.cwd();
     } else {
-      // If secure validation is enabled, we rely on the whitelist (Layer 4.5)
-      // and disable the implicit CWD restriction (Layer 6) by setting allowedPaths to null.
-      // If disabled, we fallback to legacy CWD restriction.
-      this.allowedPaths = CONFIG.security.enablePathValidation
-        ? null
-        : [this.basePath];
+      this.basePath = basePath ?? process.cwd();
+
+      if (allowedPaths) {
+        this.allowedPaths = allowedPaths;
+      } else {
+        // If secure validation is enabled, we rely on the whitelist (Layer 4.5)
+        // and disable the implicit CWD restriction (Layer 6) by setting allowedPaths to null.
+        // If disabled, we fallback to legacy CWD restriction.
+        this.allowedPaths = CONFIG.security.enablePathValidation
+          ? null
+          : [this.basePath];
+      }
     }
   }
 
@@ -448,7 +453,9 @@ export class PathValidatorService {
         return false;
       }
 
-      if (this.allowedPaths === null) return true;
+      if (this.allowedPaths === null) {
+        return isPathInAllowedDirectories(canonicalPath);
+      }
 
       const canonicalAllowed = this.allowedPaths.map((allowed) => {
         try {

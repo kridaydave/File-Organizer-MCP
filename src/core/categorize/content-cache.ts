@@ -146,14 +146,17 @@ export class ContentAnalysisCache {
    */
   async waitFor(name: string, filePath: string): Promise<CategoryName> {
     const key = `${filePath}:${name}`;
-    const promise = this.promises.get(key);
+    const cachedResult = this.results.get(key);
+    if (cachedResult) {
+      return cachedResult;
+    }
 
+    const promise = this.promises.get(key);
     if (promise) {
       return promise;
     }
 
-    const cachedResult = this.results.get(key);
-    return cachedResult || this.getExtensionCategory(name);
+    return this.trigger(name, filePath);
   }
 
   /**

@@ -8,7 +8,7 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
 import { RollbackService } from "../core/organize/rollback.js";
-import { createErrorResponse } from "../utils/error-handler.js";
+import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
 import { UndoLastOperationInputSchema } from "../schemas/organize.js";
 
 export { UndoLastOperationInputSchema } from "../schemas/organize.js";
@@ -74,22 +74,31 @@ export async function handleUndoLastOperation(
     }
 
     const result = await rollbackService.rollback(targetId!);
-    const hasFailures = result.failed > 0;
+    const sanitizedResult = {
+      ...result,
+      errors: result.errors.map((e) => sanitizeErrorMessage(e)),
+    };
+    const hasFailures = sanitizedResult.failed > 0;
 
     if (response_format === "json") {
       return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        structuredContent: result as unknown as Record<string, unknown>,
+        content: [
+          { type: "text", text: JSON.stringify(sanitizedResult, null, 2) },
+        ],
+        structuredContent: sanitizedResult as unknown as Record<
+          string,
+          unknown
+        >,
         ...(hasFailures && { isError: true }),
       };
     }
 
     const markdown = `### Undo Result
 **Manifest ID:** \`${targetId}\`
-✅ **Restored:** ${result.success} files
-❌ **Failed:** ${result.failed} files
+✅ **Restored:** ${sanitizedResult.success} files
+❌ **Failed:** ${sanitizedResult.failed} files
 
-${result.errors.length ? `**Errors:**\n${result.errors.map((e) => `- ${e}`).join("\n")}` : ""}
+${sanitizedResult.errors.length ? `**Errors:**\n${sanitizedResult.errors.map((e) => `- ${e}`).join("\n")}` : ""}
 `;
     return {
       content: [{ type: "text", text: markdown }],

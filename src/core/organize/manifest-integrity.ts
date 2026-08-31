@@ -128,7 +128,13 @@ export class ManifestIntegrityService {
     };
 
     const expectedSignature = this.computeSignature(manifestWithoutSignature);
-    if (expectedSignature !== manifest.signature) {
+    const expectedBuf = Buffer.from(expectedSignature, "hex");
+    const actualBuf = Buffer.from(manifest.signature, "hex");
+
+    if (
+      expectedBuf.length !== actualBuf.length ||
+      !crypto.timingSafeEqual(expectedBuf, actualBuf)
+    ) {
       return {
         valid: false,
         error: "Manifest signature mismatch - possible tampering detected",

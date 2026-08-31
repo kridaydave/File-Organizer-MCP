@@ -58,7 +58,7 @@ export const PathSchema = z
   .refine((path) => !path.includes("\0"), {
     message: "Path cannot contain null bytes",
   })
-  .refine((path) => !path.includes(".."), {
+  .refine((p) => !/(^|[/\\])\.\.([/\\]|$)/.test(p), {
     message: "Path cannot contain parent directory traversal",
   });
 

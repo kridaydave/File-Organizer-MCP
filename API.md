@@ -21,6 +21,7 @@
 - [file_organizer_get_categories](#file_organizer_get_categories)
 - [file_organizer_inspect_metadata](#file_organizer_inspect_metadata)
 - [file_organizer_list_files](#file_organizer_list_files)
+- [file_organizer_organize_by_project](#file_organizer_organize_by_project)
 - [file_organizer_organize_files](#file_organizer_organize_files)
 - [file_organizer_organize_music](#file_organizer_organize_music)
 - [file_organizer_organize_photos](#file_organizer_organize_photos)
@@ -281,6 +282,36 @@ file_organizer_list_files({
   limit: 123,
   offset: 123,
   response_format: "value",
+});
+```
+
+---
+
+## file_organizer_organize_by_project
+
+[⬆ Back to Top](#top)
+
+**Description:** Group files across all types into detected project folders using shared name tokens, content terms, and identifier markers. Use dry_run=true to preview changes.
+
+### Parameters
+
+| Parameter         | Type    | Description                                                     | Default    |
+| ----------------- | ------- | --------------------------------------------------------------- | ---------- |
+| `source_dir`      | string  | Full path to the directory containing files to organize         | -          |
+| `target_dir`      | string  | Full path to the directory where detected projects will be placed | -          |
+| `dry_run`         | boolean | Preview changes without moving files                            | true       |
+| `recursive`       | boolean | Scan subdirectories recursively                                 | true       |
+| `response_format` | string  | Output format: "markdown" or "json"                             | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_organize_by_project({
+  source_dir: "/path/to/source",
+  target_dir: "/path/to/target",
+  dry_run: true,
+  recursive: true,
+  response_format: "markdown",
 });
 ```
 

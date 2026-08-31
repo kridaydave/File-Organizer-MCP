@@ -7,6 +7,7 @@
 
 import crypto from "crypto";
 import path from "path";
+import fs from "fs/promises";
 import { FileOrganizerError } from "../../errors.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
 import { assertNotSensitive } from "./sensitive-files.js";
@@ -76,12 +77,16 @@ export async function readFile(
   }
 
   assertNotSensitive(filePath);
+  assertNotSensitive(path.resolve(filePath));
 
   // O_NOFOLLOW open + containment re-check on the opened handle.
   const validator = options.validator ?? new PathValidatorService();
   const handle = await validator.openAndValidateFile(filePath);
 
   try {
+    const realPath = await fs.realpath(filePath).catch(() => path.resolve(filePath));
+    assertNotSensitive(realPath);
+
     const stats = await handle.stat();
 
     const hasExplicitOffset = typeof options.offset === "number" && options.offset > 0;

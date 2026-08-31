@@ -73,6 +73,7 @@ export const viewHistoryToolDefinition: ToolDefinition = {
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
+    openWorldHint: true,
   },
 };
 

@@ -70,6 +70,7 @@ export const smartSuggestToolDefinition: ToolDefinition = {
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
+    openWorldHint: true,
   },
 };
 

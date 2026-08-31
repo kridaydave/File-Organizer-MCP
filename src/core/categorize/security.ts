@@ -172,10 +172,13 @@ export async function classifySecurity(
     // Check for mismatch
     if (!sniff.extensionMatch && sniff.detectedType !== "UNKNOWN") {
       return {
-        isExecutable: isExecutableType(sniff.detectedType),
+        isExecutable: isExecutableType(sniff.detectedType) || result.isExecutable,
         isSuspicious: true,
-        threatLevel: "low",
-        reason: `Extension mismatch: declared ${extension}, actual ${sniff.detectedType}`,
+        threatLevel: result.threatLevel === "high" ? "high" : "low",
+        reason:
+          result.threatLevel === "high"
+            ? `${result.reason}; Extension mismatch: declared ${extension}, actual ${sniff.detectedType}`
+            : `Extension mismatch: declared ${extension}, actual ${sniff.detectedType}`,
       };
     }
 
@@ -183,9 +186,12 @@ export async function classifySecurity(
     if (isExecutableType(sniff.detectedType)) {
       return {
         isExecutable: true,
-        isSuspicious: false,
-        threatLevel: "low",
-        reason: `Executable file detected: ${sniff.detectedType}`,
+        isSuspicious: result.isSuspicious,
+        threatLevel: result.threatLevel === "high" ? "high" : "low",
+        reason:
+          result.threatLevel === "high"
+            ? `${result.reason}; Executable file detected: ${sniff.detectedType}`
+            : `Executable file detected: ${sniff.detectedType}`,
       };
     }
   } catch (error) {

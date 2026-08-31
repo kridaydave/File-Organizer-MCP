@@ -103,7 +103,25 @@ export function validateEntryPath(
   entryName: string,
   targetDirectory: string,
 ): EntryValidationResult {
+  // Check for null bytes first
+  if (entryName.includes("\0")) {
+    return {
+      valid: false,
+      entryName,
+      error: "Null byte detected in entry name",
+    };
+  }
+
   const normalizedEntry = entryName.replace(/\\/g, "/");
+
+  // Check for path traversal components
+  if (/(^|\/)\.\.(\/|$)/.test(normalizedEntry)) {
+    return {
+      valid: false,
+      entryName,
+      error: `Path traversal attempt detected: ${entryName}`,
+    };
+  }
 
   // Check for blocked patterns
   for (const pattern of SECURITY_LIMITS.archiveValidation.BLOCKED_PATTERNS) {
@@ -130,23 +148,19 @@ export function validateEntryPath(
   // Resolve the potential extraction path
   const resolvedPath = path.resolve(targetDirectory, normalizedEntry);
 
-  // Ensure the resolved path is still within the target directory
+  // Ensure the resolved path is still within the target directory and does not resolve to target itself
   const normalizedTarget = path.resolve(targetDirectory);
 
-  if (!isSubPath(normalizedTarget, resolvedPath)) {
+  if (
+    !isSubPath(normalizedTarget, resolvedPath) ||
+    resolvedPath === normalizedTarget ||
+    normalizedEntry === "." ||
+    normalizedEntry === ""
+  ) {
     return {
       valid: false,
       entryName,
       error: "Zip-slip attempt: extracted path escapes target directory",
-    };
-  }
-
-  // Check for null bytes (deprecated but still check)
-  if (entryName.includes("\0")) {
-    return {
-      valid: false,
-      entryName,
-      error: "Null byte detected in entry name",
     };
   }
 

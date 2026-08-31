@@ -14,37 +14,19 @@ import {
   UserConfig,
 } from "../config.js";
 
-// Try to import chalk, fallback if not available
-let chalk: {
-  green: (s: string) => string;
-  red: (s: string) => string;
-  yellow: (s: string) => string;
-  cyan: (s: string) => string;
-  gray: (s: string) => string;
+// ANSI color helper for CLI diagnostic output
+const chalk = {
+  green: (s: string) => `\x1b[32m${s}\x1b[0m`,
+  red: (s: string) => `\x1b[31m${s}\x1b[0m`,
+  yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  cyan: (s: string) => `\x1b[36m${s}\x1b[0m`,
+  gray: (s: string) => `\x1b[90m${s}\x1b[0m`,
   bold: {
-    cyan: (s: string) => string;
-    green: (s: string) => string;
-    red: (s: string) => string;
-  };
+    cyan: (s: string) => `\x1b[1m\x1b[36m${s}\x1b[0m`,
+    green: (s: string) => `\x1b[1m\x1b[32m${s}\x1b[0m`,
+    red: (s: string) => `\x1b[1m\x1b[31m${s}\x1b[0m`,
+  },
 };
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  chalk = require("chalk");
-} catch {
-  // Fallback if chalk not available
-  chalk = {
-    green: (s: string) => s,
-    red: (s: string) => s,
-    yellow: (s: string) => s,
-    cyan: (s: string) => s,
-    gray: (s: string) => s,
-    bold: {
-      cyan: (s: string) => s,
-      green: (s: string) => s,
-      red: (s: string) => s,
-    },
-  };
-}
 
 export interface DiagnosticResult {
   name: string;
@@ -506,10 +488,10 @@ async function checkClaudeDesktopConfig(): Promise<DiagnosticResult> {
     // This reads the application config file (not external/user data), and readFileSync is appropriate
     // for synchronous diagnostic checking during startup/validation
     const configData = fs.readFileSync(configPath, "utf-8");
-    let config: any;
+    let config: Record<string, unknown>;
 
     try {
-      config = JSON.parse(configData);
+      config = JSON.parse(configData) as Record<string, unknown>;
     } catch (parseError) {
       return {
         name: "Claude Desktop Config",
@@ -524,7 +506,10 @@ async function checkClaudeDesktopConfig(): Promise<DiagnosticResult> {
     }
 
     // Check if file-organizer is configured
-    const mcpServers = config.mcpServers || {};
+    const mcpServers = (config.mcpServers ?? {}) as Record<
+      string,
+      { command?: string; args?: string[] }
+    >;
     const fileOrganizerConfig = mcpServers["file-organizer"];
 
     if (!fileOrganizerConfig) {
