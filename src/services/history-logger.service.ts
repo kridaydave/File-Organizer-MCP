@@ -316,7 +316,14 @@ export class HistoryLoggerService {
   }
 
   private redactPaths(text: string): string {
-    return text.replace(/[A-Za-z]:\\[^\s]+/g, "[REDACTED]");
+    // Redact Windows paths (e.g. C:\Users\..., D:/Projects/...)
+    let redacted = text.replace(/[A-Za-z]:[/\\][^\s]+/g, "[REDACTED]");
+    // Redact Unix absolute paths (e.g. /home/..., /var/..., /tmp/...)
+    redacted = redacted.replace(
+      /(?:^|[\s"'])(\/(?:[^\s"'/]+\/)*[^\s"'/]+)/g,
+      (match, p) => match.replace(p, "[REDACTED]"),
+    );
+    return redacted;
   }
 }
 

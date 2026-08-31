@@ -74,8 +74,7 @@ export function getCategoryByExtension(
   // Check Pattern-Based Rules (Hardcoded fallback)
   // Tests
   if (
-    lowerName.includes("test") ||
-    lowerName.includes("spec") ||
+    /(?:^|[_.-])(?:test|tests|spec|specs)(?:[_.-]|$)/i.test(name) ||
     lowerName.endsWith(".test.ts") ||
     lowerName.endsWith(".spec.ts")
   ) {
@@ -83,23 +82,22 @@ export function getCategoryByExtension(
   }
 
   if (
-    lowerName.includes("debug") ||
-    lowerName.includes("log") ||
+    /(?:^|[_.-])(?:debug|log|logs)(?:[_.-]|$)/i.test(name) ||
     lowerName.endsWith(".log")
   ) {
     return "Logs";
   }
 
   if (
-    lowerName.includes("demo") ||
-    lowerName.includes("sample") ||
-    lowerName.includes("example")
+    /(?:^|[_.-])(?:demo|demos|sample|samples|example|examples)(?:[_.-]|$)/i.test(
+      name,
+    )
   ) {
     return "Demos";
   }
 
   if (
-    lowerName.includes("script") ||
+    /(?:^|[_.-])(?:script|scripts)(?:[_.-]|$)/i.test(name) ||
     lowerName.endsWith(".sh") ||
     lowerName.endsWith(".bat")
   ) {

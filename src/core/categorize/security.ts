@@ -21,28 +21,38 @@ export interface SecurityClassification {
  * Check if type represents executable content
  */
 export function isExecutableType(detectedType: string): boolean {
-  const executableTypes = [
+  const executableTypes = new Set([
     "EXE",
     "ELF",
     "MACHO",
     "MSI",
     "PE",
+    "PE32",
+    "PE32+",
     "MACHO_32",
     "MACHO_64",
+    "MACHO_FAT",
     "MACHO_SWAP",
     "CLASS",
+    "JAVA_CLASS",
+    "JAR",
     "WASM",
     "SWF",
     "SHELL",
+    "SHEBANG",
     "BASH",
     "PYTHON",
     "PERL",
     "RUBY",
     "NODE",
-  ];
-  return (
-    executableTypes.some((t) => detectedType.toUpperCase().includes(t)) ||
-    isExecutableSignature(detectedType)
+  ]);
+  const upper = detectedType.toUpperCase().trim();
+  if (isExecutableSignature(upper) || executableTypes.has(upper)) {
+    return true;
+  }
+  const tokens = upper.split(/[^A-Z0-9_+]+/);
+  return tokens.some(
+    (t) => t.length > 0 && (executableTypes.has(t) || isExecutableSignature(t)),
   );
 }
 
@@ -91,19 +101,7 @@ export function isExecutableDisguisedAsDocument(
     return false;
   }
 
-  const executableTypes = [
-    "EXE",
-    "ELF",
-    "MACHO",
-    "MSI",
-    "PE",
-    "MACHO_32",
-    "MACHO_64",
-    "MACHO_SWAP",
-    "CLASS",
-    "WASM",
-  ];
-  return executableTypes.some((t) => detectedType.toUpperCase().includes(t));
+  return isExecutableType(detectedType);
 }
 
 /**

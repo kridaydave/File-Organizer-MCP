@@ -90,6 +90,7 @@ export async function handleViewHistory(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 

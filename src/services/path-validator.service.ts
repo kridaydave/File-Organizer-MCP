@@ -14,7 +14,7 @@
  */
 
 import fs from "fs/promises"; // for promise-based methods
-import { constants } from "fs"; // for constants (O_NOFOLLOW, etc)
+import fsSync, { constants } from "fs"; // for constants (O_NOFOLLOW, etc) and sync methods
 import path from "path";
 import { AccessDeniedError, ValidationError } from "../types.js";
 import { normalizePath, isSubPath } from "../utils/file-utils.js";
@@ -403,6 +403,9 @@ export class PathValidatorService {
 
   isPathAllowed(inputPath: string): boolean {
     try {
+      if (inputPath.includes("\0") || inputPath.includes("%00")) {
+        return false;
+      }
       const absolutePath = path.resolve(
         this.basePath,
         normalizePath(inputPath),
@@ -411,9 +414,51 @@ export class PathValidatorService {
         return false;
       }
 
+      // Resolve existing ancestor directory symlinks for non-existent paths
+      let canonicalPath = absolutePath;
+      try {
+        canonicalPath = fsSync.realpathSync(absolutePath);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+          let current = absolutePath;
+          const components: string[] = [];
+          while (current !== path.dirname(current)) {
+            components.unshift(path.basename(current));
+            current = path.dirname(current);
+            try {
+              const realAncestor = fsSync.realpathSync(current);
+              canonicalPath = path.join(realAncestor, ...components);
+              if (isPathBlocked(realAncestor)) {
+                return false;
+              }
+              break;
+            } catch (innerErr) {
+              if ((innerErr as NodeJS.ErrnoException).code === "ENOENT") {
+                continue;
+              }
+              return false;
+            }
+          }
+        } else {
+          return false;
+        }
+      }
+
+      if (isPathBlocked(canonicalPath)) {
+        return false;
+      }
+
       if (this.allowedPaths === null) return true;
 
-      return checkContainment(absolutePath, this.allowedPaths);
+      const canonicalAllowed = this.allowedPaths.map((allowed) => {
+        try {
+          return fsSync.realpathSync(allowed);
+        } catch {
+          return path.resolve(allowed);
+        }
+      });
+
+      return checkContainment(canonicalPath, canonicalAllowed);
     } catch {
       return false;
     }
@@ -463,50 +508,58 @@ export class PathValidatorService {
       }
     }
 
+    let handle: fs.FileHandle | null = null;
+    let handleClosed = false;
+
+    const closeHandleSafely = async () => {
+      if (handle && !handleClosed) {
+        handleClosed = true;
+        try {
+          await handle.close();
+        } catch {
+          // Ignore close errors
+        }
+      }
+    };
+
     try {
       // Open atomically with O_NOFOLLOW - single syscall, no race window
-      const handle = await fs.open(
+      handle = await fs.open(
         absolutePath,
         constants.O_RDONLY | constants.O_NOFOLLOW,
       );
 
-      try {
-        // Post-open validation only - no pre-validation race window
-        const stats = await handle.stat();
-        if (!stats.isFile()) {
-          await handle.close();
-          throw new ValidationError("Path is not a file");
-        }
-
-        // Verify containment using realpath after open
-        const realPath = await fs.realpath(absolutePath);
-        if (this.allowedPaths !== null) {
-          // Canonicalize allowed roots so symlinked prefixes (e.g.
-          // /var -> /private/var on macOS) don't cause false negatives.
-          const canonicalAllowed = await Promise.all(
-            this.allowedPaths.map((allowed) =>
-              fs.realpath(allowed).catch(() => path.resolve(allowed)),
-            ),
-          );
-          if (!checkContainment(realPath, canonicalAllowed)) {
-            await handle.close();
-            throw new AccessDeniedError(
-              inputPath,
-              "File outside allowed directory",
-            );
-          }
-        } else {
-          // Whitelist mode: verify the opened file's real path is still
-          // within the configured whitelist (TOCTOU-safe symlink containment).
-          await this.assertAllowedByWhitelist(realPath, inputPath);
-        }
-
-        return handle;
-      } catch (validationError) {
-        await handle.close();
-        throw validationError;
+      // Post-open validation only - no pre-validation race window
+      const stats = await handle.stat();
+      if (!stats.isFile()) {
+        throw new ValidationError("Path is not a file");
       }
+
+      // Verify containment using realpath after open
+      const realPath = await fs.realpath(absolutePath);
+      if (this.allowedPaths !== null) {
+        // Canonicalize allowed roots so symlinked prefixes (e.g.
+        // /var -> /private/var on macOS) don't cause false negatives.
+        const canonicalAllowed = await Promise.all(
+          this.allowedPaths.map((allowed) =>
+            fs.realpath(allowed).catch(() => path.resolve(allowed)),
+          ),
+        );
+        if (!checkContainment(realPath, canonicalAllowed)) {
+          throw new AccessDeniedError(
+            inputPath,
+            "File outside allowed directory",
+          );
+        }
+      } else {
+        // Whitelist mode: verify the opened file's real path is still
+        // within the configured whitelist (TOCTOU-safe symlink containment).
+        await this.assertAllowedByWhitelist(realPath, inputPath);
+      }
+
+      return handle;
     } catch (error) {
+      await closeHandleSafely();
       if ((error as NodeJS.ErrnoException).code === "ELOOP") {
         throw new ValidationError(
           "Symlink traversal detected (O_NOFOLLOW blocked)",

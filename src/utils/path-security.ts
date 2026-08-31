@@ -7,6 +7,7 @@
 
 import path from "path";
 import fs from "fs/promises";
+import fsSync from "fs";
 import { CONFIG } from "../config.js";
 import { normalizePath, isSubPath } from "./file-utils.js";
 import { logger } from "./logger.js";
@@ -28,11 +29,83 @@ export function isPathBlocked(normalizedPath: string): boolean {
 
 /**
  * Resolve symlinks in a path. When the path does not exist yet (e.g. a
- * destination that will be created), fall back to the normalized absolute form.
+ * destination that will be created), resolve existing ancestor directory
+ * symlinks and return the canonical ancestor path with remaining components.
+ */
+export async function resolveExistingAncestor(
+  inputPath: string,
+): Promise<{ resolvedPath: string; exists: boolean }> {
+  try {
+    const realPath = await fs.realpath(inputPath);
+    return { resolvedPath: realPath, exists: true };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ELOOP") {
+      throw err;
+    }
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      let currentPath = inputPath;
+      const components: string[] = [];
+
+      while (currentPath !== path.dirname(currentPath)) {
+        components.unshift(path.basename(currentPath));
+        currentPath = path.dirname(currentPath);
+
+        try {
+          const realAncestor = await fs.realpath(currentPath);
+          return {
+            resolvedPath: path.join(realAncestor, ...components),
+            exists: false,
+          };
+        } catch (innerErr) {
+          if ((innerErr as NodeJS.ErrnoException).code === "ELOOP") {
+            throw innerErr;
+          }
+          if ((innerErr as NodeJS.ErrnoException).code === "ENOENT") {
+            continue;
+          }
+          throw innerErr;
+        }
+      }
+
+      return { resolvedPath: inputPath, exists: false };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Resolve symlinks in a path or its existing ancestors synchronously.
+ */
+function canonicalizePathSync(inputPath: string): string {
+  try {
+    return fsSync.realpathSync(inputPath);
+  } catch {
+    let currentPath = inputPath;
+    const components: string[] = [];
+
+    while (currentPath !== path.dirname(currentPath)) {
+      components.unshift(path.basename(currentPath));
+      currentPath = path.dirname(currentPath);
+
+      try {
+        const realAncestor = fsSync.realpathSync(currentPath);
+        return path.join(realAncestor, ...components);
+      } catch {
+        continue;
+      }
+    }
+
+    return path.resolve(inputPath);
+  }
+}
+
+/**
+ * Resolve symlinks in a path or its existing ancestors.
  */
 async function canonicalizePath(inputPath: string): Promise<string> {
   try {
-    return await fs.realpath(inputPath);
+    const resolved = await resolveExistingAncestor(inputPath);
+    return resolved.resolvedPath;
   } catch {
     return path.resolve(inputPath);
   }
@@ -43,18 +116,18 @@ async function canonicalizePath(inputPath: string): Promise<string> {
  * Compares canonical forms so symlinked prefixes (e.g. /var -> /private/var
  * on macOS) do not cause false negatives.
  */
-async function isPathInAllowedDirectories(
+export function isPathInAllowedDirectories(
   normalizedPath: string,
-): Promise<boolean> {
+): boolean {
   const allowedDirs = [
     ...CONFIG.paths.defaultAllowed,
     ...CONFIG.paths.customAllowed,
   ];
 
-  const canonicalPath = await canonicalizePath(normalizedPath);
+  const canonicalPath = canonicalizePathSync(normalizedPath);
 
   for (const allowedDir of allowedDirs) {
-    const canonicalDir = await canonicalizePath(allowedDir);
+    const canonicalDir = canonicalizePathSync(allowedDir);
     if (isSubPath(canonicalDir, canonicalPath)) {
       return true;
     }
@@ -74,25 +147,29 @@ export async function isPathAllowed(
   const normalizedRequestPath = path.resolve(normalizePath(requestedPath));
 
   // Resolve symlinks (including intermediate ones such as /var -> /private/var
-  // on macOS) so blacklist and containment checks compare canonical forms.
+  // on macOS and existing ancestor symlinks for non-existent paths) so blacklist
+  // and containment checks compare canonical forms.
   // ATOMIC symlink handling: the canonical form is the ground truth for
   // blacklist/whitelist decisions, preventing TOCTOU symlink escapes.
   let canonicalRequestPath: string;
   try {
-    canonicalRequestPath = await fs.realpath(normalizedRequestPath);
+    const resolved = await resolveExistingAncestor(normalizedRequestPath);
+    canonicalRequestPath = resolved.resolvedPath;
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      logger.error("Path validation failed unexpectedly", {
-        path: normalizedRequestPath,
-        error: err instanceof Error ? err.message : String(err),
-      });
+    if ((err as NodeJS.ErrnoException).code === "ELOOP") {
       return {
         allowed: false,
-        reason: "Path validation failed due to system error",
+        reason: "Circular symlink detected",
       };
     }
-    // Non-existent paths can't be symlinks, so fall back to the normalized form.
-    canonicalRequestPath = normalizedRequestPath;
+    logger.error("Path validation failed unexpectedly", {
+      path: normalizedRequestPath,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return {
+      allowed: false,
+      reason: "Path validation failed due to system error",
+    };
   }
 
   // Check if blocked first (always takes priority). Both the user-facing path
@@ -109,7 +186,7 @@ export async function isPathAllowed(
   }
 
   // Check if path is within allowed directories (canonical comparison)
-  if (!(await isPathInAllowedDirectories(canonicalRequestPath))) {
+  if (!isPathInAllowedDirectories(canonicalRequestPath)) {
     return {
       allowed: false,
       reason: "Path is outside allowed directories",
@@ -134,13 +211,8 @@ export function formatAccessDeniedMessage(
   requestedPath: string,
   validation: PathValidationResult,
 ): string {
-  const allowedDirs = getAllowedDirectories();
-
-  let message = `Access Denied: ${validation.reason}\n\n`;
+  let message = `Access Denied: ${validation.reason ?? "Path is not accessible"}\n\n`;
   message += `The directory "${requestedPath}" is not accessible.\n\n`;
-  message += `Current allowed directories:\n`;
-  message += allowedDirs.map((d) => `  - ${d}`).join("\n");
-  message += "\n\n";
 
   if (validation.hint) {
     message += `To grant access to this directory:\n`;

@@ -9,6 +9,7 @@ import { logger } from "../../utils/logger.js";
 import { isSubPath } from "../../utils/file-utils.js";
 import type { PrivacyMode } from "../../types.js";
 import type { CustomRule } from "../../core/types/categories.js";
+import { parseJsonc } from "../../tui/client-detector.js";
 import { getUserConfigPath } from "./paths.js";
 import { isExternalVolumePath } from "./security.js";
 
@@ -53,7 +54,7 @@ export function loadUserConfig(): UserConfig {
       logger.warn(`Warning: Config file is empty: ${configPath}`);
       return {};
     }
-    const parsed = JSON.parse(configData) as UserConfig;
+    const parsed = parseJsonc(configData) as UserConfig;
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("Config file does not contain a valid JSON object");
     return parsed;
   } catch (error) {
@@ -84,15 +85,25 @@ Your file organization settings will be reset, but your actual files are safe.
 /** @deprecated Use updateUserConfig instead */
 export function saveConfig(config: Partial<UserConfig>): void { updateUserConfig(config); }
 export function updateUserConfig(updates: Partial<UserConfig>): boolean {
+  const configPath = getUserConfigPath();
+  const configDir = path.dirname(configPath);
+  let tempPath: string | null = null;
   try {
-    const configPath = getUserConfigPath();
     const existingConfig = loadUserConfig();
     const mergedConfig = deepMerge(existingConfig, updates);
-    const configDir = path.dirname(configPath);
     if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(configPath, JSON.stringify(mergedConfig, null, 2));
+    tempPath = path.join(configDir, `.config.tmp.${process.pid}.${Date.now()}`);
+    fs.writeFileSync(tempPath, JSON.stringify(mergedConfig, null, 2), "utf-8");
+    fs.renameSync(tempPath, configPath);
     return true;
   } catch (error) {
+    if (tempPath && fs.existsSync(tempPath)) {
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {
+        // ignore cleanup error
+      }
+    }
     logger.error("Error saving config:", (error as Error).message);
     return false;
   }

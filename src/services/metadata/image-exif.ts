@@ -138,12 +138,18 @@ export async function parseJPEGMetadata(
     for (const key of ["DateTimeOriginal", "CreateDate"] as const) {
       const value = tags[key];
       if (typeof value === "number") {
-        metadata.dateTaken = new Date(value * 1000);
-        break;
+        const d = new Date(value * 1000);
+        if (!isNaN(d.getTime())) {
+          metadata.dateTaken = d;
+          break;
+        }
       }
     }
     if (typeof tags.ModifyDate === "number") {
-      metadata.dateModified = new Date(tags.ModifyDate * 1000);
+      const d = new Date(tags.ModifyDate * 1000);
+      if (!isNaN(d.getTime())) {
+        metadata.dateModified = d;
+      }
     }
 
     const lat = tags.GPSLatitude as number | undefined;
@@ -160,7 +166,10 @@ export async function parseJPEGMetadata(
         metadata.altitude = tags.GPSAltitude;
       }
       if (typeof tags.GPSTimeStamp === "number") {
-        metadata.gpsTimestamp = new Date(tags.GPSTimeStamp * 1000);
+        const d = new Date(tags.GPSTimeStamp * 1000);
+        if (!isNaN(d.getTime())) {
+          metadata.gpsTimestamp = d;
+        }
       }
     }
   }
@@ -181,9 +190,16 @@ export async function parseJPEGMetadata(
   // Fill missing dates from file stats
   try {
     const stats = await fs.stat(filePath);
-    if (!metadata.dateModified) metadata.dateModified = stats.mtime;
-    if (!metadata.dateCreated) metadata.dateCreated = stats.birthtime;
-    if (!metadata.dateTaken && options.useFileDate) {
+    if (!metadata.dateModified || isNaN(metadata.dateModified.getTime())) {
+      metadata.dateModified = stats.mtime;
+    }
+    if (!metadata.dateCreated || isNaN(metadata.dateCreated.getTime())) {
+      metadata.dateCreated = stats.birthtime;
+    }
+    if (
+      (!metadata.dateTaken || isNaN(metadata.dateTaken.getTime())) &&
+      options.useFileDate
+    ) {
       metadata.dateTaken = new Date(stats.mtime);
     }
   } catch {

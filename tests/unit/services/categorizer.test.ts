@@ -33,6 +33,13 @@ describe('CategorizerService', () => {
             expect(categorizer.getCategory('demo_app.py')).toBe('Demos');
         });
 
+        it('should not miscategorize words containing keyword substrings', () => {
+            expect(categorizer.getCategory('catalog.pdf')).toBe('Documents');
+            expect(categorizer.getCategory('prescription.pdf')).toBe('Documents');
+            expect(categorizer.getCategory('contest_entry.jpg')).toBe('Images');
+            expect(categorizer.getCategory('dialogue.txt')).toBe('Documents');
+        });
+
         it('should respect custom rules', () => {
             categorizer.setCustomRules([
                 {

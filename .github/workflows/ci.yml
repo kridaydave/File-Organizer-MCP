@@ -2,9 +2,7 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
   pull_request:
-    branches: [main, develop]
   workflow_dispatch:
 
 jobs:
@@ -68,6 +66,9 @@ jobs:
             echo "Jest cache directory not found, skipping clear..."
           fi
         continue-on-error: true
+
+      - name: Run security tests
+        run: npm run test:security
 
       - name: Run tests
         run: npm test

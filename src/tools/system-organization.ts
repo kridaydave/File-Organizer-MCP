@@ -8,6 +8,8 @@
  * @module tools/system-organization
  */
 
+import path from "path";
+import os from "os";
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { RollbackService } from "../core/organize/rollback.js";
@@ -18,6 +20,40 @@ import { SystemOrganizationInputSchema } from "../schemas/organize.js";
 import { logger } from "../utils/logger.js";
 
 const VALID_SOURCE_DIRS = ["Downloads", "Desktop", "Temp"];
+const VALID_SOURCE_NAMES = ["downloads", "desktop", "temp"];
+
+function resolveSourceDir(sourceDir: string): string {
+  const trimmed = sourceDir.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === "downloads") {
+    return path.join(os.homedir(), "Downloads");
+  }
+  if (lower === "desktop") {
+    return path.join(os.homedir(), "Desktop");
+  }
+  if (lower === "temp") {
+    return os.tmpdir();
+  }
+  return trimmed;
+}
+
+function isValidSourceDir(dirPath: string): boolean {
+  const base = path.basename(dirPath).toLowerCase();
+  if (VALID_SOURCE_NAMES.includes(base)) {
+    return true;
+  }
+  const homeDir = os.homedir();
+  const allowed = [
+    path.join(homeDir, "Downloads").toLowerCase(),
+    path.join(homeDir, "Desktop").toLowerCase(),
+    os.tmpdir().toLowerCase(),
+  ];
+  return allowed.some(
+    (a) =>
+      dirPath.toLowerCase() === a ||
+      dirPath.toLowerCase().startsWith(a + path.sep),
+  );
+}
 
 export type SystemOrganizationInput = z.infer<
   typeof SystemOrganizationInputSchema
@@ -102,6 +138,7 @@ export async function handleSystemOrganization(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -114,14 +151,12 @@ export async function handleSystemOrganization(
       conflict_strategy,
       dry_run,
       copy_instead_of_move,
+      response_format,
     } = parsed.data;
 
-    const normalizedSource = source_dir.trim();
-    const isValidSource = VALID_SOURCE_DIRS.some(
-      (dir) => dir.toLowerCase() === normalizedSource.toLowerCase(),
-    );
+    const resolvedSource = resolveSourceDir(source_dir);
 
-    if (!isValidSource) {
+    if (!isValidSourceDir(resolvedSource)) {
       return {
         content: [
           {
@@ -129,10 +164,11 @@ export async function handleSystemOrganization(
             text: `Error: source_dir must be one of: ${VALID_SOURCE_DIRS.join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
-    const validatedSource = await validateStrictPath(normalizedSource);
+    const validatedSource = await validateStrictPath(resolvedSource);
 
     const service = new SystemOrganizeService();
 
@@ -179,6 +215,13 @@ export async function handleSystemOrganization(
           `Failed to create rollback manifest: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
         );
       }
+    }
+
+    if (response_format === "json") {
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
     }
 
     const lines: string[] = [];

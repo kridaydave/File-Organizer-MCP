@@ -13,7 +13,7 @@ import type {
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
 import { HashCalculatorService } from "../core/hash/hasher.js";
-import { createErrorResponse } from "../utils/error-handler.js";
+import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import {
   FindDuplicateFilesInputSchema,
@@ -64,6 +64,7 @@ export async function handleFindDuplicateFiles(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -71,10 +72,11 @@ export async function handleFindDuplicateFiles(
     const validatedPath = await validateStrictPath(directory);
     if (!validatedPath) {
       return {
+        isError: true,
         content: [
           {
             type: "text" as const,
-            text: `Error: Invalid or forbidden source path: ${directory}`,
+            text: sanitizeErrorMessage(`Error: Invalid or forbidden source path: ${directory}`),
           },
         ],
       };

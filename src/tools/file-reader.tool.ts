@@ -115,6 +115,7 @@ export async function handleReadFile(
     }
 
     const input = parseResult.data;
+    const effectiveMaxBytes = input.limit ?? input.maxBytes;
 
     const { data, bytesRead, totalSize, checksum, mimeType } = await readFile(
       input.path,
@@ -123,7 +124,7 @@ export async function handleReadFile(
           input.encoding === "binary"
             ? null
             : (input.encoding as BufferEncoding),
-        maxBytes: input.maxBytes,
+        maxBytes: effectiveMaxBytes,
         offset: input.offset,
         checksum: input.calculateChecksum,
       },

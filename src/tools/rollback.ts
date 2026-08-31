@@ -51,6 +51,7 @@ export async function handleUndoLastOperation(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -64,17 +65,22 @@ export async function handleUndoLastOperation(
     if (!targetId) {
       const manifests = await rollbackService.listManifests();
       if (manifests.length === 0 || !manifests[0]) {
-        return { content: [{ type: "text", text: "No undo history found." }] };
+        return {
+          content: [{ type: "text", text: "No undo history found." }],
+          isError: true,
+        };
       }
       targetId = manifests[0].id;
     }
 
     const result = await rollbackService.rollback(targetId!);
+    const hasFailures = result.failed > 0;
 
     if (response_format === "json") {
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         structuredContent: result as unknown as Record<string, unknown>,
+        ...(hasFailures && { isError: true }),
       };
     }
 
@@ -85,7 +91,10 @@ export async function handleUndoLastOperation(
 
 ${result.errors.length ? `**Errors:**\n${result.errors.map((e) => `- ${e}`).join("\n")}` : ""}
 `;
-    return { content: [{ type: "text", text: markdown }] };
+    return {
+      content: [{ type: "text", text: markdown }],
+      ...(hasFailures && { isError: true }),
+    };
   } catch (error) {
     return createErrorResponse(error);
   }

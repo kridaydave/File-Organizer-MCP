@@ -150,8 +150,8 @@ export function validateEntryPath(
     };
   }
 
-  // Check for Windows reserved names
-  const baseName = path.basename(normalizedEntry).toLowerCase();
+  // Check all path components for Windows reserved names
+  const components = normalizedEntry.split(/[\/\\]/);
   const windowsReserved = [
     "con",
     "prn",
@@ -176,13 +176,15 @@ export function validateEntryPath(
     "lpt8",
     "lpt9",
   ];
-  const fileNameWithoutExt = baseName.split(".")[0] ?? "";
-  if (windowsReserved.includes(fileNameWithoutExt)) {
-    return {
-      valid: false,
-      entryName,
-      error: `Windows reserved filename detected: ${baseName}`,
-    };
+  for (const part of components) {
+    const partWithoutExt = part.split(".")[0]?.toLowerCase() ?? "";
+    if (windowsReserved.includes(partWithoutExt)) {
+      return {
+        valid: false,
+        entryName,
+        error: `Windows reserved filename detected: ${part}`,
+      };
+    }
   }
 
   return {
@@ -197,26 +199,33 @@ export function validateEntryPath(
  * Returns list of invalid entries with reasons
  */
 export function validateArchiveEntries(
-  entries: Array<{ name: string; size?: number }>,
+  entries: Array<{ name: string; size?: number; uncompressedSize?: number }>,
   targetDirectory: string,
-): { valid: boolean; invalidEntries: EntryValidationResult[] } {
+): { valid: boolean; invalidEntries: EntryValidationResult[]; errors: string[] } {
   const invalidEntries: EntryValidationResult[] = [];
   const maxEntries = SECURITY_LIMITS.decompression.MAX_ENTRIES;
+  const maxAbsoluteBytes = SECURITY_LIMITS.decompression.MAX_ABSOLUTE_BYTES;
 
   if (entries.length > maxEntries) {
+    const errorMsg = `Too many entries: ${entries.length} exceeds limit of ${maxEntries}`;
     return {
       valid: false,
       invalidEntries: [
         {
           valid: false,
           entryName: "",
-          error: `Too many entries: ${entries.length} exceeds limit of ${maxEntries}`,
+          error: errorMsg,
         },
       ],
+      errors: [errorMsg],
     };
   }
 
+  let totalUncompressedSize = 0;
   for (const entry of entries) {
+    const entrySize = entry.uncompressedSize ?? entry.size ?? 0;
+    totalUncompressedSize += entrySize;
+
     const validation = validateEntryPath(entry.name, targetDirectory);
 
     if (!validation.valid) {
@@ -226,20 +235,29 @@ export function validateArchiveEntries(
 
     // Check individual file size limit
     if (
-      entry.size &&
-      entry.size > SECURITY_LIMITS.decompression.MAX_FILE_SIZE
+      entrySize > SECURITY_LIMITS.decompression.MAX_FILE_SIZE
     ) {
       invalidEntries.push({
         valid: false,
         entryName: entry.name,
-        error: `File size ${entry.size} exceeds maximum allowed ${SECURITY_LIMITS.decompression.MAX_FILE_SIZE}`,
+        error: `File size ${entrySize} exceeds maximum allowed ${SECURITY_LIMITS.decompression.MAX_FILE_SIZE}`,
       });
     }
+  }
+
+  if (totalUncompressedSize > maxAbsoluteBytes) {
+    const errorMsg = `Cumulative uncompressed size ${totalUncompressedSize} exceeds maximum allowed ${maxAbsoluteBytes}`;
+    invalidEntries.push({
+      valid: false,
+      entryName: "",
+      error: errorMsg,
+    });
   }
 
   return {
     valid: invalidEntries.length === 0,
     invalidEntries,
+    errors: invalidEntries.map((e) => e.error ?? "Invalid entry"),
   };
 }
 
@@ -250,8 +268,8 @@ export function sanitizeEntryName(entryName: string): string {
   // Normalize Unicode to prevent bypass with alternate representations
   let sanitized = entryName.normalize("NFC");
 
-  // Remove null bytes
-  sanitized = sanitized.replace(/\0/g, "");
+  // Remove any null or control characters FIRST before path splitting
+  sanitized = sanitized.replace(/[\x00-\x1f\x7f]/g, "");
 
   // Remove leading slashes and backslashes
   sanitized = sanitized.replace(/^[\/\\]+/, "");
@@ -262,11 +280,8 @@ export function sanitizeEntryName(entryName: string): string {
   // Remove any parent directory references
   sanitized = sanitized
     .split("/")
-    .filter((part) => part !== "..")
+    .filter((part) => part !== ".." && part !== ".")
     .join("/");
-
-  // Remove any null or control characters
-  sanitized = sanitized.replace(/[\x00-\x1f\x7f]/g, "");
 
   return sanitized;
 }

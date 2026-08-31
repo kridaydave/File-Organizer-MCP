@@ -23,7 +23,13 @@ export const CONFIG = {
   // Path Access Control
   paths: {
     defaultAllowed: getDefaultAllowedDirs(),
-    customAllowed: loadCustomAllowedDirs(),
+    _overrideCustomAllowed: undefined as string[] | undefined,
+    get customAllowed(): string[] {
+      return this._overrideCustomAllowed ?? loadCustomAllowedDirs();
+    },
+    set customAllowed(val: string[] | undefined) {
+      this._overrideCustomAllowed = val;
+    },
     alwaysBlocked: getAlwaysBlockedPatterns(),
   },
 };

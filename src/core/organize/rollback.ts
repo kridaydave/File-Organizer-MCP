@@ -18,6 +18,26 @@ import { getRollbackDirectory } from "../../core/config/paths.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
 import { manifestIntegrityService } from "./manifest-integrity.js";
 
+/**
+ * Move a file across filesystems/devices with EXDEV fallback
+ */
+async function safeMoveFile(src: string, dest: string): Promise<void> {
+  try {
+    await fs.rename(src, dest);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      "code" in err &&
+      (err as NodeJS.ErrnoException).code === "EXDEV"
+    ) {
+      await fs.copyFile(src, dest);
+      await fs.unlink(src);
+    } else {
+      throw err;
+    }
+  }
+}
+
 export class RollbackService {
   private storageDir: string;
   private pathValidator: PathValidatorService;
@@ -254,16 +274,7 @@ export class RollbackService {
           if (action.overwrittenBackupPath) {
             // TOCTOU-safe: Try restore directly, handle errors
             try {
-              try {
-                await fs.rename(action.overwrittenBackupPath, action.currentPath);
-              } catch (renameErr) {
-                if ((renameErr as NodeJS.ErrnoException).code === "EXDEV") {
-                  await fs.copyFile(action.overwrittenBackupPath, action.currentPath);
-                  await fs.unlink(action.overwrittenBackupPath);
-                } else {
-                  throw renameErr;
-                }
-              }
+              await safeMoveFile(action.overwrittenBackupPath, action.currentPath);
             } catch (e) {
               const err = e as NodeJS.ErrnoException;
               if (err.code === "ENOENT") {
@@ -273,7 +284,7 @@ export class RollbackService {
 
                 // Attempt to recover: revert the move operation
                 try {
-                  await fs.rename(action.originalPath, action.currentPath);
+                  await safeMoveFile(action.originalPath, action.currentPath);
                   results.errors.push(
                     `Recovered: Reverted move for ${action.originalPath} -> ${action.currentPath}`,
                   );
@@ -350,7 +361,7 @@ export class RollbackService {
               action.originalPath,
               constants.COPYFILE_EXCL,
             );
-            await fs.unlink(action.backupPath);
+            // Do not delete the backup file until the entire rollback completes successfully
             // Track successful delete undo for potential recovery
             completedActions.push({
               action,
@@ -405,13 +416,13 @@ export class RollbackService {
           try {
             if (completed.stage === "move") {
               // Revert the move: move back from original to current
-              await fs.rename(completed.paths.to, completed.paths.from);
+              await safeMoveFile(completed.paths.to, completed.paths.from);
               results.errors.push(
                 `Recovered move: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
               );
             } else if (completed.stage === "restore") {
               // Revert the restore: move back from current to backup location
-              await fs.rename(completed.paths.to, completed.paths.from);
+              await safeMoveFile(completed.paths.to, completed.paths.from);
               results.errors.push(
                 `Recovered restore: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
               );
@@ -422,11 +433,10 @@ export class RollbackService {
                 `Warning: Cannot recover copy operation - file content not available: ${completed.paths.from}`,
               );
             } else if (completed.stage === "delete") {
-              // Revert delete undo: delete the restored file and move backup back
+              // Revert delete undo: delete the restored file (backup is still preserved on disk)
               await fs.unlink(completed.paths.to);
-              await fs.rename(completed.paths.from, completed.paths.to);
               results.errors.push(
-                `Recovered delete: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
+                `Recovered delete: Reverted ${completed.paths.to}`,
               );
             }
           } catch (recoveryError) {
@@ -438,8 +448,17 @@ export class RollbackService {
       }
     }
 
-    // Cleanup manifest to prevent re-running only if full rollback succeeded
+    // Cleanup backups and manifest only if full rollback succeeded
     if (results.failed === 0) {
+      for (const completed of completedActions) {
+        if (completed.stage === "delete" && completed.paths.from) {
+          try {
+            await fs.unlink(completed.paths.from);
+          } catch {
+            // Ignore backup deletion error if already unlinked
+          }
+        }
+      }
       try {
         await fs.unlink(filePath);
       } catch (e) {

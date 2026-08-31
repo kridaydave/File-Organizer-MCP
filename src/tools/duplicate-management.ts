@@ -94,6 +94,7 @@ export async function handleAnalyzeDuplicates(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -181,6 +182,7 @@ export async function handleDeleteDuplicates(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -198,11 +200,13 @@ export async function handleDeleteDuplicates(
       deleted_files: result.deleted,
       failures: result.failed,
     };
+    const hasFailures = output.failed_count > 0;
 
     if (response_format === "json") {
       return {
         content: [{ type: "text", text: JSON.stringify(output, null, 2) }],
         structuredContent: output as unknown as Record<string, unknown>,
+        ...(hasFailures && { isError: true }),
       };
     }
 
@@ -212,7 +216,10 @@ export async function handleDeleteDuplicates(
 
 ${output.failures.length > 0 ? `**Failures:**\n${output.failures.map((f) => `- ${f.path}: ${f.error}`).join("\n")}` : ""}
 `;
-    return { content: [{ type: "text", text: markdown }] };
+    return {
+      content: [{ type: "text", text: markdown }],
+      ...(hasFailures && { isError: true }),
+    };
   } catch (error) {
     return createErrorResponse(error);
   }

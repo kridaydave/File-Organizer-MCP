@@ -109,28 +109,37 @@ export class RenamingService {
                 break;
 
               case "case":
-                switch (rule.conversion) {
+                const casingType = ((rule as any).casing ?? rule.conversion ?? "").toLowerCase();
+                switch (casingType) {
+                  case "lower":
                   case "lowercase":
                     newBasename = newBasename.toLowerCase();
                     newExt = newExt.toLowerCase();
                     break;
+                  case "upper":
                   case "uppercase":
                     newBasename = newBasename.toUpperCase();
                     newExt = newExt.toUpperCase();
                     break;
-                  case "camelCase":
+                  case "camel":
+                  case "camelcase":
                     newBasename = toCamelCase(newBasename);
                     break;
-                  case "PascalCase":
+                  case "pascal":
+                  case "pascalcase":
                     newBasename = toPascalCase(newBasename);
                     break;
+                  case "snake":
                   case "snake_case":
                     newBasename = toSnakeCase(newBasename);
                     break;
+                  case "kebab":
                   case "kebab-case":
                     newBasename = toKebabCase(newBasename);
                     break;
-                  case "Title Case":
+                  case "title":
+                  case "title case":
+                  case "title_case":
                     newBasename = toTitleCase(newBasename);
                     break;
                 }
@@ -193,45 +202,27 @@ export class RenamingService {
         }
         usedNames.add(newPath);
 
-        // Disk Conflict Check: Try exclusive access to detect conflicts atomically
-        // This avoids TOCTOU race condition by attempting action and handling errors
+        // Disk Conflict Check: Non-mutating stat check to detect conflicts
         if (willChange && !conflict) {
           try {
-            // Try to get exclusive access to destination - this will fail if it exists
-            // Using 'wx' flag: open for writing, fail if path exists (atomic check)
-            const handle = await fs.open(newPath, "wx");
-            await handle.close();
-            // Successfully opened exclusively, so file didn't exist - clean up our test file
-            await fs.unlink(newPath).catch(() => {
-              // Ignore cleanup errors - the conflict check succeeded
-            });
-          } catch (err) {
-            const nodeErr = err as NodeJS.ErrnoException;
-            // EEXIST: Destination file already exists
-            if (nodeErr.code === "EEXIST") {
-              // Check if it's the SAME file (case-only rename on case-insensitive FS)
-              try {
-                const srcStat = await fs.stat(originalPath);
-                const destStat = await fs.stat(newPath);
-                // On Windows/Mac (case-insensitive), ino/dev should match if same file
-                if (
-                  srcStat.ino !== destStat.ino ||
-                  srcStat.dev !== destStat.dev
-                ) {
-                  // Fallback for systems where ino is unreliable
-                  const isSamePath =
-                    path.resolve(originalPath).toLowerCase() ===
-                    path.resolve(newPath).toLowerCase();
-                  if (!isSamePath) {
-                    conflict = true;
-                  }
-                }
-              } catch {
-                // If we can't stat both files, assume conflict for safety
+            const destStat = await fs.stat(newPath);
+            // Destination file exists: Check if it's the SAME file (case-only rename on case-insensitive FS)
+            try {
+              const srcStat = await fs.stat(originalPath);
+              if (
+                srcStat.ino !== destStat.ino ||
+                srcStat.dev !== destStat.dev
+              ) {
                 conflict = true;
               }
+            } catch {
+              conflict = true;
             }
-            // ENOENT or other errors: no conflict (destination doesn't exist or other issue)
+          } catch (err) {
+            const nodeErr = err as NodeJS.ErrnoException;
+            if (nodeErr.code !== "ENOENT") {
+              // Destination cannot be stat-ed; if not ENOENT, keep existing conflict status
+            }
           }
         }
 
@@ -318,6 +309,29 @@ export class RenamingService {
 
         try {
           if (isCaseOnly) {
+            // Check if target destination already exists on disk before calling fs.rename
+            // to prevent POSIX rename(2) silent overwrites on Linux
+            try {
+              const destStat = await fs.stat(item.new);
+              const srcStat = await fs.stat(item.original);
+              if (
+                destStat.ino !== srcStat.ino ||
+                destStat.dev !== srcStat.dev
+              ) {
+                throw Object.assign(
+                  new Error(
+                    `Destination file already exists: ${path.basename(item.new)}`,
+                  ),
+                  { code: "EEXIST" },
+                );
+              }
+            } catch (statErr) {
+              if ((statErr as NodeJS.ErrnoException).code === "EEXIST") {
+                throw statErr;
+              }
+              // ENOENT means destination does not exist, safe to rename
+            }
+
             await fs.rename(item.original, item.new);
           } else {
             await fs.copyFile(item.original, item.new, constants.COPYFILE_EXCL);
@@ -484,10 +498,10 @@ function toSnakeCase(str: string) {
   return (
     str
       .match(
-        /[A-Z]{2,}(?=[A-Z][a-z]+[0-9]*|\b)|[A-Z]?[a-z]+[0-9]*|[A-Z]|[0-9]+/g,
+        /\p{Lu}{2,}(?=\p{Lu}\p{Ll}+|\b)|\p{Lu}?\p{Ll}+|\p{Lu}|\p{N}+/gu,
       )
       ?.map((x) => x.toLowerCase())
-      .join("_") ?? str
+      .join("_") ?? str.toLowerCase()
   );
 }
 
@@ -495,10 +509,10 @@ function toKebabCase(str: string) {
   return (
     str
       .match(
-        /[A-Z]{2,}(?=[A-Z][a-z]+[0-9]*|\b)|[A-Z]?[a-z]+[0-9]*|[A-Z]|[0-9]+/g,
+        /\p{Lu}{2,}(?=\p{Lu}\p{Ll}+|\b)|\p{Lu}?\p{Ll}+|\p{Lu}|\p{N}+/gu,
       )
       ?.map((x) => x.toLowerCase())
-      .join("-") ?? str
+      .join("-") ?? str.toLowerCase()
   );
 }
 

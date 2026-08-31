@@ -123,6 +123,7 @@ export async function handleSetCustomRules(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -152,6 +153,7 @@ export async function handleSetCustomRules(
         content: [
           { type: "text", text: "No valid Custom Rules were applied." },
         ],
+        isError: true,
       };
     }
 

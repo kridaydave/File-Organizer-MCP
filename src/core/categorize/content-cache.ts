@@ -101,6 +101,7 @@ export class ContentAnalysisCache {
 
         if (result.confidence >= 0.7) {
           this.results.set(key, result.category);
+          this.timestamps.set(key, Date.now());
           logger.info("Content analysis updated category", {
             filePath,
             name,
@@ -121,7 +122,9 @@ export class ContentAnalysisCache {
         return this.getExtensionCategory(name);
       } finally {
         this.promises.delete(key);
-        this.timestamps.delete(key);
+        if (!this.results.has(key)) {
+          this.timestamps.delete(key);
+        }
       }
     })();
 
@@ -158,8 +161,14 @@ export class ContentAnalysisCache {
    */
   clear(filePath?: string): void {
     if (filePath) {
-      for (const key of this.results.keys()) {
-        if (key.startsWith(filePath)) {
+      const allKeys = new Set([
+        ...this.results.keys(),
+        ...this.promises.keys(),
+        ...this.timestamps.keys(),
+      ]);
+      const prefix = `${filePath}:`;
+      for (const key of allKeys) {
+        if (key === filePath || key.startsWith(prefix)) {
           this.results.delete(key);
           this.promises.delete(key);
           this.timestamps.delete(key);

@@ -94,6 +94,16 @@ describe("core/io readFile", () => {
     });
   });
 
+  it("handles 0-byte files with offset 0 without throwing", async () => {
+    const file = path.join(testDir, "empty.txt");
+    await fs.writeFile(file, "");
+
+    const result = await readFile(file, { validator });
+    expect(result.data).toBe("");
+    expect(result.bytesRead).toBe(0);
+    expect(result.totalSize).toBe(0);
+  });
+
   it("blocks sensitive files without leaking the path", async () => {
     const file = path.join(testDir, ".env");
     await fs.writeFile(file, "SECRET=1");
@@ -129,11 +139,16 @@ describe("core/io sensitive patterns", () => {
   it.each([
     "/home/user/.env",
     "/home/user/.env.production",
+    "/home/user/.env::$DATA",
+    "/home/user/%2e%65%6e%76",
     "/home/user/.ssh/id_rsa",
     "/home/user/server.pem",
     "/home/user/aws-credentials.json",
     "/home/user/.aws/credentials",
     "/home/user/.ssh",
+    "/home/user/.gnupg/secring.gpg",
+    "/home/user/.kube/config",
+    "/home/user/.docker/config.json",
     "/etc/shadow",
     "/home/user/api_key.txt",
   ])("flags %s", (p) => {

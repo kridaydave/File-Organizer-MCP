@@ -15,9 +15,7 @@ name: Security Gates
 
 on:
   push:
-    branches: [main, master, develop]
   pull_request:
-    branches: [main, master, develop]
   schedule:
     # Run security gates daily at 02:00 UTC
     - cron: "0 2 * * *"

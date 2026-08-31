@@ -94,6 +94,7 @@ export async function handleOrganizePhotos(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 

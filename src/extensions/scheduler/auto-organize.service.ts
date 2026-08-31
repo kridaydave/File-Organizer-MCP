@@ -21,6 +21,7 @@ import {
 import { logger } from "../../utils/logger.js";
 import { SchedulerStateService } from "./scheduler-state.service.js";
 import { shouldCatchup } from "../../utils/cron-utils.js";
+import { validateStrictPath } from "../../services/path-validator.service.js";
 
 export type ConfigLoader = () => UserConfig;
 
@@ -257,37 +258,40 @@ export class AutoOrganizeService {
   private async runOrganization(watch: WatchConfig): Promise<void> {
     const { directory, rules } = watch;
 
+    // Validate directory path before scanning and organizing
+    const validatedDirectory = await validateStrictPath(directory);
+
     // Check-and-set to prevent concurrent runs for the same directory
-    if (this.runningDirectories.has(directory)) {
+    if (this.runningDirectories.has(validatedDirectory)) {
       logger.warn(
-        `Previous run still active for ${directory}, skipping this cycle`,
+        `Previous run still active for ${validatedDirectory}, skipping this cycle`,
       );
       return;
     }
-    this.runningDirectories.add(directory);
-    logger.info(`[${directory}] Starting scheduled organization`);
+    this.runningDirectories.add(validatedDirectory);
+    logger.info(`[${validatedDirectory}] Starting scheduled organization`);
 
     try {
       // Get all files
-      let files = await this.scanner.getAllFiles(directory, false);
+      let files = await this.scanner.getAllFiles(validatedDirectory, false);
 
       if (files.length === 0) {
-        logger.debug(`[${directory}] No files to organize`);
+        logger.debug(`[${validatedDirectory}] No files to organize`);
         return;
       }
 
-      logger.info(`[${directory}] Found ${files.length} files`);
+      logger.info(`[${validatedDirectory}] Found ${files.length} files`);
 
       // Apply min_file_age filter if configured
       if (rules.min_file_age_minutes && rules.min_file_age_minutes > 0) {
         files = await this.filterByAge(files, rules.min_file_age_minutes);
         logger.info(
-          `[${directory}] ${files.length} files meet age requirement (${rules.min_file_age_minutes} min)`,
+          `[${validatedDirectory}] ${files.length} files meet age requirement (${rules.min_file_age_minutes} min)`,
         );
       }
 
       if (files.length === 0) {
-        logger.debug(`[${directory}] No files meet criteria after filtering`);
+        logger.debug(`[${validatedDirectory}] No files meet criteria after filtering`);
         return;
       }
 
@@ -300,7 +304,7 @@ export class AutoOrganizeService {
       ) {
         files = files.slice(0, rules.max_files_per_run);
         logger.info(
-          `[${directory}] Limited to ${files.length} files (from ${originalCount}) due to max_files_per_run`,
+          `[${validatedDirectory}] Limited to ${files.length} files (from ${originalCount}) due to max_files_per_run`,
         );
       }
 
@@ -309,7 +313,7 @@ export class AutoOrganizeService {
       const conflictStrategy = userConfig.conflictStrategy ?? "rename";
 
       // Run organization
-      const result = await this.organizer.organize(directory, files, {
+      const result = await this.organizer.organize(validatedDirectory, files, {
         dryRun: false,
         conflictStrategy,
       });
@@ -318,14 +322,14 @@ export class AutoOrganizeService {
         (a, b) => a + b,
         0,
       );
-      logger.info(`[${directory}] Organized ${totalMoved} files`, {
+      logger.info(`[${validatedDirectory}] Organized ${totalMoved} files`, {
         statistics: result.statistics,
         errors: result.errors.length,
       });
 
       if (result.errors.length > 0) {
         logger.warn(
-          `[${directory}] Had ${result.errors.length} errors`,
+          `[${validatedDirectory}] Had ${result.errors.length} errors`,
           result.errors,
         );
       }
@@ -334,22 +338,22 @@ export class AutoOrganizeService {
       if (this.stateService) {
         try {
           await this.stateService.setLastRunTime(
-            directory,
+            validatedDirectory,
             new Date(),
             watch.schedule,
           );
-          logger.debug(`[${directory}] Recorded successful run time`);
+          logger.debug(`[${validatedDirectory}] Recorded successful run time`);
         } catch (error) {
-          logger.warn(`[${directory}] Failed to record run time:`, {
+          logger.warn(`[${validatedDirectory}] Failed to record run time:`, {
             error: String(error),
           });
         }
       }
     } catch (error) {
-      logger.error(`[${directory}] Organization failed:`, error);
+      logger.error(`[${validatedDirectory}] Organization failed:`, error);
       throw error;
     } finally {
-      this.runningDirectories.delete(directory);
+      this.runningDirectories.delete(validatedDirectory);
     }
   }
 

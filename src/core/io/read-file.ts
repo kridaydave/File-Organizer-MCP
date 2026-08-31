@@ -84,13 +84,27 @@ export async function readFile(
   try {
     const stats = await handle.stat();
 
-    if (stats.size > maxBytes) {
+    const hasExplicitOffset = typeof options.offset === "number" && options.offset > 0;
+    if (stats.size > maxBytes && !hasExplicitOffset) {
       throw new FileOrganizerError(
         `File is ${stats.size} bytes which exceeds the ${maxBytes} byte read limit`,
         "E_FILE_TOO_LARGE",
         undefined,
         "Increase maxBytes or use offset to read a portion of the file",
       );
+    }
+
+    if (stats.size === 0 && offset === 0) {
+      return {
+        data: encoding ? "" : Buffer.alloc(0),
+        bytesRead: 0,
+        totalSize: 0,
+        checksum:
+          options.checksum === false
+            ? undefined
+            : crypto.createHash("sha256").update(Buffer.alloc(0)).digest("hex"),
+        mimeType: getMimeType(filePath),
+      };
     }
 
     const bytesToRead = Math.min(stats.size - offset, maxBytes);

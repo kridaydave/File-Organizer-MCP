@@ -82,6 +82,7 @@ export async function handleCategorizeByType(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 

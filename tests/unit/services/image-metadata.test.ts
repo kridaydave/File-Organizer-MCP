@@ -485,6 +485,44 @@ describe("ImageMetadataService", () => {
       const strippedMetadata = await service.extract(outputPath);
       expect(strippedMetadata.hasEXIF).toBe(false);
     });
+
+    it("should not truncate image files larger than 256KB when stripping metadata", async () => {
+      // Create a JPEG with SOS marker and >256KB scan payload
+      const header = Buffer.from([
+        0xff, 0xd8, // SOI
+        0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, // APP0
+        0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, // SOS
+      ]);
+      const scanData = Buffer.alloc(300 * 1024, 0xaa);
+      const eoi = Buffer.from([0xff, 0xd9]); // EOI
+      const jpegData = Buffer.concat([header, scanData, eoi]);
+
+      const filePath = path.join(testDir, "large-image.jpg");
+      await fs.writeFile(filePath, jpegData);
+
+      const outputPathAll = path.join(testDir, "large-stripped-all.jpg");
+      const resultAll = await service.stripAllMetadata(filePath, outputPathAll);
+      expect(resultAll.success).toBe(true);
+      const outStatAll = await fs.stat(outputPathAll);
+      expect(outStatAll.size).toBeGreaterThan(262144);
+
+      const outputPathGps = path.join(testDir, "large-stripped-gps.jpg");
+      const resultGps = await service.stripGPS(filePath, outputPathGps);
+      expect(resultGps.success).toBe(true);
+      const outStatGps = await fs.stat(outputPathGps);
+      expect(outStatGps.size).toBeGreaterThan(262144);
+    });
+
+    it("should not return NaN/NaN for invalid metadata dates in getMetadataSubpath", async () => {
+      const { MetadataService } = await import("../../../src/services/metadata/service.js");
+      const metaService = new MetadataService();
+      const filePath = await createMockJPEG("invalid-date.jpg", {
+        hasEXIF: false,
+      });
+
+      const subpath = await metaService.getMetadataSubpath(filePath, "Images");
+      expect(subpath).not.toContain("NaN");
+    });
   });
 
   // ==================== THUMBNAIL TESTS ====================

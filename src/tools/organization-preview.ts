@@ -83,6 +83,7 @@ export async function handlePreviewOrganization(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 

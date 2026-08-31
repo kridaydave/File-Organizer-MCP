@@ -627,23 +627,29 @@ file_organizer_organize_photos({
 
 [⬆ Back to Top](#top)
 
-**Description:** Read multiple files efficiently in a single operation. Supports text, base64, and binary encoding.
+**Description:** Reads contents of all files in a specified folder for LLM context. For text files (documents, code, notes), reads the actual content. For media files (audio, video, images), reads metadata instead of binary content. Provides a comprehensive summary of folder contents.
 
 ### Parameters
 
-| Parameter            | Type   | Description                                | Default    |
-| -------------------- | ------ | ------------------------------------------ | ---------- |
-| `files`              | array  | List of absolute file paths to read        | -          |
-| `encoding`           | string | Text encoding: 'utf-8', 'base64', 'binary' | 'utf-8'    |
-| `max_bytes_per_file` | number | Maximum bytes to read per file             | 10485760   |
-| `response_format`    | string | Output format                              | 'markdown' |
+| Parameter          | Type    | Description                                                             | Default      |
+| ------------------ | ------- | ----------------------------------------------------------------------- | ------------ |
+| `directory`        | string  | Full path to the directory containing files to read                     | -            |
+| `include_subdirs`  | boolean | Include subdirectories in the batch read                                | `false`      |
+| `max_files`        | number  | Maximum number of files to process (safety limit)                       | `50`         |
+| `max_file_size_mb` | number  | Maximum file size in MB to read content (larger files get metadata only)| `10`         |
+| `include_content`  | boolean | Include file content for text files                                     | `true`       |
+| `include_metadata` | boolean | Include metadata for all files                                          | `true`       |
+| `file_types`       | array   | Filter by specific file extensions (e.g., `[".txt", ".pdf"]`)           | -            |
+| `response_format`  | string  | Output format: `'markdown'` or `'json'`                                 | `'markdown'` |
 
 ### Example
 
 ```typescript
 file_organizer_batch_read_files({
-  files: ["/path/to/file1.txt", "/path/to/file2.txt", "/path/to/file3.txt"],
-  encoding: "utf-8",
+  directory: "/path/to/folder",
+  include_subdirs: false,
+  max_files: 50,
+  file_types: [".txt", ".md", ".json"],
 });
 ```
 

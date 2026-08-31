@@ -101,27 +101,27 @@ export async function bootstrapServer(): Promise<void> {
  * Setup handlers for graceful shutdown
  */
 export function setupGracefulShutdown(): void {
-  const shutdown = (signal: string): void => {
+  const shutdown = (signal: string, exitCode = 0): void => {
     logger.info(`Received ${signal}, shutting down gracefully...`);
     logger.info("Cleanup complete, exiting...");
-    process.exit(0);
+    process.exit(exitCode);
   };
 
-  process.on("SIGINT", () => shutdown("SIGINT"));
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT", 0));
+  process.on("SIGTERM", () => shutdown("SIGTERM", 0));
 
   if (process.platform === "win32") {
-    process.on("SIGBREAK", () => shutdown("SIGBREAK"));
+    process.on("SIGBREAK", () => shutdown("SIGBREAK", 0));
   }
 
   process.on("uncaughtException", (error) => {
     logger.error("Uncaught exception:", error);
-    shutdown("uncaughtException");
+    shutdown("uncaughtException", 1);
   });
 
   process.on("unhandledRejection", (reason) => {
     logger.error("Unhandled rejection:", reason);
-    shutdown("unhandledRejection");
+    shutdown("unhandledRejection", 1);
   });
 }
 

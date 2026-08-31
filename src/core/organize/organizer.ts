@@ -6,6 +6,7 @@
 import fs from "fs/promises";
 import { constants } from "fs";
 import path from "path";
+import crypto from "crypto";
 import type {
   FileWithSize,
   OrganizeAction,
@@ -43,6 +44,8 @@ export interface OrganizeResult {
   errorCount: number;
   successCount: number;
   aborted: boolean;
+  skippedCount?: number;
+  skippedFiles?: { path: string; reason: string }[];
 }
 
 // BUG-003 FIX: Maximum consecutive errors before aborting to prevent endless processing
@@ -252,6 +255,8 @@ export class OrganizerService {
         errorCount: 0,
         successCount: plan.moves.length,
         aborted: false,
+        skippedCount: plan.skippedFiles.length,
+        skippedFiles: plan.skippedFiles,
       };
     }
 
@@ -259,6 +264,7 @@ export class OrganizerService {
     const rollbackActions: RollbackAction[] = [];
     const actionsPerformed: OrganizeAction[] = [];
     const errors: string[] = [];
+    const skippedFiles: { path: string; reason: string }[] = [...plan.skippedFiles];
 
     const rollbackService = new RollbackService();
 
@@ -280,6 +286,10 @@ export class OrganizerService {
 
     for (const move of plan.moves) {
       if (move.hasConflict && move.conflictResolution === "skip") {
+        skippedFiles.push({
+          path: move.source,
+          reason: "Conflict resolution is skip",
+        });
         continue;
       }
 
@@ -292,6 +302,7 @@ export class OrganizerService {
       if (windowsReservedRegex.test(sourceBase)) {
         const msg = `Skipped reserved Windows filename: ${move.source}`;
         logger.warn(msg);
+        skippedFiles.push({ path: move.source, reason: "Reserved Windows filename" });
         continue;
       }
 
@@ -300,6 +311,10 @@ export class OrganizerService {
       if (windowsReservedRegex.test(destBase)) {
         const msg = `Skipped reserved Windows filename in destination: ${move.destination}`;
         logger.warn(msg);
+        skippedFiles.push({
+          path: move.source,
+          reason: "Reserved Windows filename in destination",
+        });
         continue;
       }
 
@@ -328,7 +343,7 @@ export class OrganizerService {
                 // Source is not newer - skip this file
                 const msg = `Skipped ${sourcePath}: destination is newer`;
                 logger.info(msg);
-                errors.push(msg);
+                skippedFiles.push({ path: sourcePath, reason: "destination is newer" });
                 continue;
               }
             } catch (statErr: unknown) {
@@ -352,7 +367,7 @@ export class OrganizerService {
             await fs.unlink(sourcePath);
           } catch (copyErr: unknown) {
             if (isErrnoException(copyErr) && copyErr.code === "EEXIST") {
-              const backupName = `${Date.now()}_overwrite_${path.basename(targetPath)}`;
+              const backupName = `${Date.now()}_${crypto.randomUUID()}_overwrite_${path.basename(targetPath)}`;
               overwrittenBackupPath = path.join(backupDir, backupName);
 
               try {
@@ -396,9 +411,11 @@ export class OrganizerService {
               targetPath,
               path.extname(targetPath),
             );
-            const counterMatch = plannedBaseName.match(/_(\d+)$/);
-            if (counterMatch && counterMatch[1]) {
-              startCounter = parseInt(counterMatch[1], 10) + 1;
+            if (plannedBaseName.startsWith(`${sourceBaseName}_`)) {
+              const suffix = plannedBaseName.slice(sourceBaseName.length + 1);
+              if (/^\d+$/.test(suffix)) {
+                startCounter = parseInt(suffix, 10) + 1;
+              }
             }
 
             let success = false;
@@ -517,9 +534,11 @@ export class OrganizerService {
               targetPath,
               path.extname(targetPath),
             );
-            const counterMatch = plannedBaseName.match(/_(\d+)$/);
-            if (counterMatch && counterMatch[1]) {
-              startCounter = parseInt(counterMatch[1], 10) + 1;
+            if (plannedBaseName.startsWith(`${sourceBaseName}_`)) {
+              const suffix = plannedBaseName.slice(sourceBaseName.length + 1);
+              if (/^\d+$/.test(suffix)) {
+                startCounter = parseInt(suffix, 10) + 1;
+              }
             }
 
             let success = false;
@@ -562,7 +581,10 @@ export class OrganizerService {
                     // Skip this file - don't move it
                     const msg = `Skipped ${sourcePath}: destination ${effectivePath} already exists`;
                     logger.info(msg);
-                    errors.push(msg);
+                    skippedFiles.push({
+                      path: sourcePath,
+                      reason: `destination ${effectivePath} already exists`,
+                    });
                     skipped = true; // Mark as skipped
                     success = true; // Exit the loop
                   } else {
@@ -608,33 +630,34 @@ export class OrganizerService {
           overwrittenBackupPath: overwrittenBackupPath,
           timestamp: Date.now(),
         });
-
-        // HIGH-002 FIX: Save manifest incrementally after each successful operation
-        // This ensures partial successes can be rolled back if a later operation fails
-        try {
-          await rollbackService.createManifest(
-            `Organization of ${directory} (${rollbackActions.length} files)`,
-            [...rollbackActions], // Create a copy to ensure we capture current state
-          );
-        } catch (manifestErr) {
-          const manifestError =
-            manifestErr instanceof Error
-              ? manifestErr
-              : new Error(String(manifestErr));
-          const msg = `Failed to update rollback manifest: ${manifestError.message}`;
-          errors.push(msg);
-          logger.error(msg, {
-            operation: "manifest_update",
-            directory,
-            rollbackCount: rollbackActions.length,
-            error: manifestError.message,
-            errorStack: manifestError.stack,
-          });
-        }
       } catch (error) {
         const msg = `Failed to move ${move.source}: ${(error as Error).message}`;
         errors.push(msg);
         logger.error(msg);
+      }
+    }
+
+    // Save rollback manifest once for the entire batch
+    if (rollbackActions.length > 0) {
+      try {
+        await rollbackService.createManifest(
+          `Organization of ${directory} (${rollbackActions.length} files)`,
+          rollbackActions,
+        );
+      } catch (manifestErr) {
+        const manifestError =
+          manifestErr instanceof Error
+            ? manifestErr
+            : new Error(String(manifestErr));
+        const msg = `Failed to create rollback manifest: ${manifestError.message}`;
+        errors.push(msg);
+        logger.error(msg, {
+          operation: "manifest_create",
+          directory,
+          rollbackCount: rollbackActions.length,
+          error: manifestError.message,
+          errorStack: manifestError.stack,
+        });
       }
     }
 
@@ -650,6 +673,8 @@ export class OrganizerService {
       errorCount,
       successCount,
       aborted,
+      skippedCount: skippedFiles.length,
+      skippedFiles,
     };
   }
 }

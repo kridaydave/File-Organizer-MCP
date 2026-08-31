@@ -93,20 +93,40 @@ export const SENSITIVE_PATTERNS: RegExp[] = [
 
 /** Directories blocked recursively. */
 export const SENSITIVE_DIRECTORIES: RegExp[] = [
-  /\.ssh$/i,
-  /\.aws$/i,
-  /\.gnupg$/i,
-  /\.kube$/i,
-  /\.docker$/i,
-  /etc\/shadow/i,
-  /etc\/passwd/i,
-  /System\/Keychains/i,
-  /Keychains$/i,
+  /(?:^|\/)\.ssh(?:\/|$)/i,
+  /(?:^|\/)\.aws(?:\/|$)/i,
+  /(?:^|\/)\.gnupg(?:\/|$)/i,
+  /(?:^|\/)\.kube(?:\/|$)/i,
+  /(?:^|\/)\.docker(?:\/|$)/i,
+  /(?:^|\/)etc\/shadow(?:\/|$)/i,
+  /(?:^|\/)etc\/passwd(?:\/|$)/i,
+  /(?:^|\/)System\/Keychains(?:\/|$)/i,
+  /(?:^|\/)Keychains(?:\/|$)/i,
 ];
+
+export function normalizeForSensitiveCheck(filePath: string): string {
+  if (!filePath) return "";
+  let decoded = filePath;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+
+  // Strip Windows NTFS Alternate Data Stream suffixes (e.g. ::$DATA, :stream:$DATA, :stream)
+  decoded = decoded.replace(/::\$DATA/gi, "");
+  decoded = decoded.replace(/(?<!^[a-zA-Z]):\$?[a-zA-Z0-9_]+(?=[\\/]|$)/gi, "");
+
+  return decoded.toLowerCase().replace(/\\/g, "/");
+}
 
 export function isSensitiveFile(filePath: string): boolean {
   if (!filePath) return false;
-  const normalized = filePath.toLowerCase().replace(/\\/g, "/");
+  const normalized = normalizeForSensitiveCheck(filePath);
   return (
     SENSITIVE_PATTERNS.some((p) => p.test(normalized)) ||
     SENSITIVE_DIRECTORIES.some((p) => p.test(normalized))
@@ -125,7 +145,7 @@ export function assertNotSensitive(filePath: string): void {
     );
   }
 
-  const normalized = filePath.toLowerCase().replace(/\\/g, "/");
+  const normalized = normalizeForSensitiveCheck(filePath);
 
   for (const pattern of SENSITIVE_PATTERNS) {
     if (pattern.test(normalized)) {

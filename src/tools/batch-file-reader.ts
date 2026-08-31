@@ -234,6 +234,7 @@ export async function handleBatchReadFiles(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 

@@ -36,12 +36,13 @@ export class FileScannerService {
     directory: string,
     options: ScanOptions = {},
   ): Promise<FileInfo[]> {
-    const { includeSubdirs = false, maxDepth = -1 } = options;
+    const { includeSubdirs = false, maxDepth } = options;
+    const effectiveMaxDepth = maxDepth !== undefined ? maxDepth : this.maxDepth;
 
     // Validate maxDepth: -1 for unlimited, or 0-50 for bounded recursion
-    if (maxDepth !== -1 && (maxDepth < 0 || maxDepth > 50)) {
+    if (effectiveMaxDepth !== -1 && (effectiveMaxDepth < 0 || effectiveMaxDepth > 50)) {
       throw new ValidationError(
-        `Invalid maxDepth: ${maxDepth}. Must be -1 (unlimited) or between 0 and 50 (inclusive).`,
+        `Invalid maxDepth: ${effectiveMaxDepth}. Must be -1 (unlimited) or between 0 and 50 (inclusive).`,
       );
     }
 
@@ -50,7 +51,7 @@ export class FileScannerService {
       directory,
       results,
       includeSubdirs,
-      maxDepth,
+      effectiveMaxDepth,
       0,
       new Set(),
     );
@@ -101,11 +102,14 @@ export class FileScannerService {
           if (
             error.code === "EACCES" ||
             error.code === "EPERM" ||
-            error.code === "ENOENT"
+            error.code === "ENOENT" ||
+            error.code === "ELOOP" ||
+            error.code === "ENOTDIR" ||
+            error.code === "EBUSY"
           )
             return;
         }
-        throw error;
+        return;
       }
 
       for (const item of items) {
@@ -232,10 +236,6 @@ export class FileScannerService {
   ): Promise<void> {
     // Enforce limits
     if (maxDepth !== -1 && currentDepth > maxDepth) return;
-    if (currentDepth > this.maxDepth) {
-      logger.warn(`Max depth ${this.maxDepth} reached at ${dir}`);
-      return;
-    }
 
     // Detect loops using realpath
     try {
@@ -246,6 +246,17 @@ export class FileScannerService {
       }
       visited.add(realPath);
     } catch (error) {
+      if (isErrnoException(error)) {
+        if (
+          error.code === "ELOOP" ||
+          error.code === "EACCES" ||
+          error.code === "EPERM" ||
+          error.code === "ENOENT"
+        ) {
+          logger.warn(`Directory access issue at ${dir} (${error.code}), skipping`);
+          return;
+        }
+      }
       // Add original path to visited even if realpath fails
       visited.add(dir);
       logger.debug(`Could not resolve realpath for ${dir}: ${error}`);
@@ -256,16 +267,22 @@ export class FileScannerService {
       items = await fs.readdir(dir, { withFileTypes: true });
     } catch (error) {
       if (isErrnoException(error)) {
-        if (error.code === "EACCES" || error.code === "EPERM") {
-          logger.warn(`Permission denied at ${dir}, skipping`);
-          return;
-        }
-        if (error.code === "ENOENT") {
-          // Directory disappeared
+        if (
+          error.code === "EACCES" ||
+          error.code === "EPERM" ||
+          error.code === "ELOOP" ||
+          error.code === "ENOENT" ||
+          error.code === "ENOTDIR" ||
+          error.code === "EBUSY"
+        ) {
+          logger.warn(`Cannot read directory at ${dir} (${error.code}), skipping`);
           return;
         }
       }
-      throw error;
+      logger.warn(
+        `Error reading directory ${dir}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
     }
 
     for (const item of items) {
@@ -360,7 +377,10 @@ export class FileScannerService {
             error.code === "EACCES" ||
             error.code === "EPERM" ||
             error.code === "ENOENT" ||
-            error.code === "EINVAL"
+            error.code === "EINVAL" ||
+            error.code === "ELOOP" ||
+            error.code === "ENOTDIR" ||
+            error.code === "EBUSY"
           ) {
             continue;
           }

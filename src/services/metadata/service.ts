@@ -4,6 +4,7 @@
  * generation and sanitization on top.
  */
 
+import fs from "fs/promises";
 import path from "path";
 import { CategoryName } from "../../types.js";
 import { logger } from "../../utils/logger.js";
@@ -39,7 +40,10 @@ export class MetadataService {
     try {
       if (category === "Images" || category === "Videos") {
         const image = await this.imageMetadataService.extract(filePath);
-        return { date: image.dateTaken };
+        if (image.dateTaken && !isNaN(image.dateTaken.getTime())) {
+          return { date: image.dateTaken };
+        }
+        return {};
       }
       if (category === "Audio") {
         const audio = await this.audioMetadataService.extract(filePath);
@@ -71,7 +75,7 @@ export class MetadataService {
     let subpath = "";
 
     if (category === "Images" || category === "Videos") {
-      if (metadata.date) {
+      if (metadata.date && !isNaN(metadata.date.getTime())) {
         const year = metadata.date.getFullYear().toString();
         const month = (metadata.date.getMonth() + 1)
           .toString()
@@ -121,8 +125,12 @@ export class MetadataService {
     if (isImage) {
       try {
         const image = await this.imageMetadataService.extract(filePath);
+        const validDate =
+          image.dateTaken && !isNaN(image.dateTaken.getTime())
+            ? image.dateTaken
+            : undefined;
         return {
-          dateTaken: image.dateTaken?.toISOString(),
+          dateTaken: validDate?.toISOString(),
           camera:
             image.cameraMake && image.cameraModel
               ? `${image.cameraMake} ${image.cameraModel}`.trim()

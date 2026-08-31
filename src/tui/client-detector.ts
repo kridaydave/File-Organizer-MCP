@@ -583,6 +583,126 @@ export function generateClientConfig(
 }
 
 /**
+ * Strips single-line and multi-line comments from JSONC content
+ */
+export function stripJsoncComments(jsonc: string): string {
+  let output = "";
+  let inString = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let isEscaped = false;
+
+  for (let i = 0; i < jsonc.length; i++) {
+    const char = jsonc[i];
+    const nextChar = i + 1 < jsonc.length ? jsonc[i + 1] : "";
+
+    if (inLineComment) {
+      if (char === "\n" || char === "\r") {
+        inLineComment = false;
+        output += char;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === "*" && nextChar === "/") {
+        inBlockComment = false;
+        i++; // skip /
+      }
+      continue;
+    }
+
+    if (inString) {
+      output += char;
+      if (isEscaped) {
+        isEscaped = false;
+      } else if (char === "\\") {
+        isEscaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    // NORMAL state
+    if (char === '"') {
+      inString = true;
+      output += char;
+    } else if (char === "/" && nextChar === "/") {
+      inLineComment = true;
+      i++; // skip second /
+    } else if (char === "/" && nextChar === "*") {
+      inBlockComment = true;
+      i++; // skip *
+    } else {
+      output += char;
+    }
+  }
+
+  return output;
+}
+
+/**
+ * Strips trailing commas before } or ] in JSON content (outside string literals)
+ */
+export function stripTrailingCommas(json: string): string {
+  let output = "";
+  let inString = false;
+  let isEscaped = false;
+
+  for (let i = 0; i < json.length; i++) {
+    const char = json[i];
+
+    if (inString) {
+      output += char;
+      if (isEscaped) {
+        isEscaped = false;
+      } else if (char === "\\") {
+        isEscaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      output += char;
+      continue;
+    }
+
+    if (char === "}" || char === "]") {
+      // Look back in output and remove any trailing comma (and whitespace between comma and bracket)
+      let j = output.length - 1;
+      while (j >= 0 && /\s/.test(output.charAt(j))) {
+        j--;
+      }
+      if (j >= 0 && output.charAt(j) === ",") {
+        output = output.slice(0, j) + output.slice(j + 1);
+      }
+      output += char;
+    } else {
+      output += char;
+    }
+  }
+
+  return output;
+}
+
+/**
+ * Parse JSON or JSONC string, stripping comments and trailing commas
+ */
+export function parseJsonc(content: string): unknown {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return {};
+  }
+  const withoutComments = stripJsoncComments(content);
+  const withoutTrailingCommas = stripTrailingCommas(withoutComments);
+  return JSON.parse(withoutTrailingCommas);
+}
+
+/**
  * Deep merge two objects recursively
  */
 function deepMerge<T extends Record<string, unknown>>(
@@ -635,8 +755,10 @@ function mergeMcpServers(
     if (
       typeof serverConfig === "object" &&
       serverConfig !== null &&
+      !Array.isArray(serverConfig) &&
       typeof existingServer === "object" &&
-      existingServer !== null
+      existingServer !== null &&
+      !Array.isArray(existingServer)
     ) {
       merged[serverName] = deepMerge(
         existingServer as Record<string, unknown>,
@@ -712,17 +834,19 @@ export async function writeClientConfig(
         // SEC-002: Reading application config file which is an internal file
         // The configFilePath is constructed from getConfigDir() which uses validated paths
         const content = fs.readFileSync(configFilePath, "utf-8");
-        const parsed = JSON.parse(content);
+        const parsed = parseJsonc(content);
         if (
           parsed !== null &&
           typeof parsed === "object" &&
           !Array.isArray(parsed)
         ) {
-          existingConfig = parsed;
+          existingConfig = parsed as Record<string, unknown>;
         }
-      } catch {
-        // If parse fails, start fresh
-        existingConfig = {};
+      } catch (parseError) {
+        return {
+          success: false,
+          message: `Failed to parse existing config at ${configFilePath}: ${(parseError as Error).message}. Config not modified to prevent data loss.`,
+        };
       }
     }
 

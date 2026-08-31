@@ -49,6 +49,26 @@ export interface DeletionResult {
   manifestPath?: string;
 }
 
+/**
+ * Move a file across filesystems/devices with EXDEV fallback
+ */
+async function safeMoveFile(src: string, dest: string): Promise<void> {
+  try {
+    await fs.rename(src, dest);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      "code" in err &&
+      (err as NodeJS.ErrnoException).code === "EXDEV"
+    ) {
+      await fs.copyFile(src, dest);
+      await fs.unlink(src);
+    } else {
+      throw err;
+    }
+  }
+}
+
 export class DuplicateFinderService {
   private hashCalculator: HashCalculatorService;
   private rollbackService: RollbackService;
@@ -68,9 +88,16 @@ export class DuplicateFinderService {
     strategy: RecommendationStrategy = "best_location",
     options: { timeoutMs?: number } = {},
   ): Promise<AnalyzedDuplicateGroup[]> {
-    const duplicates = await this.hashCalculator.findDuplicates(files, options);
+    // Explicitly filter out 0-byte (empty) files from duplicate detection
+    const nonZeroFiles = files.filter((file) => file.size > 0);
+    const duplicates = await this.hashCalculator.findDuplicates(
+      nonZeroFiles,
+      options,
+    );
 
-    return duplicates.map((group) => {
+    return duplicates
+      .filter((group) => group.size_bytes > 0)
+      .map((group) => {
       const scoredFiles = group.files.map((file) =>
         this.scoreFile(file, strategy),
       );
@@ -278,7 +305,7 @@ export class DuplicateFinderService {
           const backupName = `${crypto.randomUUID()}_${Date.now()}_${safeName}${safeExt}`;
           const backupPath = path.join(backupDir, backupName);
 
-          await fs.rename(filePath, backupPath);
+          await safeMoveFile(filePath, backupPath);
 
           rollbackActions.push({
             type: "delete",

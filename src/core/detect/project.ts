@@ -123,7 +123,7 @@ export async function extractTextContent(filePath: string): Promise<string> {
  * @returns detected projects, each with a folder name, confidence, and files
  */
 export async function detectProjects(
-  files: Array<{ path: string; name: string }>,
+  files: Array<{ path: string; name?: string } | string>,
   options?: ProjectDetectionOptions,
   deps?: {
     extractText?: (filePath: string) => Promise<string>;
@@ -137,17 +137,24 @@ export async function detectProjects(
   const extractText = deps?.extractText ?? extractTextContent;
   const getMtime = deps?.getMtime ?? (async (p) => (await fs.stat(p)).mtimeMs);
 
-  if (files.length < 2) {
+  const normalizedFiles = files.map((f) => {
+    if (typeof f === "string") {
+      return { path: f, name: path.basename(f) };
+    }
+    return { path: f.path, name: f.name ?? path.basename(f.path) };
+  });
+
+  if (normalizedFiles.length < 2) {
     return [];
   }
-  if (files.length > opts.maxFilesToPair) {
+  if (normalizedFiles.length > opts.maxFilesToPair) {
     logger.warn(
-      `Project detection skipped for ${files.length} files (max ${opts.maxFilesToPair})`,
+      `Project detection skipped for ${normalizedFiles.length} files (max ${opts.maxFilesToPair})`,
     );
     return [];
   }
 
-  const signals = await collectSignals(files, opts, extractText, getMtime);
+  const signals = await collectSignals(normalizedFiles, opts, extractText, getMtime);
   const edges = buildEdges(signals, opts);
   return cluster(signals, edges, opts);
 }
@@ -162,8 +169,9 @@ async function collectSignals(
   const rawNameTokens: Set<string>[] = [];
 
   for (const file of files) {
+    const fileName = file.name ?? path.basename(file.path ?? "");
     const tokens = new Set(
-      tokenizeName(file.name).filter((t) => !GENERIC_NAME_TOKENS.has(t)),
+      tokenizeName(fileName).filter((t) => !GENERIC_NAME_TOKENS.has(t)),
     );
     rawNameTokens.push(tokens);
     for (const token of tokens) {

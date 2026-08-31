@@ -37,22 +37,21 @@ export function sanitizeErrorMessage(error: Error | string): string {
     "[PATH]",
   );
 
-  // Replace relative paths (e.g., ./foo, ../bar)
+  // Replace relative paths (e.g., ./foo, ../bar, .\foo, ..\bar)
   sanitized = sanitized.replace(
-    /(?:^|[\s"']+)(\.\.?\/[^\s"'\/\0\r\n]+(?:\/[^\s"'\/\0\r\n]+)*)/g,
+    /(?:^|[\s"'(\[{<:=`])(\.\.?[\/\\][^\s"'()\[\]{}<>\0\r\n`=]+(?:[\/\\][^\s"'()\[\]{}<>\0\r\n`=]+)*)/g,
     (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
   );
 
   // Replace Unix absolute paths (e.g., /home/user, /var/log)
-  // Only match paths that look like actual file paths with proper separators
   sanitized = sanitized.replace(
-    /(?:^|[\s"']+)(\/(?:[^\s"'\/\0\r\n]+\/)*[^\s"'\/\0\r\n]*)/g,
+    /(?:^|[\s"'(\[{<:=`])(\/(?:[^\s"'()\[\]{}<>\0\r\n`=]+\/)*[^\s"'()\[\]{}<>\0\r\n`=]+)/g,
     (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
   );
 
-  // Replace parent directory traversal (../ with path separators)
+  // Replace parent directory traversal (../ or ..\ with path separators)
   sanitized = sanitized.replace(
-    /(?:^|[\s"']+)(\.\.(?:\/[^\s"'\/\0\r\n]+)*)/g,
+    /(?:^|[\s"'(\[{<:=`])(\.\.(?:[\/\\][^\s"'()\[\]{}<>\0\r\n`=]+)*)/g,
     (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
   );
 
@@ -72,7 +71,19 @@ export function createErrorResponse(error: unknown): ToolResponse {
   logger.error(`Error ID ${errorId}: ${fullMessage}`);
 
   if (error instanceof FileOrganizerError) {
-    return error.toResponse();
+    const response = error.toResponse();
+    return {
+      ...response,
+      content: response.content.map((item) => {
+        if (item.type === "text") {
+          return {
+            ...item,
+            text: sanitizeErrorMessage(item.text),
+          };
+        }
+        return item;
+      }),
+    };
   } else if (error instanceof AccessDeniedError) {
     // Safe to show sanitized message for expected errors
     clientMessage = `Access Denied: ${sanitizeErrorMessage(error)}`;

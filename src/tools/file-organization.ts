@@ -12,7 +12,7 @@ import {
   OrganizerService,
 } from "../core/organize/organizer.js";
 import { CategorizerService } from "../services/categorizer.service.js";
-import { createErrorResponse } from "../utils/error-handler.js";
+import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
 import { escapeMarkdown } from "../utils/index.js";
 import {
   OrganizeFilesInputSchema,
@@ -79,6 +79,7 @@ export async function handleOrganizeFiles(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -92,10 +93,11 @@ export async function handleOrganizeFiles(
     const validatedPath = await validateStrictPath(directory);
     if (!validatedPath) {
       return {
+        isError: true,
         content: [
           {
             type: "text" as const,
-            text: `Error: Invalid or forbidden source path: ${directory}`,
+            text: sanitizeErrorMessage(`Error: Invalid or forbidden source path: ${directory}`),
           },
         ],
       };

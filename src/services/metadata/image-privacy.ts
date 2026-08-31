@@ -62,19 +62,26 @@ export function getFormatFromExtension(filePath: string): string {
   return "unknown";
 }
 
-/** Read up to 256KB of a file (sufficient for metadata segments). */
-export async function readImageFile(filePath: string): Promise<Buffer> {
+/** Read image file into buffer. If maxBytes is provided, reads up to that limit; otherwise reads entire file. */
+export async function readImageFile(
+  filePath: string,
+  maxBytes?: number,
+): Promise<Buffer> {
   try {
     const stats = await fs.stat(filePath);
     if (!stats.isFile()) {
       throw new Error(`Not a file: ${filePath}`);
     }
 
-    const maxSize = Math.min(stats.size, 262144);
+    const readSize =
+      maxBytes !== undefined ? Math.min(stats.size, maxBytes) : stats.size;
+    if (readSize === 0) {
+      return Buffer.alloc(0);
+    }
     const fd = await fs.open(filePath, "r");
     try {
-      const buffer = Buffer.alloc(maxSize);
-      await fd.read(buffer, 0, maxSize, 0);
+      const buffer = Buffer.alloc(readSize);
+      await fd.read(buffer, 0, readSize, 0);
       return buffer;
     } finally {
       await fd.close();

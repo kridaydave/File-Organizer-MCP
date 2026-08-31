@@ -73,6 +73,7 @@ export async function handleBatchRename(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -106,6 +107,7 @@ export async function handleBatchRename(
               text: `Error: All provided paths are invalid.\n${errors.join("\n")}`,
             },
           ],
+          isError: true,
         };
       }
     } else if (directory) {
@@ -135,6 +137,7 @@ export async function handleBatchRename(
 
     // 2. Execute if not dry_run
     const result = await renamingService.executeRename(previews, dry_run);
+    const hasError = !dry_run && (result.statistics.failed > 0 || result.errors.length > 0);
 
     // 3. Format Output
 
@@ -155,6 +158,7 @@ export async function handleBatchRename(
             ),
           },
         ],
+        ...(hasError && { isError: true }),
       };
     }
 
@@ -194,6 +198,7 @@ export async function handleBatchRename(
 
     return {
       content: [{ type: "text", text: md }],
+      ...(hasError && { isError: true }),
     };
   } catch (error) {
     return createErrorResponse(error);

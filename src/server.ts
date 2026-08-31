@@ -112,17 +112,40 @@ async function handleToolCall(
 
     const response = (await handler(args, ctx)) as MCPToolResponse;
 
-    logEntry.success = true;
+    const isError = Boolean(response.isError);
+    logEntry.success = !isError;
     logEntry.result = response;
 
     const summary = {
       ...response,
-      content: response.content.map((c) => ({
-        ...c,
-        text: c.text.length > 500 ? c.text.substring(0, 500) + "..." : c.text,
-      })),
+      content: Array.isArray(response.content)
+        ? response.content.map((c) => {
+            if (
+              typeof c === "object" &&
+              c &&
+              "text" in c &&
+              typeof (c as { text: unknown }).text === "string"
+            ) {
+              const text = (c as { text: string }).text;
+              return {
+                ...c,
+                text:
+                  text.length > 500
+                    ? text.substring(0, 500) + "..."
+                    : text,
+              };
+            }
+            return c;
+          })
+        : response.content,
     };
-    logger.info(`[AUDIT] Success: ${name}`, { summary });
+
+    if (isError) {
+      logEntry.error = "Tool returned error response";
+      logger.error(`[AUDIT] Failed: ${name}`, { summary });
+    } else {
+      logger.info(`[AUDIT] Success: ${name}`, { summary });
+    }
 
     return response;
   } catch (error) {
@@ -133,12 +156,13 @@ async function handleToolCall(
   } finally {
     logEntry.durationMs = Date.now() - startTime;
     try {
+      const hasError = !logEntry.success || Boolean(logEntry.error);
       await ctx.history.log({
         operation: name,
         source: "manual",
-        status: logEntry.error ? "error" : "success",
+        status: hasError ? "error" : "success",
         durationMs: logEntry.durationMs,
-        details: logEntry.error ? undefined : `Completed ${name}`,
+        details: hasError ? `Failed ${name}` : `Completed ${name}`,
         error: logEntry.error ? { message: logEntry.error } : undefined,
       });
     } catch {
