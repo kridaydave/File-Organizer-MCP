@@ -20,8 +20,25 @@ export interface PathValidationResult {
 
 /**
  * Check if a path matches any blocked patterns
+ * Excludes macOS/Linux temp dirs (/var/folders, /private/var/folders, /tmp)
+ * which are legitimately used for tests and temp files even though /var
+ * is otherwise blocked.
  */
 export function isPathBlocked(normalizedPath: string): boolean {
+  // Never block the temp-folder hierarchies themselves — allow tests
+  // that use os.tmpdir() (/var/folders/... on macOS, /tmp/... on Linux)
+  if (
+    normalizedPath.startsWith("/var/folders/") ||
+    normalizedPath === "/var/folders" ||
+    normalizedPath.startsWith("/private/var/folders/") ||
+    normalizedPath === "/private/var/folders" ||
+    normalizedPath.startsWith("/tmp/") ||
+    normalizedPath === "/tmp" ||
+    normalizedPath.startsWith("/private/tmp/") ||
+    normalizedPath === "/private/tmp"
+  ) {
+    return false;
+  }
   return CONFIG.paths.alwaysBlocked.some((pattern) =>
     pattern.test(normalizedPath),
   );

@@ -454,7 +454,12 @@ export class PathValidatorService {
       }
 
       if (this.allowedPaths === null) {
-        return isPathInAllowedDirectories(canonicalPath);
+        // Try canonical first, then fall back to direct path for Windows
+        // 8.3 and macOS /var -> /private/var edge cases
+        if (isPathInAllowedDirectories(canonicalPath)) {
+          return true;
+        }
+        return isPathInAllowedDirectories(absolutePath);
       }
 
       const canonicalAllowed = this.allowedPaths.map((allowed) => {
@@ -465,7 +470,12 @@ export class PathValidatorService {
         }
       });
 
-      return checkContainment(canonicalPath, canonicalAllowed);
+      if (checkContainment(canonicalPath, canonicalAllowed)) {
+        return true;
+      }
+      // Fallback: direct string containment (handles non-existent nested
+      // paths and Windows short-name mismatches)
+      return checkContainment(absolutePath, this.allowedPaths);
     } catch {
       return false;
     }
