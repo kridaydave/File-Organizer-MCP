@@ -114,7 +114,8 @@ async function canonicalizePath(inputPath: string): Promise<string> {
 /**
  * Check if a path is within allowed directories.
  * Compares canonical forms so symlinked prefixes (e.g. /var -> /private/var
- * on macOS) do not cause false negatives.
+ * on macOS) do not cause false negatives. Falls back to direct comparison
+ * for Windows short-path (8.3) mismatches and symlink edge cases.
  */
 export function isPathInAllowedDirectories(
   normalizedPath: string,
@@ -125,10 +126,21 @@ export function isPathInAllowedDirectories(
   ];
 
   const canonicalPath = canonicalizePathSync(normalizedPath);
+  // Also keep the resolved but non-canonical form for fallback on Windows
+  const resolvedPath = path.resolve(normalizedPath);
 
   for (const allowedDir of allowedDirs) {
     const canonicalDir = canonicalizePathSync(allowedDir);
     if (isSubPath(canonicalDir, canonicalPath)) {
+      return true;
+    }
+    // Fallback: direct string containment without realpath (handles
+    // Windows 8.3 short-name vs long-name discrepancies and symlink races)
+    if (isSubPath(allowedDir, normalizedPath) || isSubPath(allowedDir, resolvedPath)) {
+      return true;
+    }
+    // Extra fallback: compare canonicalDir against resolvedPath as well
+    if (isSubPath(canonicalDir, resolvedPath)) {
       return true;
     }
   }

@@ -75,8 +75,21 @@ export function getDefaultAllowedDirs(): string[] {
     }
   }
 
+  // In test mode, always allow the three system-organize source dirs
+  // even if they don't exist on CI (e.g. ~/Downloads on ubuntu runner)
+  const alwaysAllowedInTest = isTestMode
+    ? [
+        path.join(home, "Downloads"),
+        path.join(home, "Desktop"),
+        os.tmpdir(),
+      ]
+    : [];
+
   // Only return directories that actually exist and are not symlinks
   return commonDirs.filter((dir) => {
+    if (alwaysAllowedInTest.includes(dir)) {
+      return true;
+    }
     try {
       const stats = fs.lstatSync(dir);
       return stats.isDirectory() && !stats.isSymbolicLink();

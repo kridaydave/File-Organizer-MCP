@@ -43,6 +43,10 @@ export function getAlwaysBlockedPatterns(): RegExp[] {
     /(?:^|[\/\\])\.next(?:[\/\\]|$)/i,
     /(?:^|[\/\\])dist(?:[\/\\]|$)/i,
     /(?:^|[\/\\])build(?:[\/\\]|$)/i,
+    // Unix system dirs — blocked on all platforms for test consistency and
+    // to catch traversal attempts like "/etc/passwd" even on Windows/macOS
+    /^\/etc(?:[\/]|$)/i,
+    /^\/var(?:[\/]|$)/i,
   ];
 
   if (platform === "win32") {

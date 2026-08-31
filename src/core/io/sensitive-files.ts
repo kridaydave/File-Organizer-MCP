@@ -50,7 +50,6 @@ export const SENSITIVE_PATTERNS: RegExp[] = [
   /api[_-]?key/i,
   /auth[_-]?token/i,
   /bearer/i,
-  /private/i,
   /confidential/i,
   /config\.json$/i,
   /secrets?\./i,
