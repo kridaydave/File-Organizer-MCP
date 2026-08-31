@@ -160,6 +160,27 @@ export function isPathInAllowedDirectories(
     if (isSubPath(canonicalDir, resolvedPath)) {
       return true;
     }
+    // Ultimate fallback: case-insensitive string prefix (Windows drive letter
+    // case, 8.3 short names, and mixed separators)
+    const lowerPath = normalizedPath.toLowerCase();
+    const lowerCanonical = canonicalPath.toLowerCase();
+    const lowerDir = allowedDir.toLowerCase();
+    const lowerCanonicalDir = canonicalDir.toLowerCase();
+    const seps = ["/", "\\", path.sep.toLowerCase()];
+    for (const sep of seps) {
+      if (
+        lowerPath === lowerDir ||
+        lowerPath.startsWith(lowerDir + sep) ||
+        lowerCanonical === lowerCanonicalDir ||
+        lowerCanonical.startsWith(lowerCanonicalDir + sep) ||
+        lowerPath === lowerCanonicalDir ||
+        lowerPath.startsWith(lowerCanonicalDir + sep) ||
+        lowerCanonical === lowerDir ||
+        lowerCanonical.startsWith(lowerDir + sep)
+      ) {
+        return true;
+      }
+    }
   }
   return false;
 }
