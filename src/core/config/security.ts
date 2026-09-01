@@ -91,6 +91,8 @@ export function getAlwaysBlockedPatterns(): RegExp[] {
       /^\/sbin(?:[\/]|$)/i,
       /^\/sys(?:[\/]|$)/i,
       /^\/proc(?:[\/]|$)/i,
+      /^\/dev(?:[\/]|$)/i,
+      /^\/run\/(?!media(?:[\/]|$))(?:[^\/]+)/i,
       /^\/root(?:[\/]|$)/i,
       /^\/var(?:[\/]|$)/i,
       /^\/boot(?:[\/]|$)/i,

@@ -155,7 +155,7 @@ export async function handleScanDirectory(
     const markdown = `### Scan Results for \`${result.directory}\`
 **Total Files:** ${result.total_count}
 **Total Size:** ${result.total_size_readable}
-**Showing:** ${result.offset + 1} - ${result.offset + result.returned_count}
+**Showing:** ${result.returned_count > 0 ? result.offset + 1 : 0} - ${result.offset + result.returned_count}
 
 ${result.items.map((f) => `- **${escapeMarkdown(f.name)}** (${formatBytes(f.size)}) - ${f.modified.toISOString().split("T")[0]}`).join("\n")}
 

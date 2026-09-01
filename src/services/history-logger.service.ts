@@ -172,7 +172,7 @@ export class HistoryLoggerService {
         }
       }
 
-      const token = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const token = `${process.pid}-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
       await fs.writeFile(this.lockFilePath, token, {
         flag: "wx",
       });

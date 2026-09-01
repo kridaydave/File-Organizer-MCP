@@ -41,10 +41,21 @@ jest.unstable_mockModule("fs/promises", () => ({
   },
 }));
 
-jest.unstable_mockModule("fs", () => ({
-  createReadStream: mockCreateReadStream,
-  createWriteStream: mockCreateWriteStream,
-}));
+jest.unstable_mockModule("fs", () => {
+  const fsMock = {
+    createReadStream: mockCreateReadStream,
+    createWriteStream: mockCreateWriteStream,
+    constants: {
+      COPYFILE_EXCL: 1,
+      O_RDONLY: 0,
+      O_NOFOLLOW: 0,
+    },
+  };
+  return {
+    ...fsMock,
+    default: fsMock,
+  };
+});
 
 jest.unstable_mockModule("stream/promises", () => ({
   pipeline: mockPipeline,

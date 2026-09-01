@@ -17,6 +17,7 @@ import { ImageMetadataService } from "../services/metadata/index.js";
 import { MetadataService } from "../services/metadata/index.js";
 import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
 import { logger } from "../utils/logger.js";
+import { readFile } from "../core/io/read-file.js";
 import { formatBytes } from "../utils/formatters.js";
 import * as path from "path";
 import * as fs from "fs/promises";
@@ -144,7 +145,6 @@ const TEXT_EXTENSIONS = new Set([
   ".conf",
   ".config",
   ".properties",
-  ".env",
   ".pdf",
   ".docx",
   ".doc", // These need special handling but contain text
@@ -205,19 +205,20 @@ async function readTextFile(
   maxSizeBytes: number,
 ): Promise<string | undefined> {
   try {
-    const stats = await fs.stat(filePath);
-    if (stats.size > maxSizeBytes) {
-      return `[File too large to display: ${formatBytes(stats.size)} (limit ${formatBytes(maxSizeBytes)})]`;
-    }
-
-    const text = await fs.readFile(filePath, "utf-8");
+    const result = await readFile(filePath, {
+      maxBytes: maxSizeBytes,
+    });
+    const text =
+      typeof result.data === "string"
+        ? result.data
+        : result.data.toString("utf-8");
     const MAX_CHARS = 50000;
     if (text.length > MAX_CHARS) {
       return `${text.slice(0, MAX_CHARS)}\n\n[Content truncated - original file was ${text.length} characters]`;
     }
     return text;
   } catch (error) {
-    return `[Error reading file: ${sanitizeErrorMessage(error instanceof Error ? error : String(error))}]`;
+    return `[Access denied or unreadable: ${sanitizeErrorMessage(error instanceof Error ? error : String(error))}]`;
   }
 }
 

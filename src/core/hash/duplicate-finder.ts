@@ -49,19 +49,7 @@ export interface DeletionResult {
   manifestPath?: string;
 }
 
-async function safeMoveFile(src: string, dest: string): Promise<void> {
-  try {
-    await fs.rename(src, dest);
-  } catch (err) {
-    const error = err as NodeJS.ErrnoException;
-    if (error && (error.code === "EXDEV" || error.message?.includes("EXDEV"))) {
-      await fs.copyFile(src, dest);
-      await fs.unlink(src);
-    } else {
-      throw err;
-    }
-  }
-}
+import { safeAtomicMove } from "../io/atomic-move.js";
 
 export class DuplicateFinderService {
   private hashCalculator: HashCalculatorService;
@@ -317,7 +305,7 @@ export class DuplicateFinderService {
           const backupName = `${crypto.randomUUID()}_${Date.now()}_${safeName}${safeExt}`;
           const backupPath = path.join(backupDir, backupName);
 
-          await safeMoveFile(filePath, backupPath);
+          await safeAtomicMove(filePath, backupPath);
 
           rollbackActions.push({
             type: "delete",

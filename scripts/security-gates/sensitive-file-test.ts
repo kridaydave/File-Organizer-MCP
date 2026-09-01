@@ -383,15 +383,13 @@ async function testSensitiveFile(
   validator: PathValidatorService,
   filePath: string,
 ): Promise<{ blocked: boolean; pattern?: string }> {
-  // First check pattern matching
-  if (isSensitiveFile(filePath)) {
-    return { blocked: true };
-  }
-
-  // Try to read (should fail at validation layer)
+  // Try to read via full I/O security stack (should fail at validation or sensitive check)
   try {
-    await readFile(filePath, { validator });
-    return { blocked: false };
+    const res = await readFile(filePath, { validator });
+    if (res && res.data !== undefined) {
+      return { blocked: false };
+    }
+    return { blocked: true };
   } catch {
     return { blocked: true };
   }

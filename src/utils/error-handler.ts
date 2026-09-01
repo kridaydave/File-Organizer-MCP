@@ -19,9 +19,9 @@ import { logger } from "./logger.js";
 export function sanitizeErrorMessage(error: Error | string): string {
   const message = error instanceof Error ? error.message : String(error);
 
-  // Replace Windows paths (improved pattern for paths with/without trailing backslash)
+  // Replace Windows paths (supports single and double backslashes for JSON strings)
   let sanitized = message.replace(
-    /[a-zA-Z]:\\(?:[^\\/:*?"<>|\r\n]+(?:\\[^\\/:*?"<>|\r\n]+)*)/g,
+    /[a-zA-Z]:(?:\\\\|\\)(?:[^\\/:*?"<>|\r\n]+(?:(?:\\\\|\\)[^\\/:*?"<>|\r\n]+)*)/g,
     "[PATH]",
   );
 
@@ -31,9 +31,9 @@ export function sanitizeErrorMessage(error: Error | string): string {
     "[PATH]",
   );
 
-  // Replace UNC paths (e.g., \\server\share)
+  // Replace UNC paths (e.g., \\server\share or \\\\server\\share)
   sanitized = sanitized.replace(
-    /\\\\[\w\-\.]+\\(?:[^\r\n\\]+(?:\\[^\r\n\\]+)*)/g,
+    /(?:\\\\|\\\\\\[\w\-\.]+(?:\\\\|\\))(?:[^\r\n\\]+(?:(?:\\\\|\\)[^\r\n\\]+)*)/g,
     "[PATH]",
   );
 
@@ -86,7 +86,7 @@ export function createErrorResponse(error: unknown): ToolResponse {
     };
   } else if (error instanceof AccessDeniedError) {
     // Safe to show sanitized message for expected errors
-    clientMessage = `Access Denied: ${sanitizeErrorMessage(error)}`;
+    clientMessage = `Access Denied: ${sanitizeErrorMessage(error.message)}`;
   } else if (error instanceof ValidationError) {
     clientMessage = `Validation Error: ${sanitizeErrorMessage(error.message)}`;
   } else {

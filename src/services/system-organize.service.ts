@@ -14,6 +14,7 @@ import { randomUUID } from "crypto";
 import { logger } from "../utils/logger.js";
 import { PathValidatorService } from "./path-validator.service.js";
 import { CategorizerService } from "./categorizer.service.js";
+import { safeAtomicMove } from "../core/io/atomic-move.js";
 
 export interface SystemDirs {
   music: string;
@@ -267,6 +268,8 @@ export class SystemOrganizeService {
     category: string,
     useSystemDirs: boolean,
     sourceDir: string,
+    localFallbackPrefix = "Organized",
+    createSubfolders = true,
   ): Promise<{
     destination: string;
     useLocalFallback: boolean;
@@ -275,12 +278,12 @@ export class SystemOrganizeService {
     const systemDirKey = CATEGORY_TO_SYSTEM_DIR[category];
 
     if (!useSystemDirs || !systemDirKey) {
-      return this.determineLocalFallback(sourceDir, category);
+      return this.determineLocalFallback(sourceDir, category, localFallbackPrefix, createSubfolders);
     }
 
     const systemDir = systemDirs[systemDirKey];
     if (!systemDir) {
-      return this.determineLocalFallback(sourceDir, category);
+      return this.determineLocalFallback(sourceDir, category, localFallbackPrefix, createSubfolders);
     }
 
     const writeCheck = await this.canWriteToDirectory(systemDir);
@@ -290,7 +293,7 @@ export class SystemOrganizeService {
         systemDir,
         reason: writeCheck.reason,
       });
-      return this.determineLocalFallback(sourceDir, category);
+      return this.determineLocalFallback(sourceDir, category, localFallbackPrefix, createSubfolders);
     }
 
     return {
@@ -302,11 +305,14 @@ export class SystemOrganizeService {
   private determineLocalFallback(
     sourceDir: string,
     category: string,
+    localFallbackPrefix = "Organized",
+    createSubfolders = true,
   ): {
     destination: string;
     useLocalFallback: true;
   } {
-    const organizedDir = path.join(sourceDir, "Organized", category);
+    const baseDir = path.join(sourceDir, localFallbackPrefix);
+    const organizedDir = createSubfolders ? path.join(baseDir, category) : baseDir;
     return {
       destination: organizedDir,
       useLocalFallback: true,
@@ -333,6 +339,7 @@ export class SystemOrganizeService {
     sourcePath: string,
     destPath: string,
     copyInsteadOfMove: boolean,
+    overwrite = false,
     retryCount = 0,
   ): Promise<void> {
     try {
@@ -355,16 +362,13 @@ export class SystemOrganizeService {
           sourcePath,
           destPath,
           copyInsteadOfMove,
+          overwrite,
           retryCount + 1,
         );
       }
 
       if (err.code === "EXDEV") {
-        const content = await fs.readFile(sourcePath);
-        await fs.writeFile(destPath, content);
-        if (!copyInsteadOfMove) {
-          await fs.unlink(sourcePath);
-        }
+        await safeAtomicMove(sourcePath, destPath, { copyInsteadOfMove, overwrite });
         return;
       }
 
@@ -488,6 +492,8 @@ export class SystemOrganizeService {
           category,
           useSystemDirs,
           normalizedSourceDir,
+          localFallbackPrefix,
+          createSubfolders,
         );
 
         const targetDir = destResult.destination;

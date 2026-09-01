@@ -150,6 +150,7 @@ export interface MusicOrganizationResult {
   skippedFiles: number;
   errors: Array<{ file: string; error: string }>;
   structure: Record<string, string[]>;
+  manifestId?: string;
 }
 
 export interface PhotoOrganizationResult {
@@ -159,4 +160,5 @@ export interface PhotoOrganizationResult {
   strippedGPSFiles: number;
   errors: Array<{ file: string; error: string }>;
   structure: Record<string, number>;
+  manifestId?: string;
 }

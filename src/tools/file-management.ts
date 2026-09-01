@@ -47,7 +47,7 @@ export const setCustomRulesToolDefinition: ToolDefinition = {
   name: "file_organizer_set_custom_rules",
   title: "Set Custom Organization Rules",
   description:
-    "Customize how files are categorized. Rules persist for the current session.",
+    "Customize how files are categorized. Persists custom rules to user configuration.",
   inputSchema: {
     type: "object",
     properties: {
@@ -63,6 +63,11 @@ export const setCustomRulesToolDefinition: ToolDefinition = {
           },
           required: ["category"],
         },
+      },
+      response_format: {
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
       },
     },
     required: ["rules"],

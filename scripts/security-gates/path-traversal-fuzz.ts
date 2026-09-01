@@ -451,23 +451,17 @@ async function testPayload(
   payload: string,
 ): Promise<boolean> {
   try {
-    // First check: Sensitive file patterns
-    if (isSensitiveFile(payload)) {
-      return true; // Correctly blocked
-    }
-
-    // Attempt to read (should fail validation before actual read)
+    // Attempt to read via full I/O security stack (should throw AccessDeniedError or ValidationError)
     const result = await readFile(payload, { validator });
 
-    if (result) {
+    if (result && result.data !== undefined) {
       // CRITICAL: Payload was NOT blocked - this is a security failure
       return false;
     } else {
-      // Payload was blocked - this is expected
       return true;
     }
   } catch (error) {
-    // Exception thrown during validation - treated as blocked
+    // Exception thrown during validation - correctly blocked
     return true;
   }
 }

@@ -142,22 +142,20 @@ export async function handleBatchRename(
     // 3. Format Output
 
     if (response_format === "json") {
+      const outputData = {
+        dry_run,
+        rules,
+        previews: dry_run ? previews : undefined, // show previews in dry run
+        result: !dry_run ? result : undefined, // show result in execution
+      };
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(
-              {
-                dry_run,
-                rules,
-                previews: dry_run ? previews : undefined, // show previews in dry run
-                result: !dry_run ? result : undefined, // show result in execution
-              },
-              null,
-              2,
-            ),
+            text: JSON.stringify(outputData, null, 2),
           },
         ],
+        structuredContent: outputData as Record<string, unknown>,
         ...(hasError && { isError: true }),
       };
     }

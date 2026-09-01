@@ -77,13 +77,15 @@ type AllowedPaths = z.infer<typeof AllowedPathsSchema>;
 
 export const GetCategoriesInputSchema = z.object({}).merge(CommonParamsSchema);
 
-export const SetCustomRulesInputSchema = z.object({
-  rules: z.array(
-    z.object({
-      category: z.string(),
-      extensions: z.array(z.string()).optional(),
-      filename_pattern: z.string().optional(),
-      priority: z.number().int().min(0).default(0),
-    }),
-  ),
-});
+export const SetCustomRulesInputSchema = z
+  .object({
+    rules: z.array(
+      z.object({
+        category: z.string(),
+        extensions: z.array(z.string()).optional(),
+        filename_pattern: z.string().optional(),
+        priority: z.number().int().min(0).default(0),
+      }),
+    ),
+  })
+  .merge(CommonParamsSchema);

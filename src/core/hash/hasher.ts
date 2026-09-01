@@ -94,29 +94,35 @@ export class HashCalculatorService {
     const startTime = Date.now();
     const timeoutMs = options.timeoutMs ?? 30000; // 30s default timeout
 
+    // Step 1: Pre-group by file size to avoid hashing files with unique byte counts
+    const sizeGroups = new Map<number, FileWithSize[]>();
     for (const file of files) {
-      // Check timeout
-      if (Date.now() - startTime > timeoutMs) {
-        throw new Error(
-          `Duplicate analysis timed out after ${timeoutMs}ms. Processed ${Object.keys(hashMap).length} files.`,
-        );
-      }
+      if (file.size <= 0 || file.size > this.maxFileSize) continue;
+      const group = sizeGroups.get(file.size) ?? [];
+      group.push(file);
+      sizeGroups.set(file.size, group);
+    }
 
-      try {
-        if (file.size > this.maxFileSize) {
-          logger.warn(
-            `Skipping large file: ${file.name} (${formatBytes(file.size)})`,
+    // Step 2: Only hash files that share identical byte length with at least one other file
+    for (const [, candidates] of sizeGroups) {
+      if (candidates.length < 2) continue;
+
+      for (const file of candidates) {
+        if (Date.now() - startTime > timeoutMs) {
+          throw new Error(
+            `Duplicate analysis timed out after ${timeoutMs}ms. Processed ${Object.keys(hashMap).length} files.`,
           );
-          continue;
         }
 
-        const hash = await this.calculateHash(file.path);
-        if (!hashMap[hash]) {
-          hashMap[hash] = [];
+        try {
+          const hash = await this.calculateHash(file.path);
+          if (!hashMap[hash]) {
+            hashMap[hash] = [];
+          }
+          hashMap[hash].push(file);
+        } catch (error) {
+          logger.error(`Error hashing ${file.name}: ${(error as Error).message}`);
         }
-        hashMap[hash].push(file);
-      } catch (error) {
-        logger.error(`Error hashing ${file.name}: ${(error as Error).message}`);
       }
     }
 

@@ -207,10 +207,11 @@ export async function handleSystemOrganization(
             currentPath: op.to,
             timestamp: Date.now(),
           }));
-        await rollbackService.createManifest(
+        const manifestId = await rollbackService.createManifest(
           `System organization from ${validatedSourcePath} (${rollbackActions.length} files)`,
           rollbackActions,
         );
+        result.undoManifest.manifestId = manifestId;
       } catch (manifestErr) {
         logger.error(
           `Failed to create rollback manifest: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
@@ -233,6 +234,9 @@ export async function handleSystemOrganization(
     }
 
     lines.push("## Summary");
+    if (result.undoManifest?.manifestId) {
+      lines.push(`- **Rollback Manifest ID:** \`${result.undoManifest.manifestId}\``);
+    }
     lines.push(`- **Moved to System Directories:** ${result.movedToSystem}`);
     lines.push(`- **Organized Locally:** ${result.organizedLocally}`);
     lines.push(`- **Failed:** ${result.failed}`);

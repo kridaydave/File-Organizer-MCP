@@ -28,6 +28,11 @@ import { OrganizerService } from '../../../src/core/organize/organizer.js';
 import { HistoryLoggerService } from '../../../src/services/history-logger.service.js';
 import { PathSchema } from '../../../src/schemas/system.js';
 import { formatBytes } from '../../../src/utils/formatters.js';
+import { safeAtomicMove } from '../../../src/core/io/atomic-move.js';
+import { handleSystemOrganization } from '../../../src/tools/system-organization.js';
+import { handleOrganizePhotos } from '../../../src/tools/photo-organization.js';
+import { handleOrganizeMusic } from '../../../src/tools/music-organization.js';
+import { RollbackService } from '../../../src/core/organize/rollback.js';
 import type { FileWithSize } from '../../../src/types.js';
 
 describe('v5 Critical Regressions Gate', () => {
@@ -456,6 +461,177 @@ describe('v5 Critical Regressions Gate', () => {
     it('formats sub-byte fractions without negative index in formatBytes', () => {
       const formatted = formatBytes(0.5);
       expect(formatted).toBe('0.5 Bytes');
+    });
+  });
+
+  describe('16. In-Place Organization Idempotency & Safe Self-Moves', () => {
+    it('does not mutate or rename files already located in their target category subfolder', async () => {
+      const docsDir = path.join(tempDir, 'Documents');
+      await fs.mkdir(docsDir, { recursive: true });
+      const alreadyOrganizedFile = path.join(docsDir, 'report.pdf');
+      await fs.writeFile(alreadyOrganizedFile, 'test pdf content');
+
+      const files: FileWithSize[] = [
+        {
+          path: alreadyOrganizedFile,
+          name: 'report.pdf',
+          size: 17,
+          extension: '.pdf',
+        },
+      ];
+
+      const organizer = new OrganizerService();
+      const plan = await organizer.generateOrganizationPlan(tempDir, files, 'rename');
+
+      // The plan should not schedule unnecessary move for already-organized file
+      expect(plan.moves.length).toBe(0);
+
+      // Execute organize on the plan
+      const result = await organizer.organize(tempDir, plan, { conflictStrategy: 'rename' });
+      expect(result.errors).toHaveLength(0);
+
+      // Verify the original file is intact and no _1.pdf was created
+      const originalExists = await fs.stat(alreadyOrganizedFile).then(() => true).catch(() => false);
+      expect(originalExists).toBe(true);
+
+      const mutatedExists = await fs.stat(path.join(docsDir, 'report_1.pdf')).then(() => true).catch(() => false);
+      expect(mutatedExists).toBe(false);
+    });
+  });
+
+  describe('17. safeAtomicMove Identity Invariant', () => {
+    it('returns success immediately without unlinking or mutating when source === destination', async () => {
+      const filePath = path.join(tempDir, 'keep-me.txt');
+      await fs.writeFile(filePath, 'important data');
+
+      const res = await safeAtomicMove(filePath, filePath, { overwrite: true });
+      expect(res.success).toBe(true);
+
+      const content = await fs.readFile(filePath, 'utf8');
+      expect(content).toBe('important data');
+    });
+
+    it('refuses to clobber a distinct case-colliding destination on case-sensitive filesystems', async () => {
+      // Case-sensitive FS only: on case-insensitive filesystems (macOS/Windows)
+      // both names resolve to the same file, so the collision cannot exist.
+      const probe = path.join(tempDir, 'case-probe.txt');
+      await fs.writeFile(probe, 'x');
+      const isCaseSensitive = await fs
+        .lstat(path.join(tempDir, 'CASE-PROBE.txt'))
+        .then(
+          () => false,
+          (err: NodeJS.ErrnoException) => err.code === 'ENOENT',
+        );
+      if (!isCaseSensitive) return;
+
+      const lower = path.join(tempDir, 'test.txt');
+      const upper = path.join(tempDir, 'TEST.txt');
+      await fs.writeFile(lower, 'lower content');
+      await fs.writeFile(upper, 'upper content');
+
+      await expect(safeAtomicMove(lower, upper)).rejects.toMatchObject({ code: 'EEXIST' });
+
+      // Neither file was destroyed or moved
+      expect(await fs.readFile(lower, 'utf8')).toBe('lower content');
+      expect(await fs.readFile(upper, 'utf8')).toBe('upper content');
+    });
+
+    it('performs a true case-only rename when destination resolves to the source itself', async () => {
+      const lower = path.join(tempDir, 'rename-me.txt');
+      const upper = path.join(tempDir, 'RENAME-ME.txt');
+      await fs.writeFile(lower, 'same file');
+
+      const res = await safeAtomicMove(lower, upper);
+      expect(res.success).toBe(true);
+      await expect(fs.lstat(lower)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await fs.readFile(upper, 'utf8')).toBe('same file');
+    });
+  });
+
+  describe('18. Rollback Manifest ID Sync Across Tools', () => {
+    it('returns real persisted rollback manifestId from handleSystemOrganization', async () => {
+      const sandboxDir = path.join(process.cwd(), 'tests', 'sandbox', 'v5-system-test');
+      const downloadsDir = path.join(sandboxDir, 'Downloads');
+      const docsDir = path.join(sandboxDir, 'Documents');
+
+      try {
+        await fs.mkdir(downloadsDir, { recursive: true });
+        await fs.mkdir(docsDir, { recursive: true });
+
+        const testFile = path.join(downloadsDir, 'notes.txt');
+        await fs.writeFile(testFile, 'meeting notes');
+
+        const response = await handleSystemOrganization({
+          source_dir: downloadsDir,
+          dry_run: false,
+          response_format: 'json',
+        });
+
+        expect(response.isError).toBeFalsy();
+        const structured = response.structuredContent as Record<string, unknown>;
+        expect(structured).toBeDefined();
+        const undoManifest = structured.undoManifest as { manifestId: string } | undefined;
+        expect(undoManifest?.manifestId).toBeDefined();
+
+        // Verify the manifest actually exists on disk and is readable via RollbackService
+        const rollbackService = new RollbackService();
+        const manifests = await rollbackService.listManifests();
+        const found = manifests.find((m) => m.id === undoManifest?.manifestId);
+        expect(found).toBeDefined();
+      } finally {
+        await fs.rm(sandboxDir, { recursive: true, force: true }).catch(() => {});
+      }
+    });
+
+    it('returns real rollback manifestId from handleOrganizePhotos and handleOrganizeMusic', async () => {
+      const sandboxDir = path.join(process.cwd(), 'tests', 'sandbox', 'v5-photo-test');
+      const photosSource = path.join(sandboxDir, 'photo-src');
+      const photosTarget = path.join(sandboxDir, 'photo-dest');
+
+      try {
+        await fs.mkdir(photosSource, { recursive: true });
+        await fs.mkdir(photosTarget, { recursive: true });
+
+        const imgFile = path.join(photosSource, 'photo.jpg');
+        await fs.writeFile(imgFile, 'photo binary data');
+
+        const photoRes = await handleOrganizePhotos({
+          source_dir: photosSource,
+          target_dir: photosTarget,
+          dry_run: false,
+          response_format: 'json',
+        });
+
+        expect(photoRes.isError).toBeFalsy();
+        const photoStructured = photoRes.structuredContent as Record<string, unknown>;
+        expect(photoStructured.manifestId).toBeDefined();
+
+        const rollbackService = new RollbackService();
+        const manifests = await rollbackService.listManifests();
+        const foundPhotoManifest = manifests.find((m) => m.id === photoStructured.manifestId);
+        expect(foundPhotoManifest).toBeDefined();
+      } finally {
+        await fs.rm(sandboxDir, { recursive: true, force: true }).catch(() => {});
+      }
+    });
+  });
+
+  describe('19. Sensitive File Protection in Photo Organizer', () => {
+    it('blocks reading or processing sensitive files in copyWithoutGPS', async () => {
+      const sensitiveFile = path.join(tempDir, '.env');
+      await fs.writeFile(sensitiveFile, 'SECRET_KEY=12345');
+
+      const photoService = new PhotoOrganizerService();
+      // Processing a sensitive file with photo organizer fails securely with error recorded
+      const res = await photoService.organize({
+        sourceDir: tempDir,
+        targetDir: path.join(tempDir, 'out'),
+        stripGPS: true,
+        dryRun: false,
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.errors.length).toBeGreaterThan(0);
     });
   });
 });

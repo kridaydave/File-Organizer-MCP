@@ -12,6 +12,7 @@ import { logger } from "../../utils/logger.js";
 import { fileExists } from "../../utils/file-utils.js";
 import { RollbackService } from "./rollback.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
+import { safeAtomicMove } from "../io/atomic-move.js";
 
 export interface RenameResult {
   statistics: {
@@ -301,42 +302,9 @@ export class RenamingService {
         await validator.validatePath(item.original);
         await validator.validatePath(item.new);
 
-        // Attempt rename with exclusive copy to avoid clobbering preexisting target
-        // For case-only renames in same directory (e.g. A.txt -> a.txt on macOS/Windows), use fs.rename
-        const isCaseOnly =
-          path.dirname(item.original) === path.dirname(item.new) &&
-          item.original.toLowerCase() === item.new.toLowerCase();
-
+        // Attempt atomic move to avoid clobbering preexisting target
         try {
-          if (isCaseOnly) {
-            // Check if target destination already exists on disk before calling fs.rename
-            // to prevent POSIX rename(2) silent overwrites on Linux
-            try {
-              const destStat = await fs.stat(item.new);
-              const srcStat = await fs.stat(item.original);
-              if (
-                destStat.ino !== srcStat.ino ||
-                destStat.dev !== srcStat.dev
-              ) {
-                throw Object.assign(
-                  new Error(
-                    `Destination file already exists: ${path.basename(item.new)}`,
-                  ),
-                  { code: "EEXIST" },
-                );
-              }
-            } catch (statErr) {
-              if ((statErr as NodeJS.ErrnoException).code === "EEXIST") {
-                throw statErr;
-              }
-              // ENOENT means destination does not exist, safe to rename
-            }
-
-            await fs.rename(item.original, item.new);
-          } else {
-            await fs.copyFile(item.original, item.new, constants.COPYFILE_EXCL);
-            await fs.unlink(item.original);
-          }
+          await safeAtomicMove(item.original, item.new);
         } catch (renameError) {
           const err = renameError as NodeJS.ErrnoException;
           // EEXIST: Destination file already exists

@@ -189,6 +189,9 @@ describe('Security Hardening Suite', () => {
 
         afterEach(async () => {
             CONFIG.paths.customAllowed = originalCustomAllowed;
+            if (process.platform === 'win32') {
+                await new Promise((r) => setTimeout(r, 100));
+            }
             await fs.rm(base, { recursive: true, force: true });
         });
 
@@ -257,6 +260,9 @@ describe('Security Hardening Suite', () => {
                 await handle.close();
             } finally {
                 CONFIG.paths.customAllowed = originalCustomAllowed;
+                if (process.platform === 'win32') {
+                    await new Promise((r) => setTimeout(r, 100));
+                }
                 await fs.rm(realDir, { recursive: true, force: true });
                 await fs.rm(linkBase, { recursive: true, force: true });
             }

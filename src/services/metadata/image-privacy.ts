@@ -254,8 +254,8 @@ export async function stripGPS(
     }
 
     if (!(await detectGpsPresence(buffer))) {
-      // No GPS to remove: just copy the file
-      if (outputPath) {
+      // No GPS to remove: only copy if outputPath is distinct from filePath
+      if (outputPath && path.resolve(outputPath) !== path.resolve(filePath)) {
         await fs.copyFile(filePath, outputPath);
       }
       return { success: true, gpsRemoved: false };

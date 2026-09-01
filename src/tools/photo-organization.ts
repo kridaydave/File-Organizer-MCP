@@ -139,10 +139,11 @@ export async function handleOrganizePhotos(
             timestamp: Date.now(),
           }),
         );
-        await rollbackService.createManifest(
+        const manifestId = await rollbackService.createManifest(
           `Photo organization from ${validatedSourcePath} to ${validatedTargetPath} (${rollbackActions.length} files)`,
           rollbackActions,
         );
+        result.manifestId = manifestId;
       } catch (manifestErr) {
         logger.error(
           `Failed to create rollback manifest: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
@@ -158,6 +159,7 @@ export async function handleOrganizePhotos(
     }
 
     const dryRunText = dry_run ? "(Dry Run - No files were moved)" : "";
+    const manifestLine = result.manifestId ? `- **Rollback Manifest ID:** \`${result.manifestId}\`\n` : "";
     const markdown = `### Photo Organization Result ${dryRunText}
 
 **Source:** \`${validatedSourcePath}\`
@@ -171,7 +173,7 @@ export async function handleOrganizePhotos(
 - **Organized Files:** ${result.organizedFiles}
 - **Skipped Files:** ${result.skippedFiles}
 - **GPS Stripped:** ${result.strippedGPSFiles} file(s)
-- **Errors:** ${result.errors.length}
+${manifestLine}- **Errors:** ${result.errors.length}
 
 **Organized Structure:**
 ${Object.entries(result.structure)

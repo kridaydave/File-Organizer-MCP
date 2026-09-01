@@ -68,10 +68,14 @@ jobs:
           fi
         continue-on-error: true
 
-      - name: Run security tests
+      - name: Run security tests & static analysis
         run: npm run test:security
 
-      - name: Run tests
+      - name: Run security fuzzing & TOCTOU suite (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
+        run: npm run test:security:gates
+
+      - name: Run test suite
         run: npm test
         env:
           CI: true

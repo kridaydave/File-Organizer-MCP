@@ -17,26 +17,7 @@ import { CONFIG } from "../../config.js";
 import { getRollbackDirectory } from "../../core/config/paths.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
 import { manifestIntegrityService } from "./manifest-integrity.js";
-
-/**
- * Move a file across filesystems/devices with EXDEV fallback
- */
-async function safeMoveFile(src: string, dest: string): Promise<void> {
-  try {
-    await fs.rename(src, dest);
-  } catch (err) {
-    if (
-      err instanceof Error &&
-      "code" in err &&
-      (err as NodeJS.ErrnoException).code === "EXDEV"
-    ) {
-      await fs.copyFile(src, dest);
-      await fs.unlink(src);
-    } else {
-      throw err;
-    }
-  }
-}
+import { safeAtomicMove } from "../io/atomic-move.js";
 
 export class RollbackService {
   private storageDir: string;
@@ -245,14 +226,9 @@ export class RollbackService {
             recursive: true,
           });
 
-          // TOCTOU-safe: Use atomic exclusive copy to prevent clobbering destination on POSIX/Windows
+          // TOCTOU-safe: Use safeAtomicMove (handles exclusive copy, case-only renames, and unlink cleanup)
           try {
-            await fs.copyFile(
-              action.currentPath,
-              action.originalPath,
-              constants.COPYFILE_EXCL,
-            );
-            await fs.unlink(action.currentPath);
+            await safeAtomicMove(action.currentPath, action.originalPath);
           } catch (e) {
             if ((e as NodeJS.ErrnoException).code === "EEXIST") {
               throw new Error(
@@ -274,7 +250,7 @@ export class RollbackService {
           if (action.overwrittenBackupPath) {
             // TOCTOU-safe: Try restore directly, handle errors
             try {
-              await safeMoveFile(action.overwrittenBackupPath, action.currentPath);
+              await safeAtomicMove(action.overwrittenBackupPath, action.currentPath);
             } catch (e) {
               const err = e as NodeJS.ErrnoException;
               if (err.code === "ENOENT") {
@@ -284,7 +260,7 @@ export class RollbackService {
 
                 // Attempt to recover: revert the move operation
                 try {
-                  await safeMoveFile(action.originalPath, action.currentPath);
+                  await safeAtomicMove(action.originalPath, action.currentPath);
                   results.errors.push(
                     `Recovered: Reverted move for ${action.originalPath} -> ${action.currentPath}`,
                   );
@@ -416,13 +392,13 @@ export class RollbackService {
           try {
             if (completed.stage === "move") {
               // Revert the move: move back from original to current
-              await safeMoveFile(completed.paths.to, completed.paths.from);
+              await safeAtomicMove(completed.paths.to, completed.paths.from, { overwrite: true });
               results.errors.push(
                 `Recovered move: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
               );
             } else if (completed.stage === "restore") {
               // Revert the restore: move back from current to backup location
-              await safeMoveFile(completed.paths.to, completed.paths.from);
+              await safeAtomicMove(completed.paths.to, completed.paths.from, { overwrite: true });
               results.errors.push(
                 `Recovered restore: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
               );

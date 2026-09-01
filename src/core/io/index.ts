@@ -6,3 +6,5 @@ export {
   SENSITIVE_PATTERNS,
   SENSITIVE_DIRECTORIES,
 } from "./sensitive-files.js";
+export { safeAtomicMove } from "./atomic-move.js";
+export type { AtomicMoveOptions, AtomicMoveResult } from "./atomic-move.js";

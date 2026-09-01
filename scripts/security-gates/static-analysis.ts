@@ -12,6 +12,7 @@
  */
 
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -28,8 +29,24 @@ const colors = {
   reset: "\x1b[0m",
 };
 
-// Configuration
-const SRC_DIR = path.join(__dirname, "../../src");
+// Locate repository root (where package.json lives)
+function findProjectRoot(startDir: string): string {
+  let current = startDir;
+  while (current !== path.dirname(current)) {
+    try {
+      if (fsSync.existsSync(path.join(current, "package.json"))) {
+        return current;
+      }
+    } catch {
+      // ignore
+    }
+    current = path.dirname(current);
+  }
+  return process.cwd();
+}
+
+const PROJECT_ROOT = findProjectRoot(__dirname);
+const SRC_DIR = path.join(PROJECT_ROOT, "src");
 const EXCLUDED_DIRS = [
   "node_modules",
   "dist",
@@ -45,14 +62,13 @@ const EXCLUDED_FILES = [".d.ts", ".test.ts", ".spec.ts"];
 const EXCLUDED_FILES_FROM_SECURITY_CHECKS = [
   "rollback.ts", // core/organize: manifestId is UUID-checked before join
   "loader.ts", // core/config: startup read of the platform config file
-  "batch-file-reader.ts", // reads scanner output under an already-validated root
-  "system-organize.service.ts", // EXDEV fallback reads files under a validated source dir
   "scheduler-state.service.ts",
-  "photo-organizer.service.ts",
   "config.ts",
   "diagnostics.ts",
   "client-detector.ts",
   "setup-wizard.ts",
+  "history-logger.service.ts",
+  "manifest-integrity.ts",
 ];
 
 // Security rules
@@ -606,6 +622,13 @@ ${colors.blue}╔═════════════════════
   // Get all TypeScript files
   const files = await getTypeScriptFiles(SRC_DIR);
   console.log(`Found ${files.length} TypeScript files to analyze\n`);
+
+  if (files.length === 0) {
+    console.error(
+      `${colors.red}Error: No TypeScript files found in ${SRC_DIR}! Static analysis cannot pass with 0 files.${colors.reset}`,
+    );
+    return 1;
+  }
 
   // Analyze each file
   for (let i = 0; i < files.length; i++) {

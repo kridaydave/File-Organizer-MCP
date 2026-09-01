@@ -23,6 +23,7 @@ import { RollbackService } from "./rollback.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
 import { MetadataService } from "../../services/metadata/service.js";
 import { getBackupDirectory } from "../config/paths.js";
+import { safeAtomicMove } from "../io/atomic-move.js";
 
 export type ConflictStrategy =
   | "rename"
@@ -50,22 +51,6 @@ export interface OrganizeResult {
 
 // BUG-003 FIX: Maximum consecutive errors before aborting to prevent endless processing
 const MAX_CONSECUTIVE_ERRORS = 10;
-
-/**
- * Move a file across filesystems/devices with EXDEV fallback
- */
-async function safeMoveFile(src: string, dest: string): Promise<void> {
-  try {
-    await fs.rename(src, dest);
-  } catch (err) {
-    if (isErrnoException(err) && err.code === "EXDEV") {
-      await fs.copyFile(src, dest);
-      await fs.unlink(src);
-    } else {
-      throw err;
-    }
-  }
-}
 
 /**
  * Organizer Service - file organization logic
@@ -159,6 +144,14 @@ export class OrganizerService {
           ? path.join(directory, category, metadataSubpath)
           : path.join(directory, category);
         let destPath = path.join(destFolder, file.name);
+
+        // If file is already in its destination path, skip move
+        if (path.resolve(file.path) === path.resolve(destPath)) {
+          consecutiveErrors = 0;
+          processedCount++;
+          continue;
+        }
+
         let hasConflict = false;
         const conflictResolution: ConflictStrategy = conflictStrategy;
 
@@ -185,9 +178,7 @@ export class OrganizerService {
           }
         }
 
-        if (conflictResolution !== "skip") {
-          plannedDestinations.add(destPath);
-        }
+        plannedDestinations.add(destPath);
 
         moves.push({
           source: file.path,
@@ -326,6 +317,11 @@ export class OrganizerService {
         const targetPath = move.destination;
         const sourcePath = move.source;
 
+        // If source and destination resolve to the same file, it is already organized
+        if (path.resolve(sourcePath) === path.resolve(targetPath)) {
+          continue;
+        }
+
         let finalDest = targetPath;
         let overwrittenBackupPath: string | undefined;
         let skipped = false;
@@ -341,11 +337,11 @@ export class OrganizerService {
             try {
               const destStat = await fs.stat(targetPath);
               const srcStat = await fs.stat(sourcePath);
-              if (srcStat.mtime < destStat.mtime) {
+              if (srcStat.mtime.getTime() <= destStat.mtime.getTime()) {
                 // Source is not newer - skip this file
-                const msg = `Skipped ${sourcePath}: destination is newer`;
+                const msg = `Skipped ${sourcePath}: destination is newer or equal`;
                 logger.info(msg);
-                skippedFiles.push({ path: sourcePath, reason: "destination is newer" });
+                skippedFiles.push({ path: sourcePath, reason: "destination is newer or equal" });
                 continue;
               }
             } catch (statErr: unknown) {
@@ -374,13 +370,13 @@ export class OrganizerService {
 
               try {
                 // Backup existing file (with EXDEV cross-device fallback)
-                await safeMoveFile(targetPath, overwrittenBackupPath);
+                await safeAtomicMove(targetPath, overwrittenBackupPath);
                 // Move source file to target
-                await safeMoveFile(sourcePath, targetPath);
+                await safeAtomicMove(sourcePath, targetPath);
               } catch (backupErr: unknown) {
                 // Restore backup if move fails
                 try {
-                  await safeMoveFile(overwrittenBackupPath, targetPath);
+                  await safeAtomicMove(overwrittenBackupPath, targetPath, { overwrite: true });
                 } catch (restoreErr) {
                   const criticalMsg = `CRITICAL: Failed to restore backup for ${targetPath}. Original may be lost. Error: ${(restoreErr as Error).message}`;
                   errors.push(criticalMsg);

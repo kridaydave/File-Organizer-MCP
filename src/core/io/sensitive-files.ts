@@ -77,6 +77,26 @@ export const SENSITIVE_PATTERNS: RegExp[] = [
   /\.old$/i,
   /\.orig$/i,
 
+  // Environment files - secrets, API keys, database credentials
+  /\.env$/i,
+  /\.envrc$/i,
+  /\.env\.local$/i,
+  /\.env\.[a-z0-9_-]+$/i,
+  /\.env\./i,
+
+  // Package manager configs with auth tokens
+  /\.npmrc$/i,
+  /\.pypirc$/i,
+  /\.gemrc$/i,
+  /\.yarnrc$/i,
+  /\.yarnrc\.ya?ml$/i,
+  /\.dockercfg$/i,
+
+  // Network & DB credentials
+  /\.netrc$/i,
+  /_netrc$/i,
+  /\.pgpass$/i,
+
   // IDE/CI configs with potential credentials
   /\.vscode\/settings\.json$/i,
   /\.idea\/.*\.xml$/i,
@@ -84,19 +104,29 @@ export const SENSITIVE_PATTERNS: RegExp[] = [
   /\.gitlab-ci\.yml$/i,
   /\.travis\.yml$/i,
 
+  // Git repository internals (credentials, tokens, config)
+  /\.git[\/\\]/i,
+  /\.gitconfig$/i,
+  /\.git-credentials$/i,
+
   // Shell history
   /\.bash_history$/i,
   /\.zsh_history$/i,
   /\.sh_history$/i,
+  /fish_history$/i,
 ];
 
 /** Directories blocked recursively. */
 export const SENSITIVE_DIRECTORIES: RegExp[] = [
+  /(?:^|\/)\.git(?:\/|$)/i,
   /(?:^|\/)\.ssh(?:\/|$)/i,
   /(?:^|\/)\.aws(?:\/|$)/i,
+  /(?:^|\/)\.azure(?:\/|$)/i,
   /(?:^|\/)\.gnupg(?:\/|$)/i,
   /(?:^|\/)\.kube(?:\/|$)/i,
   /(?:^|\/)\.docker(?:\/|$)/i,
+  /(?:^|\/)\.config\/gcloud(?:\/|$)/i,
+  /(?:^|\/)\.config\/git(?:\/|$)/i,
   /(?:^|\/)etc\/shadow(?:\/|$)/i,
   /(?:^|\/)etc\/passwd(?:\/|$)/i,
   /(?:^|\/)System\/Keychains(?:\/|$)/i,
@@ -116,9 +146,12 @@ export function normalizeForSensitiveCheck(filePath: string): string {
     }
   }
 
-  // Strip Windows NTFS Alternate Data Stream suffixes (e.g. ::$DATA, :stream:$DATA, :stream)
+  // Strip Windows NTFS Alternate Data Stream suffixes (e.g. ::$DATA, :stream:$DATA, :custom-stream)
   decoded = decoded.replace(/::\$DATA/gi, "");
-  decoded = decoded.replace(/(?<!^[a-zA-Z]):\$?[a-zA-Z0-9_]+(?=[\\/]|$)/gi, "");
+  decoded = decoded.replace(/(?<!^[a-zA-Z]):[^\\/]+(?=[\\/]|$)/gi, "");
+
+  // Strip trailing dots and spaces from path components (Windows auto-trims them on disk access)
+  decoded = decoded.replace(/[.\s]+(?=[\\/]|$)/g, "");
 
   return decoded.toLowerCase().replace(/\\/g, "/");
 }

@@ -25,23 +25,21 @@ export interface PathValidationResult {
  * is otherwise blocked.
  */
 export function isPathBlocked(normalizedPath: string): boolean {
-  // Never block the temp-folder hierarchies themselves — allow tests
-  // that use os.tmpdir() (/var/folders/... on macOS, /tmp/... on Linux)
-  if (
-    normalizedPath.startsWith("/var/folders/") ||
-    normalizedPath === "/var/folders" ||
-    normalizedPath.startsWith("/private/var/folders/") ||
-    normalizedPath === "/private/var/folders" ||
-    normalizedPath.startsWith("/tmp/") ||
-    normalizedPath === "/tmp" ||
-    normalizedPath.startsWith("/private/tmp/") ||
-    normalizedPath === "/private/tmp"
-  ) {
-    return false;
-  }
-  return CONFIG.paths.alwaysBlocked.some((pattern) =>
-    pattern.test(normalizedPath),
-  );
+  return CONFIG.paths.alwaysBlocked.some((pattern) => {
+    // macOS per-user temp folders live under /var/folders — don't let the
+    // generic /^\/var/ or /^\/private\/var/ system rule block them, but DO
+    // enforce specific blocked patterns (like .git, .vscode, node_modules).
+    if (
+      process.platform === "darwin" &&
+      (pattern.source.includes("^\\/var") ||
+        pattern.source.includes("^\\/private\\/var")) &&
+      (normalizedPath.startsWith("/var/folders/") ||
+        normalizedPath.startsWith("/private/var/folders/"))
+    ) {
+      return false;
+    }
+    return pattern.test(normalizedPath);
+  });
 }
 
 /**
@@ -53,7 +51,10 @@ export async function resolveExistingAncestor(
   inputPath: string,
 ): Promise<{ resolvedPath: string; exists: boolean }> {
   try {
-    const realPath = await fs.realpath(inputPath);
+    const realPath =
+      typeof fsSync.realpathSync?.native === "function"
+        ? fsSync.realpathSync.native(inputPath)
+        : await fs.realpath(inputPath);
     return { resolvedPath: realPath, exists: true };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ELOOP") {
@@ -68,7 +69,10 @@ export async function resolveExistingAncestor(
         currentPath = path.dirname(currentPath);
 
         try {
-          const realAncestor = await fs.realpath(currentPath);
+          const realAncestor =
+            typeof fsSync.realpathSync?.native === "function"
+              ? fsSync.realpathSync.native(currentPath)
+              : await fs.realpath(currentPath);
           return {
             resolvedPath: path.join(realAncestor, ...components),
             exists: false,
@@ -95,7 +99,9 @@ export async function resolveExistingAncestor(
  */
 function canonicalizePathSync(inputPath: string): string {
   try {
-    return fsSync.realpathSync(inputPath);
+    return typeof fsSync.realpathSync?.native === "function"
+      ? fsSync.realpathSync.native(inputPath)
+      : fsSync.realpathSync(inputPath);
   } catch {
     let currentPath = inputPath;
     const components: string[] = [];
@@ -105,7 +111,10 @@ function canonicalizePathSync(inputPath: string): string {
       currentPath = path.dirname(currentPath);
 
       try {
-        const realAncestor = fsSync.realpathSync(currentPath);
+        const realAncestor =
+          typeof fsSync.realpathSync?.native === "function"
+            ? fsSync.realpathSync.native(currentPath)
+            : fsSync.realpathSync(currentPath);
         return path.join(realAncestor, ...components);
       } catch {
         continue;

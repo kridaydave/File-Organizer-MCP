@@ -18,7 +18,7 @@ import fsSync, { constants } from "fs"; // for constants (O_NOFOLLOW, etc) and s
 import path from "path";
 import { AccessDeniedError, ValidationError } from "../types.js";
 import { normalizePath, isSubPath } from "../utils/file-utils.js";
-import { sanitizeErrorMessage } from "../utils/error-handler.js";
+import { sanitizeErrorMessage, isErrnoException } from "../utils/error-handler.js";
 import { PathSchema } from "../schemas/system.js";
 import { logger } from "../utils/logger.js";
 import { CONFIG } from "../config.js";
@@ -289,29 +289,29 @@ export async function validatePathBase(
     }
   }
 
-  // Check for symlinks if disallowed (Before resolution)
+  // Check for symlinks if disallowed (all existing components)
   if (!allowSymlinks) {
-    try {
-      const stats = await fs.lstat(absolutePath);
-      if (stats.isSymbolicLink()) {
-        throw new ValidationError(
-          "Symlink traversal detected (Symlinks are not allowed)",
-        );
+    let current = absolutePath;
+    while (current !== path.dirname(current)) {
+      try {
+        const stats = await fs.lstat(current);
+        if (stats.isSymbolicLink()) {
+          throw new ValidationError(
+            "Symlink traversal detected (Symlinks are not allowed)",
+          );
+        }
+      } catch (error) {
+        if (!isErrnoException(error) || error.code !== "ENOENT") {
+          throw error;
+        }
       }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        // Does not exist, proceed to resolution failing or handling it later
-      } else {
-        throw error;
-      }
+      current = path.dirname(current);
     }
   }
 
   // Layer 5: Symlink resolution
   let realPath: string;
   if (allowSymlinks) {
-    // In whitelist mode (allowedPaths is null), pass null to skip containment checks in resolveSymlinks
-    // The whitelist check already happens at Layer 4.5 before we get here
     const allowedPathsArray =
       allowedPaths === null
         ? null
@@ -326,15 +326,23 @@ export async function validatePathBase(
     realPath = absolutePath;
   }
 
-  // Layer 6: Containment check (if allowed paths specified)
+  // Layer 6: Containment check (both scoped mode and whitelist mode)
   if (allowedPaths !== null) {
     const isContained = checkContainment(realPath, allowedPaths);
     if (!isContained) {
-      // Use the original raw path in the error for clarity
       throw new AccessDeniedError(
         rawValidatedPath,
         "Path is outside the allowed directory",
       );
+    }
+  } else if (CONFIG.security.enablePathValidation) {
+    // Whitelist mode: verify the resolved canonical path is inside whitelist
+    const { isPathAllowed, formatAccessDeniedMessage } =
+      await import("../utils/path-security.js");
+    const validation = await isPathAllowed(realPath);
+    if (!validation.allowed) {
+      const message = formatAccessDeniedMessage(rawValidatedPath, validation);
+      throw new AccessDeniedError(rawValidatedPath, message);
     }
   }
 
@@ -422,7 +430,10 @@ export class PathValidatorService {
       // Resolve existing ancestor directory symlinks for non-existent paths
       let canonicalPath = absolutePath;
       try {
-        canonicalPath = fsSync.realpathSync(absolutePath);
+        canonicalPath =
+          typeof fsSync.realpathSync?.native === "function"
+            ? fsSync.realpathSync.native(absolutePath)
+            : fsSync.realpathSync(absolutePath);
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") {
           let current = absolutePath;
@@ -431,7 +442,10 @@ export class PathValidatorService {
             components.unshift(path.basename(current));
             current = path.dirname(current);
             try {
-              const realAncestor = fsSync.realpathSync(current);
+              const realAncestor =
+                typeof fsSync.realpathSync?.native === "function"
+                  ? fsSync.realpathSync.native(current)
+                  : fsSync.realpathSync(current);
               canonicalPath = path.join(realAncestor, ...components);
               if (isPathBlocked(realAncestor)) {
                 return false;
@@ -449,22 +463,19 @@ export class PathValidatorService {
         }
       }
 
-      if (isPathBlocked(canonicalPath)) {
+      if (isPathBlocked(canonicalPath) || isPathBlocked(absolutePath)) {
         return false;
       }
 
       if (this.allowedPaths === null) {
-        // Try canonical first, then fall back to direct path for Windows
-        // 8.3 and macOS /var -> /private/var edge cases
-        if (isPathInAllowedDirectories(canonicalPath)) {
-          return true;
-        }
-        return isPathInAllowedDirectories(absolutePath);
+        return isPathInAllowedDirectories(canonicalPath);
       }
 
       const canonicalAllowed = this.allowedPaths.map((allowed) => {
         try {
-          return fsSync.realpathSync(allowed);
+          return typeof fsSync.realpathSync?.native === "function"
+            ? fsSync.realpathSync.native(allowed)
+            : fsSync.realpathSync(allowed);
         } catch {
           return path.resolve(allowed);
         }
@@ -568,10 +579,32 @@ export class PathValidatorService {
             "File outside allowed directory",
           );
         }
+        if (isPathBlocked(realPath)) {
+          throw new AccessDeniedError(
+            inputPath,
+            "Access to sensitive or blocked path is denied",
+          );
+        }
       } else {
         // Whitelist mode: verify the opened file's real path is still
         // within the configured whitelist (TOCTOU-safe symlink containment).
         await this.assertAllowedByWhitelist(realPath, inputPath);
+      }
+
+      // POSIX Inode & Device verification to prevent intermediate directory swap TOCTOU
+      if (process.platform !== "win32" && typeof stats.ino === "number" && typeof stats.dev === "number") {
+        try {
+          const realStats = await fs.stat(realPath);
+          if (realStats.ino !== stats.ino || realStats.dev !== stats.dev) {
+            throw new AccessDeniedError(
+              inputPath,
+              "File descriptor desynchronization detected (TOCTOU race)",
+            );
+          }
+        } catch (statErr) {
+          if (statErr instanceof AccessDeniedError) throw statErr;
+          // Ignore transient stat errors if realpath succeeded
+        }
       }
 
       return handle;

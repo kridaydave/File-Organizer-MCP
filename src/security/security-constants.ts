@@ -109,8 +109,8 @@ export const SECURITY_LIMITS = {
       /^[A-Z]:[\/\\]/i, // Windows absolute paths
       /\.\.[\/\\]/, // Parent directory traversal
       /^[\/\\]+/, // Leading slashes
-      /^(etc|bin|usr|sbin|boot|lib|root|home|tmp)/i, // System directories
-      /^(Windows|Program Files|Program Files \(x86\))/i, // Windows system
+      /^(?:etc|bin|usr|sbin|boot|root|home|tmp)(?:[\/\\]|$)/i, // System directories
+      /^(?:Windows|Program Files|Program Files \(x86\))(?:[\/\\]|$)/i, // Windows system
     ],
   },
 
