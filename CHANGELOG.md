@@ -2,31 +2,88 @@
 
 ## [Unreleased]
 
-### ✨ New Features
+### Added
 
-- **Project/Context-based organization (Phase 3)** - `file_organizer_organize_by_content`
-  now supports `strategy="project"` in addition to the existing topic strategy. Files
-  across types (documents, code, images) are grouped into detected project folders
-  using deterministic local signals: rarity-weighted shared filename tokens (the
-  primary cross-type anchor), IDF-filtered shared content terms, and explicit
-  identifier markers (`[A-Z]{2,3}[-_]?\d{3,7}`) with a min-occurrence floor. Content-blind
-  files (binary, images, failed extraction) only join a project via a shared rare
-  name token or marker; mtime proximity alone never forms or joins a group. Groups
-  are formed with union-find clustering and dropped if their average edge weight
-  falls below the configured floor. New `ProjectDetectorService` in
-  `src/services/project-detector.service.ts`.
-  Edge building uses an inverted index over name tokens, markers, and content
-  terms (cost = sum of `C(df, 2)` per signal instead of `O(n^2)` pairwise), with
-  a differential test proving byte-for-byte identical results to the pairwise
-  approach.
-- **Project organization hardening** - colliding project names get distinct
-  destination folders (`Name`, `Name-2`, ...), file moves are routed through
-  `sanitizeErrorMessage` so internal paths are scrubbed from error output, and
-  files that no project claims are counted as skipped instead of disappearing from
-  the summary. Content-term filtering now applies a pure absolute document-frequency
-  cap (`contentTermMaxDf`), and group naming falls back to lexical tie-breaks for
-  deterministic results. Cross-device copy fallback uses `COPYFILE_EXCL` to avoid
-  clobbering a concurrently created destination.
+- **`file_organizer_organize_by_project`** - project-based content
+  organization, re-added on the v5 architecture (the v3.5 Phase 3 feature,
+  rebuilt). Detection groups files across types using deterministic,
+  local-only signals: rarity-weighted shared name tokens, IDF-filtered
+  content terms from text-like files (read through the hardened
+  `core/io` reader, plain text only, no new dependencies), and identifier
+  markers. Content-blind files join only via a name token or marker.
+  The server serves 22 tools (was 21).
+
+## [5.0.0] - 2026-08-22
+
+### ⚠️ Breaking Changes
+
+- **Scheduler is now a standalone bin** - the watch tools
+  (`file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
+  `file_organizer_list_watches`) are removed from the MCP server. Scheduled
+  organization is managed and run by `bin/file-organizer-watch.mjs`
+  (`add`/`remove`/`list` subcommands; daemon mode is the default). The core
+  stdio server serves 21 tools (was 24).
+- **Content-based tools deleted** - `organize_smart`, `organize_by_content`
+  and the `screen_files` flag are gone, along with PDF/DOCX text extraction.
+  Text previews are raw reads. Dropped dependencies: `pdf-parse`, `mammoth`.
+- **Stateless protocol era** - see MCP section below; clients on the 2025-era
+  handshake keep working via dual-era negotiation.
+
+### 🚀 MCP 2026-07-28 Protocol Support
+
+- **Switched to `@modelcontextprotocol/server@2.0.0`** (replacing
+  `@modelcontextprotocol/sdk@1.30.0`). The server implements the stateless
+  MCP spec from 2026-07-28: no session handshake, no `Mcp-Session-Id`, modern
+  requests carried in the `_meta` envelope, and `server/discover` for
+  capability negotiation.
+- **Dual-era stdio serving** - `serveStdio` negotiates the protocol era per
+  connection. 2025-era clients (classic `initialize` handshake) and
+  2026-07-28 clients (`server/discover` opening) are served by the same
+  binary. Era is locked per connection at the opening message.
+- **Response caching** - `cacheHints` (`ttlMs: 3600000`, `cacheScope:
+  "private"`) on cacheable list operations (`tools/list`, `server/discover`),
+  so cached clients skip redundant metadata fetches.
+- Legacy `initialize` support remains available (12-month deprecation window);
+  operators can set `legacy: "reject"` to serve 2026-07-28 clients only.
+
+### 🧹 Simplification (simplify-v5)
+
+- **No file over 300 lines** - `types.ts`, `config.ts`, `index.ts` and the
+  categorizer god-file split into `core/types`, `core/config`, `core/categorize`
+  and friends. Dead methods deleted.
+- **27 services → core modules** - end state is
+  `core/{path,io,scan,categorize,organize,hash}` + history logger +
+  `extensions/scheduler`. The `readers/` framework (~2k lines with its factory,
+  Result type, rate limiter and audit log) collapsed into one
+  `core/io/readFile()` function that keeps the sensitive-file gate and TOCTOU
+  protection. Metadata stack merged into `services/metadata/{image,audio,service}`;
+  content-analyzer, topic-extractor, text-extraction, content-screening and
+  metadata-cache deleted.
+- **Schemas 22 → 4 files** (`common`, `scan`, `organize`, `system`). Tool shapes unchanged.
+- **RateLimiter deleted** outright - clients rate-limit themselves.
+- **History logger rewrite** - `log()` appends directly behind an in-process
+  write chain instead of a batch queue with a flush timer. Lockfile kept for
+  cross-process safety (server + watch daemon share one file).
+- **Stateless server** - fresh `McpServer` per connection, request-scoped
+  `ctx = { config, history }`, zero module-level service instances. Custom
+  categorization rules persist to user config instead of a global singleton.
+- **Rollback manifests** moved from `process.cwd()/.file-organizer-rollbacks`
+  (broke under npx/global installs) to the platform config dir, with guarded
+  migration of legacy manifests.
+
+### 🐛 Bug Fixes
+
+- **`set_custom_rules` filename patterns never matched** - the Zod schema uses
+  `filename_pattern` but the old code cast straight to camelCase without
+  normalizing, so pattern rules from the tool were silently ignored. Handler
+  now converts snake_case → camelCase.
+- **History lockfile steal** - staleness was judged on the same window as the
+  wait, so a waiter could take a live lock at its deadline. Stale threshold is
+  now `lockTimeoutMs * 2`.
+- **Undo broken for npx/global installs** - rollback manifests were written
+  relative to the process working directory.
+
+---
 
 ## [3.5.0] - 2026-08-15
 

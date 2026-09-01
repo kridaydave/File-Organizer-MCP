@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * organize_music Tool
  *
  * @module tools/music-organization
@@ -9,14 +9,14 @@ import { z } from "zod";
 import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { MusicOrganizerService } from "../services/music-organizer.service.js";
-import { RollbackService } from "../services/rollback.service.js";
+import { RollbackService } from "../core/organize/rollback.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { OrganizeMusicInputSchema } from "../schemas/media.schemas.js";
+import { OrganizeMusicInputSchema } from "../schemas/organize.js";
 import { logger } from "../utils/logger.js";
 
 export type OrganizeMusicInput = z.infer<typeof OrganizeMusicInputSchema>;
 
-export { OrganizeMusicInputSchema } from "../schemas/media.schemas.js";
+export { OrganizeMusicInputSchema } from "../schemas/organize.js";
 export const organizeMusicToolDefinition: ToolDefinition = {
   name: "file_organizer_organize_music",
   title: "Organize Music Files",
@@ -90,6 +90,7 @@ export async function handleOrganizeMusic(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -131,10 +132,11 @@ export async function handleOrganizeMusic(
             timestamp: Date.now(),
           }),
         );
-        await rollbackService.createManifest(
+        const manifestId = await rollbackService.createManifest(
           `Music organization from ${validatedSourcePath} to ${validatedTargetPath} (${rollbackActions.length} files)`,
           rollbackActions,
         );
+        result.manifestId = manifestId;
       } catch (manifestErr) {
         logger.error(
           `Failed to create rollback manifest: ${manifestErr instanceof Error ? manifestErr.message : String(manifestErr)}`,
@@ -150,6 +152,7 @@ export async function handleOrganizeMusic(
     }
 
     const dryRunText = dry_run ? "(Dry Run - No files were moved)" : "";
+    const manifestLine = result.manifestId ? `- **Rollback Manifest ID:** \`${result.manifestId}\`\n` : "";
     const markdown = `### Music Organization Result ${dryRunText}
 
 **Source:** \`${validatedSourcePath}\`
@@ -161,7 +164,7 @@ export async function handleOrganizeMusic(
 - **Success:** ${result.success ? "✅" : "❌"}
 - **Organized Files:** ${result.organizedFiles}
 - **Skipped Files:** ${result.skippedFiles}
-- **Errors:** ${result.errors.length}
+${manifestLine}- **Errors:** ${result.errors.length}
 
 **Organized Structure:**
 ${Object.entries(result.structure)

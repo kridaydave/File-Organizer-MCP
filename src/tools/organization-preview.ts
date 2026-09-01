@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * organization-preview Tool
  *
  * @module tools/organization-preview
@@ -12,11 +12,15 @@ import type {
   OrganizationPlan,
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
-import { globalOrganizerService } from "../services/index.js";
+import { FileScannerService } from "../core/scan/scanner.js";
+import { OrganizerService } from "../core/organize/organizer.js";
+import { CategorizerService } from "../services/categorizer.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { PreviewOrganizationInputSchema } from "../schemas/preview.schemas.js";
-import { loadUserConfig } from "../config.js";
+import { PreviewOrganizationInputSchema } from "../schemas/organize.js";
+import {
+  createRequestContext,
+  type ToolContext,
+} from "../mcp/context.js";
 
 export interface MoveItem {
   source: string;
@@ -31,8 +35,8 @@ export interface SkippedFile {
   reason: string;
 }
 
-export { PreviewOrganizationInputSchema } from "../schemas/preview.schemas.js";
-export type { PreviewOrganizationInput } from "../schemas/preview.schemas.js";
+export { PreviewOrganizationInputSchema } from "../schemas/organize.js";
+export type { PreviewOrganizationInput } from "../schemas/organize.js";
 export const previewOrganizationToolDefinition: ToolDefinition = {
   name: "file_organizer_preview_organization",
   title: "Preview File Organization Plan",
@@ -65,16 +69,9 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
   },
 };
 
-/**
- * Get conflict strategy from user config or return default
- */
-function getConflictStrategy(): "rename" | "skip" | "overwrite" {
-  const userConfig = loadUserConfig();
-  return userConfig.conflictStrategy ?? "rename";
-}
-
 export async function handlePreviewOrganization(
   args: Record<string, unknown>,
+  ctx: ToolContext = createRequestContext(),
 ): Promise<ToolResponse> {
   try {
     const parsed = PreviewOrganizationInputSchema.safeParse(args);
@@ -86,6 +83,7 @@ export async function handlePreviewOrganization(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -98,11 +96,13 @@ export async function handlePreviewOrganization(
     const validatedPath = await validateStrictPath(directory);
 
     const scanner = new FileScannerService();
-    const organizer = globalOrganizerService;
+    const organizer = new OrganizerService(
+      new CategorizerService(ctx.config.customRules ?? []),
+    );
 
     // Use provided strategy, or fall back to config, or default to 'rename'
     const effectiveConflictStrategy =
-      conflict_strategy ?? getConflictStrategy();
+      conflict_strategy ?? ctx.config.conflictStrategy ?? "rename";
 
     const files = await scanner.getAllFiles(validatedPath, false);
     const plan = await organizer.generateOrganizationPlan(

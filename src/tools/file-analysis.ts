@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * find_largest_files Tool
  *
  * @module tools/file-analysis
@@ -12,13 +12,13 @@ import type {
   LargestFileInfo,
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
+import { FileScannerService } from "../core/scan/scanner.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import {
   FindLargestFilesInputSchema,
   type FindLargestFilesInput,
-} from "../schemas/scan.schemas.js";
+} from "../schemas/scan.js";
 
 export const findLargestFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_find_largest_files",
@@ -68,6 +68,7 @@ export async function handleFindLargestFiles(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 

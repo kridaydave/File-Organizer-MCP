@@ -52,7 +52,7 @@ describe('Integration: Full Organization Flow', () => {
         }
 
         // 2. Run Organization
-        const orgResult = await handleOrganizeFiles({ directory: testDir });
+        const orgResult = await handleOrganizeFiles({ directory: testDir, dry_run: false });
         expect(orgResult.content[0].text).toContain('Organization Result');
         expect(orgResult.content[0].text).toContain('Total Files Processed:** 4'); // Note: I fixed the bolding expectation in unit test so reusing it here
 

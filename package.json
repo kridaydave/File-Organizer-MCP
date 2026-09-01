@@ -1,13 +1,14 @@
 {
   "name": "file-organizer-mcp",
-  "version": "3.5.0",
+  "version": "5.0.0",
   "description": "Intelligent file organization MCP server for Claude with security-hardened operations, auto-categorization, and duplicate detection",
   "type": "module",
   "main": "dist/src/index.js",
   "bin": {
     "file-organizer-mcp": "./bin/file-organizer-mcp.mjs",
     "file-organizer": "./bin/file-organizer-mcp.mjs",
-    "file-organizer-setup": "./bin/file-organizer-setup.mjs"
+    "file-organizer-setup": "./bin/file-organizer-setup.mjs",
+    "file-organizer-watch": "./bin/file-organizer-watch.mjs"
   },
   "scripts": {
     "build": "tsc",
@@ -17,7 +18,10 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
-    "test:security": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit/security_suite.test.ts tests/unit/security_repro.test.ts tests/unit/category_security.test.ts",
+    "test:security:static": "node dist/scripts/security-gates/static-analysis.js",
+    "test:security:gates": "node dist/scripts/security-gates/run-all.js",
+    "test:security": "npm run test:security:static && node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit/security_suite.test.ts tests/unit/security_repro.test.ts tests/unit/category_security.test.ts tests/unit/services/v5-regressions.test.ts tests/unit/services/adversarial-deep-audit.test.ts tests/unit/services/adversarial-deep-audit-2.test.ts tests/unit/services/adversarial-tool-gates.test.ts",
+    "verify:all": "npm run build && npm run lint && npm run test:security && npm test",
     "setup": "node dist/src/tui/index.js",
     "postinstall": "node scripts/postinstall.cjs",
     "prepare": "node scripts/prepare.cjs",
@@ -55,14 +59,12 @@
   "homepage": "https://github.com/kridaydave/File-Organizer-MCP#readme",
   "dependencies": {
     "@inquirer/prompts": "^8.5.2",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "chalk": "^5.6.2",
     "exif-parser": "^0.1.12",
-    "mammoth": "^1.12.1",
     "minimatch": "^10.1.2",
     "music-metadata": "^11.11.2",
     "node-cron": "^4.6.0",
-    "pdf-parse": "^2.4.5",
     "piexifjs": "^1.0.6",
     "zod": "^4.4.3"
   },
@@ -82,7 +84,7 @@
     "typescript-eslint": "^8.67.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "os": [
     "win32",

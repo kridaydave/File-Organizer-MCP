@@ -295,7 +295,6 @@ describe("System Organization Tool - Integration Tests", () => {
         sourceDir: testDownloadsDir,
         dryRun: false,
         useSystemDirs: false,
-        localFallbackPrefix: "Sorted",
       });
 
       expect(result.organizedLocally).toBe(1);
@@ -303,6 +302,27 @@ describe("System Organization Tool - Integration Tests", () => {
       const organizedDir = path.join(testDownloadsDir, "Organized");
       const exists = await fs
         .access(organizedDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(true);
+    });
+
+    it("should respect custom localFallbackPrefix", async () => {
+      await fs.writeFile(path.join(testDownloadsDir, "custom.mp3"), "audio");
+
+      const service = new SystemOrganizeService();
+      const result = await service.systemOrganize({
+        sourceDir: testDownloadsDir,
+        dryRun: false,
+        useSystemDirs: false,
+        localFallbackPrefix: "Sorted",
+      });
+
+      expect(result.organizedLocally).toBe(1);
+
+      const sortedDir = path.join(testDownloadsDir, "Sorted");
+      const exists = await fs
+        .access(sortedDir)
         .then(() => true)
         .catch(() => false);
       expect(exists).toBe(true);

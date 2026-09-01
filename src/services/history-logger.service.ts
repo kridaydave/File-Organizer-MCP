@@ -1,14 +1,18 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * History Logger Service
  *
- * Tracks operation history with JSON-lines format, batching, and file rotation.
+ * Tracks operation history as JSON-lines. Stateless: every log() is a direct
+ * file append behind an in-process write chain — no batch queue, no flush
+ * timer, nothing in memory to lose on crash. A lockfile serializes writers
+ * across processes (server + watch bin share one operations.jsonl).
  */
 
 import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { logger } from "../utils/logger.js";
+import { getHistoryDirectory } from "../core/config/paths.js";
 
 export interface HistoryEntry {
   id: string;
@@ -42,38 +46,33 @@ export interface HistoryResult {
 
 interface HistoryLoggerConfig {
   dataDir: string;
-  batchSize: number;
-  batchTimeoutMs: number;
   maxFileSizeBytes: number;
   maxBackupFiles: number;
   lockTimeoutMs: number;
 }
 
 const DEFAULT_CONFIG: HistoryLoggerConfig = {
-  dataDir: path.join(process.cwd(), "data"),
-  batchSize: 10,
-  batchTimeoutMs: 1000,
+  dataDir: getHistoryDirectory(),
   maxFileSizeBytes: 10 * 1024 * 1024,
   maxBackupFiles: 5,
   lockTimeoutMs: 5000,
 };
 
+const LOCK_RETRY_MS = 100;
+
 export class HistoryLoggerService {
   private config: HistoryLoggerConfig;
   private writeQueue: Promise<void>;
-  private pendingEntries: HistoryEntry[];
-  private flushTimeout: ReturnType<typeof setTimeout> | null;
   private initialized: boolean = false;
   private historyFilePath: string;
   private lockFilePath: string;
+  private currentLockToken: string | null = null;
 
   constructor(config: Partial<HistoryLoggerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.historyFilePath = path.join(this.config.dataDir, "operations.jsonl");
     this.lockFilePath = path.join(this.config.dataDir, "operations.lock");
     this.writeQueue = Promise.resolve();
-    this.pendingEntries = [];
-    this.flushTimeout = null;
   }
 
   async init(): Promise<void> {
@@ -95,10 +94,12 @@ export class HistoryLoggerService {
     return this.historyFilePath;
   }
 
+  /**
+   * Append one entry immediately. Serialized through writeQueue so concurrent
+   * callers can't interleave lock/append cycles within this process.
+   */
   async log(entry: Omit<HistoryEntry, "id" | "timestamp">): Promise<void> {
-    if (!this.initialized) {
-      await this.init();
-    }
+    await this.init();
 
     const fullEntry: HistoryEntry = {
       ...entry,
@@ -106,74 +107,64 @@ export class HistoryLoggerService {
       timestamp: new Date().toISOString(),
     };
 
-    this.pendingEntries.push(fullEntry);
-
-    if (this.pendingEntries.length >= this.config.batchSize) {
-      await this.flush();
-    } else if (!this.flushTimeout) {
-      this.flushTimeout = setTimeout(() => {
-        this.flush().catch((err) => {
-          logger.error("Failed to flush history entries:", err);
-        });
-      }, this.config.batchTimeoutMs);
-    }
-  }
-
-  private async flush(): Promise<void> {
-    if (this.pendingEntries.length === 0) return;
-
-    if (this.flushTimeout) {
-      clearTimeout(this.flushTimeout);
-      this.flushTimeout = null;
-    }
-
-    const entriesToWrite = [...this.pendingEntries];
-    this.pendingEntries = [];
-
-    this.writeQueue = this.writeQueue.then(async () => {
-      await this.writeEntries(entriesToWrite);
+    const append = this.writeQueue.then(() => this.appendEntry(fullEntry));
+    this.writeQueue = append.catch(() => {
+      // Already logged in appendEntry; keep the chain alive for next writer.
     });
-
-    await this.writeQueue;
+    await append;
   }
 
-  private async writeEntries(entries: HistoryEntry[]): Promise<void> {
-    const lockAcquired = await this.acquireLock();
-    if (!lockAcquired) {
-      this.pendingEntries.unshift(...entries);
-      return;
-    }
-
+  private async appendEntry(entry: HistoryEntry): Promise<void> {
     try {
-      await this.checkRotation();
-
-      const lines = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
+      await this.acquireLock();
 
       try {
-        await fs.appendFile(this.historyFilePath, lines);
+        await this.checkRotation();
+        await fs.appendFile(this.historyFilePath, JSON.stringify(entry) + "\n");
       } catch (error: unknown) {
         if ((error as { code?: string }).code === "ENOSPC") {
           logger.warn("Disk full, attempting retry once");
           await new Promise((resolve) => setTimeout(resolve, 1000));
-          await fs.appendFile(this.historyFilePath, lines);
+          await fs.appendFile(this.historyFilePath, JSON.stringify(entry) + "\n");
         } else {
           throw error;
         }
+      } finally {
+        await this.releaseLock();
       }
     } catch (error) {
-      logger.error("Failed to write history entries:", error);
-    } finally {
-      await this.releaseLock();
+      logger.error("Failed to write history entry:", error);
     }
   }
 
-  private async acquireLock(): Promise<boolean> {
+  private async acquireLock(): Promise<void> {
+    const deadline = Date.now() + this.config.lockTimeoutMs;
+
+    while (true) {
+      const held = await this.tryAcquireLock();
+      if (held) return;
+
+      if (Date.now() >= deadline) {
+        throw new Error("History lock timeout — another writer is stuck");
+      }
+      // Poll no faster than a quarter of the wait window, so a waiter can
+      // never wake up past the staleness threshold while the holder lives.
+      const sleep = Math.min(LOCK_RETRY_MS, this.config.lockTimeoutMs / 4);
+      await new Promise((resolve) => setTimeout(resolve, sleep));
+    }
+  }
+
+  private async tryAcquireLock(): Promise<boolean> {
     try {
       const stat = await fs.stat(this.lockFilePath).catch(() => null);
 
       if (stat) {
+        // Stale threshold is 2x the wait window: a waiter that polled for the
+        // full lockTimeoutMs must never see the holder's live lock cross the
+        // staleness line at the exact same moment and steal it.
+        const staleAfterMs = this.config.lockTimeoutMs * 2;
         const lockAge = Date.now() - stat.mtimeMs;
-        if (lockAge > this.config.lockTimeoutMs) {
+        if (lockAge > staleAfterMs) {
           logger.warn("Stale lock detected, removing");
           await fs.unlink(this.lockFilePath).catch(() => null);
         } else {
@@ -181,9 +172,11 @@ export class HistoryLoggerService {
         }
       }
 
-      await fs.writeFile(this.lockFilePath, String(Date.now()), {
+      const token = `${process.pid}-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
+      await fs.writeFile(this.lockFilePath, token, {
         flag: "wx",
       });
+      this.currentLockToken = token;
       return true;
     } catch {
       return false;
@@ -192,7 +185,17 @@ export class HistoryLoggerService {
 
   private async releaseLock(): Promise<void> {
     try {
-      await fs.unlink(this.lockFilePath);
+      if (this.currentLockToken) {
+        const content = await fs
+          .readFile(this.lockFilePath, "utf-8")
+          .catch(() => null);
+        if (content === this.currentLockToken) {
+          await fs.unlink(this.lockFilePath).catch(() => null);
+        }
+        this.currentLockToken = null;
+      } else {
+        await fs.unlink(this.lockFilePath).catch(() => null);
+      }
     } catch {
       // Ignore cleanup errors
     }
@@ -206,13 +209,10 @@ export class HistoryLoggerService {
       logger.info("Rotating history file", { currentSize: stat.size });
 
       for (let i = this.config.maxBackupFiles - 1; i >= 1; i--) {
-        const oldPath = path.join(this.config.dataDir, `operations.${i}.jsonl`);
-        const newPath = path.join(
-          this.config.dataDir,
-          `operations.${i + 1}.jsonl`,
-        );
+        const rotatedPath = (n: number) =>
+          path.join(this.config.dataDir, `operations.${n}.jsonl`);
         try {
-          await fs.rename(oldPath, newPath);
+          await fs.rename(rotatedPath(i), rotatedPath(i + 1));
         } catch {
           // File doesn't exist, continue
         }
@@ -244,23 +244,31 @@ export class HistoryLoggerService {
     } = query;
 
     const allEntries: HistoryEntry[] = [];
-    const lockAcquired = await this.acquireLock();
+    const lockAcquired = await this.tryAcquireLock();
 
     try {
-      const content = await fs
-        .readFile(this.historyFilePath, "utf-8")
-        .catch(() => "");
+      const filesToRead = [this.historyFilePath];
+      for (let i = 1; i <= this.config.maxBackupFiles; i++) {
+        filesToRead.push(
+          path.join(this.config.dataDir, `operations.${i}.jsonl`),
+        );
+      }
 
-      const lines = content.split("\n").filter((line) => line.trim());
+      for (const file of filesToRead) {
+        const content = await fs.readFile(file, "utf-8").catch(() => "");
+        if (!content) continue;
 
-      for (const line of lines) {
-        try {
-          const entry = JSON.parse(line) as HistoryEntry;
-          allEntries.push(entry);
-        } catch (error) {
-          logger.debug(
-            `Skipped corrupted history line: ${(error as Error).message}`,
-          );
+        const lines = content.split("\n").filter((line) => line.trim());
+
+        for (const line of lines) {
+          try {
+            const entry = JSON.parse(line) as HistoryEntry;
+            allEntries.push(entry);
+          } catch (error) {
+            logger.debug(
+              `Skipped corrupted history line: ${(error as Error).message}`,
+            );
+          }
         }
       }
     } catch (error) {
@@ -329,16 +337,14 @@ export class HistoryLoggerService {
   }
 
   private redactPaths(text: string): string {
-    return text.replace(/[A-Za-z]:\\[^\s]+/g, "[REDACTED]");
-  }
-
-  async flushAndClose(): Promise<void> {
-    if (this.flushTimeout) {
-      clearTimeout(this.flushTimeout);
-      this.flushTimeout = null;
-    }
-
-    await this.flush();
+    // Redact Windows paths (e.g. C:\Users\..., D:/Projects/...)
+    let redacted = text.replace(/[A-Za-z]:[/\\][^\s]+/g, "[REDACTED]");
+    // Redact Unix absolute paths (e.g. /home/..., /var/..., /tmp/...)
+    redacted = redacted.replace(
+      /(?:^|[\s"'])(\/(?:[^\s"'/]+\/)*[^\s"'/]+)/g,
+      (match, p) => match.replace(p, "[REDACTED]"),
+    );
+    return redacted;
   }
 }
 

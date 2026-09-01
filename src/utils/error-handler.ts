@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Centralized Error Handling
  */
 
@@ -19,9 +19,9 @@ import { logger } from "./logger.js";
 export function sanitizeErrorMessage(error: Error | string): string {
   const message = error instanceof Error ? error.message : String(error);
 
-  // Replace Windows paths (improved pattern for paths with/without trailing backslash)
+  // Replace Windows paths (supports single and double backslashes for JSON strings)
   let sanitized = message.replace(
-    /[a-zA-Z]:\\(?:[^\\/:*?"<>|\r\n]+(?:\\[^\\/:*?"<>|\r\n]+)*)/g,
+    /[a-zA-Z]:(?:\\\\|\\)(?:[^\\/:*?"<>|\r\n]+(?:(?:\\\\|\\)[^\\/:*?"<>|\r\n]+)*)/g,
     "[PATH]",
   );
 
@@ -31,28 +31,27 @@ export function sanitizeErrorMessage(error: Error | string): string {
     "[PATH]",
   );
 
-  // Replace UNC paths (e.g., \\server\share)
+  // Replace UNC paths (e.g., \\server\share or \\\\server\\share)
   sanitized = sanitized.replace(
-    /\\\\[\w\-\.]+\\(?:[^\r\n\\]+(?:\\[^\r\n\\]+)*)/g,
+    /(?:\\\\|\\\\\\[\w\-\.]+(?:\\\\|\\))(?:[^\r\n\\]+(?:(?:\\\\|\\)[^\r\n\\]+)*)/g,
     "[PATH]",
   );
 
-  // Replace relative paths (e.g., ./foo, ../bar)
+  // Replace relative paths (e.g., ./foo, ../bar, .\foo, ..\bar)
   sanitized = sanitized.replace(
-    /(?:^|[\s"']+)(\.\.?\/[^\s"'\/\0\r\n]+(?:\/[^\s"'\/\0\r\n]+)*)/g,
+    /(?:^|[\s"'(\[{<:=`])(\.\.?[\/\\][^\s"'()\[\]{}<>\0\r\n`=]+(?:[\/\\][^\s"'()\[\]{}<>\0\r\n`=]+)*)/g,
     (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
   );
 
   // Replace Unix absolute paths (e.g., /home/user, /var/log)
-  // Only match paths that look like actual file paths with proper separators
   sanitized = sanitized.replace(
-    /(?:^|[\s"']+)(\/(?:[^\s"'\/\0\r\n]+\/)*[^\s"'\/\0\r\n]*)/g,
+    /(?:^|[\s"'(\[{<:=`])(\/(?:[^\s"'()\[\]{}<>\0\r\n`=]+\/)*[^\s"'()\[\]{}<>\0\r\n`=]+)/g,
     (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
   );
 
-  // Replace parent directory traversal (../ with path separators)
+  // Replace parent directory traversal (../ or ..\ with path separators)
   sanitized = sanitized.replace(
-    /(?:^|[\s"']+)(\.\.(?:\/[^\s"'\/\0\r\n]+)*)/g,
+    /(?:^|[\s"'(\[{<:=`])(\.\.(?:[\/\\][^\s"'()\[\]{}<>\0\r\n`=]+)*)/g,
     (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
   );
 
@@ -72,10 +71,22 @@ export function createErrorResponse(error: unknown): ToolResponse {
   logger.error(`Error ID ${errorId}: ${fullMessage}`);
 
   if (error instanceof FileOrganizerError) {
-    return error.toResponse();
+    const response = error.toResponse();
+    return {
+      ...response,
+      content: response.content.map((item) => {
+        if (item.type === "text") {
+          return {
+            ...item,
+            text: sanitizeErrorMessage(item.text),
+          };
+        }
+        return item;
+      }),
+    };
   } else if (error instanceof AccessDeniedError) {
     // Safe to show sanitized message for expected errors
-    clientMessage = `Access Denied: ${sanitizeErrorMessage(error)}`;
+    clientMessage = `Access Denied: ${sanitizeErrorMessage(error.message)}`;
   } else if (error instanceof ValidationError) {
     clientMessage = `Validation Error: ${sanitizeErrorMessage(error.message)}`;
   } else {

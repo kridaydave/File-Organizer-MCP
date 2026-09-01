@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Archive Validation Utility
  *
  * Provides:
@@ -18,14 +18,16 @@ export interface ArchiveValidationResult {
   format?: string;
   error?: string;
   entries?: number;
-  totalSize?: number;
+  uncompressedSize?: number;
+  compressedSize?: number;
+  ratio?: number;
 }
 
 export interface EntryValidationResult {
   valid: boolean;
   entryName: string;
-  error?: string;
   extractedPath?: string;
+  error?: string;
 }
 
 /**
@@ -33,29 +35,59 @@ export interface EntryValidationResult {
  */
 export function detectArchiveFormat(filePath: string): ArchiveValidationResult {
   try {
-    const buffer = Buffer.alloc(16);
-    const fd = fs.openSync(filePath, "r");
-    const bytesRead = fs.readSync(fd, buffer, 0, 16, 0);
-    fs.closeSync(fd);
+    const buffer = Buffer.alloc(512);
+    const flags =
+      (fs.constants?.O_RDONLY ?? 0) |
+      (process.platform !== "win32" ? (fs.constants?.O_NOFOLLOW ?? 0) : 0);
+    const fd = fs.openSync(filePath, flags);
+    let bytesRead = 0;
+    try {
+      bytesRead = fs.readSync(fd, buffer, 0, 512, 0);
+    } finally {
+      fs.closeSync(fd);
+    }
 
-    if (bytesRead < 4) {
+    if (bytesRead < 2) {
       return { valid: false, error: "File too small to be an archive" };
     }
 
     const magicBytes = Array.from(buffer.subarray(0, bytesRead));
 
-    // Check ZIP format (full 4-byte signature: 0x50 0x4B 0x03 0x04)
+    // Check ZIP format (standard PK.. or empty PK..)
     if (
       bytesRead >= 4 &&
-      magicBytes[0] ===
-        SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.zip[0] &&
-      magicBytes[1] ===
-        SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.zip[1] &&
-      magicBytes[2] ===
-        SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.zip[2] &&
-      magicBytes[3] === SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.zip[3]
+      magicBytes[0] === 0x50 &&
+      magicBytes[1] === 0x4b &&
+      ((magicBytes[2] === 0x03 && magicBytes[3] === 0x04) ||
+        (magicBytes[2] === 0x05 && magicBytes[3] === 0x06))
     ) {
       return { valid: true, format: "zip" };
+    }
+
+    // Check 7Z format
+    if (
+      bytesRead >= 6 &&
+      magicBytes[0] === 0x37 &&
+      magicBytes[1] === 0x7a &&
+      magicBytes[2] === 0xbc &&
+      magicBytes[3] === 0xaf &&
+      magicBytes[4] === 0x27 &&
+      magicBytes[5] === 0x1c
+    ) {
+      return { valid: true, format: "7z" };
+    }
+
+    // Check XZ format
+    if (
+      bytesRead >= 6 &&
+      magicBytes[0] === 0xfd &&
+      magicBytes[1] === 0x37 &&
+      magicBytes[2] === 0x7a &&
+      magicBytes[3] === 0x58 &&
+      magicBytes[4] === 0x5a &&
+      magicBytes[5] === 0x00
+    ) {
+      return { valid: true, format: "xz" };
     }
 
     // Check GZIP format
@@ -79,6 +111,14 @@ export function detectArchiveFormat(filePath: string): ArchiveValidationResult {
       return { valid: true, format: "bz2" };
     }
 
+    // Check TAR POSIX format (magic 'ustar' at offset 257)
+    if (bytesRead >= 262) {
+      const tarMagic = buffer.subarray(257, 262).toString("ascii");
+      if (tarMagic === "ustar") {
+        return { valid: true, format: "tar" };
+      }
+    }
+
     return { valid: false, error: "Unknown or unsupported archive format" };
   } catch (error) {
     return {
@@ -99,7 +139,34 @@ export function validateEntryPath(
   entryName: string,
   targetDirectory: string,
 ): EntryValidationResult {
+  // Check for null bytes first
+  if (entryName.includes("\0")) {
+    return {
+      valid: false,
+      entryName,
+      error: "Null byte detected in entry name",
+    };
+  }
+
+  // Check for Alternate Data Streams or Windows drive letters
+  if (entryName.includes(":") || /^[a-zA-Z]:/.test(entryName)) {
+    return {
+      valid: false,
+      entryName,
+      error: "Invalid characters or drive specifier in archive entry",
+    };
+  }
+
   const normalizedEntry = entryName.replace(/\\/g, "/");
+
+  // Check for path traversal components
+  if (/(^|\/)\.\.(\/|$)/.test(normalizedEntry)) {
+    return {
+      valid: false,
+      entryName,
+      error: `Path traversal attempt detected: ${entryName}`,
+    };
+  }
 
   // Check for blocked patterns
   for (const pattern of SECURITY_LIMITS.archiveValidation.BLOCKED_PATTERNS) {
@@ -126,10 +193,15 @@ export function validateEntryPath(
   // Resolve the potential extraction path
   const resolvedPath = path.resolve(targetDirectory, normalizedEntry);
 
-  // Ensure the resolved path is still within the target directory
+  // Ensure the resolved path is still within the target directory and does not resolve to target itself
   const normalizedTarget = path.resolve(targetDirectory);
 
-  if (!isSubPath(normalizedTarget, resolvedPath)) {
+  if (
+    !isSubPath(normalizedTarget, resolvedPath) ||
+    resolvedPath === normalizedTarget ||
+    normalizedEntry === "." ||
+    normalizedEntry === ""
+  ) {
     return {
       valid: false,
       entryName,
@@ -137,17 +209,8 @@ export function validateEntryPath(
     };
   }
 
-  // Check for null bytes (deprecated but still check)
-  if (entryName.includes("\0")) {
-    return {
-      valid: false,
-      entryName,
-      error: "Null byte detected in entry name",
-    };
-  }
-
-  // Check for Windows reserved names
-  const baseName = path.basename(normalizedEntry).toLowerCase();
+  // Check all path components for Windows reserved names
+  const components = normalizedEntry.split(/[\/\\]/);
   const windowsReserved = [
     "con",
     "prn",
@@ -172,13 +235,15 @@ export function validateEntryPath(
     "lpt8",
     "lpt9",
   ];
-  const fileNameWithoutExt = baseName.split(".")[0] ?? "";
-  if (windowsReserved.includes(fileNameWithoutExt)) {
-    return {
-      valid: false,
-      entryName,
-      error: `Windows reserved filename detected: ${baseName}`,
-    };
+  for (const part of components) {
+    const partWithoutExt = part.split(".")[0]?.toLowerCase() ?? "";
+    if (windowsReserved.includes(partWithoutExt)) {
+      return {
+        valid: false,
+        entryName,
+        error: `Windows reserved filename detected: ${part}`,
+      };
+    }
   }
 
   return {
@@ -193,26 +258,43 @@ export function validateEntryPath(
  * Returns list of invalid entries with reasons
  */
 export function validateArchiveEntries(
-  entries: Array<{ name: string; size?: number }>,
+  entries: Array<{ name: string; size?: number; uncompressedSize?: number }>,
   targetDirectory: string,
-): { valid: boolean; invalidEntries: EntryValidationResult[] } {
+  archiveCompressedSize?: number,
+): { valid: boolean; invalidEntries: EntryValidationResult[]; errors: string[] } {
   const invalidEntries: EntryValidationResult[] = [];
   const maxEntries = SECURITY_LIMITS.decompression.MAX_ENTRIES;
+  const maxAbsoluteBytes = SECURITY_LIMITS.decompression.MAX_ABSOLUTE_BYTES;
+  const maxRatio = SECURITY_LIMITS.decompression.MAX_RATIO;
 
   if (entries.length > maxEntries) {
+    const errorMsg = `Too many entries: ${entries.length} exceeds limit of ${maxEntries}`;
     return {
       valid: false,
       invalidEntries: [
         {
           valid: false,
           entryName: "",
-          error: `Too many entries: ${entries.length} exceeds limit of ${maxEntries}`,
+          error: errorMsg,
         },
       ],
+      errors: [errorMsg],
     };
   }
 
+  let totalUncompressedSize = 0;
   for (const entry of entries) {
+    const entrySize = entry.uncompressedSize ?? entry.size ?? 0;
+    if (entrySize < 0) {
+      invalidEntries.push({
+        valid: false,
+        entryName: entry.name,
+        error: `Negative file size reported for ${entry.name}`,
+      });
+      continue;
+    }
+    totalUncompressedSize += entrySize;
+
     const validation = validateEntryPath(entry.name, targetDirectory);
 
     if (!validation.valid) {
@@ -221,21 +303,41 @@ export function validateArchiveEntries(
     }
 
     // Check individual file size limit
-    if (
-      entry.size &&
-      entry.size > SECURITY_LIMITS.decompression.MAX_FILE_SIZE
-    ) {
+    if (entrySize > SECURITY_LIMITS.decompression.MAX_FILE_SIZE) {
       invalidEntries.push({
         valid: false,
         entryName: entry.name,
-        error: `File size ${entry.size} exceeds maximum allowed ${SECURITY_LIMITS.decompression.MAX_FILE_SIZE}`,
+        error: `File size ${entrySize} exceeds maximum allowed ${SECURITY_LIMITS.decompression.MAX_FILE_SIZE}`,
       });
     }
+  }
+
+  if (totalUncompressedSize > maxAbsoluteBytes) {
+    const errorMsg = `Cumulative uncompressed size ${totalUncompressedSize} exceeds maximum allowed ${maxAbsoluteBytes}`;
+    invalidEntries.push({
+      valid: false,
+      entryName: "",
+      error: errorMsg,
+    });
+  }
+
+  if (
+    typeof archiveCompressedSize === "number" &&
+    archiveCompressedSize > 0 &&
+    totalUncompressedSize / archiveCompressedSize > maxRatio
+  ) {
+    const errorMsg = `Decompression ratio ${(totalUncompressedSize / archiveCompressedSize).toFixed(1)} exceeds safety limit of ${maxRatio}x`;
+    invalidEntries.push({
+      valid: false,
+      entryName: "",
+      error: errorMsg,
+    });
   }
 
   return {
     valid: invalidEntries.length === 0,
     invalidEntries,
+    errors: invalidEntries.map((e) => e.error ?? "Invalid entry"),
   };
 }
 
@@ -246,8 +348,8 @@ export function sanitizeEntryName(entryName: string): string {
   // Normalize Unicode to prevent bypass with alternate representations
   let sanitized = entryName.normalize("NFC");
 
-  // Remove null bytes
-  sanitized = sanitized.replace(/\0/g, "");
+  // Remove any null or control characters FIRST before path splitting
+  sanitized = sanitized.replace(/[\x00-\x1f\x7f]/g, "");
 
   // Remove leading slashes and backslashes
   sanitized = sanitized.replace(/^[\/\\]+/, "");
@@ -258,11 +360,8 @@ export function sanitizeEntryName(entryName: string): string {
   // Remove any parent directory references
   sanitized = sanitized
     .split("/")
-    .filter((part) => part !== "..")
+    .filter((part) => part !== ".." && part !== ".")
     .join("/");
-
-  // Remove any null or control characters
-  sanitized = sanitized.replace(/[\x00-\x1f\x7f]/g, "");
 
   return sanitized;
 }

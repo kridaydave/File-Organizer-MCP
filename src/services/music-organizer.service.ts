@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Music Organizer Service
  *
  * Organizes audio files into structured folders based on metadata.
@@ -8,10 +8,11 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { AudioMetadataService } from "./audio-metadata.service.js";
+import { AudioMetadataService } from "./metadata/audio.js";
 import { PathValidatorService } from "./path-validator.service.js";
 import { logger } from "../utils/logger.js";
-import { isSubPath } from "../utils/file-utils.js";
+import { isSubPath, fileExists } from "../utils/file-utils.js";
+import { safeAtomicMove } from "../core/io/atomic-move.js";
 
 /**
  * Audio metadata structure for music organization
@@ -64,6 +65,7 @@ export interface MusicOrganizationResult {
   structure: Record<string, string[]>;
   /** Tracks files that were moved (not copied) for rollback support */
   movedFiles: Array<{ originalPath: string; currentPath: string }>;
+  manifestId?: string;
 }
 
 /**
@@ -423,8 +425,8 @@ export class MusicOrganizerService {
           continue;
         }
 
-        // Resolve any file collisions
-        const finalDestination = this.resolveCollision(
+        // Resolve any file collisions (checking both in-memory and on-disk)
+        const finalDestination = await this.resolveCollision(
           operation.destinationPath,
           usedPaths,
         );
@@ -440,37 +442,24 @@ export class MusicOrganizerService {
         );
 
         if (!dryRun) {
-          // Create destination directory
-          const destDir = path.dirname(finalDestination);
-          await fs.mkdir(destDir, { recursive: true });
+          const moveRes = await safeAtomicMove(
+            operation.sourcePath,
+            finalDestination,
+            {
+              copyInsteadOfMove: config.copyInsteadOfMove,
+            },
+          );
 
-          if (config.copyInsteadOfMove) {
-            await fs.copyFile(operation.sourcePath, finalDestination);
-            logger.debug(
-              `Copied: ${operation.sourcePath} -> ${finalDestination}`,
-            );
-          } else {
-            try {
-              await fs.rename(operation.sourcePath, finalDestination);
-            } catch (renameErr) {
-              const err = renameErr as NodeJS.ErrnoException;
-              if (err.code === "EXDEV") {
-                // Cross-device move: fall back to copy + delete
-                await fs.copyFile(operation.sourcePath, finalDestination);
-                await fs.unlink(operation.sourcePath);
-              } else {
-                throw renameErr;
-              }
-            }
-            // Track moved files for rollback support
+          if (!config.copyInsteadOfMove && moveRes.rollbackAction) {
             result.movedFiles.push({
               originalPath: operation.sourcePath,
               currentPath: finalDestination,
             });
-            logger.debug(
-              `Moved: ${operation.sourcePath} -> ${finalDestination}`,
-            );
           }
+
+          logger.debug(
+            `${config.copyInsteadOfMove ? "Copied" : "Moved"}: ${operation.sourcePath} -> ${finalDestination}`,
+          );
         }
 
         result.organizedFiles++;
@@ -491,12 +480,13 @@ export class MusicOrganizerService {
 
   /**
    * Resolve file path collisions by appending (1), (2), etc.
+   * Checks both in-memory batch paths and on-disk files.
    */
-  private resolveCollision(
+  private async resolveCollision(
     destinationPath: string,
     usedPaths: Set<string>,
-  ): string {
-    if (!usedPaths.has(destinationPath)) {
+  ): Promise<string> {
+    if (!usedPaths.has(destinationPath) && !(await fileExists(destinationPath))) {
       return destinationPath;
     }
 
@@ -506,7 +496,7 @@ export class MusicOrganizerService {
 
     while (true) {
       const newPath = `${baseName} (${counter})${ext}`;
-      if (!usedPaths.has(newPath)) {
+      if (!usedPaths.has(newPath) && !(await fileExists(newPath))) {
         return newPath;
       }
       counter++;

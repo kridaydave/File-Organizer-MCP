@@ -104,5 +104,26 @@ mestuff/
 # Runtime telemetry identifier
 telemetry-id
 
+# --- Phase-0 cleanup: repo hygiene (keep root lean, not a monorepo) ---
+# Research / local experiments
+CD_res/
+CD-res/
+
+# Runtime / local data (OS config dir is the source of truth, not repo root)
+data/
+Desktop/
+Local-Model-Configs/
+
+# One-off planning artifacts (kept in docs/implementation if needed)
+implementation_plan.md.resolved
+test-templates.js
+
+# Dev skills are docs, not product (moved to docs/skills/)
+# Keep .opencode skills tracked; ignore ad-hoc local skills folder at root
+/skills/
+
+# Example user config should live in examples/, not repo root
+/config.json
+
 # Windows artifacts
 nul

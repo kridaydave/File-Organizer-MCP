@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * list_files Tool
  *
  * @module tools/file-listing
@@ -18,7 +18,7 @@ import { createErrorResponse } from "../utils/error-handler.js";
 import {
   ListFilesInputSchema,
   type ListFilesInput,
-} from "../schemas/scan.schemas.js";
+} from "../schemas/scan.js";
 
 export const listFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_list_files",
@@ -64,6 +64,7 @@ export async function handleListFiles(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 

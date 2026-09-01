@@ -260,7 +260,7 @@ describe("File Organization Tool", () => {
       expect(Array.isArray(data.errors)).toBe(true);
     });
 
-    it("should default dry_run to false when not specified", async () => {
+    it("should default dry_run to true when not specified", async () => {
       await createFile("test.txt");
 
       const result = await handleOrganizeFiles({
@@ -269,7 +269,7 @@ describe("File Organization Tool", () => {
       });
 
       const data = JSON.parse(result.content[0].text);
-      expect(data.dry_run).toBe(false);
+      expect(data.dry_run).toBe(true);
     });
   });
 });

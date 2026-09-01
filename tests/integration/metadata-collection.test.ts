@@ -6,11 +6,10 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { AudioMetadataService } from "../../src/services/audio-metadata.service.js";
-import { ImageMetadataService } from "../../src/services/image-metadata.service.js";
+import { AudioMetadataService } from "../../src/services/metadata/audio.js";
+import { ImageMetadataService } from "../../src/services/metadata/image.js";
 import { MusicOrganizerService } from "../../src/services/music-organizer.service.js";
 import { PhotoOrganizerService } from "../../src/services/photo-organizer.service.js";
-import { MetadataCacheService } from "../../src/services/metadata-cache.service.js";
 
 describe("Music Collection Tests", () => {
   let musicOrganizer: MusicOrganizerService;
@@ -332,118 +331,5 @@ describe("Photo Collection Tests", () => {
 
     expect(result.success).toBe(true);
     expect(result.organizedFiles).toBeGreaterThanOrEqual(1);
-  });
-});
-
-describe("Metadata Cache Tests", () => {
-  let cacheService: MetadataCacheService;
-  let audioMetadataService: AudioMetadataService;
-  let imageMetadataService: ImageMetadataService;
-  let testDir: string;
-
-  beforeEach(async () => {
-    cacheService = new MetadataCacheService({
-      cacheDir: path.join(process.cwd(), "tests", "temp", "metadata-cache"),
-      maxAge: 3600000,
-      maxEntries: 100,
-    });
-    audioMetadataService = new AudioMetadataService();
-    imageMetadataService = new ImageMetadataService();
-    testDir = await fs.mkdtemp(
-      path.join(process.cwd(), "tests", "temp", "cache-tests-"),
-    );
-    await cacheService.initialize();
-  });
-
-  afterEach(async () => {
-    try {
-      await fs.rm(testDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
-  });
-
-  it("should cache and retrieve metadata", async () => {
-    const audioFile = path.join(testDir, "cache-test.mp3");
-    const id3Header = Buffer.from([
-      0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1f,
-    ]);
-    const tit2Frame = Buffer.concat([
-      Buffer.from("TIT2"),
-      Buffer.from([0x00, 0x00, 0x00, 0x10]),
-      Buffer.from([0x00, 0x00]),
-      Buffer.from([0x03]),
-      Buffer.from("Cached Song"),
-    ]);
-    await fs.writeFile(
-      audioFile,
-      Buffer.concat([id3Header, tit2Frame, Buffer.alloc(31)]),
-    );
-
-    const metadata = await audioMetadataService.extract(audioFile);
-    await cacheService.set(audioFile, metadata);
-
-    const cachedEntry = await cacheService.get(audioFile);
-    expect(cachedEntry).not.toBeNull();
-  });
-
-  it("should invalidate cache on file change", async () => {
-    const testFile = path.join(testDir, "change-test.mp3");
-    const initialData = Buffer.from([
-      0x49,
-      0x44,
-      0x33,
-      0x03,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
-      0x0f,
-      ...Buffer.alloc(15),
-    ]);
-    await fs.writeFile(testFile, initialData);
-
-    const metadata1 = await audioMetadataService.extract(testFile);
-    await cacheService.set(testFile, metadata1, { filePath: testFile });
-
-    await fs.writeFile(
-      testFile,
-      Buffer.concat([initialData, Buffer.alloc(10)]),
-    );
-
-    const cachedEntry = await cacheService.get(testFile);
-    expect(cachedEntry).toBeNull();
-  });
-
-  it("should handle cache misses gracefully", async () => {
-    const nonExistentFile = path.join(testDir, "nonexistent.mp3");
-    const entry = await cacheService.get(nonExistentFile);
-    expect(entry).toBeNull();
-  });
-
-  it("should cleanup expired entries", async () => {
-    const testFile = path.join(testDir, "expire-test.mp3");
-    await fs.writeFile(
-      testFile,
-      Buffer.from([
-        0x49,
-        0x44,
-        0x33,
-        0x03,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x0f,
-        ...Buffer.alloc(15),
-      ]),
-    );
-
-    const metadata = await audioMetadataService.extract(testFile);
-    await cacheService.set(testFile, metadata);
-
-    expect(await cacheService.has(testFile)).toBe(true);
   });
 });

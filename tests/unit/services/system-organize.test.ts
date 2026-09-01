@@ -571,8 +571,7 @@ describe("SystemOrganizeService", () => {
         copyInsteadOfMove: false,
       });
 
-      expect(mockReadFile).toHaveBeenCalled();
-      expect(mockWriteFile).toHaveBeenCalled();
+      expect(mockCopyFile).toHaveBeenCalled();
       expect(mockUnlink).toHaveBeenCalled();
       expect(result.failed).toBe(0);
     });

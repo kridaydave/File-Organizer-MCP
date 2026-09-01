@@ -13,39 +13,20 @@ import {
   getUserConfigPath,
   UserConfig,
 } from "../config.js";
-import { getAutoOrganizeScheduler } from "../services/auto-organize.service.js";
 
-// Try to import chalk, fallback if not available
-let chalk: {
-  green: (s: string) => string;
-  red: (s: string) => string;
-  yellow: (s: string) => string;
-  cyan: (s: string) => string;
-  gray: (s: string) => string;
+// ANSI color helper for CLI diagnostic output
+const chalk = {
+  green: (s: string) => `\x1b[32m${s}\x1b[0m`,
+  red: (s: string) => `\x1b[31m${s}\x1b[0m`,
+  yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  cyan: (s: string) => `\x1b[36m${s}\x1b[0m`,
+  gray: (s: string) => `\x1b[90m${s}\x1b[0m`,
   bold: {
-    cyan: (s: string) => string;
-    green: (s: string) => string;
-    red: (s: string) => string;
-  };
+    cyan: (s: string) => `\x1b[1m\x1b[36m${s}\x1b[0m`,
+    green: (s: string) => `\x1b[1m\x1b[32m${s}\x1b[0m`,
+    red: (s: string) => `\x1b[1m\x1b[31m${s}\x1b[0m`,
+  },
 };
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  chalk = require("chalk");
-} catch {
-  // Fallback if chalk not available
-  chalk = {
-    green: (s: string) => s,
-    red: (s: string) => s,
-    yellow: (s: string) => s,
-    cyan: (s: string) => s,
-    gray: (s: string) => s,
-    bold: {
-      cyan: (s: string) => s,
-      green: (s: string) => s,
-      red: (s: string) => s,
-    },
-  };
-}
 
 export interface DiagnosticResult {
   name: string;
@@ -507,10 +488,10 @@ async function checkClaudeDesktopConfig(): Promise<DiagnosticResult> {
     // This reads the application config file (not external/user data), and readFileSync is appropriate
     // for synchronous diagnostic checking during startup/validation
     const configData = fs.readFileSync(configPath, "utf-8");
-    let config: any;
+    let config: Record<string, unknown>;
 
     try {
-      config = JSON.parse(configData);
+      config = JSON.parse(configData) as Record<string, unknown>;
     } catch (parseError) {
       return {
         name: "Claude Desktop Config",
@@ -525,7 +506,10 @@ async function checkClaudeDesktopConfig(): Promise<DiagnosticResult> {
     }
 
     // Check if file-organizer is configured
-    const mcpServers = config.mcpServers || {};
+    const mcpServers = (config.mcpServers ?? {}) as Record<
+      string,
+      { command?: string; args?: string[] }
+    >;
     const fileOrganizerConfig = mcpServers["file-organizer"];
 
     if (!fileOrganizerConfig) {
@@ -581,63 +565,43 @@ async function checkClaudeDesktopConfig(): Promise<DiagnosticResult> {
 }
 
 /**
- * Check 7: Auto-organize scheduler status
+ * Check 7: Watch configuration
+ *
+ * The scheduler runs as its own process (file-organizer-watch); diagnostics
+ * only inspects the shared config, never the watcher itself.
  */
 async function checkAutoOrganizeScheduler(): Promise<DiagnosticResult> {
   try {
-    const scheduler = getAutoOrganizeScheduler();
+    const config = loadUserConfig();
+    const watchList = config.watchList ?? [];
 
-    if (!scheduler) {
+    if (watchList.length === 0) {
       return {
-        name: "Auto-Organize Scheduler",
+        name: "Watch Configuration",
         success: true,
-        message: "⚠ Not initialized",
-        details: ["Scheduler not created - will be created on server start"],
-      };
-    }
-
-    const status = scheduler.getStatus();
-
-    if (!status.active) {
-      const config = loadUserConfig();
-      const hasWatchList = config.watchList && config.watchList.length > 0;
-
-      if (!hasWatchList) {
-        return {
-          name: "Auto-Organize Scheduler",
-          success: true,
-          message: "⚠ No directories configured",
-          details: [
-            "Auto-organize is not monitoring any directories",
-            "Run: npx file-organizer-mcp --setup",
-          ],
-        };
-      }
-
-      return {
-        name: "Auto-Organize Scheduler",
-        success: false,
-        message: "✗ Inactive but has configuration",
-        fix: "Check scheduler logs or restart the server",
-        details: [`Configured tasks: ${config.watchList?.length || 0}`],
+        message: "⚠ No directories configured",
+        details: [
+          "Scheduled organization is not configured",
+          'Add a watch: file-organizer-watch add <directory> "<cron>"',
+        ],
       };
     }
 
     return {
-      name: "Auto-Organize Scheduler",
+      name: "Watch Configuration",
       success: true,
-      message: `✓ Active (${status.taskCount} task${status.taskCount !== 1 ? "s" : ""})`,
-      details:
-        status.watchedDirectories.length > 0
-          ? [`Watching: ${status.watchedDirectories.join(", ")}`]
-          : undefined,
+      message: `✓ Configured (${watchList.length} task${watchList.length !== 1 ? "s" : ""})`,
+      details: [
+        `Watching: ${watchList.map((w) => w.directory).join(", ")}`,
+        "Start the watcher: file-organizer-watch",
+      ],
     };
   } catch (error) {
     return {
-      name: "Auto-Organize Scheduler",
+      name: "Watch Configuration",
       success: false,
-      message: `Error checking scheduler: ${(error as Error).message}`,
-      fix: "Restart the server or check configuration",
+      message: `Error checking watch config: ${(error as Error).message}`,
+      fix: "Check the config file or re-run setup",
     };
   }
 }

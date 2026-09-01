@@ -8,10 +8,12 @@ import path from "path";
 import { createReadStream, createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
 import * as piexif from "piexifjs";
-import { MetadataService } from "./metadata.service.js";
+import { MetadataService } from "./metadata/service.js";
 import { PathValidatorService } from "./path-validator.service.js";
 import { logger } from "../utils/logger.js";
 import { isSubPath } from "../utils/file-utils.js";
+import { safeAtomicMove } from "../core/io/atomic-move.js";
+import { readFile } from "../core/io/index.js";
 import { FileInfo } from "../types.js";
 
 // Photo file extensions supported
@@ -61,6 +63,7 @@ export interface PhotoOrganizationResult {
   structure: Record<string, number>;
   /** Tracks files that were moved (not copied) for rollback support */
   movedFiles: Array<{ originalPath: string; currentPath: string }>;
+  manifestId?: string;
 }
 
 interface PhotoFileInfo extends FileInfo {
@@ -148,10 +151,14 @@ export class PhotoOrganizerService {
       }
 
       // Organize files
+      const usedPaths = new Set<string>();
+
       for (const photo of photosWithMetadata) {
         try {
           const targetPath = await this.getTargetPath(photo, config);
-          const targetDir = path.dirname(targetPath);
+          const finalTargetPath = await this.resolveCollision(targetPath, usedPaths);
+          usedPaths.add(finalTargetPath);
+          const targetDir = path.dirname(finalTargetPath);
 
           if (dryRun) {
             // Dry run: just track the structure
@@ -160,16 +167,13 @@ export class PhotoOrganizerService {
             result.organizedFiles++;
             logger.debug("Dry run: would organize file", {
               source: photo.path,
-              target: targetPath,
+              target: finalTargetPath,
             });
             continue;
           }
 
           // Ensure target directory exists
           await fs.mkdir(targetDir, { recursive: true });
-
-          // Handle filename collisions
-          const finalTargetPath = await this.resolveCollision(targetPath);
 
           // Perform move or copy
           if (config.copyInsteadOfMove) {
@@ -229,9 +233,9 @@ export class PhotoOrganizerService {
               } catch (renameErr) {
                 const err = renameErr as NodeJS.ErrnoException;
                 if (err.code === "EXDEV") {
-                  // Cross-device move: fall back to copy + delete
-                  await fs.copyFile(photo.path, finalTargetPath);
-                  await fs.unlink(photo.path);
+                  await safeAtomicMove(photo.path, finalTargetPath, {
+                    copyInsteadOfMove: false,
+                  });
                 } else {
                   throw renameErr;
                 }
@@ -375,14 +379,14 @@ export class PhotoOrganizerService {
 
         // Extract date with fallback chain
         if (metadata?.dateTaken) {
-          photoInfo.dateTaken = new Date(metadata.dateTaken);
+          photoInfo.dateTaken = new Date(metadata.dateTaken as string);
         } else if (config.useDateCreated) {
           photoInfo.dateTaken = file.created;
         }
 
         // Extract camera model
         if (metadata?.camera) {
-          photoInfo.cameraModel = metadata.camera;
+          photoInfo.cameraModel = metadata.camera as string;
         }
 
         // Check for GPS data (would need EXIF library with GPS support)
@@ -518,9 +522,13 @@ export class PhotoOrganizerService {
 
   /**
    * Resolve filename collisions by appending (1), (2), etc.
+   * Checks both in-memory batch paths and on-disk files.
    */
-  private async resolveCollision(targetPath: string): Promise<string> {
-    if (!(await this.fileExists(targetPath))) {
+  private async resolveCollision(
+    targetPath: string,
+    usedPaths: Set<string>,
+  ): Promise<string> {
+    if (!usedPaths.has(targetPath) && !(await this.fileExists(targetPath))) {
       return targetPath;
     }
 
@@ -534,7 +542,10 @@ export class PhotoOrganizerService {
     do {
       newPath = path.join(dir, `${basename} (${counter})${ext}`);
       counter++;
-    } while (await this.fileExists(newPath));
+      if (counter > 999) {
+        throw new Error(`Too many file collisions for: ${targetPath}`);
+      }
+    } while (usedPaths.has(newPath) || (await this.fileExists(newPath)));
 
     return newPath;
   }
@@ -605,8 +616,10 @@ export class PhotoOrganizerService {
    * ensuring all path access control checks happen at the boundary of the service layer.
    */
   private async copyWithoutGPS(source: string, target: string): Promise<void> {
-    // Read the file
-    const buffer = await fs.readFile(source);
+    const readResult = await readFile(source, { encoding: null }); /* validates sensitive files */
+    const buffer = Buffer.isBuffer(readResult.data)
+      ? readResult.data
+      : Buffer.from(readResult.data);
 
     // For JPEG files, attempt to strip GPS EXIF segments
     const strippedBuffer = this.stripGPSFromBuffer(buffer);

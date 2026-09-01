@@ -17,9 +17,9 @@ describe('AutoOrganizeService', () => {
   describe('Service Lifecycle', () => {
     it('should start with no tasks initially', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -34,9 +34,9 @@ describe('AutoOrganizeService', () => {
 
     it('should be inactive before start', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -50,9 +50,9 @@ describe('AutoOrganizeService', () => {
 
     it('should return empty watched directories initially', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -68,9 +68,9 @@ describe('AutoOrganizeService', () => {
   describe('Cron Schedule Conversion', () => {
     it('should convert hourly to correct cron', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -85,9 +85,9 @@ describe('AutoOrganizeService', () => {
 
     it('should convert daily to correct cron', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -102,9 +102,9 @@ describe('AutoOrganizeService', () => {
 
     it('should convert weekly to correct cron', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -119,9 +119,9 @@ describe('AutoOrganizeService', () => {
 
     it('should default to daily for unknown schedules', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -138,9 +138,9 @@ describe('AutoOrganizeService', () => {
   describe('getStatus', () => {
     it('should return correct initial status', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -160,9 +160,9 @@ describe('AutoOrganizeService', () => {
   describe('shouldIncludeInCatchupCheck', () => {
     it('should return true when auto_organize is enabled', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -181,9 +181,9 @@ describe('AutoOrganizeService', () => {
 
     it('should return false when auto_organize is disabled', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -218,9 +218,9 @@ describe('AutoOrganizeService', () => {
 
     it('should not throw when watchList is empty', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -234,9 +234,9 @@ describe('AutoOrganizeService', () => {
 
     it('should skip directories already in runningDirectories', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const watches: WatchConfig[] = [
         {
@@ -267,9 +267,9 @@ describe('AutoOrganizeService', () => {
 
     it('should allow processing different directories even when one is running', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const dir1 = tempDir;
       const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-2-'));
@@ -323,9 +323,9 @@ describe('AutoOrganizeService', () => {
 
     it('should handle errors when catch-up fails for a directory without throwing', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const dir1 = tempDir;
       const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-2-'));
@@ -397,9 +397,9 @@ describe('AutoOrganizeService', () => {
 
     it('should return false when directory is not in watch list', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
@@ -415,9 +415,9 @@ describe('AutoOrganizeService', () => {
 
     it('should return true and run organization when directory is in watch list', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const watches: WatchConfig[] = [
         {
@@ -446,9 +446,9 @@ describe('AutoOrganizeService', () => {
 
     it('should not run if already running for directory', async () => {
       const { AutoOrganizeService } =
-        await import('../../../src/services/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/services/file-scanner.service.js');
-      const { OrganizerService } = await import('../../../src/services/organizer.service.js');
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const watches: WatchConfig[] = [
         {

@@ -57,4 +57,15 @@ describe('Category Security Tests', () => {
         const count = categorizer.setCustomRules(reservedRules);
         expect(count).toBe(0);
     });
+
+    it('should never classify JPEG, MPEG, OPENEXR as executable types', async () => {
+        const { isExecutableType, isExecutableDisguisedAsDocument } = await import('../../src/core/categorize/security.js');
+        expect(isExecutableType('JPEG')).toBe(false);
+        expect(isExecutableType('MPEG')).toBe(false);
+        expect(isExecutableType('OPENEXR')).toBe(false);
+        expect(isExecutableType('PE')).toBe(true);
+        expect(isExecutableType('EXE')).toBe(true);
+        expect(isExecutableDisguisedAsDocument('JPEG', 'photo.jpg')).toBe(false);
+        expect(isExecutableDisguisedAsDocument('PE', 'fake.jpg')).toBe(true);
+    });
 });

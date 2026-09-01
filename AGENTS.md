@@ -1,369 +1,199 @@
-# AGENTS.md
+# File Organizer MCP
 
-Development guidelines for agentic coding agents working on the File Organizer MCP project.
+File Organizer MCP is a security-hardened Model Context Protocol server for intelligent file organization. A single Node process exposes typed tools over stdio — scan, categorize, deduplicate, organize, and rollback — with 8-layer path validation on every filesystem touch.
 
-## Commands
+You can think of it as a "bring-your-own-directory" organizer that works with any MCP client (Claude Desktop, Codex, Cursor, OpenCode) without leaking paths or holding state.
 
-### Build
+## What makes File Organizer special?
 
-- `npm run build` - Compile TypeScript to JavaScript (ES2022, NodeNext modules)
-- `npm run build:watch` - Build in watch mode
-- `npm run start` - Start the compiled server (run `npm run build` first)
-- `npm run dev` - Build and start the server
-- `npm run clean` - Remove the `dist/` directory
+We have users who trust this with their real home directories. It's important we keep the things they trust as we simplify.
 
-### Test
+### 1. Security without compromise
 
-- `npm test` - Run all tests with Jest (Node.js 18+ required)
-- `npm test:watch` - Run tests in watch mode
-- `npm test:coverage` - Run tests with a coverage report
-- `npm test tests/unit/services/your-service.test.ts` - Run one test file
-- `npm run test:security` - Run the security validation suites
-- `npm run test:phase1` - Run the phase 1 security tests
+Every path goes through 8-layer validation before we touch `fs`. Whitelist + blacklist, symlink containment per-component, `O_NOFOLLOW`, atomic moves, no path leaks in errors. If a change weakens this, it's wrong.
 
-### Quality
+### 2. Simple systems over clever ones
 
-- `npm run lint` - Run ESLint on `src` and `tests`
-- `npm run lint:fix` - Auto-fix lint issues
-- `npm run format` - Format `src` with Prettier
+The core is `scan -> categorize -> plan -> move`. Prefer a straight `fs` call and a Zod parse over a framework. Don't preserve complexity just because it already exists. Don't add machinery because it looks impressive.
 
-### Agent system
+### 3. Stateless and fast
 
-- `npm run setup` - Run the interactive setup wizard
-- `npm run docs:generate` - Generate documentation from the debate system
+The MCP server is request/response. No in-memory session, no global singletons, no watchers inside the server. Tools are pure `(args, ctx) -> result`. We stream large files, batch operations, and limit concurrency. Performance regressions often come from loading whole files or holding handles too long — audit those first.
 
-## Project layout
+## A note from kriday — creator
+
+I like ambitious ideas, simple systems, and software that feels obvious. YAGNI is not a slogan — it's how we keep this small. Fight scope creep. If the churn makes the correct behavior more surprising, undo it.
+
+Channel both "measure twice, cut once" and "yagni". Honor the intent in a minimal and realistic way. If a rule below fights the task, say so loudly and get a sign-off before breaking it.
+
+## A small glossary
+
+Use this language so we stay on the same page:
+
+- **you** means the agent reading this file and changing the repo.
+- **we / maintainers** means kriday and people building this.
+- **user** means the person running the MCP server on their machine.
+- **agent / client** means the LLM or MCP client calling our tools.
+- **tool** means one MCP tool (e.g. `file_organizer_scan_directory`).
+- **service** means business logic behind a tool (scanner, categorizer, organizer).
+- **environment** means one running MCP server + its allowed directories + OS.
+- **turn** means one tool call cycle, including validation and response.
+- **K5 home** analogy: for us it's the OS config dir (`~/.config/file-organizer-mcp` / `%APPDATA%`) where `config.json` and `history.jsonl` live.
+
+## The three ways to hurt yourself
+
+1. **Touching the live home.** Never run a tool or service against the developer's real home without `validateStrictPath`. Your worktree is `/home/kriday/File-Organizer-MCP` — that's the only safe playground. Reading allowed dirs is fine; writing to `~/Documents` or `~/.config/file-organizer-mcp` for real data is not. Use `tests/sandbox/` or `os.tmpdir()` for test data.
+
+2. **Killing by pattern.** Never `pkill -f node`, `pgrep | kill`, or `kill` a PID you matched by name/path. Your own agent has this worktree path in its argv and several dev servers may be running. Kill only a PID you spawned, or the port owner from `ss -H -ltnp` after checking `/proc/<pid>/cwd` is your worktree.
+
+3. **Baking in paths.** Never hardcode `process.cwd()`, `os.homedir()`, or absolute test paths into schemas, tools, or snapshots. Allowed roots are platform-aware and user-configurable via `src/core/config/loader.ts:100` (`loadCustomAllowedDirs`). Tests that bake `/home/kriday` will fail on Windows/macOS and leak intent. Derive from `CONFIG.paths` or inject via `ValidatePathOptions`.
+
+## Hit every surface
+
+The most common defect here is a change that works for one tool and is missing everywhere else. Before calling work done, walk this list:
+
+- **Entry points.** A behavior reachable from one tool is often also reachable from `organize_files`, `preview_organization`, and `undo`. Fixing one is not fixing the feature.
+- **Tools.** `src/tools/*.ts` — each tool needs schema + handler + registration in `src/mcp/registry.ts` (one `reg()` line) + routing in `src/server.ts`. Shared logic lives in `src/core/`, `src/schemas/`.
+- **Schemas.** External input is typed in `src/schemas/`. Change the schema and the server, tests, and `API.md` all follow.
+- **Security.** Anything crossing into `fs` is typed via `PathValidatorService` and Zod. Change the validation and scanner, organizer, reader, and history logger all follow.
+- **Reverse states.** If you added a way in, add the way out and the way to see it. Organize needs preview + undo + history. Watch needs unwatch + list.
+- **Contracts.** Anything crossing the wire is a `ToolDefinition` in `src/mcp/types.ts:16`. `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) must be honest or the client will make bad decisions.
+- **Docs.** Behavior a user notices → `README.md`; structural change → `ARCHITECTURE.md`; tool shape → `API.md` + `config.schema.json`; new vocabulary → `docs/FRAMEWORK.md`.
+
+## Dev servers
+
+- `npm install` installs. If module resolution looks broken, `dist/` is stale — run `npm run build`.
+- `npm run dev` builds and starts the stdio server. `npm run build:watch` for tight loops. State defaults to the OS config dir, not the worktree.
+- `npm run setup` runs the TUI wizard (`src/tui/setup-wizard.ts:1`).
+- Don't start a second server against the same OS config dir in another terminal without knowing it — you'll get lock contention on `history.jsonl`.
+- Stop what you started, by the PID you tracked. See rule 1.
+
+## Test data
+
+An empty directory is a bad test. Seed with real shapes, but keep them in the sandbox:
+
+- Use `tests/sandbox/` or `await fs.mkdtemp(path.join(os.tmpdir(), 'test-'))` — never `~/Documents` or `~/.k5`.
+- Copy real fixtures only if needed; `src/constants/file-signatures.ts:1` has canonical signatures. Don't invent magic bytes.
+- Bring `operations.jsonl` or `config.json` only if the flow under test needs them. Copy in, never symlink. Data flows one way: into your sandbox, never back out.
+- On Windows, add a 100ms delay before `fs.rm` in `afterEach` to avoid file-lock flakes:
+
+  ```ts
+  afterEach(async () => {
+    await new Promise(r => setTimeout(r, 100));
+    await fs.rm(testDir, { recursive: true, force: true });
+  });
+  ```
+
+## Verifying
+
+- Smallest proof that the change works. `npm test tests/unit/services/your-service.test.ts` for the files you touched, targeted lint/typecheck for the scope you changed.
+- **Do not run repo-wide checks** unless asked. No `npm run test:coverage` sweep, no `npm run lint` across everything unless you changed the rule. CI owns the full suite.
+- Backend behavior changes ship with focused tests for that behavior. Services are unit-tested in isolation; tools have integration tests in `tests/integration/`.
+- The organizer is async and event-ish (history logger, rollback). Wait on receipts/awaited promises, never on `setTimeout` polling. A test that needs a sleep to pass is wrong.
+- For user-visible tool output, check both `json` and `markdown` formats — both are part of the contract.
+
+## Pull requests
+
+- Never make a PR unless the developer explicitly asks.
+- Conventional titles, plain language: `fix(organizer): atomic move now uses COPYFILE_EXCL`.
+- Body: problem in 1–2 sentences, then how you fixed it. End with the model and harness that did the work.
+- Behavior or error-message changes need a quick before/after in the description. Keep it factual, no superlatives.
+- One concern per PR. If the description says "also", split it.
+- When babysitting: poll checks/comments newer than last push, verify each finding against source, fix real ones, dismiss false positives with reason. Stay quiet when nothing is new. Stop when green on latest commit.
+
+## Plans and work artifacts
+
+- Do not commit implementation plans, research notes, or scratch files. Keep temporary material outside the worktree. `docs/implementation/` is for durable phase docs only.
+- Track active work in the GitHub issue that owns it.
+- Put durable architecture, constraints, and decisions in `ARCHITECTURE.md` and `docs/internals/`. Update those when the product changes so the next agent finds current facts, not abandoned intent.
+- A merged PR is the implementation record. Close its tracking item; don't keep a second checklist in the repo.
+
+## How it works
+
+Client sends a JSON-RPC tool call over stdio → `src/server.ts` creates the MCP server and registers `TOOLS` from `src/mcp/registry.ts` (name → handler map) → handler validates with Zod (`src/schemas/*`) then `validateStrictPath` (`src/services/path-validator.service.ts:357`) → calls a service (`scan`, `categorize`, `organize`, `hash`, `rollback`) → formats `ToolResponse` (`src/mcp/types.ts:8`) → server returns it. Services are pure and stateless; per-request `ctx` carries config and history logger. Side effects (history, backups, rollback manifests) are file-backed, not in memory.
+
+Full tour: `ARCHITECTURE.md` + `docs/FRAMEWORK.md`.
+
+## Where code lives
 
 ```
 File-Organizer-MCP/
 ├── src/
-│   ├── services/     # Business logic (path validation, organization, scanning)
-│   ├── tools/        # MCP tool implementations
-│   ├── readers/      # Secure file reading
-│   ├── schemas/      # Zod validation schemas
-│   ├── security/     # Security constants and helpers
-│   ├── tui/          # Interactive setup wizard
-│   ├── utils/        # Logger, file utilities, error handling
-│   ├── index.ts      # Entry point, exports tools and services
-│   ├── server.ts     # MCP server implementation
-│   ├── config.ts     # Configuration management
-│   ├── constants.ts  # Application constants
-│   ├── errors.ts     # Custom error classes
-│   └── types.ts      # TypeScript types
+│   ├── server.ts              # createServer() + handleToolCall() (stateless routing)
+│   ├── index.ts               # CLI entry: main() only
+│   ├── mcp/                   # registry (tool map), defineTool, context, bootstrap, cli
+│   ├── tools/                 # one file per tool group: ToolDefinition + handler
+│   ├── schemas/               # Zod input schemas: common, scan, organize, system
+│   ├── core/                  # business logic, pure + stateless
+│   │   ├── io/                # readFile(): validate → sensitive gate → fs
+│   │   ├── scan/              # scanner
+│   │   ├── categorize/        # rules, extension map, magic-byte sniff
+│   │   ├── organize/          # organizer, rename, rollback (+ manifest integrity)
+│   │   ├── hash/              # hasher, duplicate-finder
+│   │   ├── config/            # platform-aware defaults, loader, paths
+│   │   └── types/             # shared FileInfo / Organize / category types
+│   ├── services/              # facades + metadata/{image,audio} + history-logger
+│   ├── extensions/scheduler/  # cron watch daemon + watch-cli (own bin)
+│   ├── security/              # archive validation, security constants
+│   ├── tui/                   # setup wizard
+│   └── utils/                 # logger, error-handler, path-security, formatters
 ├── tests/
-│   ├── unit/         # Unit tests
-│   ├── integration/  # Integration tests
-│   └── performance/  # Performance benchmarks
-├── bin/              # Executable entry points
-├── docs/             # Design docs and the debate framework
-├── examples/         # Example configs
-├── reports/          # Analysis reports
-├── scripts/          # Build and utility scripts
-└── skills/           # Dev skills
+│   ├── unit/                  # service + util tests
+│   ├── integration/           # tool wiring tests
+│   └── performance/           # benchmarks
+├── bin/                       # file-organizer-mcp, file-organizer-setup, file-organizer-watch
+├── docs/                      # FRAMEWORK.md, implementation notes, docs/skills/
+├── examples/                  # config.strict.json, config.sandboxed.json, mcp-clients/
+└── scripts/                   # postinstall, prepare, benchmarks, security-gates/
 ```
 
-`dist/`, `node_modules/`, and `coverage/` are generated and gitignored.
+`dist/`, `node_modules/`, `coverage/`, `.jest-cache/`, `.file-organizer-*` are gitignored and generated.
 
-## Key files
+## Taste
 
-### Entry points and core
+- Complexity belongs at the validation boundary. Services stay pure, tools stay thin, handlers stay honest.
+- Inferred types over annotations. `any` is the enemy — use `unknown` + Zod.
+- Comments describe how a thing is used and move when the code moves. Use them to describe functions, not to narrate every line.
+- Don't preserve complexity just because it already exists. Don't ship machinery that looks impressive but doesn't change the answer.
+- Errors are part of the interface. Never leak internal paths; use `sanitizeErrorMessage()` (`src/utils/error-handler.ts:1`). Throw `ValidationError` / `AccessDeniedError` (`src/mcp/types.ts:63`) and let `createErrorResponse` format them.
+- If a schema or tool adds a new field, grep `tests/` and `API.md` before calling it done.
 
-- `src/index.ts` - Exports all tools and services
-- `src/server.ts` - MCP server implementation
-- `src/config.ts` - Configuration management
-- `src/constants.ts` - Application constants
-- `src/errors.ts` - Custom error classes
-- `src/types.ts` - TypeScript types
+## Commands
 
-### Services
+Quick reference you will actually use:
 
-- `src/services/path-validator.service.ts` - Path validation and security
-- `src/services/organizer.service.ts` - Core file organization
-- `src/services/file-scanner.service.ts` - File scanning
-- `src/services/categorizer.service.ts` - File categorization
-- `src/services/duplicate-finder.service.ts` - Duplicate detection
-- `src/services/rollback.service.ts` - Operation rollback
-- `src/services/history-logger.service.ts` - Operation history
+```bash
+npm run build                              # tsc to dist/
+npm run build:watch                        # watch mode
+npm run dev                                # build + start stdio server
+npm run clean                              # rm dist/
 
-### Tools
+npm test                                   # all tests (Jest, ESM)
+npm test tests/unit/services/organizer.test.ts  # single file
+npm run test:security                      # path + access control suite
+npm run test:coverage                      # with coverage
 
-- `src/tools/index.ts` - Tool exports and registration
-- `src/tools/file-organization.ts` - Main organization tool
-- `src/tools/file-duplicates.ts` - Duplicate management
-- `src/tools/file-scanning.ts` - File scanning
-- `src/tools/content-organization.ts` - Content-based organization
+npm run lint                               # eslint src + tests
+npm run lint:fix                           # auto-fix
+npm run format                             # prettier src/
 
-### Utilities and security
-
-- `src/utils/logger.ts` - Structured logging
-- `src/utils/error-handler.ts` - Error handling
-- `src/utils/file-utils.ts` - File operations
-- `src/utils/path-security.ts` - Path security
-- `src/readers/secure-file-reader.ts` - Secure file reading
-
-### Documentation
-
-- `README.md` - User-facing documentation
-- `ARCHITECTURE.md` - Technical architecture
-- `API.md` - MCP API reference
-- `docs/FRAMEWORK.md` - Multi-Shepherd Debate Framework
-
-## Code style
-
-### TypeScript
-
-- Target ES2022, NodeNext modules, strict mode.
-- Module resolution NodeNext with ESM imports.
-- Strict flags include `noUncheckedIndexedAccess`, `noImplicitReturns`, and `forceConsistentCasingInFileNames`.
-
-### Imports
-
-Use ESM imports with `.js` extensions, required by NodeNext modules:
-
-```typescript
-import { createServer } from "./server.js";
-import { logger } from "../utils/logger.js";
-import type { FileInfo } from "../types.js";
+npm run setup                              # TUI wizard
 ```
-
-Prefer path aliases for relative imports:
-
-```typescript
-import { validatePath } from "../../services/path-validator.service.js";
-```
-
-### Naming
-
-- Files: `kebab-case.ts`, for example `path-validator.service.ts`
-- Classes: `PascalCase`, for example `PathValidatorService`
-- Functions: `camelCase`, for example `validatePath`
-- Constants: `SCREAMING_SNAKE_CASE`, for example `MAX_FILE_SIZE`
-- Interfaces: `PascalCase` with a descriptive name, for example `FileInfo`
-
-### Type safety
-
-- Avoid `any`. Use a concrete type or `unknown` with validation.
-- Use type guards for runtime type checks.
-- Validate external data with Zod schemas.
-
-### Error handling
-
-Throw the custom error classes from `errors.ts`, and route responses through the standard helpers:
-
-```typescript
-import { FileOrganizerError } from "../errors.js";
-import { ValidationError } from "../errors.js";
-
-export function createErrorResponse(error: unknown): ToolResponse {
-  const errorId = crypto.randomUUID();
-  logger.error(`Error ID ${errorId}: ${error.message}`);
-
-  if (error instanceof FileOrganizerError) {
-    return error.toResponse();
-  }
-
-  return {
-    content: [
-      {
-        type: "text",
-        text: `Error: An unexpected error occurred. Error ID: ${errorId}.`,
-      },
-    ],
-  };
-}
-```
-
-### Logging
-
-Use structured logging with context:
-
-```typescript
-logger.info("File processed", {
-  filePath: filePath,
-  fileSize: fileSize,
-  processedAt: new Date(),
-});
-```
-
-Log errors with the error object attached:
-
-```typescript
-logger.error("File processing failed", {
-  filePath: filePath,
-  error: error,
-  retryCount: retryCount,
-});
-```
-
-## Testing
-
-### Structure
-
-Group tests by service or tool with `describe`, and cover each behavior in an `it`:
-
-```typescript
-describe("ServiceName", () => {
-  let service: ServiceName;
-
-  beforeEach(() => {
-    service = new ServiceName();
-  });
-
-  describe("methodName", () => {
-    it("should do something when condition", async () => {
-      const input = "test";
-      const result = await service.methodName(input);
-      expect(result).toBe(expected);
-    });
-  });
-});
-```
-
-### Utilities
-
-- `createMockLogger()` for testing logging behavior.
-- `suppressLoggerOutput()` to silence logs during tests.
-- `withMockedLogger()` to test logging.
-- Mock file system operations with `fs/promises` mocks.
-
-### Coverage
-
-- Every service method needs a unit test.
-- Integration tests cover MCP tools and service wiring.
-- Security tests cover path validation and access control.
-- Edge cases include invalid input, missing files, and permission errors.
-
-## Performance
-
-- Stream large files instead of loading them whole.
-- Do cleanup in `finally` blocks.
-- Batch file operations.
-- Use `fs/promises` for async I/O.
-- Cache metadata where it is cheap and safe.
-- Limit concurrency and rate-limit file operations.
-
-## Security
-
-Always validate paths before touching the file system:
-
-```typescript
-import { validateStrictPath } from "../services/path-validator.service.js";
-
-const validatedPath = await validateStrictPath(userPath, allowedRoots);
-if (!validatedPath) {
-  throw new AccessDeniedError(userPath);
-}
-```
-
-Validate external input with Zod:
-
-```typescript
-import { z } from "zod";
-
-const PathSchema = z.object({
-  path: z.string().min(1),
-  recursive: z.boolean().default(false),
-});
-
-const result = PathSchema.safeParse(input);
-if (!result.success) {
-  throw new ValidationError("Invalid input", result.error);
-}
-```
-
-Never expose internal paths in error messages. Use `sanitizeErrorMessage()`:
-
-```typescript
-import { sanitizeErrorMessage } from "../utils/error-handler.js";
-
-try {
-  // Operation
-} catch (error) {
-  throw new ValidationError(`Operation failed: ${sanitizeErrorMessage(error)}`);
-}
-```
-
-### Rules
-
-- Route every path operation through `PathValidatorService`.
-- Never leak internal paths in errors.
-- Respect the security modes: STRICT, SANDBOXED, UNRESTRICTED.
-- Screen out sensitive files such as `.env`, `.ssh`, passwords, and keys.
-
-## Documentation
-
-Document exported methods with JSDoc:
-
-```typescript
-/**
- * Service description
- * @param param - Parameter description
- * @returns Return value description
- * @throws Error type and conditions
- */
-```
-
-Update the matching docs with each change: `README.md` for user-facing changes, `CHANGELOG.md` for version changes, `ARCHITECTURE.md` for structural changes.
-
-## Agent system
-
-The project ships an agent framework described in [docs/FRAMEWORK.md](docs/FRAMEWORK.md). The agents:
-
-| Agent | Designation | Primary function |
-| --- | --- | --- |
-| Shepherd | The Architect | Task decomposition and planning |
-| Retriever-Beagle | The Scout | Context gathering, search, and analysis |
-| Kane | The Builder | Implementation and development |
-| Sentinel | The Gatekeeper | Security and quality assurance |
-| Bones | The Tester | Testing and validation |
-| Jonnah | The Scribe | Result synthesis and reporting |
-| Echo | The Documenter | Documentation |
-| Bloodhound | The Keeper | Backup, versioning, and restore |
-| Borzoi | The Advisor | Pattern analysis and debate intelligence |
-
-If you are assigned one of these roles, do the work and follow the security guidelines. Submit work in this format:
-
-```markdown
-# Agent: [Your Name]
-## Designation: [Your Designation]
-## Task: [Task Description]
-## Work Done:
-[Your detailed work here]
-### Confidence Score: [0-100]
-```
-
-Give a confidence score below 80 only if you plan to retry. Score yourself on how well you did the work, how well you followed the security guidelines, and whether the code is buggy or breakable.
-
-### Multi-Shepherd Debate
-
-Structured decision-making for architectural choices, with these phases: idea generation, cross-validation, conflict resolution, consensus, post-mortem. Decisions use weighted voting across the agents.
-
-### Content-based organization
-
-- Phase 1: Document content analysis (topic extraction, text analysis)
-- Phase 2: Music content analysis (genre, mood, artist relationships)
-- Phase 3: Project and context-based organization (related file grouping)
-- Excluded: image analysis and ML-based learning (security concerns)
-
-## Anti-patterns
-
-Avoid these:
-
-- Synchronous file operations in async code.
-- Exposing internal file paths in error messages.
-- Skipping input validation on external data.
-- Using `any` without validation.
-- Ignoring async and await.
 
 ## Quality gates
 
 Before submitting changes:
 
 - [ ] `npm run build` succeeds
-- [ ] `npm run lint` is clean
-- [ ] `npm test` passes
-- [ ] `npm run test:security` passes
-- [ ] New functionality has tests
-- [ ] Documentation is updated
-- [ ] Error handling is complete
-- [ ] Security guidelines are followed
+- [ ] `npm run lint` is clean for files you touched
+- [ ] `npm test` for those files passes
+- [ ] `npm run test:security` passes if you touched `path-validator` or `path-security`
+- [ ] New behavior has a test
+- [ ] Errors don't leak paths
+- [ ] Docs updated if you changed a tool shape or security rule
+
+## Additional tips
+
+- Don't verify with browsers unless the user asks — this is a stdio server, not a web app.
+- Security matters but don't over-index for maintainer-only scripts. For user-facing tools, it matters absolutely.
+- When in doubt, do less. Ship the smallest model that makes the correct behavior unsurprising.

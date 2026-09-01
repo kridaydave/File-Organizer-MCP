@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * batch_rename Tool
  *
  * @module tools/file-renaming
@@ -9,14 +9,14 @@ import { z } from "zod";
 import path from "path";
 import type { ToolDefinition, ToolResponse } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
-import { RenamingService } from "../services/renaming.service.js";
-import { BatchRenameInputSchema } from "../schemas/batch-rename.schemas.js";
+import { FileScannerService } from "../core/scan/scanner.js";
+import { RenamingService } from "../core/organize/rename.js";
+import { BatchRenameInputSchema } from "../schemas/organize.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 
 export type BatchRenameInput = z.infer<typeof BatchRenameInputSchema>;
 
-export { BatchRenameInputSchema } from "../schemas/batch-rename.schemas.js";
+export { BatchRenameInputSchema } from "../schemas/organize.js";
 export const batchRenameToolDefinition: ToolDefinition = {
   name: "file_organizer_batch_rename",
   title: "Batch Rename Files",
@@ -73,6 +73,7 @@ export async function handleBatchRename(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -106,6 +107,7 @@ export async function handleBatchRename(
               text: `Error: All provided paths are invalid.\n${errors.join("\n")}`,
             },
           ],
+          isError: true,
         };
       }
     } else if (directory) {
@@ -135,26 +137,26 @@ export async function handleBatchRename(
 
     // 2. Execute if not dry_run
     const result = await renamingService.executeRename(previews, dry_run);
+    const hasError = !dry_run && (result.statistics.failed > 0 || result.errors.length > 0);
 
     // 3. Format Output
 
     if (response_format === "json") {
+      const outputData = {
+        dry_run,
+        rules,
+        previews: dry_run ? previews : undefined, // show previews in dry run
+        result: !dry_run ? result : undefined, // show result in execution
+      };
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(
-              {
-                dry_run,
-                rules,
-                previews: dry_run ? previews : undefined, // show previews in dry run
-                result: !dry_run ? result : undefined, // show result in execution
-              },
-              null,
-              2,
-            ),
+            text: JSON.stringify(outputData, null, 2),
           },
         ],
+        structuredContent: outputData as Record<string, unknown>,
+        ...(hasError && { isError: true }),
       };
     }
 
@@ -194,6 +196,7 @@ export async function handleBatchRename(
 
     return {
       content: [{ type: "text", text: md }],
+      ...(hasError && { isError: true }),
     };
   } catch (error) {
     return createErrorResponse(error);

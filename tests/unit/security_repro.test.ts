@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { validateStrictPath } from '../../src/services/path-validator.service.js';
-import { DuplicateFinderService } from '../../src/services/duplicate-finder.service.js';
+import { DuplicateFinderService } from '../../src/core/hash/duplicate-finder.js';
 import { handleScanDirectory } from '../../src/tools/file-scanning.js';
 
 describe('Security Repro Suite (Refactored)', () => {

@@ -8,15 +8,13 @@
  * @module scripts/security-gates/sensitive-file-test
  */
 
-import { SecureFileReader } from "../../src/readers/secure-file-reader.js";
+import { readFile } from "../../src/core/io/index.js";
 import { PathValidatorService } from "../../src/services/path-validator.service.js";
-import { RateLimiter } from "../../src/services/security/rate-limiter.service.js";
-import { IAuditLogger } from "../../src/readers/secure-file-reader.js";
 import {
   SENSITIVE_PATTERNS,
   SENSITIVE_DIRECTORIES,
-  checkSensitiveFile,
-} from "../../src/readers/security/sensitive-file-patterns.js";
+  isSensitiveFile,
+} from "../../src/core/io/sensitive-files.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -51,13 +49,6 @@ const stats: SensitiveFileStats = {
   allowed: 0,
   byCategory: new Map(),
 };
-
-// Mock audit logger
-class MockAuditLogger implements IAuditLogger {
-  logOperationStart(): void {}
-  logOperationSuccess(): void {}
-  logOperationFailure(): void {}
-}
 
 /**
  * Define sensitive file test cases by category
@@ -389,24 +380,17 @@ function getSensitiveFileTestCases(): Array<{
  * Test a single sensitive file path
  */
 async function testSensitiveFile(
-  reader: SecureFileReader,
+  validator: PathValidatorService,
   filePath: string,
-  category: string,
 ): Promise<{ blocked: boolean; pattern?: string }> {
-  // First check pattern matching
-  const patternCheck = checkSensitiveFile(filePath);
-  if (!patternCheck.success) {
-    return { blocked: true, pattern: patternCheck.error?.patternMatched };
-  }
-
-  // Try to read (should fail at validation layer)
+  // Try to read via full I/O security stack (should fail at validation or sensitive check)
   try {
-    const result = await reader.read(filePath);
-    if (!result.ok) {
-      return { blocked: true };
+    const res = await readFile(filePath, { validator });
+    if (res && res.data !== undefined) {
+      return { blocked: false };
     }
-    return { blocked: false };
-  } catch (error) {
+    return { blocked: true };
+  } catch {
     return { blocked: true };
   }
 }
@@ -505,16 +489,9 @@ ${colors.blue}╔═════════════════════
 
   await setup();
 
-  // Initialize SecureFileReader
-  const pathValidator = new PathValidatorService(ALLOWED_DIR, [ALLOWED_DIR]);
-  const rateLimiter = new RateLimiter(10000, 100000);
-  const auditLogger = new MockAuditLogger();
-  const reader = new SecureFileReader(
-    pathValidator,
-    rateLimiter,
-    auditLogger,
-    1024 * 1024,
-  );
+  // Reads are scoped to the sandbox dir so only pattern/containment
+  // decisions decide the outcome.
+  const validator = new PathValidatorService(ALLOWED_DIR, [ALLOWED_DIR]);
 
   // Get test cases
   const testCases = getSensitiveFileTestCases();
@@ -537,7 +514,7 @@ ${colors.blue}╔═════════════════════
     const testCase = testCases[i];
     if (!testCase) continue;
     const { path: filePath, category, description } = testCase;
-    const result = await testSensitiveFile(reader, filePath, category);
+    const result = await testSensitiveFile(validator, filePath);
     updateStats(category, result.blocked);
 
     if (!result.blocked) {

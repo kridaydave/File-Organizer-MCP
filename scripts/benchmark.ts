@@ -17,9 +17,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { performance } from "perf_hooks";
-import { FileReaderFactory } from "../src/readers/factory.js";
-import { SecureFileReader } from "../src/readers/secure-file-reader.js";
-import { isOk } from "../src/readers/result.js";
+import { readFile } from "../src/core/io/index.js";
 
 // Benchmark configuration
 const CONFIG = {
@@ -91,7 +89,6 @@ async function main(): Promise<void> {
   const tempDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "file-reader-benchmark-"),
   );
-  const reader = FileReaderFactory.createDefault();
 
   try {
     const results: BenchmarkResult[] = [];
@@ -101,7 +98,7 @@ async function main(): Promise<void> {
 
     // Generate and benchmark each file size
     for (const sizeConfig of CONFIG.fileSizes) {
-      const result = await benchmarkFileSize(reader, tempDir, sizeConfig);
+      const result = await benchmarkFileSize(tempDir, sizeConfig);
       results.push(result);
 
       totalDuration += result.latencies.mean * result.iterations;
@@ -156,7 +153,6 @@ async function main(): Promise<void> {
 }
 
 async function benchmarkFileSize(
-  reader: SecureFileReader,
   tempDir: string,
   sizeConfig: { name: string; bytes: number },
 ): Promise<BenchmarkResult> {
@@ -168,9 +164,12 @@ async function benchmarkFileSize(
 
   // Warmup
   for (let i = 0; i < CONFIG.warmupIterations; i++) {
-    const result = await reader.read(testFile);
-    if (!isOk(result)) {
-      throw new Error(`Warmup failed: ${result.error?.message}`);
+    try {
+      await readFile(testFile);
+    } catch (error) {
+      throw new Error(`Warmup failed: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
   }
 
@@ -186,11 +185,18 @@ async function benchmarkFileSize(
   // Benchmark iterations
   for (let i = 0; i < CONFIG.iterations; i++) {
     const start = performance.now();
-    const result = await reader.read(testFile);
+    let result;
+    try {
+      result = await readFile(testFile);
+    } catch (error) {
+      throw new Error(`Read failed: ${(error as Error).message}`, {
+        cause: error,
+      });
+    }
     const end = performance.now();
 
-    if (!isOk(result)) {
-      throw new Error(`Read failed: ${result.error?.message}`);
+    if (!result) {
+      throw new Error("Read failed");
     }
 
     latencies.push(end - start);

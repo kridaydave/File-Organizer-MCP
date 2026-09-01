@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * scan_directory Tool
  *
  * @module tools/file-scanning
@@ -10,25 +10,23 @@ import type {
   ToolDefinition,
   ToolResponse,
   ScanResult,
-  ScreeningReport,
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
-import { contentScreeningService } from "../services/content-screening.service.js";
-import { createErrorResponse } from "../utils/error-handler.js";
+import { FileScannerService } from "../core/scan/scanner.js";
+import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
 import { escapeMarkdown } from "../utils/index.js";
 import {
   ScanDirectoryInputSchema,
   type ScanDirectoryInput,
-} from "../schemas/scan.schemas.js";
+} from "../schemas/scan.js";
 import { ValidationError } from "../types.js";
 
 export const scanDirectoryToolDefinition: ToolDefinition = {
   name: "file_organizer_scan_directory",
   title: "Scan Directory for Detailed Info",
   description:
-    "Scan directory and get detailed file information including size, dates, and extensions. Supports recursive scanning and security screening.",
+    "Scan directory and get detailed file information including size, dates, and extensions. Supports recursive scanning.",
   inputSchema: {
     type: "object",
     properties: {
@@ -45,11 +43,6 @@ export const scanDirectoryToolDefinition: ToolDefinition = {
         type: "number",
         description: "Maximum depth to scan",
         default: -1,
-      },
-      screen_files: {
-        type: "boolean",
-        description: "Screen files for security threats",
-        default: false,
       },
       limit: {
         type: "number",
@@ -86,6 +79,7 @@ export async function handleScanDirectory(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -93,7 +87,6 @@ export async function handleScanDirectory(
       directory,
       include_subdirs,
       max_depth,
-      screen_files,
       response_format,
       limit,
       offset,
@@ -101,10 +94,11 @@ export async function handleScanDirectory(
     const validatedPath = await validateStrictPath(directory);
     if (!validatedPath) {
       return {
+        isError: true,
         content: [
           {
             type: "text" as const,
-            text: `Error: Invalid or forbidden source path: ${directory}`,
+            text: sanitizeErrorMessage(`Error: Invalid or forbidden source path: ${directory}`),
           },
         ],
       };
@@ -130,15 +124,6 @@ export async function handleScanDirectory(
       maxDepth: max_depth,
     });
 
-    let screeningReport: ScreeningReport | undefined;
-    if (screen_files) {
-      const filePaths = allFiles.map((f) => f.path);
-      const screeningResults =
-        await contentScreeningService.screenBatch(filePaths);
-      screeningReport =
-        contentScreeningService.generateScreeningReport(screeningResults);
-    }
-
     const totalSize = allFiles.reduce((sum, file) => sum + file.size, 0);
 
     // Pagination logic
@@ -158,7 +143,6 @@ export async function handleScanDirectory(
       items: paginatedFiles,
       total_size: totalSize,
       total_size_readable: formatBytes(totalSize),
-      screening_report: screeningReport,
     };
 
     if (response_format === "json") {
@@ -171,13 +155,12 @@ export async function handleScanDirectory(
     const markdown = `### Scan Results for \`${result.directory}\`
 **Total Files:** ${result.total_count}
 **Total Size:** ${result.total_size_readable}
-**Showing:** ${result.offset + 1} - ${result.offset + result.returned_count}
+**Showing:** ${result.returned_count > 0 ? result.offset + 1 : 0} - ${result.offset + result.returned_count}
 
 ${result.items.map((f) => `- **${escapeMarkdown(f.name)}** (${formatBytes(f.size)}) - ${f.modified.toISOString().split("T")[0]}`).join("\n")}
 
 ${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more files (use offset=${result.next_offset})*` : ""}
-
-${screeningReport ? `### Security Screening Report\n${screeningReport}` : ""}`;
+`;
 
     return {
       content: [{ type: "text", text: markdown }],

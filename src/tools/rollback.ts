@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Rollback Tool
  *
  * @module tools/rollback
@@ -7,15 +7,12 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
-import { RollbackService } from "../services/rollback.service.js";
-import { createErrorResponse } from "../utils/error-handler.js";
-import { UndoLastOperationInputSchema } from "../schemas/rollback.schemas.js";
+import { RollbackService } from "../core/organize/rollback.js";
+import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
+import { UndoLastOperationInputSchema } from "../schemas/organize.js";
 
-// Singleton for now, or just new instance since it reads from disk
-const rollbackService = new RollbackService();
-
-export { UndoLastOperationInputSchema } from "../schemas/rollback.schemas.js";
-export type { UndoLastOperationInput } from "../schemas/rollback.schemas.js";
+export { UndoLastOperationInputSchema } from "../schemas/organize.js";
+export type { UndoLastOperationInput } from "../schemas/organize.js";
 export const undoLastOperationToolDefinition: ToolDefinition = {
   name: "file_organizer_undo_last_operation",
   title: "Undo Last Organization Operation",
@@ -54,38 +51,59 @@ export async function handleUndoLastOperation(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
     const { manifest_id, response_format } = parsed.data;
+
+    // Reads manifests from disk — no shared state to preserve across calls.
+    const rollbackService = new RollbackService();
 
     // Find manifest
     let targetId = manifest_id;
     if (!targetId) {
       const manifests = await rollbackService.listManifests();
       if (manifests.length === 0 || !manifests[0]) {
-        return { content: [{ type: "text", text: "No undo history found." }] };
+        return {
+          content: [{ type: "text", text: "No undo history found." }],
+          isError: true,
+        };
       }
       targetId = manifests[0].id;
     }
 
     const result = await rollbackService.rollback(targetId!);
+    const sanitizedResult = {
+      ...result,
+      errors: result.errors.map((e) => sanitizeErrorMessage(e)),
+    };
+    const hasFailures = sanitizedResult.failed > 0;
 
     if (response_format === "json") {
       return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        structuredContent: result as unknown as Record<string, unknown>,
+        content: [
+          { type: "text", text: JSON.stringify(sanitizedResult, null, 2) },
+        ],
+        structuredContent: sanitizedResult as unknown as Record<
+          string,
+          unknown
+        >,
+        ...(hasFailures && { isError: true }),
       };
     }
 
     const markdown = `### Undo Result
 **Manifest ID:** \`${targetId}\`
-✅ **Restored:** ${result.success} files
-❌ **Failed:** ${result.failed} files
+✅ **Restored:** ${sanitizedResult.success} files
+❌ **Failed:** ${sanitizedResult.failed} files
 
-${result.errors.length ? `**Errors:**\n${result.errors.map((e) => `- ${e}`).join("\n")}` : ""}
+${sanitizedResult.errors.length ? `**Errors:**\n${sanitizedResult.errors.map((e) => `- ${e}`).join("\n")}` : ""}
 `;
-    return { content: [{ type: "text", text: markdown }] };
+    return {
+      content: [{ type: "text", text: markdown }],
+      ...(hasFailures && { isError: true }),
+    };
   } catch (error) {
     return createErrorResponse(error);
   }

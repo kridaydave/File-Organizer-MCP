@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * inspect_metadata Tool
  *
  * @module tools/metadata-inspection
@@ -8,10 +8,10 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse, CategoryName } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { createErrorResponse } from "../utils/error-handler.js";
+import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
-import { InspectMetadataInputSchema } from "../schemas/metadata.schemas.js";
-import { MetadataService } from "../services/metadata.service.js";
+import { InspectMetadataInputSchema } from "../schemas/scan.js";
+import { MetadataService } from "../services/metadata/index.js";
 import * as path from "path";
 
 export type InspectMetadataInput = z.infer<typeof InspectMetadataInputSchema>;
@@ -42,7 +42,7 @@ export interface MetadataInspectionResult {
   warnings?: string[];
 }
 
-export { InspectMetadataInputSchema } from "../schemas/metadata.schemas.js";
+export { InspectMetadataInputSchema } from "../schemas/scan.js";
 export const inspectMetadataToolDefinition: ToolDefinition = {
   name: "file_organizer_inspect_metadata",
   title: "Inspect File Metadata",
@@ -81,11 +81,23 @@ export async function handleInspectMetadata(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
     const { file, response_format } = parsed.data;
     const validatedPath = await validateStrictPath(file);
+    if (!validatedPath) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: sanitizeErrorMessage(`Error: Invalid or forbidden source path: ${file}`),
+          },
+        ],
+      };
+    }
 
     // Get file stats
     const fs = await import("fs/promises");
@@ -93,8 +105,12 @@ export async function handleInspectMetadata(
 
     if (!stats.isFile()) {
       return {
+        isError: true,
         content: [
-          { type: "text", text: `Error: ${validatedPath} is not a file` },
+          {
+            type: "text",
+            text: sanitizeErrorMessage(`Error: ${validatedPath} is not a file`),
+          },
         ],
       };
     }
@@ -143,32 +159,32 @@ export async function handleInspectMetadata(
 
         if (category === "Images" && extractedMetadata) {
           if (extractedMetadata.dateTaken) {
-            result.metadata.dateTaken = extractedMetadata.dateTaken;
+            result.metadata.dateTaken = extractedMetadata.dateTaken as string;
           }
           if (extractedMetadata.camera) {
-            result.metadata.camera = extractedMetadata.camera;
+            result.metadata.camera = extractedMetadata.camera as string;
           }
           if (extractedMetadata.width && extractedMetadata.height) {
             result.metadata.dimensions = {
-              width: extractedMetadata.width,
-              height: extractedMetadata.height,
+              width: extractedMetadata.width as number,
+              height: extractedMetadata.height as number,
             };
           }
         } else if (category === "Audio" && extractedMetadata) {
           if (extractedMetadata.artist) {
-            result.metadata.artist = extractedMetadata.artist;
+            result.metadata.artist = extractedMetadata.artist as string;
           }
           if (extractedMetadata.album) {
-            result.metadata.album = extractedMetadata.album;
+            result.metadata.album = extractedMetadata.album as string;
           }
           if (extractedMetadata.title) {
-            result.metadata.title = extractedMetadata.title;
+            result.metadata.title = extractedMetadata.title as string;
           }
           if (extractedMetadata.year) {
-            result.metadata.year = extractedMetadata.year;
+            result.metadata.year = extractedMetadata.year as number;
           }
           if (extractedMetadata.duration) {
-            result.metadata.duration = extractedMetadata.duration;
+            result.metadata.duration = extractedMetadata.duration as number;
           }
         }
 
@@ -182,7 +198,7 @@ export async function handleInspectMetadata(
         }
       } catch (metadataError) {
         result.warnings?.push(
-          `Could not extract metadata: ${metadataError instanceof Error ? metadataError.message : String(metadataError)}`,
+          `Could not extract metadata: ${sanitizeErrorMessage(metadataError instanceof Error ? metadataError : String(metadataError))}`,
         );
       }
     } else {

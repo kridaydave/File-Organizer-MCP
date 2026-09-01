@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * Formatting Utilities
  */
 
@@ -18,7 +18,7 @@ export function formatBytes(bytes: number): string {
   const k = 1024;
   const sizes = ["Bytes", "KB", "MB", "GB", "TB"] as const;
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  const index = Math.min(i, sizes.length - 1);
+  const index = Math.max(0, Math.min(i, sizes.length - 1));
 
   return `${Math.round((bytes / Math.pow(k, index)) * 100) / 100} ${sizes[index]}`;
 }

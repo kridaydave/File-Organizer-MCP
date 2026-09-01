@@ -1,9 +1,10 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * File System Utilities
  */
 
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 import os from "os";
 import { logger } from "./logger.js";
@@ -162,20 +163,52 @@ export function isSubPath(parentPath: string, childPath: string): boolean {
   const normalizedParent = path.resolve(parentPath);
   const normalizedChild = path.resolve(childPath);
 
-  if (process.platform === "win32") {
-    const relative = path.relative(
-      normalizedParent.toLocaleLowerCase("en"),
-      normalizedChild.toLocaleLowerCase("en"),
-    );
+  const checkRelative = (p: string, c: string): boolean => {
+    const relative =
+      process.platform === "win32"
+        ? path.relative(
+            p.toLocaleLowerCase("en"),
+            c.toLocaleLowerCase("en"),
+          )
+        : path.relative(p, c);
     return (
       relative === "" ||
       (!relative.startsWith("..") && !path.isAbsolute(relative))
     );
+  };
+
+  if (checkRelative(normalizedParent, normalizedChild)) {
+    return true;
   }
 
-  const relative = path.relative(normalizedParent, normalizedChild);
-  return (
-    relative === "" ||
-    (!relative.startsWith("..") && !path.isAbsolute(relative))
-  );
+  // Windows: short (8.3) DOS names vs long name mismatch fallback
+  if (process.platform === "win32") {
+    try {
+      const getCanonical = (p: string): string => {
+        try {
+          return typeof fsSync.realpathSync?.native === "function"
+            ? fsSync.realpathSync.native(p)
+            : fsSync.realpathSync(p);
+        } catch {
+          return p;
+        }
+      };
+
+      const canonicalParent = getCanonical(normalizedParent);
+      const canonicalChild = getCanonical(normalizedChild);
+
+      if (
+        checkRelative(canonicalParent, canonicalChild) ||
+        checkRelative(canonicalParent, normalizedChild) ||
+        checkRelative(normalizedParent, canonicalChild)
+      ) {
+        return true;
+      }
+    } catch {
+      // Ignore resolution errors
+    }
+  }
+
+  return false;
 }
+

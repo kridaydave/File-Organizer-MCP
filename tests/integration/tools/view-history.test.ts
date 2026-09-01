@@ -113,9 +113,6 @@ jest.unstable_mockModule(
       getHistory: jest
         .fn<(query: HistoryQuery) => Promise<HistoryResult>>()
         .mockImplementation((query) => mockGetHistory(query)),
-      flushAndClose: jest
-        .fn<() => Promise<void>>()
-        .mockResolvedValue(undefined),
       getHistoryFilePath: jest.fn<() => string>().mockReturnValue(""),
     },
   }),

@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * file-management Tool (Get Categories / Set Rules)
  *
  * @module tools/file-management
@@ -8,17 +8,18 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse, CustomRule } from "../types.js";
 import { CATEGORIES } from "../constants.js";
+import { CategorizerService } from "../services/categorizer.service.js";
+import { updateUserConfig } from "../config.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import {
   GetCategoriesInputSchema,
   SetCustomRulesInputSchema,
-} from "../schemas/file-management.schemas.js";
-import { globalCategorizerService } from "../services/index.js";
+} from "../schemas/system.js";
 
 export {
   GetCategoriesInputSchema,
   SetCustomRulesInputSchema,
-} from "../schemas/file-management.schemas.js";
+} from "../schemas/system.js";
 export const getCategoriesToolDefinition: ToolDefinition = {
   name: "file_organizer_get_categories",
   title: "Get Available File Categories",
@@ -46,7 +47,7 @@ export const setCustomRulesToolDefinition: ToolDefinition = {
   name: "file_organizer_set_custom_rules",
   title: "Set Custom Organization Rules",
   description:
-    "Customize how files are categorized. Rules persist for the current session.",
+    "Customize how files are categorized. Persists custom rules to user configuration.",
   inputSchema: {
     type: "object",
     properties: {
@@ -62,6 +63,11 @@ export const setCustomRulesToolDefinition: ToolDefinition = {
           },
           required: ["category"],
         },
+      },
+      response_format: {
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
       },
     },
     required: ["rules"],
@@ -87,7 +93,7 @@ export async function handleGetCategories(
       : "markdown";
 
     const categories = { ...CATEGORIES }; // Static defaults
-    // In future we might fetch dynamic categories from globalCategorizerService if needed
+    // Custom rules affect categorization results, not the category list.
 
     if (response_format === "json") {
       return {
@@ -122,29 +128,47 @@ export async function handleSetCustomRules(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
     const { rules } = parsed.data;
 
-    // Apply to singleton
-    const appliedCount = globalCategorizerService.setCustomRules(
-      rules as CustomRule[],
+    // Schema is snake_case on the wire; CustomRule is camelCase internally.
+    // (The old singleton path cast these straight through, so filename
+    // patterns from this tool never actually matched.)
+    const normalized: CustomRule[] = rules.map((rule) => ({
+      category: rule.category,
+      ...(rule.extensions !== undefined && { extensions: rule.extensions }),
+      ...(rule.filename_pattern !== undefined && {
+        filenamePattern: rule.filename_pattern,
+      }),
+      priority: rule.priority,
+    }));
+
+    // Validate against a scratch instance, then persist the valid subset so
+    // every future request loads them from config (stateless, survives restarts).
+    const probe = new CategorizerService();
+    const validRules = normalized.filter(
+      (rule) => probe.setCustomRules([rule]) === 1,
     );
 
-    if (appliedCount === 0) {
+    if (validRules.length === 0) {
       return {
         content: [
           { type: "text", text: "No valid Custom Rules were applied." },
         ],
+        isError: true,
       };
     }
+
+    updateUserConfig({ customRules: validRules });
 
     return {
       content: [
         {
           type: "text",
-          text: `✅ Applied ${appliedCount} custom organization rules`,
+          text: `✅ Applied ${validRules.length} custom organization rules`,
         },
       ],
     };

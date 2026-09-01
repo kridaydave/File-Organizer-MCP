@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * batch_read_files Tool
  *
  * @module tools/batch-file-reader
@@ -9,15 +9,15 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
-import { BatchReadFilesInputSchema } from "../schemas/batch.schemas.js";
+import { BatchReadFilesInputSchema } from "../schemas/scan.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { FileScannerService } from "../services/file-scanner.service.js";
-import { AudioMetadataService } from "../services/audio-metadata.service.js";
-import { ImageMetadataService } from "../services/image-metadata.service.js";
-import { MetadataService } from "../services/metadata.service.js";
-import { textExtractionService } from "../services/text-extraction.service.js";
-import { createErrorResponse } from "../utils/error-handler.js";
+import { FileScannerService } from "../core/scan/scanner.js";
+import { AudioMetadataService } from "../services/metadata/index.js";
+import { ImageMetadataService } from "../services/metadata/index.js";
+import { MetadataService } from "../services/metadata/index.js";
+import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
 import { logger } from "../utils/logger.js";
+import { readFile } from "../core/io/read-file.js";
 import { formatBytes } from "../utils/formatters.js";
 import * as path from "path";
 import * as fs from "fs/promises";
@@ -32,11 +32,11 @@ export interface FileReadResult {
   category: string;
   contentType: "text" | "media" | "binary" | "unknown";
   content?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   error?: string;
 }
 
-export { BatchReadFilesInputSchema } from "../schemas/batch.schemas.js";
+export { BatchReadFilesInputSchema } from "../schemas/scan.js";
 export const batchReadFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_batch_read_files",
   title: "Batch Read Files for LLM Context",
@@ -145,7 +145,6 @@ const TEXT_EXTENSIONS = new Set([
   ".conf",
   ".config",
   ".properties",
-  ".env",
   ".pdf",
   ".docx",
   ".doc", // These need special handling but contain text
@@ -206,18 +205,20 @@ async function readTextFile(
   maxSizeBytes: number,
 ): Promise<string | undefined> {
   try {
-    const result = await textExtractionService.extract(filePath, {
-      maxFileSizeBytes: maxSizeBytes,
-      maxTextLength: 50000,
+    const result = await readFile(filePath, {
+      maxBytes: maxSizeBytes,
     });
-
-    if (result.truncated) {
-      return `${result.text}\n\n[Content truncated - original file was ${result.originalLength} characters, extracted via ${result.extractionMethod}]`;
+    const text =
+      typeof result.data === "string"
+        ? result.data
+        : result.data.toString("utf-8");
+    const MAX_CHARS = 50000;
+    if (text.length > MAX_CHARS) {
+      return `${text.slice(0, MAX_CHARS)}\n\n[Content truncated - original file was ${text.length} characters]`;
     }
-
-    return result.text;
+    return text;
   } catch (error) {
-    return `[Error reading file: ${(error as Error).message}]`;
+    return `[Access denied or unreadable: ${sanitizeErrorMessage(error instanceof Error ? error : String(error))}]`;
   }
 }
 
@@ -234,6 +235,7 @@ export async function handleBatchReadFiles(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -252,7 +254,6 @@ export async function handleBatchReadFiles(
     const scanner = new FileScannerService();
     const audioMetadataService = new AudioMetadataService();
     const imageMetadataService = new ImageMetadataService();
-    const metadataService = new MetadataService();
 
     // Get all files
     const allFiles = await scanner.getAllFiles(validatedPath, include_subdirs);
@@ -408,7 +409,7 @@ export async function handleBatchReadFiles(
           }
         }
       } catch (error) {
-        result.error = (error as Error).message;
+        result.error = sanitizeErrorMessage(error instanceof Error ? error : String(error));
       }
 
       results.push(result);

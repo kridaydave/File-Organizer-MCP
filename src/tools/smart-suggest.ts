@@ -1,5 +1,5 @@
 /**
- * File Organizer MCP Server v3.5.0
+ * File Organizer MCP Server v5.0.0
  * smart_suggest Tool
  *
  * Analyze directory health and get actionable suggestions for organization
@@ -10,18 +10,20 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
-import { SmartSuggestService } from "../services/smart-suggest.service.js";
+import {
+  SmartSuggestService,
+  type DirectoryHealthReport,
+} from "../services/smart-suggest.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { SmartSuggestInputSchema } from "../schemas/smart.schemas.js";
-import { loadUserConfig } from "../config.js";
+import { SmartSuggestInputSchema } from "../schemas/organize.js";
 
 export { SmartSuggestInputSchema };
-export type { SmartSuggestInput } from "../schemas/smart.schemas.js";
+export type { SmartSuggestInput } from "../schemas/organize.js";
 export const smartSuggestToolDefinition: ToolDefinition = {
   name: "file_organizer_smart_suggest",
   title: "Smart Suggest",
   description:
-    "Analyze directory health and get actionable suggestions for organization",
+    "Analyze a directory and provide intelligent suggestions for organization, cleanup, and deduplication based on directory health metrics.",
   inputSchema: {
     type: "object",
     properties: {
@@ -71,30 +73,13 @@ export const smartSuggestToolDefinition: ToolDefinition = {
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
+    openWorldHint: true,
   },
 };
 
-interface HealthResult {
+export interface FormattedHealthReport extends DirectoryHealthReport {
   directory: string;
-  score: number;
-  grade: string;
-  metrics: {
-    totalFiles: number;
-    totalSizeReadable: string;
-    duplicateGroups: number;
-    duplicateSpaceReadable: string;
-    unorganizedFiles: number;
-    organizationScore: number;
-    filesByCategory: string;
-  };
-  suggestions: Array<{
-    title: string;
-    description: string;
-    priority: string;
-    impact: string;
-    estimatedSavings?: string;
-  }>;
-  analyzedAt: Date;
+  analyzedAt: string;
 }
 
 export async function handleSmartSuggest(
@@ -110,6 +95,7 @@ export async function handleSmartSuggest(
             text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
           },
         ],
+        isError: true,
       };
     }
 
@@ -128,14 +114,20 @@ export async function handleSmartSuggest(
 
     const service = new SmartSuggestService();
 
-    const result = (await service.analyzeHealth(validatedPath, {
+    const report = await service.analyzeHealth(validatedPath, {
       includeSubdirs: include_subdirs,
       includeDuplicates: include_duplicates,
       maxFiles: max_files,
       timeoutSeconds: timeout_seconds,
       sampleRate: sample_rate,
       useCache: use_cache,
-    })) as unknown as HealthResult;
+    });
+
+    const result: FormattedHealthReport = {
+      ...report,
+      directory: validatedPath,
+      analyzedAt: new Date().toISOString(),
+    };
 
     if (response_format === "json") {
       return {
@@ -153,35 +145,41 @@ export async function handleSmartSuggest(
   }
 }
 
-function formatHealthReport(result: HealthResult): string {
-  const { score, grade, metrics, suggestions, analyzedAt } = result;
+function formatHealthReport(result: FormattedHealthReport): string {
+  const { score, grade, metrics, suggestions, quickWins, directory, analyzedAt } = result;
 
   let report = `# Directory Health Report\n\n`;
-  report += `**Directory:** \`${result.directory}\`\n`;
+  report += `**Directory:** \`${directory}\`\n`;
   report += `**Overall Score:** ${score}/100\n`;
   report += `**Grade:** ${grade}\n`;
-  report += `**Analyzed:** ${analyzedAt.toISOString()}\n\n`;
+  report += `**Analyzed:** ${analyzedAt}\n\n`;
 
   report += `## Metrics Breakdown\n\n`;
-  report += `| Metric | Value |\n`;
-  report += `|--------|-------|\n`;
-  report += `| Total Files | ${metrics.totalFiles.toLocaleString()} |\n`;
-  report += `| Total Size | ${metrics.totalSizeReadable} |\n`;
-  report += `| Duplicate Groups | ${metrics.duplicateGroups} |\n`;
-  report += `| Duplicate Space Wasted | ${metrics.duplicateSpaceReadable} |\n`;
-  report += `| Unorganized Files | ${metrics.unorganizedFiles.toLocaleString()} |\n`;
-  report += `| Organization Score | ${metrics.organizationScore}/100 |\n`;
-  report += `| Files by Category | ${metrics.filesByCategory} |\n\n`;
+  report += `| Metric | Score | Details |\n`;
+  report += `|--------|-------|---------|\n`;
+  report += `| File Type Entropy | ${metrics.fileTypeEntropy.score}/100 | ${metrics.fileTypeEntropy.details} |\n`;
+  report += `| Naming Consistency | ${metrics.namingConsistency.score}/100 | ${metrics.namingConsistency.details} |\n`;
+  report += `| Depth Balance | ${metrics.depthBalance.score}/100 | ${metrics.depthBalance.details} |\n`;
+  report += `| Duplicate Ratio | ${metrics.duplicateRatio.score}/100 | ${metrics.duplicateRatio.details} |\n`;
+  report += `| Misplaced Files | ${metrics.misplacedFiles.score}/100 | ${metrics.misplacedFiles.details} |\n\n`;
+
+  if (quickWins && quickWins.length > 0) {
+    report += `## Quick Wins\n\n`;
+    quickWins.forEach((win, i) => {
+      report += `${i + 1}. **${win.action}** (+${win.estimatedScoreImprovement} score) using \`${win.tool}\`\n`;
+    });
+    report += `\n`;
+  }
 
   if (suggestions.length > 0) {
     report += `## Suggestions\n\n`;
     suggestions.forEach((suggestion, i) => {
-      report += `### ${i + 1}. ${suggestion.title}\n\n`;
-      report += `${suggestion.description}\n\n`;
-      report += `**Priority:** ${suggestion.priority}\n`;
-      report += `**Impact:** ${suggestion.impact}\n`;
-      if (suggestion.estimatedSavings) {
-        report += `**Estimated Savings:** ${suggestion.estimatedSavings}\n`;
+      report += `### ${i + 1}. [${suggestion.priority.toUpperCase()}] ${suggestion.message}\n\n`;
+      if (suggestion.suggestedTool) {
+        report += `**Suggested Tool:** \`${suggestion.suggestedTool}\`\n`;
+      }
+      if (suggestion.suggestedArgs) {
+        report += `**Suggested Arguments:** \`${JSON.stringify(suggestion.suggestedArgs)}\`\n`;
       }
       report += `\n`;
     });
