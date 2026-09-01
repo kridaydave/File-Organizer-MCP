@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [5.0.0] - 2026-08-22
 
 ### Added
 
@@ -12,8 +12,6 @@
   `core/io` reader, plain text only, no new dependencies), and identifier
   markers. Content-blind files join only via a name token or marker.
   The server serves 22 tools (was 21).
-
-## [5.0.0] - 2026-08-22
 
 ### ⚠️ Breaking Changes
 
