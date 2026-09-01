@@ -111,11 +111,12 @@ file_organizer_batch_rename({
 
 ### Parameters
 
-| Parameter         | Type    | Description                              | Default    |
-| ----------------- | ------- | ---------------------------------------- | ---------- |
-| `directory`       | string  | Full path to the directory to categorize | -          |
-| `include_subdirs` | boolean | Include subdirectories                   | false      |
-| `response_format` | string  | -                                        | 'markdown' |
+| Parameter              | Type    | Description                              | Default    |
+| ---------------------- | ------- | ---------------------------------------- | ---------- |
+| `directory`            | string  | Full path to the directory to categorize | -          |
+| `include_subdirs`      | boolean | Include subdirectories                   | false      |
+| `use_content_analysis` | boolean | Enable magic-byte content inspection     | false      |
+| `response_format`      | string  | Output format (markdown/json)            | 'markdown' |
 
 ### Example
 
@@ -123,6 +124,7 @@ file_organizer_batch_rename({
 file_organizer_categorize_by_type({
   directory: "value",
   include_subdirs: true,
+  use_content_analysis: false,
   response_format: "value",
 });
 ```
@@ -295,12 +297,13 @@ file_organizer_list_files({
 
 ### Parameters
 
-| Parameter           | Type    | Description                                                                                | Default    |
-| ------------------- | ------- | ------------------------------------------------------------------------------------------ | ---------- |
-| `directory`         | string  | Full path to the directory                                                                 | -          |
-| `dry_run`           | boolean | Simulate organization                                                                      | true       |
-| `response_format`   | string  | -                                                                                          | 'markdown' |
-| `conflict_strategy` | string  | How to handle file conflicts (rename/skip/overwrite). Uses config default if not specified | -          |
+| Parameter              | Type    | Description                                                                                | Default    |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------ | ---------- |
+| `directory`            | string  | Full path to the directory                                                                 | -          |
+| `dry_run`              | boolean | Simulate organization                                                                      | true       |
+| `conflict_strategy`    | string  | How to handle file conflicts (rename/skip/overwrite). Uses config default if not specified | -          |
+| `use_content_analysis` | boolean | Enable magic-byte content inspection                                                       | false      |
+| `response_format`      | string  | Output format (markdown/json)                                                              | 'markdown' |
 
 ### Example
 
@@ -308,8 +311,9 @@ file_organizer_list_files({
 file_organizer_organize_files({
   directory: "value",
   dry_run: true,
-  response_format: "value",
   conflict_strategy: "value",
+  use_content_analysis: false,
+  response_format: "value",
 });
 ```
 
@@ -424,9 +428,9 @@ file_organizer_scan_directory({
 | `properties`       | string | -           | -       |
 | `category`         | string | -           | -       |
 | `extensions`       | array  | -           | -       |
-| `items`            | string | -           | -       |
 | `filename_pattern` | string | -           | -       |
 | `priority`         | number | -           | -       |
+| `response_format`  | string | 'json' or 'markdown' | 'markdown' |
 
 ### Example
 
@@ -437,9 +441,9 @@ file_organizer_set_custom_rules({
   properties: "value",
   category: "value",
   extensions: [],
-  items: "value",
   filename_pattern: "value",
   priority: 123,
+  response_format: "markdown",
 });
 ```
 
