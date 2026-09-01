@@ -543,7 +543,11 @@ describe('v5 Critical Regressions Gate', () => {
 
       const res = await safeAtomicMove(lower, upper);
       expect(res.success).toBe(true);
-      await expect(fs.lstat(lower)).rejects.toMatchObject({ code: 'ENOENT' });
+      // On case-insensitive filesystems lstat(lower) still resolves to the
+      // renamed file, so assert on actual directory entry names instead.
+      const entries = await fs.readdir(tempDir);
+      expect(entries).toContain('RENAME-ME.txt');
+      expect(entries).not.toContain('rename-me.txt');
       expect(await fs.readFile(upper, 'utf8')).toBe('same file');
     });
   });
