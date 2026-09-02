@@ -3,6 +3,9 @@
 Measured comparison of the lean v5 rewrite against v3.5.0 (the last release
 before it). Run on 2026-09-02, single Linux machine, both versions built and
 exercised at the **tool-handler level** — the same code an MCP client hits.
+One exception: the path-validation micro-benchmark called `validateStrictPath`
+directly, below the Zod parsing and response formatting that MCP handlers add
+on top.
 
 - **v3.5.0** = commit `faa0f99` (merge of `release/v3.5.0`)
 - **v5.0.0** = commit `3fb0e4e` (main)
@@ -83,12 +86,16 @@ duplicates or the find-duplicates-first sequence:
 The failing moves die with
 `Failed to move ... after 100 retries due to race conditions`: v3.5 moves
 with `COPYFILE_EXCL` and retries on `EEXIST` with `_1`/`_2` suffixes. The
-trigger is concurrency-dependent — larger files widen the copy window. v5's
-rewritten organizer does not have this code path and moved 3,000/3,000.
+trigger is concurrency-dependent — larger files widen the copy window.
+v5 keeps the same `COPYFILE_EXCL` non-destructive semantics
+(`src/core/io/atomic-move.ts` still maps destination collisions to `EEXIST`)
+but drops the retry-with-suffix loop: a colliding move fails fast with one
+structured error instead of being retried 100 times. In the tested
+scenarios v5 moved 3,000/3,000 with 0 errors.
 
 ## Security
 
-**Correctness is identical.** 2,000 calls per case through
+**Correctness matched for the seven tested cases.** 2,000 calls per case through
 `validateStrictPath`:
 
 | Case | v3.5.0 | v5.0.0 |
@@ -124,9 +131,24 @@ v5 runs 78 in ~10 s (56 extra adversarial/regression tests added in v5).
 
 Both versions must be built side by side, run with `NODE_ENV=test`, the
 version's repo root as cwd, and `XDG_CONFIG_HOME` redirected to a temp dir.
-Datasets go under the repo's `tests/sandbox/`. The harness called the same
-handler entry points in both versions:
-`handleScanDirectory`, `handleCategorizeByType`, `handlePreviewOrganization`,
-`handleOrganizeFiles`, `handleUndoLastOperation`, `handleFindDuplicateFiles`
-(from `dist/src/tools/`), and `validateStrictPath` (from
-`dist/src/services/path-validator.service.js`).
+Datasets go under the repo's `tests/sandbox/`.
+
+Datasets came from a seeded PRNG (mulberry32), deterministic across
+versions:
+
+- **Happy path** — seed 42: 400 files (300 flat + 20 subdirs × 5 files)
+  across 16 extensions, 1 KB–200 KB
+- **Stress tree** — seed 1337: 10×10×3 directories × 30 files
+  (9,500 files, 30 KB–1 MB, plus 500 exact-content duplicate copies)
+- **Stress flat set** — seed 777: 3,000 files, 4 KB–512 KB, of which 600
+  are exact-content copies of 500 originals
+- Happy-path numbers are medians of 5 iterations; stress and security
+  numbers are single runs. Security cases ran 2,000 `validateStrictPath`
+  calls each.
+
+The harness was a scratch script calling the same entry points in both
+versions — `handleScanDirectory`, `handleCategorizeByType`,
+`handlePreviewOrganization`, `handleOrganizeFiles`,
+`handleUndoLastOperation`, `handleFindDuplicateFiles` (from
+`dist/src/tools/`), and `validateStrictPath` (from
+`dist/src/services/path-validator.service.js`) — and was not committed.
