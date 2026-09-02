@@ -118,3 +118,7 @@ If a tool adds a way in, add the way out and the way to see it: organize ships w
 - `scripts/security-gates/` — path-traversal fuzzing, TOCTOU races, sensitive-file patterns, static analysis
 
 Tests derive all paths from `os.tmpdir()` or `tests/sandbox/`. A test that needs `sleep()` to pass is wrong; wait on receipts instead.
+
+## Performance
+
+The lean-v5 shape was benchmarked against v3.5.0 — preview/organize 12–35× faster with the content-analysis stack removed, the tested large-directory organize scenarios completing without failures where v3.5 failed them, path-validation cost unchanged. Numbers and method: `docs/benchmarks-v5-vs-v3.5.md`.
