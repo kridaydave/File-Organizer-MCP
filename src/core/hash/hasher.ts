@@ -37,6 +37,27 @@ export interface ContentIdentity {
 }
 
 /**
+ * Reject with `message` if `promise` has not settled within `timeoutMs`.
+ *
+ * The timer is always cleared, so a fast operation does not keep the event
+ * loop alive. The underlying work is abandoned, not cancelled.
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const budget = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, budget]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+/**
  * Hash Calculator Service - file hashing and duplicate detection
  */
 export class HashCalculatorService {
@@ -137,50 +158,60 @@ export class HashCalculatorService {
       return { digest, method: "full", size };
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    // Only this method opens its own handle; a caller-supplied one belongs to
+    // the caller and must not be closed here.
+    const owned =
+      typeof fileInput === "string" ? await fs.open(fileInput, "r") : null;
+    const handle = owned ?? (fileInput as fs.FileHandle);
+
     try {
-      const handle =
-        typeof fileInput === "string"
-          ? await fs.open(fileInput, "r")
-          : fileInput;
-
-      const hash = crypto.createHash("sha256");
-      // Size is part of the digest so a small file cannot collide with a
-      // sampled identity of a different length.
-      hash.update(`size:${size}\n`);
-
-      const start = Buffer.alloc(Math.min(SAMPLE_WINDOW, size));
-      await handle.read(start, 0, start.length, 0);
-      hash.update(start);
-
-      if (size > SAMPLE_WINDOW) {
-        const tail = Buffer.alloc(Math.min(SAMPLE_WINDOW, size));
-        await handle.read(
-          tail,
-          0,
-          tail.length,
-          Math.max(0, size - SAMPLE_WINDOW),
-        );
-        hash.update(tail);
-      }
-
-      return {
-        digest: `sampled:${hash.digest("hex")}`,
-        method: "sampled",
-        size,
-      };
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw new Error(
-          `Content identity timed out after ${timeoutMs}ms for a ${formatBytes(size)} file`,
-          { cause: error },
-        );
-      }
-      throw error;
+      // `handle.read` takes no AbortSignal, so the budget is enforced by
+      // racing the reads rather than by aborting them. A read that outlives
+      // the race is abandoned rather than waited on.
+      const digest = await withTimeout(
+        this.buildSampledDigest(handle, size),
+        timeoutMs,
+        `Content identity timed out after ${timeoutMs}ms for a ${formatBytes(size)} file`,
+      );
+      return { digest, method: "sampled", size };
     } finally {
-      clearTimeout(timeoutId);
+      if (owned) {
+        // The digest is already computed, so a close failure must not fail
+        // the operation.
+        await owned.close().catch(() => undefined);
+      }
     }
+  }
+
+  /**
+   * Digest an oversized file from its size plus its first and last 64KB.
+   * The caller must hold an open handle on the file.
+   */
+  private async buildSampledDigest(
+    handle: fs.FileHandle,
+    size: number,
+  ): Promise<string> {
+    const hash = crypto.createHash("sha256");
+    // Size is part of the digest so a small file cannot collide with a
+    // sampled identity of a different length.
+    hash.update(`size:${size}\n`);
+
+    const start = Buffer.alloc(Math.min(SAMPLE_WINDOW, size));
+    await handle.read(start, 0, start.length, 0);
+    hash.update(start);
+
+    if (size > SAMPLE_WINDOW) {
+      const tail = Buffer.alloc(Math.min(SAMPLE_WINDOW, size));
+      await handle.read(
+        tail,
+        0,
+        tail.length,
+        Math.max(0, size - SAMPLE_WINDOW),
+      );
+      hash.update(tail);
+    }
+
+    return `sampled:${hash.digest("hex")}`;
   }
 
   /**
@@ -198,6 +229,9 @@ export class HashCalculatorService {
     const startTime = Date.now();
     const timeoutMs = options.timeoutMs ?? 30000; // 30s default timeout
     const skipped: SkippedFile[] = [];
+    // Paths that already have an outcome, so the timeout sweep cannot report
+    // them a second time under a different reason.
+    const decided = new Set<string>();
 
     // Step 1: Pre-group by file size to avoid hashing files with unique byte counts
     const sizeGroups = new Map<number, FileWithSize[]>();
@@ -210,6 +244,7 @@ export class HashCalculatorService {
             "Empty file: every 0-byte file is trivially identical, so it carries no duplicate information.",
           ),
         );
+        decided.add(file.path);
         continue;
       }
       if (file.size > this.maxFileSize) {
@@ -220,6 +255,7 @@ export class HashCalculatorService {
             `Larger than the ${formatBytes(this.maxFileSize)} hashing cap, so its content was not compared.`,
           ),
         );
+        decided.add(file.path);
         continue;
       }
       const group = sizeGroups.get(file.size) ?? [];
@@ -244,6 +280,7 @@ export class HashCalculatorService {
             hashMap[hash] = [];
           }
           hashMap[hash].push(file);
+          decided.add(file.path);
         } catch (error) {
           logger.error(`Error hashing ${file.name}: ${(error as Error).message}`);
           skipped.push(
@@ -253,20 +290,23 @@ export class HashCalculatorService {
               `Could not be read for hashing: ${(error as Error).message}`,
             ),
           );
+          decided.add(file.path);
         }
       }
 
       if (timedOut) break;
     }
 
-    // Any file that never got hashed because the budget ran out is also a skip.
+    // Any file that still needed hashing when the budget ran out is a skip.
+    // Only groups that were actually eligible are swept: a group with fewer
+    // than two members can never hold a duplicate, so those files were
+    // excluded on purpose, not starved of budget, and reporting them as
+    // timed_out would be wrong.
     if (timedOut) {
-      const hashedPaths = new Set(
-        Object.values(hashMap).flat().map((f) => f.path),
-      );
       for (const [, candidates] of sizeGroups) {
+        if (candidates.length < 2) continue;
         for (const file of candidates) {
-          if (!hashedPaths.has(file.path)) {
+          if (!decided.has(file.path)) {
             skipped.push(
               this.describeSkip(
                 file,
@@ -274,6 +314,7 @@ export class HashCalculatorService {
                 `Not analyzed: duplicate scan exceeded its ${timeoutMs}ms budget.`,
               ),
             );
+            decided.add(file.path);
           }
         }
       }

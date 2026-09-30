@@ -132,6 +132,143 @@ describe('HashCalculatorService', () => {
             expect(scan.skipped.every(s => s.reason === 'hash_failed')).toBe(true);
         });
 
+        it('does not report unique-size files as timed_out (issue: timeout sweep)', async () => {
+            // A 0ms budget trips the timeout immediately. Unique-size files are
+            // excluded on purpose (a unique size cannot be a duplicate), so
+            // they must not be reported as starved of budget.
+            const solo = path.join(testDir, 'solo.txt');
+            const pairA = path.join(testDir, 'pairA.txt');
+            const pairB = path.join(testDir, 'pairB.txt');
+            await fs.writeFile(solo, 'x'.repeat(50));
+            await fs.writeFile(pairA, 'y'.repeat(40));
+            await fs.writeFile(pairB, 'y'.repeat(40));
+
+            const scan = await hashService.findDuplicates(
+                [
+                    { name: 'solo.txt', path: solo, size: 50 },
+                    { name: 'pairA.txt', path: pairA, size: 40 },
+                    { name: 'pairB.txt', path: pairB, size: 40 },
+                ],
+                { timeoutMs: 0 },
+            );
+
+            const soloSkips = scan.skipped.filter((s) => s.path === solo);
+            expect(soloSkips).toEqual([]);
+
+            // Only the pair members that were never hashed are reported, and
+            // each exactly once. The singleton is never swept.
+            const pairSkips = scan.skipped.filter(
+                (s) => s.path === pairA || s.path === pairB,
+            );
+            expect(pairSkips.length).toBeGreaterThan(0);
+            for (const skip of pairSkips) {
+                expect(skip.reason).toBe('timed_out');
+            }
+            expect(scan.skipped.map((s) => s.path)).not.toContain(solo);
+        });
+
+        it('never double-counts a file under two skip reasons', async () => {
+            // Interleave files that fail to hash instantly (nonexistent) with
+            // real files big enough that hashing them burns the remaining
+            // budget. That produces a hash_failed entry and then a timeout in
+            // the same pass, which is the only way to reach the sweep with an
+            // already-decided file in it.
+            const group: { name: string; path: string; size: number }[] = [];
+            const big = Buffer.alloc(4 * 1024 * 1024, 3);
+            for (let i = 0; i < 8; i++) {
+                if (i % 2 === 0) {
+                    group.push({
+                        name: `ghost${i}.bin`,
+                        path: path.join(testDir, `ghost${i}.bin`),
+                        size: big.length,
+                    });
+                } else {
+                    const p = path.join(testDir, `real${i}.bin`);
+                    await fs.writeFile(p, big);
+                    group.push({ name: `real${i}.bin`, path: p, size: big.length });
+                }
+            }
+
+            const scan = await hashService.findDuplicates(group, { timeoutMs: 1 });
+
+            const paths = scan.skipped.map((s) => s.path);
+            expect(new Set(paths).size).toBe(paths.length);
+            // Whatever the budget allowed, no path may carry two entries.
+            for (const p of new Set(paths)) {
+                expect(scan.skipped.filter((s) => s.path === p)).toHaveLength(1);
+            }
+        });
+
+        it('closes the file descriptor it opens on the string-input path', async () => {
+            // The sampled path opens its own handle when given a string. If it
+            // leaks one per call, a bulk delete exhausts the descriptor limit.
+            const service = new HashCalculatorService(8);
+            const filePath = path.join(testDir, 'leaky.bin');
+            await fs.writeFile(filePath, Buffer.alloc(256, 1));
+
+            const before = (fs as unknown as { open: unknown }).open;
+            let opened = 0;
+            let closed = 0;
+            const realOpen = (fs as unknown as { open: () => Promise<unknown> }).open
+                .bind(fs);
+
+            (fs as unknown as { open: () => Promise<unknown> }).open = async (
+                ...args: unknown[]
+            ) => {
+                opened++;
+                const handle = (await (realOpen as never as (...a: unknown[]) => Promise<{
+                    close: () => Promise<void>;
+                }>)(...(args as []))) as { close: () => Promise<void> };
+                const realClose = handle.close.bind(handle);
+                handle.close = async () => {
+                    closed++;
+                    return realClose();
+                };
+                return handle;
+            };
+
+            try {
+                for (let i = 0; i < 5; i++) {
+                    await service.calculateContentIdentity(filePath);
+                }
+            } finally {
+                (fs as unknown as { open: unknown }).open = before;
+            }
+
+            expect(opened).toBe(5);
+            expect(closed).toBe(5);
+        });
+
+        it('honours timeoutMs on the sampled path instead of ignoring it', async () => {
+            // The sampled reads take no AbortSignal, so the budget has to be
+            // enforced by racing. A read that never settles must be abandoned
+            // once the budget is gone, not awaited forever.
+            const service = new HashCalculatorService(8);
+            const filePath = path.join(testDir, 'slow.bin');
+            await fs.writeFile(filePath, Buffer.alloc(4096, 2));
+
+            const realOpen = fs.open.bind(fs);
+            jest.spyOn(fs, 'open').mockImplementation((async (
+                ...args: never[]
+            ) => {
+                const handle = (await (realOpen as never as (
+                    ...a: never[]
+                ) => Promise<{ read: () => Promise<unknown> }>)(...args)) as {
+                    read: () => Promise<unknown>;
+                };
+                handle.read = () => new Promise<never>(() => undefined);
+                return handle;
+            }) as never);
+
+            try {
+                await expect(
+                    service.calculateContentIdentity(filePath, { timeoutMs: 25 }),
+                ).rejects.toThrow(/timed out after 25ms/);
+            } finally {
+                jest.restoreAllMocks();
+            }
+        });
+
         it('returns an empty skipped list for a clean scan', async () => {
             const filePath = path.join(testDir, 'solo.txt');
             await fs.writeFile(filePath, 'unique content here');
