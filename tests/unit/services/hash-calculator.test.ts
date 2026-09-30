@@ -9,6 +9,7 @@ import {
     expectNoDuplicateGroups,
     expectAllSkippedFor,
     expectNoDuplicateSkipPaths,
+    expectSingleSkipFor,
 } from '../skipped-file-assertions.js';
 
 describe('HashCalculatorService', () => {
@@ -83,11 +84,10 @@ describe('HashCalculatorService', () => {
             ]);
 
             expectNoDuplicateGroups(scan.groups);
-            expectAllSkippedFor(scan.skipped, 'exceeds_size_cap', 1);
-            expect(scan.skipped[0].path).toBe(filePath);
-            expect(scan.skipped[0].size_bytes).toBe(64);
-            expect(scan.skipped[0].detail).toMatch(/not compared/i);
-            expect(scan.skipped_bytes).toBe(64);
+            const onlySkip = expectSingleSkipFor(scan, filePath);
+            expect(onlySkip.reason).toBe('exceeds_size_cap');
+            expect(onlySkip.size_bytes).toBe(64);
+            expect(onlySkip.detail).toMatch(/not compared/i);
         });
 
         it('still finds duplicates among small files while reporting the large ones', async () => {
@@ -119,8 +119,9 @@ describe('HashCalculatorService', () => {
             ]);
 
             expectNoDuplicateGroups(scan.groups);
-            expectAllSkippedFor(scan.skipped, 'empty_file', 1);
-            expect(scan.skipped_bytes).toBe(0);
+            const onlySkip = expectSingleSkipFor(scan, filePath);
+            expect(onlySkip.reason).toBe('empty_file');
+            expect(onlySkip.size_bytes).toBe(0);
         });
 
         it('reports unreadable files as skipped rather than logging only', async () => {

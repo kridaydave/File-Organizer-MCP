@@ -34,3 +34,22 @@ export function expectNoDuplicateSkipPaths(skipped: SkippedFile[]): void {
   const paths = skipped.map((f) => f.path);
   expect(new Set(paths).size).toBe(paths.length);
 }
+
+/**
+ * Assert the scan excluded exactly one file, and return its record.
+ *
+ * Also checks the two fields that must agree with it — the reported path and
+ * the skipped-byte total — since those are what a caller reads to decide how
+ * much of the scan to trust, and they were easy to assert inline and easy to
+ * forget.
+ */
+export function expectSingleSkipFor(
+  scan: { skipped: SkippedFile[]; skipped_bytes: number },
+  path: string,
+): SkippedFile {
+  expect(scan.skipped).toHaveLength(1);
+  const [only] = scan.skipped;
+  expect(only?.path).toBe(path);
+  expect(scan.skipped_bytes).toBe(only?.size_bytes);
+  return only as SkippedFile;
+}
