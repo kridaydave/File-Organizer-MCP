@@ -1,6 +1,6 @@
 # File Organizer MCP Server
 
-Version 5.0.0 | MCP protocol 2026-07-28 (stateless) | Node.js 18+
+Version 5.0.0 | MCP protocol 2026-07-28 (stateless) | Node.js 20+
 
 [![npm version](https://img.shields.io/badge/npm-v5.0.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
@@ -49,7 +49,7 @@ The wizard detects installed AI clients (Claude Desktop, Cursor, Windsurf, Cline
 
 ### Requirements
 
-Node.js 18 or newer.
+Node.js 20 or newer.
 
 ### After setup
 
@@ -90,7 +90,7 @@ You can ask the assistant things like:
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 
-### Full tool list
+### Full tool list (22 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
@@ -104,6 +104,7 @@ You can ask the assistant things like:
 - `file_organizer_list_files`
 - `file_organizer_organize_files`
 - `file_organizer_organize_music`
+- `file_organizer_organize_by_project`
 - `file_organizer_organize_photos`
 - `file_organizer_preview_organization`
 - `file_organizer_read_file`
@@ -342,7 +343,7 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 ### The MCP server does not appear
 
 1. Check the config file path is correct.
-2. Confirm Node.js 18 or newer: `node --version`.
+2. Confirm Node.js 20 or newer: `node --version`.
 3. Fully restart the client.
 4. Check the path in the client config file.
 

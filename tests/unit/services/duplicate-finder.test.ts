@@ -69,7 +69,7 @@ describe("DuplicateFinderService", () => {
       const file2 = await createFile("file2.txt", content);
       const file3 = await createFile("unique.txt", "unique content");
 
-      const duplicates = await duplicateFinder.findWithScoring([
+      const { groups: duplicates } = await duplicateFinder.findWithScoring([
         file1,
         file2,
         file3,
@@ -88,7 +88,7 @@ describe("DuplicateFinderService", () => {
       const docFile = await createFile("Documents/doc.txt", content);
       const dlFile = await createFile("Downloads/doc.txt", content);
 
-      const duplicates = await duplicateFinder.findWithScoring(
+      const { groups: duplicates } = await duplicateFinder.findWithScoring(
         [docFile, dlFile],
         "best_location",
       );
@@ -119,7 +119,7 @@ describe("DuplicateFinderService", () => {
       const oldFile = await createFile("old.txt", content, oldDate);
       const newFile = await createFile("new.txt", content, newDate);
 
-      const duplicates = await duplicateFinder.findWithScoring(
+      const { groups: duplicates } = await duplicateFinder.findWithScoring(
         [oldFile, newFile],
         "newest",
       );

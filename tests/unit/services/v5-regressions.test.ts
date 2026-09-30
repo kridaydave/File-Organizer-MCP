@@ -64,10 +64,13 @@ describe('v5 Critical Regressions Gate', () => {
       ];
 
       const finder = new DuplicateFinderService();
-      const result = await finder.findWithScoring(files, 'newest');
+      const { groups, skipped } = await finder.findWithScoring(files, 'newest');
 
       // 0-byte files should not form duplicate groups or be recommended for deletion
-      expect(result).toHaveLength(0);
+      expect(groups).toHaveLength(0);
+      // ...but they must be reported as skipped, never silently dropped
+      expect(skipped).toHaveLength(3);
+      expect(skipped.every((f) => f.reason === 'empty_file')).toBe(true);
     });
   });
 
