@@ -4,6 +4,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { handleFindDuplicateFiles } from '../../../src/tools/file-duplicates.js'; // Check import path
 import { handleDeleteDuplicates } from '../../../src/tools/duplicate-management.js'; // Check import path
+import { DuplicateFinderService } from '../../../src/core/hash/duplicate-finder.js';
+import { HashCalculatorService } from '../../../src/core/hash/hasher.js';
 
 describe('Duplicate Management Tools', () => {
     let testDir: string;
@@ -116,6 +118,40 @@ describe('Duplicate Management Tools', () => {
             const structured = result.structuredContent as Record<string, unknown>;
             expect(structured.manifest_id).toBeTruthy();
             expect(structured.verified).toBe(true);
+        });
+
+        it('can delete an oversized duplicate that the hash cap used to block', async () => {
+            // The delete path hashes every candidate, and calculateHash throws
+            // above the cap, so a large video could never be confirmed as a
+            // duplicate and was always refused. It now falls back to a sampled
+            // identity, which must be disclosed rather than silent.
+            const bigA = path.join(testDir, 'big-a.mp4');
+            const bigB = path.join(testDir, 'big-b.mp4');
+            const chunk = Buffer.alloc(1024, 7);
+            for (const p of [bigA, bigB]) {
+                const fd = await fs.open(p, 'w');
+                try {
+                    for (let i = 0; i < 3072; i++) await fd.write(chunk);
+                } finally {
+                    await fd.close();
+                }
+            }
+
+            // A tiny cap forces the sampled path without writing 100MB.
+            const finder = new DuplicateFinderService();
+            (finder as unknown as { hashCalculator: HashCalculatorService }).hashCalculator =
+                new HashCalculatorService(1024);
+
+            const result = await finder.deleteFiles([bigA], {
+                autoVerify: true,
+                candidateDirectories: [testDir],
+            });
+
+            expect(result.failed).toEqual([]);
+            expect(result.deleted).toContain(bigA);
+            // The weaker check must be reported, never implied. Only the file
+            // that was actually deleted belongs in the list.
+            expect(result.partiallyVerified).toEqual([bigA]);
         });
 
         it('honours verify_before_delete: false as an explicit opt-out', async () => {

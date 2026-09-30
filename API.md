@@ -156,11 +156,17 @@ file_organizer_categorize_by_type({
 | `failed_count`  | number | Files refused or errored                                 |
 | `verified`      | boolean | Whether the surviving-copy check ran                     |
 | `manifest_id`   | string | Pass to `file_organizer_undo_last_operation` to restore   |
+| `partially_verified_files` | array | Deleted files whose check used a sampled identity (see below) |
 
 Verification searches each file's parent and grandparent directory by default.
 When a surviving copy lives elsewhere, pass its directory in
 `candidate_directories`, otherwise it will be treated as a last copy and the
 deletion refused.
+
+Files above the 100MB hashing cap cannot be fully hashed, so their surviving-copy
+check compares size plus the first and last 64KB instead of the whole file. Those
+files are listed in `partially_verified_files`. That is a weaker check, not proof
+of equality, and it is reported rather than implied.
 
 ### Example
 

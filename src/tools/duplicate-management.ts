@@ -249,6 +249,7 @@ export async function handleDeleteDuplicates(
       failures: result.failed,
       verified: verify_before_delete,
       manifest_id: result.manifestPath ?? null,
+      partially_verified_files: result.partiallyVerified ?? [],
     };
     const hasFailures = output.failed_count > 0;
 
@@ -265,6 +266,7 @@ export async function handleDeleteDuplicates(
 ❌ **Failed:** ${output.failed_count} files
 ${output.verified ? "🔎 **Verified:** each file was hashed and confirmed to have a surviving copy" : "⚠️ **Unverified:** deletion ran without confirming a surviving copy exists"}
 
+${output.partially_verified_files.length > 0 ? `\n🟡 **Partially verified:** ${output.partially_verified_files.length} file(s) exceed the hashing size cap, so their surviving-copy check compared size plus the first and last 64KB rather than the full content. Treat this as a weaker check, not proof of equality.\n` : ""}
 ${output.manifest_id ? `↩️ **Recoverable:** pass manifest_id \`${output.manifest_id}\` to \`file_organizer_undo_last_operation\` to restore the deleted files.\n` : ""}
 ${output.failures.length > 0 ? `**Failures:**\n${output.failures.map((f) => `- ${f.path}: ${f.error}`).join("\n")}` : ""}
 `;

@@ -57,6 +57,12 @@ export interface DeletionResult {
   deleted: string[];
   failed: { path: string; error: string }[];
   manifestPath?: string;
+  /**
+   * Files whose surviving-copy check used a sampled identity (size + first and
+   * last 64KB) because the file is over the hashing size cap. Non-empty means
+   * the check was weaker than a full-content comparison.
+   */
+  partiallyVerified?: string[];
 }
 
 import { safeAtomicMove } from "../io/atomic-move.js";
@@ -256,11 +262,13 @@ export class DuplicateFinderService {
     }
 
     const rollbackActions: RollbackAction[] = [];
+    // Files confirmed readable, tracked by the identity method used to read them.
+    let filesToProcess: string[] = [];
+    const sampledPaths = new Set<string>();
 
     // 2. Verify files are accessible and can be hashed (basic safety checks)
     // Note: We trust that user has identified duplicates via analyze_duplicates
     // We just ensure files exist, are readable, and pass security validation
-    let filesToProcess: string[] = [];
     for (const filePath of uniquePaths) {
       let handle: fs.FileHandle | undefined;
       try {
@@ -272,8 +280,15 @@ export class DuplicateFinderService {
         const validator = this.pathValidator;
         handle = await validator.openAndValidateFile(filePath);
 
-        // Verify file can be read/hashed
-        await this.hashCalculator.calculateHash(handle);
+        // Verify the file can actually be read. Oversized files fall back to a
+        // sampled identity rather than being refused outright, so a large
+        // duplicate can still be deleted; the weaker check is reported back.
+        const identity = await this.hashCalculator.calculateContentIdentity(
+          handle,
+        );
+        if (identity.method === "sampled") {
+          sampledPaths.add(filePath);
+        }
 
         filesToProcess.push(filePath);
       } catch (error) {
@@ -301,6 +316,9 @@ export class DuplicateFinderService {
 
       // Only proceed with valid files
       filesToProcess = verification.valid;
+      for (const path of verification.sampled) {
+        sampledPaths.add(path);
+      }
     }
 
     // 3. Delete (Move to Backup) - only process files that passed validation
@@ -345,6 +363,14 @@ export class DuplicateFinderService {
       result.manifestPath = manifestId;
     }
 
+    // Only report files that were actually deleted. `sampledPaths` also holds
+    // survivors that were scanned during verification, and listing those would
+    // read as though they were removed.
+    const deletedSampled = result.deleted.filter((p) => sampledPaths.has(p));
+    if (deletedSampled.length > 0) {
+      result.partiallyVerified = deletedSampled;
+    }
+
     return result;
   }
 
@@ -359,9 +385,14 @@ export class DuplicateFinderService {
   private async verifyDuplicatesExist(
     filesToDelete: string[],
     candidateDirectories: string[] = [],
-  ): Promise<{ valid: string[]; invalid: { path: string; error: string }[] }> {
+  ): Promise<{
+    valid: string[];
+    invalid: { path: string; error: string }[];
+    sampled: Set<string>;
+  }> {
     const valid: string[] = [];
     const invalid: { path: string; error: string }[] = [];
+    const sampled = new Set<string>();
 
     // Collect all directories to scan
     const dirsToScan = new Set<string>(candidateDirectories);
@@ -387,12 +418,17 @@ export class DuplicateFinderService {
           try {
             const validator = this.pathValidator;
             handle = await validator.openAndValidateFile(file.path);
-            const hash = await this.hashCalculator.calculateHash(handle);
-
-            if (!hashToFiles.has(hash)) {
-              hashToFiles.set(hash, []);
+            const identity = await this.hashCalculator.calculateContentIdentity(
+              handle,
+            );
+            if (identity.method === "sampled") {
+              sampled.add(file.path);
             }
-            hashToFiles.get(hash)!.push(file.path);
+
+            if (!hashToFiles.has(identity.digest)) {
+              hashToFiles.set(identity.digest, []);
+            }
+            hashToFiles.get(identity.digest)!.push(file.path);
           } catch (error) {
             logger.debug(
               `Skipping file during verification: ${file.path}`,
@@ -425,9 +461,14 @@ export class DuplicateFinderService {
       try {
         const validator = this.pathValidator;
         handle = await validator.openAndValidateFile(filePath);
-        const hash = await this.hashCalculator.calculateHash(handle);
+        const identity = await this.hashCalculator.calculateContentIdentity(
+          handle,
+        );
+        if (identity.method === "sampled") {
+          sampled.add(filePath);
+        }
 
-        const remainingCopies = hashToFiles.get(hash) || [];
+        const remainingCopies = hashToFiles.get(identity.digest) || [];
 
         if (remainingCopies.length === 0) {
           invalid.push({
@@ -457,6 +498,6 @@ export class DuplicateFinderService {
       }
     }
 
-    return { valid, invalid };
+    return { valid, invalid, sampled };
   }
 }

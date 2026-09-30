@@ -19,6 +19,13 @@
   Verification now defaults to on. The tool also reports `verified` and returns
   `manifest_id` in its response, which it previously withheld, so a caller had no
   way to reach the undo tool for a deletion it had just performed.
+- **Oversized duplicates could never be deleted** — the delete path hashed every
+  candidate, and `calculateHash` throws above the 100MB cap, so a large video or
+  ISO was always refused with "Cannot verify: File exceeds maximum size for
+  hashing" even when a genuine copy existed. Oversized files now fall back to a
+  size + first/last 64KB identity. Because that is a weaker check than a full
+  hash, affected deletions are listed in `partially_verified_files` and flagged in
+  the markdown report rather than being presented as fully verified.
 - **Documentation drift** — README claimed Node 18 while `package.json` requires
   Node 20, and the README tool list was missing `file_organizer_organize_by_project`
   (21 listed against 22 registered). A new `docs-tool-list.test.ts` guard reads

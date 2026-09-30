@@ -17,6 +17,25 @@ import { MAX_FILE_SIZE } from "../../config.js";
 import { formatBytes } from "../../utils/formatters.js";
 import { logger } from "../../utils/logger.js";
 
+/** Bytes read from each end of an oversized file when sampling. */
+const SAMPLE_WINDOW = 64 * 1024;
+
+/**
+ * How a content identity was derived.
+ *
+ * - `full`     — the entire file was hashed. Equality is proven.
+ * - `sampled`  — only the first and last 64KB plus the size were hashed.
+ *                Two different files could still share this digest, so it is
+ *                a weaker signal, never a proof of equality.
+ */
+export type ContentIdentityMethod = "full" | "sampled";
+
+export interface ContentIdentity {
+  digest: string;
+  method: ContentIdentityMethod;
+  size: number;
+}
+
 /**
  * Hash Calculator Service - file hashing and duplicate detection
  */
@@ -84,6 +103,83 @@ export class HashCalculatorService {
           setTimeout(() => resolve(), 100);
         });
       }
+    }
+  }
+
+  /**
+   * Content identity that works at any file size.
+   *
+   * `calculateHash` throws above the size cap, which made oversized files
+   * impossible to verify before deleting: the delete path hashed every
+   * candidate, so a 4GB video could never be confirmed as a duplicate and
+   * was refused. This falls back to size + first/last 64KB for those files.
+   *
+   * The fallback is a weaker signal than a full hash, so the returned `method`
+   * says which one was used and callers must not treat `sampled` as proof of
+   * equality. Used for "does a surviving copy exist" questions, where a
+   * false positive is recoverable via the deletion manifest.
+   */
+  async calculateContentIdentity(
+    fileInput: string | fs.FileHandle,
+    options: { timeoutMs?: number } = {},
+  ): Promise<ContentIdentity> {
+    const timeoutMs = options.timeoutMs ?? 60000;
+
+    let size: number;
+    if (typeof fileInput === "string") {
+      size = (await fs.stat(fileInput)).size;
+    } else {
+      size = (await fileInput.stat()).size;
+    }
+
+    if (size <= this.maxFileSize) {
+      const digest = await this.calculateHash(fileInput, options);
+      return { digest, method: "full", size };
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const handle =
+        typeof fileInput === "string"
+          ? await fs.open(fileInput, "r")
+          : fileInput;
+
+      const hash = crypto.createHash("sha256");
+      // Size is part of the digest so a small file cannot collide with a
+      // sampled identity of a different length.
+      hash.update(`size:${size}\n`);
+
+      const start = Buffer.alloc(Math.min(SAMPLE_WINDOW, size));
+      await handle.read(start, 0, start.length, 0);
+      hash.update(start);
+
+      if (size > SAMPLE_WINDOW) {
+        const tail = Buffer.alloc(Math.min(SAMPLE_WINDOW, size));
+        await handle.read(
+          tail,
+          0,
+          tail.length,
+          Math.max(0, size - SAMPLE_WINDOW),
+        );
+        hash.update(tail);
+      }
+
+      return {
+        digest: `sampled:${hash.digest("hex")}`,
+        method: "sampled",
+        size,
+      };
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(
+          `Content identity timed out after ${timeoutMs}ms for a ${formatBytes(size)} file`,
+          { cause: error },
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
