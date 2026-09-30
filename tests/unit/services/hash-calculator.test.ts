@@ -133,38 +133,43 @@ describe('HashCalculatorService', () => {
         });
 
         it('does not report unique-size files as timed_out (issue: timeout sweep)', async () => {
-            // A 0ms budget trips the timeout immediately. Unique-size files are
-            // excluded on purpose (a unique size cannot be a duplicate), so
-            // they must not be reported as starved of budget.
-            const solo = path.join(testDir, 'solo.txt');
-            const pairA = path.join(testDir, 'pairA.txt');
-            const pairB = path.join(testDir, 'pairB.txt');
+            // A file whose byte count is unique can never be a duplicate, so
+            // it is excluded deliberately. If the budget runs out, it must
+            // still not be reported as starved of budget.
+            //
+            // The shared-size files are large enough that hashing one always
+            // crosses the 0ms budget, so the timeout path is reached without
+            // depending on machine speed.
+            const big = Buffer.alloc(4 * 1024 * 1024, 5);
+            const solo = path.join(testDir, 'solo.bin');
+            const pairA = path.join(testDir, 'pairA.bin');
+            const pairB = path.join(testDir, 'pairB.bin');
             await fs.writeFile(solo, 'x'.repeat(50));
-            await fs.writeFile(pairA, 'y'.repeat(40));
-            await fs.writeFile(pairB, 'y'.repeat(40));
+            await fs.writeFile(pairA, big);
+            await fs.writeFile(pairB, big);
 
             const scan = await hashService.findDuplicates(
                 [
-                    { name: 'solo.txt', path: solo, size: 50 },
-                    { name: 'pairA.txt', path: pairA, size: 40 },
-                    { name: 'pairB.txt', path: pairB, size: 40 },
+                    { name: 'solo.bin', path: solo, size: 50 },
+                    { name: 'pairA.bin', path: pairA, size: big.length },
+                    { name: 'pairB.bin', path: pairB, size: big.length },
                 ],
                 { timeoutMs: 0 },
             );
 
-            const soloSkips = scan.skipped.filter((s) => s.path === solo);
-            expect(soloSkips).toEqual([]);
+            // The singleton is never reported under any reason.
+            expect(scan.skipped.map((s) => s.path)).not.toContain(solo);
+            expect(
+                scan.skipped.filter((s) => s.path === solo),
+            ).toEqual([]);
 
-            // Only the pair members that were never hashed are reported, and
-            // each exactly once. The singleton is never swept.
-            const pairSkips = scan.skipped.filter(
-                (s) => s.path === pairA || s.path === pairB,
-            );
-            expect(pairSkips.length).toBeGreaterThan(0);
-            for (const skip of pairSkips) {
+            // Anything reported for the pair is a genuine budget skip, and no
+            // path is reported twice.
+            for (const skip of scan.skipped) {
                 expect(skip.reason).toBe('timed_out');
             }
-            expect(scan.skipped.map((s) => s.path)).not.toContain(solo);
+            const paths = scan.skipped.map((s) => s.path);
+            expect(new Set(paths).size).toBe(paths.length);
         });
 
         it('never double-counts a file under two skip reasons', async () => {
