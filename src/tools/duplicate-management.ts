@@ -10,7 +10,7 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
 import { DuplicateFinderService } from "../core/hash/duplicate-finder.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { formatBytes } from "../utils/formatters.js";
+import { formatBytes, renderSkippedNotice } from "../utils/formatters.js";
 import {
   AnalyzeDuplicatesInputSchema,
   DeleteDuplicatesInputSchema,
@@ -59,7 +59,7 @@ export const deleteDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_delete_duplicates",
   title: "Delete Duplicate Files",
   description:
-    "Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed, so a last copy is never deleted. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.",
+    "Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed. The search covers each candidate's parent and grandparent directory plus any candidate_directories you pass, so a copy kept outside those directories is not found and the deletion is refused; pass its directory if the surviving copy lives elsewhere. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.",
   inputSchema: {
     type: "object",
     properties: {
@@ -69,14 +69,14 @@ export const deleteDuplicatesToolDefinition: ToolDefinition = {
         type: "boolean",
         default: true,
         description:
-          "Hash each candidate and refuse to delete a file with no surviving copy (default true)",
+          "Hash each candidate and refuse to delete a file with no surviving copy in the searched directories (default true)",
       },
       candidate_directories: {
         type: "array",
         items: { type: "string" },
         default: [],
         description:
-          "Extra directories to search for surviving copies during verification",
+          "Extra directories to search for surviving copies during verification. Without these, only each candidate's parent and grandparent directory are searched, so a copy kept elsewhere is not found and the deletion is refused.",
       },
       response_format: {
         type: "string",
@@ -165,21 +165,6 @@ export async function handleAnalyzeDuplicates(
       };
     }
 
-    const skippedNotice =
-      analysis.skipped.length > 0
-        ? `\n⚠️ **Not analyzed: ${analysis.skipped.length} file(s)** (${formatBytes(analysis.skipped_bytes)}) — the analysis above is partial.\n` +
-          analysis.skipped
-            .slice(0, 20)
-            .map(
-              (f) =>
-                `- \`${f.path}\` (${formatBytes(f.size_bytes)}) — ${f.detail}`,
-            )
-            .join("\n") +
-          (analysis.skipped.length > 20
-            ? `\n- *… and ${analysis.skipped.length - 20} more (full list in the \`skipped\` array of the JSON response)*`
-            : "")
-        : "";
-
     const markdown = `### Duplicate Analysis for \`${directory}\`
 **Strategy:** ${recommendation_strategy}
 **Wasted Space:** ${summary.total_wasted_space_readable}
@@ -200,7 +185,11 @@ ${g.files
   .join("\n")}
 `,
   )
-  .join("\n")}${skippedNotice}
+  .join("\n")}${renderSkippedNotice(
+    analysis.skipped,
+    analysis.skipped_bytes,
+    "the analysis above is partial.",
+  )}
 `;
     return { content: [{ type: "text", text: markdown }] };
   } catch (error) {

@@ -44,3 +44,42 @@ export function formatDuration(ms: number): string {
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${(ms / 60000).toFixed(1)}m`;
 }
+
+/** How many skipped files to name before deferring to the full JSON array. */
+const SKIP_NOTICE_LIMIT = 20;
+
+/**
+ * Render the "these files were not analyzed" block that every duplicate tool
+ * appends, so a partial analysis is never read as an exhaustive one.
+ *
+ * Shared by the analyze and find-duplicates handlers: the wording has to match
+ * between them, because a caller comparing the two responses should not have to
+ * work out whether the same skip was described differently.
+ *
+ * @param skipped - Files excluded from analysis, each with a user-facing detail
+ * @param skippedBytes - Total size of the excluded files
+ * @param consequence - How the caller should read the surrounding results
+ * @returns Markdown block, or an empty string when nothing was skipped
+ */
+export function renderSkippedNotice(
+  skipped: readonly { path: string; size_bytes: number; detail: string }[],
+  skippedBytes: number,
+  consequence: string,
+): string {
+  if (skipped.length === 0) return "";
+
+  const lines = [
+    `⚠️ **Not analyzed: ${skipped.length} file(s)** (${formatBytes(skippedBytes)}) — ${consequence}`,
+    ...skipped
+      .slice(0, SKIP_NOTICE_LIMIT)
+      .map((f) => `- \`${f.path}\` (${formatBytes(f.size_bytes)}) — ${f.detail}`),
+  ];
+
+  if (skipped.length > SKIP_NOTICE_LIMIT) {
+    lines.push(
+      `- *… and ${skipped.length - SKIP_NOTICE_LIMIT} more (full list in the \`skipped\` array of the JSON response)*`,
+    );
+  }
+
+  return `\n\n${lines.join("\n")}\n`;
+}

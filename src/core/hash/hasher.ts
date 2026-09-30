@@ -215,6 +215,83 @@ export class HashCalculatorService {
   }
 
   /**
+   * Sort files into buckets by byte length, recording why any file cannot be
+   * compared at all.
+   *
+   * Files that cannot be hashed (empty, or over the cap) never reach the hash
+   * loop, so they are recorded here as skipped. A file with a unique byte
+   * length is deliberately *not* recorded: it is correctly excluded, since
+   * nothing can share its length, and reporting it would imply a blind spot
+   * that does not exist.
+   */
+  private groupByComparableSize(
+    files: FileWithSize[],
+    skipped: SkippedFile[],
+    decided: Set<string>,
+  ): Map<number, FileWithSize[]> {
+    const sizeGroups = new Map<number, FileWithSize[]>();
+
+    for (const file of files) {
+      if (file.size <= 0) {
+        skipped.push(
+          this.describeSkip(
+            file,
+            "empty_file",
+            "Empty file: every 0-byte file is trivially identical, so it carries no duplicate information.",
+          ),
+        );
+        decided.add(file.path);
+        continue;
+      }
+
+      if (file.size > this.maxFileSize) {
+        skipped.push(
+          this.describeSkip(
+            file,
+            "exceeds_size_cap",
+            `Larger than the ${formatBytes(this.maxFileSize)} hashing cap, so its content was not compared.`,
+          ),
+        );
+        decided.add(file.path);
+        continue;
+      }
+
+      const group = sizeGroups.get(file.size) ?? [];
+      group.push(file);
+      sizeGroups.set(file.size, group);
+    }
+
+    return sizeGroups;
+  }
+
+  /**
+   * Record every file that still needed hashing when the budget ran out.
+   *
+   * Only groups that were eligible are swept. A group with fewer than two
+   * members can never hold a duplicate, so those files were excluded on
+   * purpose, not starved of budget, and reporting them as timed_out would be
+   * wrong. Paths already settled are skipped so no file is reported twice
+   * under two different reasons.
+   */
+  private recordTimedOut(
+    sizeGroups: Map<number, FileWithSize[]>,
+    skipped: SkippedFile[],
+    decided: Set<string>,
+    detail: string,
+  ): void {
+    for (const [, candidates] of sizeGroups) {
+      if (candidates.length < 2) continue;
+
+      for (const file of candidates) {
+        if (decided.has(file.path)) continue;
+
+        skipped.push(this.describeSkip(file, "timed_out", detail));
+        decided.add(file.path);
+      }
+    }
+  }
+
+  /**
    * Find duplicate files based on content hash.
    *
    * Files that cannot be compared are NOT dropped silently: every one is
@@ -233,37 +310,8 @@ export class HashCalculatorService {
     // them a second time under a different reason.
     const decided = new Set<string>();
 
-    // Step 1: Pre-group by file size to avoid hashing files with unique byte counts
-    const sizeGroups = new Map<number, FileWithSize[]>();
-    for (const file of files) {
-      if (file.size <= 0) {
-        skipped.push(
-          this.describeSkip(
-            file,
-            "empty_file",
-            "Empty file: every 0-byte file is trivially identical, so it carries no duplicate information.",
-          ),
-        );
-        decided.add(file.path);
-        continue;
-      }
-      if (file.size > this.maxFileSize) {
-        skipped.push(
-          this.describeSkip(
-            file,
-            "exceeds_size_cap",
-            `Larger than the ${formatBytes(this.maxFileSize)} hashing cap, so its content was not compared.`,
-          ),
-        );
-        decided.add(file.path);
-        continue;
-      }
-      const group = sizeGroups.get(file.size) ?? [];
-      group.push(file);
-      sizeGroups.set(file.size, group);
-    }
+    const sizeGroups = this.groupByComparableSize(files, skipped, decided);
 
-    // Step 2: Only hash files that share identical byte length with at least one other file
     let timedOut = false;
     for (const [, candidates] of sizeGroups) {
       if (candidates.length < 2) continue;
@@ -297,27 +345,13 @@ export class HashCalculatorService {
       if (timedOut) break;
     }
 
-    // Any file that still needed hashing when the budget ran out is a skip.
-    // Only groups that were actually eligible are swept: a group with fewer
-    // than two members can never hold a duplicate, so those files were
-    // excluded on purpose, not starved of budget, and reporting them as
-    // timed_out would be wrong.
     if (timedOut) {
-      for (const [, candidates] of sizeGroups) {
-        if (candidates.length < 2) continue;
-        for (const file of candidates) {
-          if (!decided.has(file.path)) {
-            skipped.push(
-              this.describeSkip(
-                file,
-                "timed_out",
-                `Not analyzed: duplicate scan exceeded its ${timeoutMs}ms budget.`,
-              ),
-            );
-            decided.add(file.path);
-          }
-        }
-      }
+      this.recordTimedOut(
+        sizeGroups,
+        skipped,
+        decided,
+        `Not analyzed: duplicate scan exceeded its ${timeoutMs}ms budget.`,
+      );
     }
 
     const groups = Object.entries(hashMap)
@@ -349,6 +383,13 @@ export class HashCalculatorService {
     };
   }
 
+  /**
+   * Build the record explaining why one file was left out of the analysis.
+   *
+   * `detail` is written for the person reading the tool response, not for a
+   * log reader, so it should say what happened and what it means rather than
+   * name a code path.
+   */
   private describeSkip(
     file: FileWithSize,
     reason: SkippedFile["reason"],

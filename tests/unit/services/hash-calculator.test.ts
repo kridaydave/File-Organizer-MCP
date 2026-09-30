@@ -5,6 +5,11 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import { HashCalculatorService } from '../../../src/core/hash/hasher.js';
+import {
+    expectNoDuplicateGroups,
+    expectAllSkippedFor,
+    expectNoDuplicateSkipPaths,
+} from '../skipped-file-assertions.js';
 
 describe('HashCalculatorService', () => {
     let hashService: HashCalculatorService;
@@ -77,9 +82,8 @@ describe('HashCalculatorService', () => {
                 { name: 'big.bin', path: filePath, size: 64 },
             ]);
 
-            expect(scan.groups).toHaveLength(0);
-            expect(scan.skipped).toHaveLength(1);
-            expect(scan.skipped[0].reason).toBe('exceeds_size_cap');
+            expectNoDuplicateGroups(scan.groups);
+            expectAllSkippedFor(scan.skipped, 'exceeds_size_cap', 1);
             expect(scan.skipped[0].path).toBe(filePath);
             expect(scan.skipped[0].size_bytes).toBe(64);
             expect(scan.skipped[0].detail).toMatch(/not compared/i);
@@ -114,9 +118,8 @@ describe('HashCalculatorService', () => {
                 { name: 'empty.txt', path: filePath, size: 0 },
             ]);
 
-            expect(scan.groups).toHaveLength(0);
-            expect(scan.skipped).toHaveLength(1);
-            expect(scan.skipped[0].reason).toBe('empty_file');
+            expectNoDuplicateGroups(scan.groups);
+            expectAllSkippedFor(scan.skipped, 'empty_file', 1);
             expect(scan.skipped_bytes).toBe(0);
         });
 
@@ -127,9 +130,8 @@ describe('HashCalculatorService', () => {
             ]);
 
             // Both claim the same size, so both enter the hash loop and fail there.
-            expect(scan.groups).toHaveLength(0);
-            expect(scan.skipped).toHaveLength(2);
-            expect(scan.skipped.every(s => s.reason === 'hash_failed')).toBe(true);
+            expectNoDuplicateGroups(scan.groups);
+            expectAllSkippedFor(scan.skipped, 'hash_failed', 2);
         });
 
         it('does not report unique-size files as timed_out (issue: timeout sweep)', async () => {
@@ -159,9 +161,6 @@ describe('HashCalculatorService', () => {
 
             // The singleton is never reported under any reason.
             expect(scan.skipped.map((s) => s.path)).not.toContain(solo);
-            expect(
-                scan.skipped.filter((s) => s.path === solo),
-            ).toEqual([]);
 
             // Anything reported for the pair is a genuine budget skip, and no
             // path is reported twice.
@@ -196,12 +195,8 @@ describe('HashCalculatorService', () => {
 
             const scan = await hashService.findDuplicates(group, { timeoutMs: 1 });
 
-            const paths = scan.skipped.map((s) => s.path);
-            expect(new Set(paths).size).toBe(paths.length);
             // Whatever the budget allowed, no path may carry two entries.
-            for (const p of new Set(paths)) {
-                expect(scan.skipped.filter((s) => s.path === p)).toHaveLength(1);
-            }
+            expectNoDuplicateSkipPaths(scan.skipped);
         });
 
         it('closes the file descriptor it opens on the string-input path', async () => {

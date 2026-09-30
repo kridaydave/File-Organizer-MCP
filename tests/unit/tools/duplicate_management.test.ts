@@ -6,6 +6,7 @@ import { handleFindDuplicateFiles } from '../../../src/tools/file-duplicates.js'
 import { handleDeleteDuplicates } from '../../../src/tools/duplicate-management.js'; // Check import path
 import { DuplicateFinderService } from '../../../src/core/hash/duplicate-finder.js';
 import { HashCalculatorService } from '../../../src/core/hash/hasher.js';
+import { expectAllSkippedFor } from '../skipped-file-assertions.js';
 
 describe('Duplicate Management Tools', () => {
     let testDir: string;
@@ -188,8 +189,11 @@ describe('Duplicate Management Tools', () => {
 
             expect(Array.isArray(structured.skipped)).toBe(true);
             expect(structured.skipped.map(s => s.name)).toContain('empty.txt');
-            expect(structured.skipped.find(s => s.name === 'empty.txt')?.reason)
-                .toBe('empty_file');
+            expectAllSkippedFor(
+                structured.skipped.filter((s: { name: string }) => s.name === 'empty.txt'),
+                'empty_file',
+                1,
+            );
         });
     });
 });

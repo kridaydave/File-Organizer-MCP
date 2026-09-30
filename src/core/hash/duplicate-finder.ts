@@ -81,7 +81,15 @@ export class DuplicateFinderService {
   }
 
   /**
-   * Find duplicates and score them for recommendation
+   * Find duplicates and rank each copy by how likely it is the one to keep.
+   *
+   * The scan's `skipped` list is passed through untouched rather than dropped,
+   * because a caller recommending deletions from these groups must be able to
+   * tell the user which files the recommendation is blind to.
+   *
+   * @param files - Candidate files, typically from a recursive scan
+   * @param strategy - Which signal decides the "keep" recommendation
+   * @param options - Forwarded scan options, e.g. the timeout budget
    */
   async findWithScoring(
     files: FileWithSize[],
@@ -215,7 +223,11 @@ export class DuplicateFinderService {
    * @param filesToDelete - Array of file paths to delete
    * @param options - Deletion options
    * @param options.createBackupManifest - Create backup and rollback manifest (default: true)
-   * @param options.autoVerify - Automatically verify duplicates exist before deletion (default: false, WARNING: disabling verification may cause data loss)
+   * @param options.autoVerify - Verify a surviving copy exists before deleting (default: false at
+   *   this layer, true via the MCP tool). The scan covers each file's parent and grandparent
+   *   directory plus `candidateDirectories`, so a copy kept elsewhere looks like a last copy and
+   *   the deletion is refused.
+   * @param options.candidateDirectories - Extra directories to search for surviving copies
    */
   async deleteFiles(
     filesToDelete: string[],
