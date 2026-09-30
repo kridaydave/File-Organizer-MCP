@@ -184,7 +184,7 @@ export class SmartSuggestService {
 
     if (opts.includeDuplicates) {
       try {
-        const duplicates =
+        const { groups: duplicates } =
           await this.hashCalculator.findDuplicates(sampledFiles);
         const totalDupes = duplicates.reduce((sum, g) => sum + g.count - 1, 0);
         duplicateScore =

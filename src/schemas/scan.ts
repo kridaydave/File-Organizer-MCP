@@ -260,6 +260,19 @@ export const DeleteDuplicatesInputSchema = z
   .object({
     files_to_delete: z.array(z.string()).min(1),
     create_backup_manifest: z.boolean().default(true),
+    /**
+     * Hash every candidate and refuse to delete a file that has no surviving
+     * copy anywhere in the searched directories. Defaults to true; turning it
+     * off is reported back in the response so the caller knows the run was
+     * unverified.
+     */
+    verify_before_delete: z.boolean().default(true),
+    /**
+     * Extra directories to search for surviving copies. Verification
+     * otherwise scans each file's parent and grandparent directory only, so a
+     * duplicate kept in an unrelated folder would look like a last copy.
+     */
+    candidate_directories: z.array(z.string()).default([]),
   })
   .merge(CommonParamsSchema);
 

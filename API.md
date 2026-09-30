@@ -135,7 +135,7 @@ file_organizer_categorize_by_type({
 
 [⬆ Back to Top](#top)
 
-**Description:** Permanently deletes specified duplicate files. DESTRUCTIVE. Verifies hash/size before deletion.
+**Description:** Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed, so a last copy is never deleted. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.
 
 ### Parameters
 
@@ -144,7 +144,23 @@ file_organizer_categorize_by_type({
 | `files_to_delete`        | array   | -           | -          |
 | `items`                  | string  | -           | -          |
 | `create_backup_manifest` | boolean | -           | true       |
+| `verify_before_delete`   | boolean | Hash each candidate and refuse to delete a file with no surviving copy | true |
+| `candidate_directories`  | array   | Extra directories to search for surviving copies during verification | `[]` |
 | `response_format`        | string  | -           | 'markdown' |
+
+### Response fields
+
+| Field           | Type   | Description                                             |
+| --------------- | ------ | ------------------------------------------------------- |
+| `deleted_count` | number | Files removed                                            |
+| `failed_count`  | number | Files refused or errored                                 |
+| `verified`      | boolean | Whether the surviving-copy check ran                     |
+| `manifest_id`   | string | Pass to `file_organizer_undo_last_operation` to restore   |
+
+Verification searches each file's parent and grandparent directory by default.
+When a surviving copy lives elsewhere, pass its directory in
+`candidate_directories`, otherwise it will be treated as a last copy and the
+deletion refused.
 
 ### Example
 
@@ -153,6 +169,8 @@ file_organizer_delete_duplicates({
   files_to_delete: [],
   items: "value",
   create_backup_manifest: true,
+  verify_before_delete: true,
+  candidate_directories: [],
   response_format: "value",
 });
 ```
@@ -163,7 +181,7 @@ file_organizer_delete_duplicates({
 
 [⬆ Back to Top](#top)
 
-**Description:** Find duplicate files in a directory based on their content (SHA-256 hash). Shows potential wasted space.
+**Description:** Find duplicate files in a directory based on their content (SHA-256 hash). Shows potential wasted space. Files above the hashing size cap (100MB by default) and empty files are not compared; any such file is reported back in `skipped` so the result is never mistaken for exhaustive.
 
 ### Parameters
 
@@ -173,6 +191,21 @@ file_organizer_delete_duplicates({
 | `limit`           | number | Max groups to return       | 100        |
 | `offset`          | number | Groups to skip             | 0          |
 | `response_format` | string | -                          | 'markdown' |
+
+### Not-analyzed files
+
+Duplicate detection cannot compare every file. Anything left out is reported
+rather than dropped, so a partial analysis is never returned as an exhaustive one.
+
+| Field           | Type     | Description                                        |
+| --------------- | -------- | -------------------------------------------------- |
+| `skipped`       | array    | One entry per unanalyzed file                      |
+| `skipped[].path`| string   | Full path                                          |
+| `skipped[].name`| string   | File name                                          |
+| `skipped[].size_bytes` | number | Size in bytes                                 |
+| `skipped[].reason` | string | `empty_file`, `exceeds_size_cap`, `hash_failed`, or `timed_out` |
+| `skipped[].detail` | string | Plain-English explanation of the skip           |
+| `skipped_bytes` | number   | Total bytes belonging to skipped files             |
 
 ### Example
 

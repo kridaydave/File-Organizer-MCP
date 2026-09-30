@@ -59,12 +59,25 @@ export const deleteDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_delete_duplicates",
   title: "Delete Duplicate Files",
   description:
-    "Permanently deletes specified duplicate files. DESTRUCTIVE. Verifies hash/size before deletion.",
+    "Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed, so a last copy is never deleted. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.",
   inputSchema: {
     type: "object",
     properties: {
       files_to_delete: { type: "array", items: { type: "string" } },
       create_backup_manifest: { type: "boolean", default: true },
+      verify_before_delete: {
+        type: "boolean",
+        default: true,
+        description:
+          "Hash each candidate and refuse to delete a file with no surviving copy (default true)",
+      },
+      candidate_directories: {
+        type: "array",
+        items: { type: "string" },
+        default: [],
+        description:
+          "Extra directories to search for surviving copies during verification",
+      },
       response_format: {
         type: "string",
         enum: ["json", "markdown"],
@@ -105,10 +118,11 @@ export async function handleAnalyzeDuplicates(
     const duplicateFinder = new DuplicateFinderService(); // Stateless service is fine
 
     const files = await scanner.getAllFiles(validatedPath, true); // Recursive? User usually expects deep dupes
-    const analyzed = await duplicateFinder.findWithScoring(
+    const analysis = await duplicateFinder.findWithScoring(
       files,
       recommendation_strategy,
     );
+    const analyzed = analysis.groups;
 
     const summary = {
       total_duplicate_groups: analyzed.length,
@@ -123,6 +137,8 @@ export async function handleAnalyzeDuplicates(
       total_wasted_space_readable: formatBytes(
         analyzed.reduce((sum, g) => sum + g.wasted_space_bytes, 0),
       ),
+      not_analyzed_files: analysis.skipped.length,
+      not_analyzed_bytes: analysis.skipped_bytes,
     };
 
     if (response_format === "json") {
@@ -131,15 +147,38 @@ export async function handleAnalyzeDuplicates(
           {
             type: "text",
             text: JSON.stringify(
-              { summary, duplicate_groups: analyzed },
+              {
+                summary,
+                duplicate_groups: analyzed,
+                skipped: analysis.skipped,
+              },
               null,
               2,
             ),
           },
         ],
-        structuredContent: { summary, duplicate_groups: analyzed },
+        structuredContent: {
+          summary,
+          duplicate_groups: analyzed,
+          skipped: analysis.skipped,
+        },
       };
     }
+
+    const skippedNotice =
+      analysis.skipped.length > 0
+        ? `\n⚠️ **Not analyzed: ${analysis.skipped.length} file(s)** (${formatBytes(analysis.skipped_bytes)}) — the analysis above is partial.\n` +
+          analysis.skipped
+            .slice(0, 20)
+            .map(
+              (f) =>
+                `- \`${f.path}\` (${formatBytes(f.size_bytes)}) — ${f.detail}`,
+            )
+            .join("\n") +
+          (analysis.skipped.length > 20
+            ? `\n- *… and ${analysis.skipped.length - 20} more (full list in the \`skipped\` array of the JSON response)*`
+            : "")
+        : "";
 
     const markdown = `### Duplicate Analysis for \`${directory}\`
 **Strategy:** ${recommendation_strategy}
@@ -161,7 +200,7 @@ ${g.files
   .join("\n")}
 `,
   )
-  .join("\n")}
+  .join("\n")}${skippedNotice}
 `;
     return { content: [{ type: "text", text: markdown }] };
   } catch (error) {
@@ -186,12 +225,21 @@ export async function handleDeleteDuplicates(
       };
     }
 
-    const { files_to_delete, create_backup_manifest, response_format } =
-      parsed.data;
+    const {
+      files_to_delete,
+      create_backup_manifest,
+      verify_before_delete,
+      candidate_directories,
+      response_format,
+    } = parsed.data;
     const duplicateFinder = new DuplicateFinderService();
 
+    // Verification is on by default: this tool hands paths to a filesystem
+    // mutation, and an unverified delete can take the last copy of a file.
     const result = await duplicateFinder.deleteFiles(files_to_delete, {
       createBackupManifest: create_backup_manifest,
+      autoVerify: verify_before_delete,
+      candidateDirectories: candidate_directories,
     });
 
     const output = {
@@ -199,6 +247,8 @@ export async function handleDeleteDuplicates(
       failed_count: result.failed.length,
       deleted_files: result.deleted,
       failures: result.failed,
+      verified: verify_before_delete,
+      manifest_id: result.manifestPath ?? null,
     };
     const hasFailures = output.failed_count > 0;
 
@@ -213,7 +263,9 @@ export async function handleDeleteDuplicates(
     const markdown = `### Deletion Report
 ✅ **Deleted:** ${output.deleted_count} files
 ❌ **Failed:** ${output.failed_count} files
+${output.verified ? "🔎 **Verified:** each file was hashed and confirmed to have a surviving copy" : "⚠️ **Unverified:** deletion ran without confirming a surviving copy exists"}
 
+${output.manifest_id ? `↩️ **Recoverable:** pass manifest_id \`${output.manifest_id}\` to \`file_organizer_undo_last_operation\` to restore the deleted files.\n` : ""}
 ${output.failures.length > 0 ? `**Failures:**\n${output.failures.map((f) => `- ${f.path}: ${f.error}`).join("\n")}` : ""}
 `;
     return {

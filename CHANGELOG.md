@@ -1,5 +1,36 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Duplicate detection no longer hides the files it skipped** — files over the
+  100MB hashing cap were dropped with a bare `continue` and no record, so the
+  largest and most expensive-to-miss files (videos, ISOs) were the ones silently
+  excluded while the tool still reported success. `findDuplicates` and
+  `findWithScoring` now return a `skipped` array (path, size, reason, plain-English
+  detail) plus `skipped_bytes`, and both duplicate tools surface it in the
+  markdown and JSON output. A partial analysis is no longer presented as an
+  exhaustive one. Empty files, over-cap files, unreadable files, and files
+  dropped to a scan timeout are all reported.
+- **`autoVerify` is reachable from MCP** — `handleDeleteDuplicates` never passed
+  the flag, so the "is this the last copy?" gate was dead code from the tool
+  surface and the tool would permanently unlink a file with no surviving copy.
+  Verification now defaults to on. The tool also reports `verified` and returns
+  `manifest_id` in its response, which it previously withheld, so a caller had no
+  way to reach the undo tool for a deletion it had just performed.
+- **Documentation drift** — README claimed Node 18 while `package.json` requires
+  Node 20, and the README tool list was missing `file_organizer_organize_by_project`
+  (21 listed against 22 registered). A new `docs-tool-list.test.ts` guard reads
+  the real registry and fails when the README list, the headline tool counts, or
+  the documented Node version disagree with the code.
+
+### Added
+
+- `file_organizer_delete_duplicates` accepts `verify_before_delete` (default
+  `true`) and `candidate_directories`, for when a surviving copy lives outside
+  the searched parent directories.
+
 ## [5.0.0] - 2026-08-22
 
 ### Added

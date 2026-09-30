@@ -19,7 +19,7 @@ describe("SmartSuggestService", () => {
     service = new SmartSuggestService();
 
     mockGetAllFiles.mockResolvedValue([]);
-    mockFindDuplicates.mockResolvedValue([]);
+    mockFindDuplicates.mockResolvedValue({ groups: [], skipped: [], skipped_bytes: 0 });
     mockAccess.mockRejectedValue(new Error("Not found"));
 
     (service as any).fileScanner = {
@@ -320,7 +320,7 @@ describe("SmartSuggestService", () => {
         size_bytes: 100,
         files: [],
       }));
-      mockFindDuplicates.mockResolvedValue(duplicates);
+      mockFindDuplicates.mockResolvedValue({ groups: duplicates, skipped: [], skipped_bytes: 0 });
 
       const report = await service.analyzeHealth("/test");
 
@@ -488,7 +488,7 @@ describe("SmartSuggestService", () => {
           files: [],
         },
       ];
-      mockFindDuplicates.mockResolvedValue(duplicates);
+      mockFindDuplicates.mockResolvedValue({ groups: duplicates, skipped: [], skipped_bytes: 0 });
 
       const report = await service.analyzeHealth("/test");
 

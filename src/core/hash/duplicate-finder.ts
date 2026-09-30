@@ -8,7 +8,7 @@
 import fs from "fs/promises";
 import crypto from "crypto";
 import { HashCalculatorService } from "./hasher.js";
-import type { FileWithSize, DuplicateGroup } from "../../types.js";
+import type { FileWithSize, SkippedFile } from "../../types.js";
 import { fileExists } from "../../utils/file-utils.js";
 import { logger } from "../../utils/logger.js";
 import path from "path";
@@ -43,6 +43,16 @@ export interface AnalyzedDuplicateGroup {
   wasted_space_bytes: number;
 }
 
+/**
+ * Scored duplicate groups plus the files the scan could not compare.
+ * A caller that ignores `skipped` is reporting a partial analysis as complete.
+ */
+export interface DuplicateAnalysis {
+  groups: AnalyzedDuplicateGroup[];
+  skipped: SkippedFile[];
+  skipped_bytes: number;
+}
+
 export interface DeletionResult {
   deleted: string[];
   failed: { path: string; error: string }[];
@@ -71,15 +81,10 @@ export class DuplicateFinderService {
     files: FileWithSize[],
     strategy: RecommendationStrategy = "best_location",
     options: { timeoutMs?: number } = {},
-  ): Promise<AnalyzedDuplicateGroup[]> {
-    // Explicitly filter out 0-byte (empty) files from duplicate detection
-    const nonZeroFiles = files.filter((file) => file.size > 0);
-    const duplicates = await this.hashCalculator.findDuplicates(
-      nonZeroFiles,
-      options,
-    );
+  ): Promise<DuplicateAnalysis> {
+    const scan = await this.hashCalculator.findDuplicates(files, options);
 
-    return duplicates
+    const groups = scan.groups
       .filter((group) => group.size_bytes > 0)
       .map((group) => {
       const scoredFiles = group.files.map((file) =>
@@ -112,6 +117,12 @@ export class DuplicateFinderService {
         wasted_space_bytes: group.size_bytes * (group.files.length - 1),
       };
     });
+
+    return {
+      groups,
+      skipped: scan.skipped,
+      skipped_bytes: scan.skipped_bytes,
+    };
   }
 
   /**

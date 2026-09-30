@@ -23,6 +23,43 @@ export interface DuplicateGroup {
   files: DuplicateFile[];
 }
 
+/**
+ * Why a file was left out of duplicate detection.
+ *
+ * Detection drops files it cannot compare. Every drop is recorded so the
+ * caller can tell the user what was NOT analyzed, instead of the analysis
+ * looking complete when it is not.
+ */
+export type SkipReason =
+  /** Zero-byte file: content is identical to every other empty file, not a useful duplicate. */
+  | "empty_file"
+  /** Larger than the configured hash size cap. */
+  | "exceeds_size_cap"
+  /** Unreadable, or hashing threw. */
+  | "hash_failed"
+  /** Duplicate analysis ran past its timeout budget. */
+  | "timed_out";
+
+export interface SkippedFile {
+  path: string;
+  name: string;
+  size_bytes: number;
+  reason: SkipReason;
+  /** Human-readable explanation, safe to show a user. */
+  detail: string;
+}
+
+/**
+ * Result of a duplicate scan. `skipped` is always present (possibly empty) so
+ * a partial analysis is never reported as a complete one.
+ */
+export interface DuplicateScan {
+  groups: DuplicateGroup[];
+  skipped: SkippedFile[];
+  /** Total bytes belonging to skipped files — the analysis blind spot. */
+  skipped_bytes: number;
+}
+
 export interface OrganizationPlan {
   moves: {
     source: string;
@@ -43,6 +80,9 @@ export interface DuplicateResult extends PaginatedResult<DuplicateGroup> {
   duplicate_groups: number;
   total_duplicate_files: number;
   wasted_space: string;
+  /** Files that were not analyzed, with the reason for each. */
+  skipped: SkippedFile[];
+  skipped_bytes: number;
 }
 
 // ==================== Organize Types ====================

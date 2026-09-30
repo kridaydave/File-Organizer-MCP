@@ -7,8 +7,13 @@ import fs from "fs/promises";
 import { createReadStream, type ReadStream } from "fs";
 import { pipeline } from "stream/promises";
 import crypto from "crypto";
-import type { FileWithSize, DuplicateGroup } from "../../types.js";
-import { CONFIG } from "../../config.js";
+import type {
+  FileWithSize,
+  DuplicateGroup,
+  DuplicateScan,
+  SkippedFile,
+} from "../../types.js";
+import { MAX_FILE_SIZE } from "../../config.js";
 import { formatBytes } from "../../utils/formatters.js";
 import { logger } from "../../utils/logger.js";
 
@@ -18,8 +23,7 @@ import { logger } from "../../utils/logger.js";
 export class HashCalculatorService {
   private readonly maxFileSize: number;
 
-  constructor(maxFileSize = 100 * 1024 * 1024) {
-    // 100MB default
+  constructor(maxFileSize = MAX_FILE_SIZE) {
     this.maxFileSize = maxFileSize;
   }
 
@@ -84,34 +88,58 @@ export class HashCalculatorService {
   }
 
   /**
-   * Find duplicate files based on content hash
+   * Find duplicate files based on content hash.
+   *
+   * Files that cannot be compared are NOT dropped silently: every one is
+   * returned in `skipped` with a reason, so callers can tell the user that
+   * the analysis was partial instead of implying it was exhaustive.
    */
   async findDuplicates(
     files: FileWithSize[],
     options: { timeoutMs?: number } = {},
-  ): Promise<DuplicateGroup[]> {
+  ): Promise<DuplicateScan> {
     const hashMap: Record<string, FileWithSize[]> = {};
     const startTime = Date.now();
     const timeoutMs = options.timeoutMs ?? 30000; // 30s default timeout
+    const skipped: SkippedFile[] = [];
 
     // Step 1: Pre-group by file size to avoid hashing files with unique byte counts
     const sizeGroups = new Map<number, FileWithSize[]>();
     for (const file of files) {
-      if (file.size <= 0 || file.size > this.maxFileSize) continue;
+      if (file.size <= 0) {
+        skipped.push(
+          this.describeSkip(
+            file,
+            "empty_file",
+            "Empty file: every 0-byte file is trivially identical, so it carries no duplicate information.",
+          ),
+        );
+        continue;
+      }
+      if (file.size > this.maxFileSize) {
+        skipped.push(
+          this.describeSkip(
+            file,
+            "exceeds_size_cap",
+            `Larger than the ${formatBytes(this.maxFileSize)} hashing cap, so its content was not compared.`,
+          ),
+        );
+        continue;
+      }
       const group = sizeGroups.get(file.size) ?? [];
       group.push(file);
       sizeGroups.set(file.size, group);
     }
 
     // Step 2: Only hash files that share identical byte length with at least one other file
+    let timedOut = false;
     for (const [, candidates] of sizeGroups) {
       if (candidates.length < 2) continue;
 
       for (const file of candidates) {
         if (Date.now() - startTime > timeoutMs) {
-          throw new Error(
-            `Duplicate analysis timed out after ${timeoutMs}ms. Processed ${Object.keys(hashMap).length} files.`,
-          );
+          timedOut = true;
+          break;
         }
 
         try {
@@ -122,12 +150,40 @@ export class HashCalculatorService {
           hashMap[hash].push(file);
         } catch (error) {
           logger.error(`Error hashing ${file.name}: ${(error as Error).message}`);
+          skipped.push(
+            this.describeSkip(
+              file,
+              "hash_failed",
+              `Could not be read for hashing: ${(error as Error).message}`,
+            ),
+          );
+        }
+      }
+
+      if (timedOut) break;
+    }
+
+    // Any file that never got hashed because the budget ran out is also a skip.
+    if (timedOut) {
+      const hashedPaths = new Set(
+        Object.values(hashMap).flat().map((f) => f.path),
+      );
+      for (const [, candidates] of sizeGroups) {
+        for (const file of candidates) {
+          if (!hashedPaths.has(file.path)) {
+            skipped.push(
+              this.describeSkip(
+                file,
+                "timed_out",
+                `Not analyzed: duplicate scan exceeded its ${timeoutMs}ms budget.`,
+              ),
+            );
+          }
         }
       }
     }
 
-    // Filter only duplicates and format
-    return Object.entries(hashMap)
+    const groups = Object.entries(hashMap)
       .filter(([_, group]) => group.length > 1)
       .map(([hash, group]) => ({
         hash,
@@ -141,5 +197,43 @@ export class HashCalculatorService {
           modified: f.modified,
         })),
       }));
+
+    if (skipped.length > 0) {
+      logger.warn(
+        `Duplicate analysis skipped ${skipped.length} file(s); ` +
+          `reasons: ${summarizeSkipReasons(skipped)}`,
+      );
+    }
+
+    return {
+      groups,
+      skipped,
+      skipped_bytes: skipped.reduce((sum, f) => sum + f.size_bytes, 0),
+    };
   }
+
+  private describeSkip(
+    file: FileWithSize,
+    reason: SkippedFile["reason"],
+    detail: string,
+  ): SkippedFile {
+    return {
+      path: file.path,
+      name: file.name,
+      size_bytes: file.size,
+      reason,
+      detail,
+    };
+  }
+}
+
+/** Compact reason tally for log lines, e.g. "exceeds_size_cap: 3". */
+function summarizeSkipReasons(skipped: SkippedFile[]): string {
+  const counts = new Map<string, number>();
+  for (const file of skipped) {
+    counts.set(file.reason, (counts.get(file.reason) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([reason, count]) => `${reason}: ${count}`)
+    .join(", ");
 }
