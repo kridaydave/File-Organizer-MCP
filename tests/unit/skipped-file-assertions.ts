@@ -7,7 +7,7 @@
  * made in several places, where it usually was not made at all.
  */
 
-import type { SkipReason, SkippedFile } from "../../../src/types.js";
+import type { SkipReason, SkippedFile } from "../../src/types.js";
 
 /** Assert that a scan produced no duplicate groups. */
 export function expectNoDuplicateGroups(groups: unknown[]): void {
@@ -18,9 +18,12 @@ export function expectNoDuplicateGroups(groups: unknown[]): void {
  * Assert every skipped file carries `reason`, and that there are `count` of
  * them. Both halves matter: a wrong reason and a wrong count are different
  * bugs, and checking only one hides the other.
+ *
+ * Takes the two fields it reads rather than a whole `SkippedFile`, so a suite
+ * holding a narrowed projection of the response can use it without a cast.
  */
 export function expectAllSkippedFor(
-  skipped: SkippedFile[],
+  skipped: readonly Pick<SkippedFile, "name" | "reason">[],
   reason: SkipReason,
   count: number,
 ): void {
