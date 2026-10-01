@@ -81,7 +81,15 @@ export class DuplicateFinderService {
   }
 
   /**
-   * Find duplicates and score them for recommendation
+   * Find duplicates and rank each copy by how likely it is the one to keep.
+   *
+   * The scan's `skipped` list is passed through untouched rather than dropped,
+   * because a caller recommending deletions from these groups must be able to
+   * tell the user which files the recommendation is blind to.
+   *
+   * @param files - Candidate files, typically from a recursive scan
+   * @param strategy - Which signal decides the "keep" recommendation
+   * @param options - Forwarded scan options, e.g. the timeout budget
    */
   async findWithScoring(
     files: FileWithSize[],
@@ -215,7 +223,12 @@ export class DuplicateFinderService {
    * @param filesToDelete - Array of file paths to delete
    * @param options - Deletion options
    * @param options.createBackupManifest - Create backup and rollback manifest (default: true)
-   * @param options.autoVerify - Automatically verify duplicates exist before deletion (default: false, WARNING: disabling verification may cause data loss)
+   * @param options.autoVerify - Verify a surviving copy exists before deleting (default: false at
+   *   this layer, true via the MCP tool). The scan walks each file's parent and grandparent
+   *   directory recursively, plus `candidateDirectories`, subject to the scanner's depth, file
+   *   count and skip rules; a copy kept outside those roots looks like a last copy and the
+   *   deletion is refused.
+   * @param options.candidateDirectories - Extra directories to search for surviving copies
    */
   async deleteFiles(
     filesToDelete: string[],
@@ -375,8 +388,14 @@ export class DuplicateFinderService {
   }
 
   /**
-   * Verify that duplicates exist for files being deleted
-   * Scans parent directories to ensure at least one copy remains
+   * Verify that a surviving copy exists for each file being deleted.
+   *
+   * Roots are each file's parent and grandparent directory plus
+   * `candidateDirectories`, and each root is walked recursively by the scanner,
+   * so a copy in a subfolder of the parent is found. The scanner's own limits
+   * apply: `maxScanDepth` levels, `maxFilesPerOperation` files, and dot-entries
+   * plus SKIP_DIRECTORIES are skipped. Files over the hashing cap are compared
+   * by size and sampled content and are reported back as `sampled`.
    *
    * @param filesToDelete - Files that will be deleted
    * @param candidateDirectories - Optional additional directories to scan

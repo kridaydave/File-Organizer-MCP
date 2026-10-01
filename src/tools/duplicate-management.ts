@@ -10,7 +10,7 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
 import { DuplicateFinderService } from "../core/hash/duplicate-finder.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { formatBytes } from "../utils/formatters.js";
+import { formatBytes, renderSkippedNotice } from "../utils/formatters.js";
 import {
   AnalyzeDuplicatesInputSchema,
   DeleteDuplicatesInputSchema,
@@ -59,7 +59,7 @@ export const deleteDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_delete_duplicates",
   title: "Delete Duplicate Files",
   description:
-    "Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed, so a last copy is never deleted. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.",
+    "Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed. The search walks each candidate's parent and grandparent directory recursively, plus any candidate_directories you pass, up to 10 levels deep and 10000 files, skipping dot-entries and node_modules/.git/__pycache__/.venv; a copy kept outside those roots is not found and the deletion is refused, so pass its directory if the surviving copy lives elsewhere. Files over the hashing size cap are checked by size plus sampled content, which is weaker than a full hash and is reported as partially verified. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.",
   inputSchema: {
     type: "object",
     properties: {
@@ -69,14 +69,14 @@ export const deleteDuplicatesToolDefinition: ToolDefinition = {
         type: "boolean",
         default: true,
         description:
-          "Hash each candidate and refuse to delete a file with no surviving copy (default true)",
+          "Hash each candidate and refuse to delete a file with no surviving copy in the searched directories (default true)",
       },
       candidate_directories: {
         type: "array",
         items: { type: "string" },
         default: [],
         description:
-          "Extra directories to search for surviving copies during verification",
+          "Extra directories to search for surviving copies during verification, walked the same way as the candidate's parent and grandparent. Without these, only those two roots are searched recursively, so a copy kept in an unrelated directory is not found and the deletion is refused.",
       },
       response_format: {
         type: "string",
@@ -165,20 +165,11 @@ export async function handleAnalyzeDuplicates(
       };
     }
 
-    const skippedNotice =
-      analysis.skipped.length > 0
-        ? `\n⚠️ **Not analyzed: ${analysis.skipped.length} file(s)** (${formatBytes(analysis.skipped_bytes)}) — the analysis above is partial.\n` +
-          analysis.skipped
-            .slice(0, 20)
-            .map(
-              (f) =>
-                `- \`${f.path}\` (${formatBytes(f.size_bytes)}) — ${f.detail}`,
-            )
-            .join("\n") +
-          (analysis.skipped.length > 20
-            ? `\n- *… and ${analysis.skipped.length - 20} more (full list in the \`skipped\` array of the JSON response)*`
-            : "")
-        : "";
+    const skippedNotice = renderSkippedNotice(
+      analysis.skipped,
+      analysis.skipped_bytes,
+      "the analysis above is partial.",
+    );
 
     const markdown = `### Duplicate Analysis for \`${directory}\`
 **Strategy:** ${recommendation_strategy}
@@ -200,7 +191,7 @@ ${g.files
   .join("\n")}
 `,
   )
-  .join("\n")}${skippedNotice}
+  .join("\n")}${skippedNotice ? `\n${skippedNotice}` : ""}
 `;
     return { content: [{ type: "text", text: markdown }] };
   } catch (error) {

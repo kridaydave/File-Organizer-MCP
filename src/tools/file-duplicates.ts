@@ -14,7 +14,7 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
 import { HashCalculatorService } from "../core/hash/hasher.js";
 import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
-import { formatBytes } from "../utils/formatters.js";
+import { formatBytes, renderSkippedNotice } from "../utils/formatters.js";
 import {
   FindDuplicateFilesInputSchema,
   type FindDuplicateFilesInput,
@@ -123,20 +123,11 @@ export async function handleFindDuplicateFiles(
       };
     }
 
-    const skippedNotice =
-      result.skipped.length > 0
-        ? `\n\n⚠️ **Not analyzed: ${result.skipped.length} file(s)** (${formatBytes(result.skipped_bytes)}) — the results above are partial.\n` +
-          result.skipped
-            .slice(0, 20)
-            .map(
-              (f) =>
-                `- \`${f.path}\` (${formatBytes(f.size_bytes)}) — ${f.detail}`,
-            )
-            .join("\n") +
-          (result.skipped.length > 20
-            ? `\n- *… and ${result.skipped.length - 20} more (full list in the \`skipped\` array of the JSON response)*`
-            : "")
-        : "";
+    const skippedNotice = renderSkippedNotice(
+      result.skipped,
+      result.skipped_bytes,
+      "the results above are partial.",
+    );
 
     const markdown = `### Duplicate Files in \`${result.directory}\`
 **Wasted Space:** ${result.wasted_space}
@@ -145,7 +136,7 @@ export async function handleFindDuplicateFiles(
 
 ${result.items.map((g) => `**Group (${g.size} each):**\n${g.files.map((f) => `- ${f.path}`).join("\n")}`).join("\n\n")}
 
-${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more groups (use offset=${result.next_offset})*` : ""}${skippedNotice}`;
+${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more groups (use offset=${result.next_offset})*` : ""}${skippedNotice ? `\n\n${skippedNotice}` : ""}`;
 
     return {
       content: [{ type: "text", text: markdown }],

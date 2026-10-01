@@ -10,6 +10,10 @@ import os from 'os';
 import { DuplicateFinderService } from '../../../src/core/hash/duplicate-finder.js';
 import { RenamingService } from '../../../src/core/organize/rename.js';
 import { ManifestIntegrityService } from '../../../src/core/organize/manifest-integrity.js';
+import {
+  expectNoDuplicateGroups,
+  expectAllSkippedFor,
+} from '../skipped-file-assertions.js';
 import { assertNotSensitive } from '../../../src/core/io/sensitive-files.js';
 import { isPathBlocked } from '../../../src/utils/path-security.js';
 import { PathValidatorService } from '../../../src/services/path-validator.service.js';
@@ -66,11 +70,11 @@ describe('v5 Critical Regressions Gate', () => {
       const finder = new DuplicateFinderService();
       const { groups, skipped } = await finder.findWithScoring(files, 'newest');
 
-      // 0-byte files should not form duplicate groups or be recommended for deletion
-      expect(groups).toHaveLength(0);
-      // ...but they must be reported as skipped, never silently dropped
-      expect(skipped).toHaveLength(3);
-      expect(skipped.every((f) => f.reason === 'empty_file')).toBe(true);
+      // 0-byte files should not form duplicate groups or be recommended for
+      // deletion ...but they must be reported as skipped, never silently
+      // dropped.
+      expectNoDuplicateGroups(groups);
+      expectAllSkippedFor(skipped, 'empty_file', 3);
     });
   });
 
