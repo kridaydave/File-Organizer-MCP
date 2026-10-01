@@ -123,6 +123,12 @@ export async function handleFindDuplicateFiles(
       };
     }
 
+    const skippedNotice = renderSkippedNotice(
+      result.skipped,
+      result.skipped_bytes,
+      "the results above are partial.",
+    );
+
     const markdown = `### Duplicate Files in \`${result.directory}\`
 **Wasted Space:** ${result.wasted_space}
 **Duplicate Groups:** ${result.total_count}
@@ -130,11 +136,7 @@ export async function handleFindDuplicateFiles(
 
 ${result.items.map((g) => `**Group (${g.size} each):**\n${g.files.map((f) => `- ${f.path}`).join("\n")}`).join("\n\n")}
 
-${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more groups (use offset=${result.next_offset})*` : ""}${renderSkippedNotice(
-      result.skipped,
-      result.skipped_bytes,
-      "the results above are partial.",
-    )}`;
+${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more groups (use offset=${result.next_offset})*` : ""}${skippedNotice ? `\n\n${skippedNotice}` : ""}`;
 
     return {
       content: [{ type: "text", text: markdown }],

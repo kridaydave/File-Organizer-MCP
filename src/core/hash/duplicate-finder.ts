@@ -224,9 +224,10 @@ export class DuplicateFinderService {
    * @param options - Deletion options
    * @param options.createBackupManifest - Create backup and rollback manifest (default: true)
    * @param options.autoVerify - Verify a surviving copy exists before deleting (default: false at
-   *   this layer, true via the MCP tool). The scan covers each file's parent and grandparent
-   *   directory plus `candidateDirectories`, so a copy kept elsewhere looks like a last copy and
-   *   the deletion is refused.
+   *   this layer, true via the MCP tool). The scan walks each file's parent and grandparent
+   *   directory recursively, plus `candidateDirectories`, subject to the scanner's depth, file
+   *   count and skip rules; a copy kept outside those roots looks like a last copy and the
+   *   deletion is refused.
    * @param options.candidateDirectories - Extra directories to search for surviving copies
    */
   async deleteFiles(
@@ -387,8 +388,14 @@ export class DuplicateFinderService {
   }
 
   /**
-   * Verify that duplicates exist for files being deleted
-   * Scans parent directories to ensure at least one copy remains
+   * Verify that a surviving copy exists for each file being deleted.
+   *
+   * Roots are each file's parent and grandparent directory plus
+   * `candidateDirectories`, and each root is walked recursively by the scanner,
+   * so a copy in a subfolder of the parent is found. The scanner's own limits
+   * apply: `maxScanDepth` levels, `maxFilesPerOperation` files, and dot-entries
+   * plus SKIP_DIRECTORIES are skipped. Files over the hashing cap are compared
+   * by size and sampled content and are reported back as `sampled`.
    *
    * @param filesToDelete - Files that will be deleted
    * @param candidateDirectories - Optional additional directories to scan

@@ -49,16 +49,16 @@ describe("renderSkippedNotice", () => {
     expect(notice).toContain("`skipped` array");
   });
 
-  // Both call sites splice this straight into a markdown response, so the
-  // surrounding newlines are part of what the caller sees: the leading pair
-  // closes whatever list precedes it. Asserted exactly, not by substring,
-  // because a change here is invisible in every other test in this file.
-  it("wraps the block in the newlines that separate it from preceding content", () => {
+  // The block carries no leading or trailing newline: each caller splices it
+  // into a different position in its own template, so the separators belong
+  // there. tests/unit/tools/skipped_notice_placement.test.ts pins the composed
+  // result at both call sites.
+  it("returns the bare block with no surrounding newlines", () => {
     const notice = renderSkippedNotice([skip("a.bin")], 1024, "partial.");
 
     expect(notice).toBe(
-      "\n\n⚠️ **Not analyzed: 1 file(s)** (1 KB) — partial.\n" +
-        "- `/tmp/a.bin` (1 KB) — Larger than the 100 MB hashing cap, so its content was not compared.\n",
+      "⚠️ **Not analyzed: 1 file(s)** (1 KB) — partial.\n" +
+        "- `/tmp/a.bin` (1 KB) — Larger than the 100 MB hashing cap, so its content was not compared.",
     );
   });
 });

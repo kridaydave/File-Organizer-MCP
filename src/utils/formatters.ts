@@ -56,6 +56,11 @@ const SKIP_NOTICE_LIMIT = 20;
  * between them, because a caller comparing the two responses should not have to
  * work out whether the same skip was described differently.
  *
+ * Returns the bare block with no leading or trailing newline. Where it sits in
+ * the surrounding document is the caller's decision, and the two call sites
+ * disagree about it, so baking the separators in here would silently restyle
+ * one of them.
+ *
  * @param skipped - Files excluded from analysis, each with a user-facing detail
  * @param skippedBytes - Total size of the excluded files
  * @param consequence - How the caller should read the surrounding results
@@ -81,5 +86,5 @@ export function renderSkippedNotice(
     );
   }
 
-  return `\n\n${lines.join("\n")}\n`;
+  return lines.join("\n");
 }

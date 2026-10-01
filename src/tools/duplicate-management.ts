@@ -59,7 +59,7 @@ export const deleteDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_delete_duplicates",
   title: "Delete Duplicate Files",
   description:
-    "Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed. The search covers each candidate's parent and grandparent directory plus any candidate_directories you pass, so a copy kept outside those directories is not found and the deletion is refused; pass its directory if the surviving copy lives elsewhere. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.",
+    "Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed. The search walks each candidate's parent and grandparent directory recursively, plus any candidate_directories you pass, up to 10 levels deep and 10000 files, skipping dot-entries and node_modules/.git/__pycache__/.venv; a copy kept outside those roots is not found and the deletion is refused, so pass its directory if the surviving copy lives elsewhere. Files over the hashing size cap are checked by size plus sampled content, which is weaker than a full hash and is reported as partially verified. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.",
   inputSchema: {
     type: "object",
     properties: {
@@ -76,7 +76,7 @@ export const deleteDuplicatesToolDefinition: ToolDefinition = {
         items: { type: "string" },
         default: [],
         description:
-          "Extra directories to search for surviving copies during verification. Without these, only each candidate's parent and grandparent directory are searched, so a copy kept elsewhere is not found and the deletion is refused.",
+          "Extra directories to search for surviving copies during verification, walked the same way as the candidate's parent and grandparent. Without these, only those two roots are searched recursively, so a copy kept in an unrelated directory is not found and the deletion is refused.",
       },
       response_format: {
         type: "string",
@@ -165,6 +165,12 @@ export async function handleAnalyzeDuplicates(
       };
     }
 
+    const skippedNotice = renderSkippedNotice(
+      analysis.skipped,
+      analysis.skipped_bytes,
+      "the analysis above is partial.",
+    );
+
     const markdown = `### Duplicate Analysis for \`${directory}\`
 **Strategy:** ${recommendation_strategy}
 **Wasted Space:** ${summary.total_wasted_space_readable}
@@ -185,11 +191,7 @@ ${g.files
   .join("\n")}
 `,
   )
-  .join("\n")}${renderSkippedNotice(
-    analysis.skipped,
-    analysis.skipped_bytes,
-    "the analysis above is partial.",
-  )}
+  .join("\n")}${skippedNotice ? `\n${skippedNotice}` : ""}
 `;
     return { content: [{ type: "text", text: markdown }] };
   } catch (error) {

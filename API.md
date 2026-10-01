@@ -135,7 +135,7 @@ file_organizer_categorize_by_type({
 
 [⬆ Back to Top](#top)
 
-**Description:** Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed, so a last copy is never deleted. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.
+**Description:** Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed. The search walks each candidate's parent and grandparent directory recursively, up to 10 levels deep and 10000 files, skipping dot-entries and `node_modules`/`.git`/`__pycache__`/`.venv`; a copy kept outside those roots is not found and the deletion is refused. Files over the hashing size cap are checked by size plus sampled content, which is weaker than a full hash and is reported as partially verified. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.
 
 ### Parameters
 
@@ -145,7 +145,7 @@ file_organizer_categorize_by_type({
 | `items`                  | string  | -           | -          |
 | `create_backup_manifest` | boolean | -           | true       |
 | `verify_before_delete`   | boolean | Hash each candidate and refuse to delete a file with no surviving copy | true |
-| `candidate_directories`  | array   | Extra directories to search for surviving copies during verification | `[]` |
+| `candidate_directories`  | array   | Extra directories to search for surviving copies during verification, walked the same way as the candidate's parent and grandparent | `[]` |
 | `response_format`        | string  | -           | 'markdown' |
 
 ### Response fields
@@ -158,8 +158,11 @@ file_organizer_categorize_by_type({
 | `manifest_id`   | string | Pass to `file_organizer_undo_last_operation` to restore   |
 | `partially_verified_files` | array | Deleted files whose check used a sampled identity (see below) |
 
-Verification searches each file's parent and grandparent directory by default.
-When a surviving copy lives elsewhere, pass its directory in
+Verification walks each file's parent and grandparent directory recursively, so a
+copy in a subfolder of the parent is found. The walk is bounded by the scanner's
+own limits: `maxScanDepth` (10) levels, `maxFilesPerOperation` (10000) files, and
+dot-entries plus `node_modules`/`.git`/`__pycache__`/`.venv` are skipped. When the
+only surviving copy lives outside those roots, pass its directory in
 `candidate_directories`, otherwise it will be treated as a last copy and the
 deletion refused.
 
