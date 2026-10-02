@@ -11,7 +11,7 @@ import type { PrivacyMode } from "../../types.js";
 import type { CustomRule } from "../../core/types/categories.js";
 import { parseJsonc } from "../../tui/client-detector.js";
 import { getUserConfigPath } from "./paths.js";
-import { isExternalVolumePath } from "./security.js";
+import { inspectAllowedDirs } from "./allowed-dirs.js";
 
 export interface UserConfig {
   customAllowedDirectories?: string[];
@@ -112,33 +112,20 @@ export function loadCustomAllowedDirs(): string[] {
   try {
     const config = loadUserConfig();
     if (Array.isArray(config.customAllowedDirectories)) {
-      return config.customAllowedDirectories.filter((dir: string) => {
-        try {
-          const expandedDir = dir.startsWith("~") ? path.join(os.homedir(), dir.slice(1)) : dir;
-          const stats = fs.lstatSync(expandedDir);
-          if (stats.isSymbolicLink()) {
-            logger.error(`Warning: Custom directory blocked (symlink): ${dir}`);
-            return false;
-          }
-          if (expandedDir.includes("..") || expandedDir.includes("\0")) {
-            const reason = expandedDir.includes("\0") ? "null byte" : "path traversal";
-            logger.error(`Warning: Custom directory blocked (${reason}): ${dir}`);
-            return false;
-          }
-          if (!stats.isDirectory()) return false;
-          const resolvedDir = path.resolve(expandedDir);
-          const home = os.homedir();
-          const externalVolumeAllowed = config.allowExternalVolumes === true && isExternalVolumePath(resolvedDir);
-          if (!isSubPath(home, resolvedDir) && !externalVolumeAllowed) {
-            logger.error(`Warning: Custom directory blocked (outside home): ${dir}`);
-            return false;
-          }
-          return true;
-        } catch {
-          logger.error(`Warning: Custom directory does not exist: ${dir}`);
+      // inspectAllowedDir is the single verdict function: the doctor report and
+      // this gate read the same reason, so they cannot disagree.
+      return inspectAllowedDirs(
+        config.customAllowedDirectories,
+        config.allowExternalVolumes === true,
+      )
+        .filter((verdict) => {
+          if (verdict.accepted) return true;
+          logger.error(
+            `Warning: Custom directory blocked (${verdict.rejection}): ${verdict.configured}`,
+          );
           return false;
-        }
-      });
+        })
+        .map((verdict) => verdict.configured);
     }
   } catch (error) {
     logger.error("Error loading custom config:", (error as Error).message);

@@ -16,6 +16,7 @@
 - [file_organizer_batch_rename](#file_organizer_batch_rename)
 - [file_organizer_categorize_by_type](#file_organizer_categorize_by_type)
 - [file_organizer_delete_duplicates](#file_organizer_delete_duplicates)
+- [file_organizer_doctor](#file_organizer_doctor)
 - [file_organizer_find_duplicate_files](#file_organizer_find_duplicate_files)
 - [file_organizer_find_largest_files](#file_organizer_find_largest_files)
 - [file_organizer_get_categories](#file_organizer_get_categories)
@@ -599,6 +600,60 @@ file_organizer_undo_last_operation({
 ```typescript
 file_organizer_view_history({
   limit: 20,
+});
+```
+
+---
+
+## file_organizer_doctor
+
+[⬆ Back to Top](#top)
+
+**Description:** Report the effective configuration after defaults, config.json and env are layered, and flag every configured allowed directory that is missing, blocked by security policy, or rejected by the home-directory gate. Use this first when a call fails unexpectedly.
+
+**Read-only.** Safe to call at any time; changes nothing on disk.
+
+### Parameters
+
+| Parameter         | Type   | Description                          | Default    |
+| ----------------- | ------ | ------------------------------------ | ---------- |
+| `response_format` | string | 'json' or 'markdown'                 | 'markdown' |
+
+### Returned fields
+
+| Field                     | Description                                                            |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `version`                 | Server version                                                         |
+| `platform`                | `process.platform` the report was built on                             |
+| `config_file_present`     | Whether a config.json was found (false means defaults only)           |
+| `security`                | Effective security settings after config.json is layered over defaults |
+| `conflict_strategy`       | Effective conflict strategy                                            |
+| `allow_external_volumes`  | Whether external volumes are allowed                                   |
+| `custom_rule_count`       | Number of custom categorization rules                                  |
+| `default_allowed`         | Platform default allowed roots that exist                              |
+| `configured_allowed_dirs` | One entry per `customAllowedDirectories` entry                         |
+| `effective_allowed_dirs`  | The configured entries the security gate kept                          |
+| `unknown_config_keys`     | config.json keys the loader does not understand                         |
+| `problems`                | Human-readable list of what is wrong                                  |
+| `healthy`                 | True when `problems` is empty                                          |
+
+Each `configured_allowed_dirs` entry carries `configured` (as written in
+config.json), `resolved` (`~` expanded), `exists`, `is_directory`, `symlink`,
+`accepted`, optional `rejection` (`missing`, `not_a_directory`, `symlink`,
+`path_traversal`, `null_byte`, `outside_home`,
+`external_volume_not_allowed`), and `blocked_by_policy`.
+
+`blocked_by_policy` is independent of `accepted`. The always-blocked pattern
+list is enforced per request, so a directory can be accepted by the config gate
+and still be rejected when a tool touches it. A `missing` directory is reported
+as a likely typo, a `blocked_by_policy` directory is reported as unusable, and
+the two problems read differently so they can be told apart.
+
+### Example
+
+```typescript
+file_organizer_doctor({
+  response_format: "json",
 });
 ```
 

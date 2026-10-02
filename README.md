@@ -90,13 +90,14 @@ You can ask the assistant things like:
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 
-### Full tool list (22 tools)
+### Full tool list (23 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
 - `file_organizer_batch_rename`
 - `file_organizer_categorize_by_type`
 - `file_organizer_delete_duplicates`
+- `file_organizer_doctor`
 - `file_organizer_find_duplicate_files`
 - `file_organizer_find_largest_files`
 - `file_organizer_get_categories`

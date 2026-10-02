@@ -77,6 +77,10 @@ type AllowedPaths = z.infer<typeof AllowedPathsSchema>;
 
 export const GetCategoriesInputSchema = z.object({}).merge(CommonParamsSchema);
 
+export const DoctorInputSchema = z.object({}).merge(CommonParamsSchema);
+
+export type DoctorInput = z.infer<typeof DoctorInputSchema>;
+
 export const SetCustomRulesInputSchema = z
   .object({
     rules: z.array(
