@@ -29,9 +29,8 @@ src/
 ├── server.ts              createServer() + handleToolCall() (pure routing)
 ├── mcp/                   bootstrap, cli, registry, defineTool, context
 ├── tools/                 one file per tool group (handler + ToolDefinition)
-├── schemas/               Zod input validation: common, scan, organize, system
+├── schemas/               Zod input validation: common, scan, organize, system, output, index
 ├── core/
-│   ├── path→ services/path-validator.service.ts   8-layer validation (see Security)
 │   ├── io/                readFile(): validate → sensitive-file gate → fs.readFile
 │   ├── scan/              scanner.ts: recursive scan with depth/count limits
 │   ├── categorize/        rules + extension map + magic-byte sniff + custom rules
@@ -39,25 +38,12 @@ src/
 │   ├── hash/              SHA-256 hasher + duplicate finder
 │   ├── config/            platform-aware defaults, loader, allowed paths
 │   └── types/             shared FileInfo / Organize / category types
-├── services/              facade re-exports + metadata/{image,audio} + history logger
+├── services/              facade re-exports + metadata/{image,audio} + history logger + path validator (8-layer, see Security)
 ├── extensions/scheduler/  cron watch daemon + its own bin (bin/file-organizer-watch.mjs)
 └── utils/                 logger, error-handler (path-safe messages), formatters
 ```
 
 The scheduler is a separate process by design. It has its own bin, its own state file, and the core server does not import it. Its internal singletons are fine there because it runs alone.
-
-Two ways to drive that process:
-
-| Mode | Command | Who decides the timing |
-| --- | --- | --- |
-| Daemon | `file-organizer-watch` | node-cron inside the process |
-| One pass | `file-organizer-watch once <dir> [--apply]` | the OS (cron, launchd, systemd timer, Task Scheduler) |
-
-`once` is one scan, one plan, every planned move, one history entry, then the process exits. It starts no cron task and holds no handle, which is what makes it safe to point a timer at. The pass itself lives in `src/extensions/scheduler/organize-pass.ts` as `runOrganizePass(options, ctx)` and takes config and history through `ctx`, the same shape the tools get. Argument parsing and the exit-code rule live in `once-cli.ts`.
-
-A dry run is the default for `once`, and it appends no history entry, so a timer pointed at a directory cannot move anything until someone passes `--apply`. The exit code is 1 for a refused path, a per-file error, an aborted organizer, or a thrown failure, so a scheduler can alert on it.
-
-The daemon keeps its own loop for now. Making that loop a thin caller of `runOrganizePass` per tick is issue #52.
 
 ## State is file-backed
 
@@ -66,7 +52,7 @@ Side effects live on disk in the platform config dir (`~/.config/file-organizer-
 | File               | Owner                                                       |
 | ------------------ | ----------------------------------------------------------- |
 | `config.json`      | user config: allowed dirs, defaults, custom rules           |
-| `history.jsonl`    | history logger, append-only behind a cross-process lockfile |
+| `operations.jsonl` | history logger, append-only behind a cross-process lockfile |
 | `rollbacks/*.json` | rollback manifests written by every organize run            |
 
 Nothing else survives a restart. Kill the process mid-run and the manifest tells you what happened; `undo` replays it.

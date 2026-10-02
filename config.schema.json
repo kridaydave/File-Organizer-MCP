@@ -3,18 +3,54 @@
   "title": "File Organizer Config",
   "type": "object",
   "properties": {
-    "watchFolders": {
+    "customAllowedDirectories": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Additional folders to watch beyond platform defaults"
+      "description": "Extra directories the path validator allows beyond the platform defaults (Desktop, Documents, Downloads, Pictures, Videos, Music, and common project dirs). '~' is expanded to the user home; symlinks are rejected."
     },
-    "debounceTime": {
-      "type": "integer",
-      "minimum": 100,
-      "maximum": 10000,
-      "default": 1000
+    "allowExternalVolumes": {
+      "type": "boolean",
+      "description": "Allow organizing files on external volumes (/Volumes on macOS, /mnt, /media, /run/media on Linux)."
+    },
+    "conflictStrategy": {
+      "type": "string",
+      "enum": ["rename", "skip", "overwrite"],
+      "description": "What to do when a destination file already exists: rename (default), skip, or overwrite."
+    },
+    "autoOrganize": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "schedule": {
+          "type": "string",
+          "enum": ["hourly", "daily", "weekly"]
+        }
+      },
+      "required": ["enabled"],
+      "description": "Periodic automatic organization of allowed directories."
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "maxScanDepth": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "logAccess": {
+          "type": "boolean"
+        },
+        "enablePathValidation": {
+          "type": "boolean"
+        },
+        "allowCustomDirectories": {
+          "type": "boolean"
+        }
+      },
+      "description": "Runtime tuning for scanning and path validation."
     },
     "rules": {
       "type": "array",
@@ -32,11 +68,93 @@
             "default": false
           }
         },
-        "required": [
-          "pattern",
-          "destination"
-        ]
-      }
+        "required": ["pattern", "destination"]
+      },
+      "description": "Move rules: files matching pattern go to destination."
+    },
+    "customRules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "filenamePattern": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer"
+          }
+        },
+        "required": ["category", "priority"]
+      },
+      "description": "Custom categorization rules (set via set_custom_rules); loaded by every request."
+    },
+    "watchList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string",
+            "description": "Cron expression for when to scan this directory"
+          },
+          "rules": {
+            "type": "object",
+            "properties": {
+              "auto_organize": {
+                "type": "boolean"
+              },
+              "min_file_age_minutes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max_files_per_run": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "catchup_mode": {
+                "type": "string",
+                "enum": ["smart", "always", "never"]
+              }
+            },
+            "required": ["auto_organize"]
+          }
+        },
+        "required": ["directory", "schedule", "rules"]
+      },
+      "description": "Directories the cron watch daemon scans on a schedule."
+    },
+    "historyLogging": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxFileSizeMB": {
+          "type": "number",
+          "minimum": 1
+        },
+        "keepRotatedFiles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "privacyMode": {
+          "type": "string",
+          "enum": ["full", "redacted", "none"]
+        }
+      },
+      "description": "Operation history log rotation and privacy settings."
     }
   }
 }
