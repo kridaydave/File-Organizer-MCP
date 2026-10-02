@@ -243,21 +243,13 @@ describe("file-organizer-watch once (real CLI)", () => {
   let home: string;
   let configDir: string;
   let workDir: string;
+  let childEnv: NodeJS.ProcessEnv;
 
   function runCli(args: string[]): Promise<{ code: number; out: string }> {
     return new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [CLI_BIN, ...args], {
         cwd: REPO_ROOT,
-        // A private HOME and XDG_CONFIG_HOME keep both the config file and
-        // the history dir inside this test's mkdtemp root. The work dir sits
-        // under HOME because loadCustomAllowedDirs() rejects an allow-list
-        // entry outside the home directory.
-        env: {
-          PATH: process.env.PATH,
-          HOME: home,
-          XDG_CONFIG_HOME: path.join(home, ".config"),
-          NODE_ENV: "test",
-        },
+        env: childEnv,
       });
       let out = "";
       child.stdout.on("data", (c: Buffer) => (out += c.toString()));
@@ -278,8 +270,33 @@ describe("file-organizer-watch once (real CLI)", () => {
   beforeEach(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), "fom-once-cli-"));
     home = path.join(root, "home");
-    configDir = path.join(home, ".config", "file-organizer-mcp");
     workDir = path.join(home, "work");
+
+    // The config and history locations are platform-specific
+    // (getUserConfigPath / getHistoryDirectory in src/core/config/paths.ts):
+    // Windows reads APPDATA, macOS hardcodes ~/Library/Application Support and
+    // ignores XDG_CONFIG_HOME, Linux reads XDG_CONFIG_HOME. Point every one of
+    // them at this test's root so the child reads the config written below
+    // instead of the real user profile.
+    const appData = path.join(home, "AppData", "Roaming");
+    const configBase =
+      process.platform === "win32"
+        ? appData
+        : process.platform === "darwin"
+          ? path.join(home, "Library", "Application Support")
+          : path.join(home, ".config");
+
+    childEnv = {
+      PATH: process.env.PATH,
+      HOME: home,
+      // Windows resolves the home directory from USERPROFILE, not HOME.
+      USERPROFILE: home,
+      APPDATA: appData,
+      XDG_CONFIG_HOME: path.join(home, ".config"),
+      NODE_ENV: "test",
+    };
+
+    configDir = path.join(configBase, "file-organizer-mcp");
     await fs.mkdir(workDir, { recursive: true });
     await fs.mkdir(configDir, { recursive: true });
     await fs.writeFile(
