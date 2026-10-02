@@ -135,6 +135,53 @@ export const undoOutputSchema = z.object({
   errors: z.array(z.string()),
 });
 
+export const doctorOutputSchema = z.object({
+  version: z.string(),
+  platform: z.string(),
+  config_file_present: z.boolean(),
+  security: z.object({
+    enable_path_validation: z.boolean(),
+    allow_custom_directories: z.boolean(),
+    log_access: z.boolean(),
+    max_scan_depth: z.number(),
+    max_files_per_operation: z.number(),
+  }),
+  conflict_strategy: z.string(),
+  allow_external_volumes: z.boolean(),
+  custom_rule_count: z.number(),
+  history_logging: z
+    .object({
+      enabled: z.boolean().optional(),
+      maxFileSizeMB: z.number().optional(),
+      keepRotatedFiles: z.number().optional(),
+      privacyMode: z.string().optional(),
+    })
+    .optional(),
+  auto_organize: z
+    .object({
+      enabled: z.boolean(),
+      schedule: z.string().optional(),
+    })
+    .optional(),
+  default_allowed: z.array(z.string()),
+  configured_allowed_dirs: z.array(
+    z.object({
+      configured: z.string(),
+      resolved: z.string(),
+      exists: z.boolean(),
+      is_directory: z.boolean(),
+      symlink: z.boolean(),
+      accepted: z.boolean(),
+      rejection: z.string().optional(),
+      blocked_by_policy: z.boolean(),
+    }),
+  ),
+  effective_allowed_dirs: z.array(z.string()),
+  unknown_config_keys: z.array(z.string()),
+  problems: z.array(z.string()),
+  healthy: z.boolean(),
+});
+
 type JsonSchemaObject = {
   type: "object";
   properties: Record<string, unknown>;
@@ -160,4 +207,7 @@ export const previewOrganizationOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const undoOutputJsonSchema = z.toJSONSchema(
   undoOutputSchema,
+) as JsonSchemaObject;
+export const doctorOutputJsonSchema = z.toJSONSchema(
+  doctorOutputSchema,
 ) as JsonSchemaObject;

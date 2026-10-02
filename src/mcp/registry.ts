@@ -98,6 +98,10 @@ import {
   organizeByProjectToolDefinition,
   handleOrganizeByProject,
 } from "../tools/project-organization.js";
+import {
+  doctorToolDefinition,
+  handleDoctor,
+} from "../tools/doctor.js";
 
 function reg(def: ToolDefinition, handler: ToolHandler) {
   return defineTool({
@@ -134,6 +138,7 @@ const entries = [
   reg(fileReaderToolDefinition, handleReadFile),
   reg(viewHistoryToolDefinition, handleViewHistory),
   reg(organizeByProjectToolDefinition, handleOrganizeByProject),
+  reg(doctorToolDefinition, handleDoctor),
 ];
 
 export const TOOLS: ToolDefinition[] = entries.map((e) => e.definition);
