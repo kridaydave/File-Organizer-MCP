@@ -46,6 +46,19 @@ src/
 
 The scheduler is a separate process by design. It has its own bin, its own state file, and the core server does not import it. Its internal singletons are fine there because it runs alone.
 
+Two ways to drive that process:
+
+| Mode | Command | Who decides the timing |
+| --- | --- | --- |
+| Daemon | `file-organizer-watch` | node-cron inside the process |
+| One pass | `file-organizer-watch once <dir> [--apply]` | the OS (cron, launchd, systemd timer, Task Scheduler) |
+
+`once` is one scan, one plan, every planned move, one history entry, then the process exits. It starts no cron task and holds no handle, which is what makes it safe to point a timer at. The pass itself lives in `src/extensions/scheduler/organize-pass.ts` as `runOrganizePass(options, ctx)` and takes config and history through `ctx`, the same shape the tools get. Argument parsing and the exit-code rule live in `once-cli.ts`.
+
+A dry run is the default for `once`, and it appends no history entry, so a timer pointed at a directory cannot move anything until someone passes `--apply`. The exit code is 1 for a refused path, a per-file error, an aborted organizer, or a thrown failure, so a scheduler can alert on it.
+
+The daemon keeps its own loop for now. Making that loop a thin caller of `runOrganizePass` per tick is issue #52.
+
 ## State is file-backed
 
 Side effects live on disk in the platform config dir (`~/.config/file-organizer-mcp/` or `%APPDATA%`):

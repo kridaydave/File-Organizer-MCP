@@ -269,9 +269,7 @@ describe("HistoryLoggerService", () => {
 
       const logs: Promise<void>[] = [];
       for (let i = 0; i < 5; i++) {
-        logs.push(
-          service.log(sampleEntry({ operation: "organize" })),
-        );
+        logs.push(service.log(sampleEntry({ operation: "organize" })));
         logs.push(
           service2.log(sampleEntry({ operation: "scan", source: "scheduled" })),
         );
@@ -307,11 +305,13 @@ describe("HistoryLoggerService", () => {
       const lockPath = path.join(dataDir, "operations.lock");
       await fs.writeFile(lockPath, String(Date.now()), { flag: "wx" });
 
-      // Lock never released within lockTimeoutMs (1000ms) — write is dropped
-      // and logged, not crash.
-      await expect(
-        service.log(sampleEntry()),
-      ).resolves.toBeUndefined();
+      // Lock never released within lockTimeoutMs (1000ms) — the write is
+      // dropped, and log() rejects so the caller can tell a dropped record
+      // from a written one. Swallowing this here is what made a lost undo
+      // record read as success.
+      await expect(service.log(sampleEntry())).rejects.toThrow(
+        /History lock timeout/,
+      );
 
       const during = await service.getHistory({});
       expect(during.entries.length).toBe(0);
@@ -448,7 +448,9 @@ describe("HistoryLoggerService", () => {
       const lockPath = path.join(dataDir, "operations.lock");
       await fs.writeFile(lockPath, String(Date.now()), { flag: "wx" });
 
-      await shortLockService.log(sampleEntry()); // dropped, lock held
+      await expect(shortLockService.log(sampleEntry())).rejects.toThrow(
+        /History lock timeout/,
+      ); // dropped, lock held
 
       await fs.unlink(lockPath);
       await service.log(sampleEntry()); // recovers

@@ -97,6 +97,10 @@ export class HistoryLoggerService {
   /**
    * Append one entry immediately. Serialized through writeQueue so concurrent
    * callers can't interleave lock/append cycles within this process.
+   *
+   * Rejects when the entry was not appended (lock timeout, append error) so a
+   * dropped record can never read as a written one. writeQueue still stays
+   * alive after a rejection — only this caller sees the failure.
    */
   async log(entry: Omit<HistoryEntry, "id" | "timestamp">): Promise<void> {
     await this.init();
@@ -114,6 +118,12 @@ export class HistoryLoggerService {
     await append;
   }
 
+  /**
+   * Append one entry. Rethrows whatever the append failed with, including a
+   * lock timeout, so the caller can tell a written record from a dropped one.
+   * Callers whose own work must not fail on history wrap this in try/catch
+   * (src/server.ts does); callers that need the record for undo must not.
+   */
   private async appendEntry(entry: HistoryEntry): Promise<void> {
     try {
       await this.acquireLock();
@@ -125,7 +135,10 @@ export class HistoryLoggerService {
         if ((error as { code?: string }).code === "ENOSPC") {
           logger.warn("Disk full, attempting retry once");
           await new Promise((resolve) => setTimeout(resolve, 1000));
-          await fs.appendFile(this.historyFilePath, JSON.stringify(entry) + "\n");
+          await fs.appendFile(
+            this.historyFilePath,
+            JSON.stringify(entry) + "\n",
+          );
         } else {
           throw error;
         }
@@ -134,6 +147,7 @@ export class HistoryLoggerService {
       }
     } catch (error) {
       logger.error("Failed to write history entry:", error);
+      throw error;
     }
   }
 

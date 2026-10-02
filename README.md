@@ -134,6 +134,34 @@ file-organizer-watch                                # start the daemon
 Watches are stored in the shared user config, so `add`/`remove` work even
 while the daemon is running (restart it to pick up changes).
 
+### One pass from your OS scheduler
+
+If you would rather your operating system own the timer, run one pass and let
+the process end:
+
+```bash
+file-organizer-watch once ~/Downloads              # preview, writes nothing
+file-organizer-watch once ~/Downloads --apply      # organize, then exit
+file-organizer-watch once ~/Downloads --apply --recursive
+```
+
+`once` scans, categorizes, plans, optionally moves, appends one history entry,
+and exits. It starts no watcher, no timer, and no daemon, so the process ends
+on its own. That makes it a plain target for cron, launchd, a systemd timer, or
+Task Scheduler:
+
+```cron
+0 10 * * * file-organizer-watch once "$HOME/Downloads" --apply >> "$HOME/.local/share/file-organizer-once.log" 2>&1
+```
+
+A pass is a dry run unless you pass `--apply`. The dry run writes nothing at
+all, not even a history entry, so you can point a timer at a directory and see
+the plan before letting it move anything. `--dry-run` is accepted as an
+explicit spelling of the default.
+
+Exit code is 0 on a clean pass and 1 when the pass failed, including a path the
+validator refused, an unknown flag, or per-file errors during the move.
+
 ---
 
 ## File categories
@@ -369,7 +397,7 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 
 The server is stateless: each JSON-RPC request gets a fresh context (`config`, history logger) routed through an explicit tool registry into pure service modules under `src/core/`. The pipeline is `scan → categorize → plan → move`, every path passes 8-layer validation before any `fs` call, and all side effects are file-backed (history, rollback manifests), so nothing survives a restart except what you can undo.
 
-Scheduled organization runs as a separate process (`file-organizer-watch`) so the stdio server stays request/response.
+Scheduled organization runs as a separate process (`file-organizer-watch`) so the stdio server stays request/response. For a timer you drive yourself, `file-organizer-watch once <dir>` runs a single pass and exits, so cron, launchd, or a systemd timer is the scheduler.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram and design notes.
 

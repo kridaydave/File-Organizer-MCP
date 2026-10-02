@@ -6,6 +6,10 @@
  *   file-organizer-watch add <dir> <cron>         add/update a watch
  *   file-organizer-watch remove <dir>             remove a watch
  *   file-organizer-watch list                     show configured watches
+ *   file-organizer-watch once <dir> [--apply]     one pass, then exit
+ *
+ * `once` is the mode an OS timer drives. It starts no watcher and holds no
+ * handle, so the process ends on its own. See once-cli.ts and organize-pass.ts.
  *
  * Task state lives in the shared user config (watchList), so the daemon and
  * the CLI subcommands stay in sync without any in-memory coupling.
@@ -21,14 +25,20 @@ import {
   handleUnwatchDirectory,
   handleListWatches,
 } from "./watch-manager.js";
+import { once } from "./once-cli.js";
 
 function text(response: { content: Array<{ text?: string }> }): string {
   return response.content.map((c) => c.text ?? "").join("\n");
 }
 
-async function add(directory: string | undefined, schedule: string | undefined): Promise<void> {
+async function add(
+  directory: string | undefined,
+  schedule: string | undefined,
+): Promise<void> {
   if (!directory || !schedule) {
-    console.error("Usage: file-organizer-watch add <directory> <cron-expression>");
+    console.error(
+      "Usage: file-organizer-watch add <directory> <cron-expression>",
+    );
     console.error('Example: file-organizer-watch add ~/Downloads "0 10 * * *"');
     process.exit(1);
   }
@@ -105,12 +115,14 @@ async function main(): Promise<void> {
       return remove(rest[0]);
     case "list":
       return list();
+    case "once":
+      return once(rest);
     case "run":
     case undefined:
       return run();
     default:
       console.error(
-        `Unknown command "${command}". Use add | remove | list | run.`,
+        `Unknown command "${command}". Use add | remove | list | once | run.`,
       );
       process.exit(1);
   }

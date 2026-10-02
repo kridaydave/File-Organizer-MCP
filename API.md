@@ -39,7 +39,8 @@
 > **Note:** The watch tools (`file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
 > `file_organizer_list_watches`) are no longer part of the MCP server. Scheduled organization
 > runs as a standalone process — see `file-organizer-watch` (`bin/file-organizer-watch.mjs`)
-> with `add` / `remove` / `list` / `run` subcommands.
+> with `add` / `remove` / `list` / `once` / `run` subcommands. `once` runs a single
+> organization pass and exits, so an OS timer can be the scheduler. No MCP tool shape changed.
 
 ---
 
