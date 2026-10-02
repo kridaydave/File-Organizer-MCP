@@ -1,6 +1,6 @@
 # Architecture
 
-File Organizer MCP is a stateless stdio MCP server. One Node process exposes 23 typed tools over JSON-RPC. There is no session state, no in-memory cache of your files, and no background work in the core server. The core loop is `scan → categorize → plan → move`, and every filesystem touch passes through one path validator.
+File Organizer MCP is a stateless stdio MCP server. One Node process exposes 24 typed tools over JSON-RPC. There is no session state, no in-memory cache of your files, and no background work in the core server. The core loop is `scan → categorize → plan → move`, and every filesystem touch passes through one path validator.
 
 ## Request lifecycle
 
@@ -50,11 +50,11 @@ The scheduler is a separate process by design. It has its own bin, its own state
 
 Side effects live on disk in the platform config dir (`~/.config/file-organizer-mcp/` or `%APPDATA%`):
 
-| File | Owner |
-| --- | --- |
-| `config.json` | user config: allowed dirs, defaults, custom rules |
-| `history.jsonl` | history logger, append-only behind a cross-process lockfile |
-| `rollbacks/*.json` | rollback manifests written by every organize run |
+| File               | Owner                                                       |
+| ------------------ | ----------------------------------------------------------- |
+| `config.json`      | user config: allowed dirs, defaults, custom rules           |
+| `history.jsonl`    | history logger, append-only behind a cross-process lockfile |
+| `rollbacks/*.json` | rollback manifests written by every organize run            |
 
 Nothing else survives a restart. Kill the process mid-run and the manifest tells you what happened; `undo` replays it.
 

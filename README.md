@@ -28,12 +28,12 @@ A filesystem MCP server built only on `read`, `write`, `make`, and `delete` forc
 
 File Organizer MCP replaces those chains with one call:
 
-| Primitive approach | File Organizer MCP |
-| --- | --- |
+| Primitive approach                     | File Organizer MCP                                |
+| -------------------------------------- | ------------------------------------------------- |
 | Many `read` / `write` / `rename` calls | `organize_files()` runs the whole move atomically |
-| Dozens of reasoning steps | One reasoning step |
-| High token use | Minimal token use |
-| Easy to corrupt on partial failure | Rollback-safe operations |
+| Dozens of reasoning steps              | One reasoning step                                |
+| High token use                         | Minimal token use                                 |
+| Easy to corrupt on partial failure     | Rollback-safe operations                          |
 
 ---
 
@@ -61,9 +61,9 @@ You can ask the assistant things like:
 
 ### Install methods
 
-| Method | Command | Use case |
-| --- | --- | --- |
-| npx | `npx file-organizer-mcp --setup` | Occasional use or a trial |
+| Method | Command                             | Use case                    |
+| ------ | ----------------------------------- | --------------------------- |
+| npx    | `npx file-organizer-mcp --setup`    | Occasional use or a trial   |
 | Global | `npm install -g file-organizer-mcp` | Regular use, faster startup |
 
 ---
@@ -89,8 +89,9 @@ You can ask the assistant things like:
 - `file_organizer_read_file` - Read a file with 8-layer path validation. `path` is required; `encoding` is utf-8, base64, or binary.
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
+- `file_organizer_find_broken_symlinks` - Audit a directory for symlinks that dangle or resolve outside the allowed roots. Read-only, never follows a link. Run it before organizing a tree full of links.
 
-### Full tool list (23 tools)
+### Full tool list (24 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
@@ -98,6 +99,7 @@ You can ask the assistant things like:
 - `file_organizer_categorize_by_type`
 - `file_organizer_delete_duplicates`
 - `file_organizer_doctor`
+- `file_organizer_find_broken_symlinks`
 - `file_organizer_find_duplicate_files`
 - `file_organizer_find_largest_files`
 - `file_organizer_get_categories`
@@ -136,15 +138,15 @@ while the daemon is running (restart it to pick up changes).
 
 ## File categories
 
-| Category | Typical extensions |
-| --- | --- |
-| Executables | `.exe`, `.msi`, `.bat`, `.sh` |
-| Videos | `.mp4`, `.avi`, `.mkv`, `.mov` |
-| Documents | `.pdf`, `.doc`, `.docx`, `.txt`, `.md` |
-| Images | `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp` |
-| Audio | `.mp3`, `.wav`, `.flac`, `.m4a` |
-| Archives | `.zip`, `.rar`, `.7z`, `.tar.gz` |
-| Code | `.py`, `.js`, `.ts`, `.java`, `.go`, `.json` |
+| Category    | Typical extensions                           |
+| ----------- | -------------------------------------------- |
+| Executables | `.exe`, `.msi`, `.bat`, `.sh`                |
+| Videos      | `.mp4`, `.avi`, `.mkv`, `.mov`               |
+| Documents   | `.pdf`, `.doc`, `.docx`, `.txt`, `.md`       |
+| Images      | `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`     |
+| Audio       | `.mp3`, `.wav`, `.flac`, `.m4a`              |
+| Archives    | `.zip`, `.rar`, `.7z`, `.tar.gz`             |
+| Code        | `.py`, `.js`, `.ts`, `.java`, `.go`, `.json` |
 
 ---
 
@@ -247,11 +249,11 @@ Access is restricted to a whitelist of user directories by default. System direc
 
 The server enables these locations if they exist on the machine:
 
-| Platform | Allowed directories |
-| --- | --- |
-| Windows | Desktop, Documents, Downloads, Pictures, Videos, Music, OneDrive, Projects, Workspace |
-| macOS | Desktop, Documents, Downloads, Movies, Music, Pictures, iCloud Drive, Projects |
-| Linux | Desktop, Documents, Downloads, Music, Pictures, Videos, `~/dev`, `~/workspace` |
+| Platform | Allowed directories                                                                   |
+| -------- | ------------------------------------------------------------------------------------- |
+| Windows  | Desktop, Documents, Downloads, Pictures, Videos, Music, OneDrive, Projects, Workspace |
+| macOS    | Desktop, Documents, Downloads, Movies, Music, Pictures, iCloud Drive, Projects        |
+| Linux    | Desktop, Documents, Downloads, Music, Pictures, Videos, `~/dev`, `~/workspace`        |
 
 ### Always blocked
 
@@ -330,12 +332,12 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 
 ### Defenses
 
-| Attack type | Protection |
-| --- | --- |
-| Unauthorized access | Whitelist plus blacklist enforcement |
-| Path traversal | 8-layer validation pipeline |
-| Symlink attacks | Real path resolution |
-| DoS | Resource limits on file count, depth, and size |
+| Attack type         | Protection                                     |
+| ------------------- | ---------------------------------------------- |
+| Unauthorized access | Whitelist plus blacklist enforcement           |
+| Path traversal      | 8-layer validation pipeline                    |
+| Symlink attacks     | Real path resolution                           |
+| DoS                 | Resource limits on file count, depth, and size |
 
 ---
 

@@ -109,6 +109,22 @@ export const CategorizeByTypeInputSchema = z
   })
   .merge(CommonParamsSchema);
 
+/**
+ * Schema for find_broken_symlinks tool
+ */
+export const FindBrokenSymlinksInputSchema = z
+  .object({
+    directory: z
+      .string()
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to audit for symlink problems"),
+  })
+  .merge(CommonParamsSchema);
+
+export type FindBrokenSymlinksInput = z.infer<
+  typeof FindBrokenSymlinksInputSchema
+>;
+
 export type ListFilesInput = z.infer<typeof ListFilesInputSchema>;
 export type ScanDirectoryInput = z.infer<typeof ScanDirectoryInputSchema>;
 export type FindLargestFilesInput = z.infer<typeof FindLargestFilesInputSchema>;

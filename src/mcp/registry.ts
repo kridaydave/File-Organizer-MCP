@@ -98,10 +98,11 @@ import {
   organizeByProjectToolDefinition,
   handleOrganizeByProject,
 } from "../tools/project-organization.js";
+import { doctorToolDefinition, handleDoctor } from "../tools/doctor.js";
 import {
-  doctorToolDefinition,
-  handleDoctor,
-} from "../tools/doctor.js";
+  findBrokenSymlinksToolDefinition,
+  handleFindBrokenSymlinks,
+} from "../tools/symlink-audit.js";
 
 function reg(def: ToolDefinition, handler: ToolHandler) {
   return defineTool({
@@ -139,6 +140,7 @@ const entries = [
   reg(viewHistoryToolDefinition, handleViewHistory),
   reg(organizeByProjectToolDefinition, handleOrganizeByProject),
   reg(doctorToolDefinition, handleDoctor),
+  reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
 ];
 
 export const TOOLS: ToolDefinition[] = entries.map((e) => e.definition);

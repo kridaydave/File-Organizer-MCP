@@ -63,6 +63,42 @@ export interface ListResult extends PaginatedResult<BasicFileInfo> {
   directory: string;
 }
 
+/** Why a symlink was reported by the symlink audit. */
+export type SymlinkIssueKind =
+  /** The link's target does not exist. */
+  | "dangling"
+  /** The target exists but resolves outside the allowed directories. */
+  | "escapes_allowed_roots"
+  /** The link chain loops, so the target cannot be resolved at all. */
+  | "circular";
+
+export interface BrokenSymlinkFinding {
+  /** The link itself, not its target. */
+  path: string;
+  /** Raw link value as stored on disk, so relative links stay readable. */
+  link_target: string;
+  kind: SymlinkIssueKind;
+  detail: string;
+  /**
+   * Canonical absolute form of the target. Absent when the target could not be
+   * resolved at all (a loop).
+   */
+  resolved_target?: string;
+}
+
+export interface BrokenSymlinkResult {
+  directory: string;
+  /** Symlinks examined. Not full coverage on its own — read `truncated`. */
+  scanned_count: number;
+  /** True when a subdirectory past the configured max scan depth was not walked. */
+  truncated: boolean;
+  total_count: number;
+  dangling_count: number;
+  escaping_count: number;
+  circular_count: number;
+  findings: BrokenSymlinkFinding[];
+}
+
 export interface FileOrganizerConfig {
   security: {
     maxFileSize: number;
