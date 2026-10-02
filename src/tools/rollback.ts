@@ -10,6 +10,7 @@ import type { ToolDefinition, ToolResponse } from "../types.js";
 import { RollbackService } from "../core/organize/rollback.js";
 import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
 import { UndoLastOperationInputSchema } from "../schemas/organize.js";
+import { undoOutputJsonSchema } from "../schemas/output.js";
 
 export { UndoLastOperationInputSchema } from "../schemas/organize.js";
 export type { UndoLastOperationInput } from "../schemas/organize.js";
@@ -30,6 +31,7 @@ export const undoLastOperationToolDefinition: ToolDefinition = {
     },
     required: [],
   },
+  outputSchema: undoOutputJsonSchema,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -102,6 +104,7 @@ ${sanitizedResult.errors.length ? `**Errors:**\n${sanitizedResult.errors.map((e)
 `;
     return {
       content: [{ type: "text", text: markdown }],
+      structuredContent: sanitizedResult as unknown as Record<string, unknown>,
       ...(hasFailures && { isError: true }),
     };
   } catch (error) {

@@ -58,6 +58,11 @@ export function createServer(): McpServer {
         inputSchema: fromJsonSchema(
           tool.inputSchema as unknown as JsonSchemaType,
         ),
+        ...(tool.outputSchema !== undefined && {
+          outputSchema: fromJsonSchema(
+            tool.outputSchema as unknown as JsonSchemaType,
+          ),
+        }),
         annotations: tool.annotations,
       },
       async (args) => {
