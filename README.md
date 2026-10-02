@@ -76,7 +76,7 @@ You can ask the assistant things like:
 - Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
 - Dry-run preview, atomic moves, and rollback.
-- Path traversal protection, TOCTOU mitigation, and metadata scrubbing.
+- Path traversal protection, TOCTOU mitigation.
 - Windows, macOS, and Linux.
 
 ---
@@ -89,7 +89,6 @@ You can ask the assistant things like:
 - `file_organizer_read_file` - Read a file with 8-layer path validation. `path` is required; `encoding` is utf-8, base64, or binary.
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
-- `file_organizer_find_broken_symlinks` - Audit a directory for symlinks that dangle or resolve outside the allowed roots. Read-only, never follows a link. Run it before organizing a tree full of links.
 
 ### Full tool list (24 tools)
 
@@ -133,34 +132,6 @@ file-organizer-watch                                # start the daemon
 
 Watches are stored in the shared user config, so `add`/`remove` work even
 while the daemon is running (restart it to pick up changes).
-
-### One pass from your OS scheduler
-
-If you would rather your operating system own the timer, run one pass and let
-the process end:
-
-```bash
-file-organizer-watch once ~/Downloads              # preview, writes nothing
-file-organizer-watch once ~/Downloads --apply      # organize, then exit
-file-organizer-watch once ~/Downloads --apply --recursive
-```
-
-`once` scans, categorizes, plans, optionally moves, appends one history entry,
-and exits. It starts no watcher, no timer, and no daemon, so the process ends
-on its own. That makes it a plain target for cron, launchd, a systemd timer, or
-Task Scheduler:
-
-```cron
-0 10 * * * file-organizer-watch once "$HOME/Downloads" --apply >> "$HOME/.local/share/file-organizer-once.log" 2>&1
-```
-
-A pass is a dry run unless you pass `--apply`. The dry run writes nothing at
-all, not even a history entry, so you can point a timer at a directory and see
-the plan before letting it move anything. `--dry-run` is accepted as an
-explicit spelling of the default.
-
-Exit code is 0 on a clean pass and 1 when the pass failed, including a path the
-validator refused, an unknown flag, or per-file errors during the move.
 
 ---
 
@@ -226,7 +197,7 @@ Music/
 
 ### Organize photos
 
-It reads the capture date from EXIF and sorts photos into `YYYY / MM / DD` folders.
+It reads the capture date from EXIF and sorts photos into date-based folders. The default `date_format` is `YYYY/MM`; the example below uses `YYYY/MM/DD`.
 
 ```
 Before:
@@ -261,7 +232,10 @@ Register a directory with a cron schedule:
 {
   "directory": "/Users/john/Downloads",
   "schedule": "0 9 * * *",
-  "min_file_age_minutes": 5
+  "rules": {
+    "auto_organize": true,
+    "min_file_age_minutes": 5
+  }
 }
 ```
 
@@ -277,11 +251,13 @@ Access is restricted to a whitelist of user directories by default. System direc
 
 The server enables these locations if they exist on the machine:
 
-| Platform | Allowed directories                                                                   |
-| -------- | ------------------------------------------------------------------------------------- |
-| Windows  | Desktop, Documents, Downloads, Pictures, Videos, Music, OneDrive, Projects, Workspace |
-| macOS    | Desktop, Documents, Downloads, Movies, Music, Pictures, iCloud Drive, Projects        |
-| Linux    | Desktop, Documents, Downloads, Music, Pictures, Videos, `~/dev`, `~/workspace`        |
+| Platform | Allowed directories                                                                                                                          |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows  | Desktop, Documents, Downloads, Pictures, Videos, Music, Projects, Workspace, workspace, Development, Code, OneDrive (if set)                 |
+| macOS    | Desktop, Documents, Downloads, Pictures, Videos, Music, Projects, Workspace, workspace, Development, Code, Movies, iCloud Drive, /Volumes    |
+| Linux    | Desktop, Documents, Downloads, Pictures, Videos, Music, Projects, Workspace, workspace, Development, Code, `~/dev`, /mnt, /media, /run/media |
+
+Only directories that exist and are not symlinks are returned.
 
 ### Always blocked
 
@@ -397,7 +373,7 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 
 The server is stateless: each JSON-RPC request gets a fresh context (`config`, history logger) routed through an explicit tool registry into pure service modules under `src/core/`. The pipeline is `scan → categorize → plan → move`, every path passes 8-layer validation before any `fs` call, and all side effects are file-backed (history, rollback manifests), so nothing survives a restart except what you can undo.
 
-Scheduled organization runs as a separate process (`file-organizer-watch`) so the stdio server stays request/response. For a timer you drive yourself, `file-organizer-watch once <dir>` runs a single pass and exits, so cron, launchd, or a systemd timer is the scheduler.
+Scheduled organization runs as a separate process (`file-organizer-watch`) so the stdio server stays request/response.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram and design notes.
 
