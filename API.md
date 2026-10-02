@@ -17,6 +17,7 @@
 - [file_organizer_categorize_by_type](#file_organizer_categorize_by_type)
 - [file_organizer_delete_duplicates](#file_organizer_delete_duplicates)
 - [file_organizer_doctor](#file_organizer_doctor)
+- [file_organizer_find_broken_symlinks](#file_organizer_find_broken_symlinks)
 - [file_organizer_find_duplicate_files](#file_organizer_find_duplicate_files)
 - [file_organizer_find_largest_files](#file_organizer_find_largest_files)
 - [file_organizer_get_categories](#file_organizer_get_categories)
@@ -181,6 +182,48 @@ file_organizer_delete_duplicates({
   create_backup_manifest: true,
   verify_before_delete: true,
   candidate_directories: [],
+  response_format: "value",
+});
+```
+
+---
+
+## file_organizer_find_broken_symlinks
+
+[⬆ Back to Top](#top)
+
+**Description:** Audit a directory for symlinks that dangle (target missing) or resolve outside the allowed directories. Recurses into real subdirectories but never follows a symlink, so it cannot read outside the allowed roots. Symlink loops are reported as their own kind. Read-only, so it is safe to run before organizing a directory. Closes #33.
+
+### Parameters
+
+| Parameter         | Type   | Description                       | Default    |
+| ----------------- | ------ | --------------------------------- | ---------- |
+| `directory`       | string | Full path to the directory        | -          |
+| `response_format` | string | `json` or `markdown`              | 'markdown' |
+
+### Findings
+
+| Field                        | Type     | Description                                        |
+| ---------------------------- | -------- | -------------------------------------------------- |
+| `directory`                  | string   | The audited directory                              |
+| `scanned_count`              | number   | Symlinks examined                                  |
+| `total_count`                | number   | Findings reported                                  |
+| `dangling_count`             | number   | Findings whose `kind` is `dangling`                |
+| `escaping_count`             | number   | Findings whose `kind` is `escapes_allowed_roots`   |
+| `circular_count`             | number   | Findings whose `kind` is `circular`                |
+| `findings[].path`            | string   | Full path of the link itself, not its target       |
+| `findings[].link_target`     | string   | Raw link value as stored on disk                   |
+| `findings[].kind`            | string   | `dangling`, `escapes_allowed_roots`, or `circular` |
+| `findings[].detail`          | string   | Plain-English explanation                          |
+| `findings[].resolved_target` | string   | Canonical absolute target. Absent for a loop        |
+
+Containment is decided by the same whitelist check the validation layer uses, so this tool and `organize_files` agree on what "outside the allowed roots" means.
+
+### Example
+
+```typescript
+file_organizer_find_broken_symlinks({
+  directory: "value",
   response_format: "value",
 });
 ```

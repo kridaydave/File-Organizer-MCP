@@ -13,7 +13,12 @@ const skippedFileSchema = z.object({
   path: z.string(),
   name: z.string(),
   size_bytes: z.number(),
-  reason: z.enum(["empty_file", "exceeds_size_cap", "hash_failed", "timed_out"]),
+  reason: z.enum([
+    "empty_file",
+    "exceeds_size_cap",
+    "hash_failed",
+    "timed_out",
+  ]),
   detail: z.string(),
 });
 
@@ -129,6 +134,25 @@ export const previewOrganizationOutputSchema = z.object({
   skipped_files: z.array(z.object({ path: z.string(), reason: z.string() })),
 });
 
+export const findBrokenSymlinksOutputSchema = z.object({
+  directory: z.string(),
+  scanned_count: z.number(),
+  truncated: z.boolean(),
+  total_count: z.number(),
+  dangling_count: z.number(),
+  escaping_count: z.number(),
+  circular_count: z.number(),
+  findings: z.array(
+    z.object({
+      path: z.string(),
+      link_target: z.string(),
+      kind: z.enum(["dangling", "escapes_allowed_roots", "circular"]),
+      detail: z.string(),
+      resolved_target: z.string().optional(),
+    }),
+  ),
+});
+
 export const undoOutputSchema = z.object({
   success: z.number(),
   failed: z.number(),
@@ -210,4 +234,7 @@ export const undoOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const doctorOutputJsonSchema = z.toJSONSchema(
   doctorOutputSchema,
+) as JsonSchemaObject;
+export const findBrokenSymlinksOutputJsonSchema = z.toJSONSchema(
+  findBrokenSymlinksOutputSchema,
 ) as JsonSchemaObject;
