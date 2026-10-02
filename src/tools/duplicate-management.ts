@@ -15,6 +15,10 @@ import {
   AnalyzeDuplicatesInputSchema,
   DeleteDuplicatesInputSchema,
 } from "../schemas/scan.js";
+import {
+  analyzeDuplicatesOutputJsonSchema,
+  deleteDuplicatesOutputJsonSchema,
+} from "../schemas/output.js";
 
 export {
   AnalyzeDuplicatesInputSchema,
@@ -47,6 +51,7 @@ export const analyzeDuplicatesToolDefinition: ToolDefinition = {
     },
     required: ["directory"],
   },
+  outputSchema: analyzeDuplicatesOutputJsonSchema,
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,
@@ -86,6 +91,7 @@ export const deleteDuplicatesToolDefinition: ToolDefinition = {
     },
     required: ["files_to_delete"],
   },
+  outputSchema: deleteDuplicatesOutputJsonSchema,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -193,7 +199,14 @@ ${g.files
   )
   .join("\n")}${skippedNotice ? `\n${skippedNotice}` : ""}
 `;
-    return { content: [{ type: "text", text: markdown }] };
+    return {
+      content: [{ type: "text", text: markdown }],
+      structuredContent: {
+        summary,
+        duplicate_groups: analyzed,
+        skipped: analysis.skipped,
+      },
+    };
   } catch (error) {
     return createErrorResponse(error);
   }
@@ -263,6 +276,7 @@ ${output.failures.length > 0 ? `**Failures:**\n${output.failures.map((f) => `- $
 `;
     return {
       content: [{ type: "text", text: markdown }],
+      structuredContent: output as unknown as Record<string, unknown>,
       ...(hasFailures && { isError: true }),
     };
   } catch (error) {

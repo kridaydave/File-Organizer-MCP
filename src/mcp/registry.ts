@@ -106,6 +106,7 @@ function reg(def: ToolDefinition, handler: ToolHandler) {
     title: def.title,
     inputSchema: def.inputSchema,
     annotations: def.annotations,
+    outputSchema: def.outputSchema,
     handler,
   });
 }

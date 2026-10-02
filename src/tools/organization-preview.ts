@@ -17,6 +17,7 @@ import { OrganizerService } from "../core/organize/organizer.js";
 import { CategorizerService } from "../services/categorizer.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { PreviewOrganizationInputSchema } from "../schemas/organize.js";
+import { previewOrganizationOutputJsonSchema } from "../schemas/output.js";
 import {
   createRequestContext,
   type ToolContext,
@@ -61,6 +62,7 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
     },
     required: ["directory"],
   },
+  outputSchema: previewOrganizationOutputJsonSchema,
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,
@@ -166,6 +168,7 @@ ${output.skipped_files.length ? `**Skipped Files:**\n${output.skipped_files.map(
 
     return {
       content: [{ type: "text", text: markdown }],
+      structuredContent: output as unknown as Record<string, unknown>,
     };
   } catch (error) {
     return createErrorResponse(error);

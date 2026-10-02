@@ -19,6 +19,7 @@ import {
   FindDuplicateFilesInputSchema,
   type FindDuplicateFilesInput,
 } from "../schemas/scan.js";
+import { findDuplicatesOutputJsonSchema } from "../schemas/output.js";
 
 export const findDuplicateFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_find_duplicate_files",
@@ -43,6 +44,7 @@ export const findDuplicateFilesToolDefinition: ToolDefinition = {
     },
     required: ["directory"],
   },
+  outputSchema: findDuplicatesOutputJsonSchema,
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,
@@ -140,6 +142,7 @@ ${result.has_more ? `*... ${result.total_count - (result.offset + result.returne
 
     return {
       content: [{ type: "text", text: markdown }],
+      structuredContent: result as unknown as Record<string, unknown>,
     };
   } catch (error) {
     return createErrorResponse(error);

@@ -18,6 +18,7 @@ import {
   OrganizeFilesInputSchema,
   type OrganizeFilesInput,
 } from "../schemas/organize.js";
+import { organizeFilesOutputJsonSchema } from "../schemas/output.js";
 import {
   createRequestContext,
   type ToolContext,
@@ -57,6 +58,7 @@ export const organizeFilesToolDefinition: ToolDefinition = {
     },
     required: ["directory"],
   },
+  outputSchema: organizeFilesOutputJsonSchema,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -180,6 +182,7 @@ ${result.errors.length > 0 ? `\n**Errors:**\n${result.errors.join("\n")}` : ""}`
 
     return {
       content: [{ type: "text", text: markdown }],
+      structuredContent: result as unknown as Record<string, unknown>,
     };
   } catch (error) {
     return createErrorResponse(error);
