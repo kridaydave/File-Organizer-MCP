@@ -6,6 +6,7 @@
  */
 
 import path from "path";
+import os from "os";
 import fs from "fs/promises";
 import fsSync from "fs";
 import { CONFIG } from "../config.js";
@@ -19,16 +20,74 @@ export interface PathValidationResult {
 }
 
 /**
- * Check if a path matches any blocked patterns
- * Excludes macOS/Linux temp dirs (/var/folders, /private/var/folders, /tmp)
- * which are legitimately used for tests and temp files even though /var
+ * Patterns for system-critical roots that a whitelist can never unlock, per
+ * platform. A POSIX-only list left darwin and win32 with nothing hard, so
+ * whitelisting opened /System, /Applications and C:\Windows. Mirrors the
+ * platform branches of `getAlwaysBlockedPatterns()` in
+ * `src/core/config/security.ts`; that file stays the source of truth for what
+ * is blocked, this list only decides what survives an override.
+ *
+ * Kept soft on purpose (overridable): /root, /home, /var and /run, because
+ * tests and per-user temp work legitimately live under /var/folders,
+ * /var/tmp and /tmp.
+ */
+function getHardBlockedPatterns(): RegExp[] {
+  // os.platform() (not process.platform) so this stays in lockstep with
+  // getAlwaysBlockedPatterns(), which reads the same source.
+  const platform = os.platform();
+  const posix = [
+    /^\/(?:etc|proc|sys|dev)(?:[/]|$)/i,
+    /^\/boot(?:[/]|$)/i,
+    /^\/(?:usr|bin|sbin)(?:[/]|$)/i,
+  ];
+  if (platform === "win32") {
+    // /etc is blocked on every platform to catch traversal like
+    // /etc/passwd, so it must stay hard there too.
+    return [
+      ...posix,
+      /^[A-Z]:[\\/]Windows(?:[\\/]|$)/i,
+      /^[A-Z]:[\\/]Program Files(?:[\\/]|$)/i,
+      /^[A-Z]:[\\/]Program Files \(x86\)(?:[\\/]|$)/i,
+      /^[A-Z]:[\\/]ProgramData(?:[\\/]|$)/i,
+      /^[A-Z]:[\\/]\$Recycle\.Bin(?:[\\/]|$)/i,
+      /^[A-Z]:[\\/]System Volume Information(?:[\\/]|$)/i,
+    ];
+  }
+  if (platform === "darwin") {
+    return [
+      ...posix,
+      /^\/System(?:[/]|$)/i,
+      /^\/Library(?:[/]|$)/i,
+      /^\/Applications(?:[/]|$)/i,
+      /^\/private\/etc(?:[/]|$)/i,
+      /^\/private\/var\/(?:db|root|vm|at|run|log|spool|audit)(?:[/]|$)/i,
+    ];
+  }
+  return posix;
+}
+
+/**
+ * Check if a path matches any blocked patterns.
+ *
+ * `hard` blocks (system-critical roots like /etc, /proc, C:\Windows) can never
+ * be overridden. Everything else is a "soft" block: on single-user systems
+ * where the user IS root (Termux/proot, some containers, CI running as root)
+ * the /root entry would otherwise make the user's own home permanently
+ * inaccessible even when it is explicitly whitelisted. Soft blocks yield to an
+ * explicit whitelist entry, hard blocks never do.
+ *
+ * macOS/Linux temp dirs (/var/folders, /private/var/folders, /tmp) are exempt
+ * from the generic /var rules, which is why they stay usable even though /var
  * is otherwise blocked.
  */
-export function isPathBlocked(normalizedPath: string): boolean {
-  return CONFIG.paths.alwaysBlocked.some((pattern) => {
-    // macOS per-user temp folders live under /var/folders — don't let the
-    // generic /^\/var/ or /^\/private\/var/ system rule block them, but DO
-    // enforce specific blocked patterns (like .git, .vscode, node_modules).
+export function isPathBlocked(
+  normalizedPath: string,
+  options: { allowWhitelistedOverride?: boolean } = {},
+): boolean {
+  const matched = CONFIG.paths.alwaysBlocked.some((pattern) => {
+    // Don't let the generic /^\/var or /^\/private\/var system rule block
+    // per-user temp folders, but DO enforce specific blocked patterns
+    // (like .git, .vscode, node_modules).
     if (
       process.platform === "darwin" &&
       (pattern.source.includes("^\\/var") ||
@@ -40,6 +99,11 @@ export function isPathBlocked(normalizedPath: string): boolean {
     }
     return pattern.test(normalizedPath);
   });
+  if (!matched) return false;
+  if (!options.allowWhitelistedOverride) return true;
+  // A whitelisted directory may only override soft blocks. If the path sits
+  // under a system-critical root, the block stands regardless.
+  return getHardBlockedPatterns().some((pattern) => pattern.test(normalizedPath));
 }
 
 /**
@@ -266,10 +330,17 @@ export async function isPathAllowed(
   }
 
   // Check if blocked first (always takes priority). Both the user-facing path
-  // and its canonical form are checked.
+  // and its canonical form are checked. A soft block (e.g. /root on a system
+  // where the user runs as root) yields when the path is itself inside an
+  // explicitly whitelisted directory; system-critical blocks never yield.
+  const blockedOverride = {
+    allowWhitelistedOverride: isPathInAllowedDirectoriesSync(
+      canonicalRequestPath,
+    ),
+  };
   if (
-    isPathBlocked(normalizedRequestPath) ||
-    isPathBlocked(canonicalRequestPath)
+    isPathBlocked(normalizedRequestPath, blockedOverride) ||
+    isPathBlocked(canonicalRequestPath, blockedOverride)
   ) {
     return {
       allowed: false,
@@ -288,6 +359,22 @@ export async function isPathAllowed(
   }
 
   return { allowed: true };
+}
+
+/**
+ * Check if a path is within allowed directories, synchronously.
+ * Used to decide whether a whitelist entry exists before a blocked-pattern
+ * check, so the soft/hard split in `isPathBlocked` can be applied.
+ */
+function isPathInAllowedDirectoriesSync(normalizedPath: string): boolean {
+  const allowedDirs = [
+    ...CONFIG.paths.defaultAllowed,
+    ...CONFIG.paths.customAllowed,
+  ];
+  const resolvedPath = path.resolve(normalizedPath);
+  return allowedDirs.some((allowedDir) =>
+    isSubPath(path.resolve(allowedDir), resolvedPath),
+  );
 }
 
 /**
