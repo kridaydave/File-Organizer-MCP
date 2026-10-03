@@ -1,6 +1,6 @@
 # Architecture
 
-File Organizer MCP is a stateless stdio MCP server. One Node process exposes 32 typed tools over JSON-RPC. There is no session state, no in-memory cache of your files, and no background work in the core server. The core loop is `scan → categorize → plan → move`, and every filesystem touch passes through one path validator.
+File Organizer MCP is a stateless stdio MCP server. One Node process exposes 33 typed tools over JSON-RPC. There is no session state, no in-memory cache of your files, and no background work in the core server. The core loop is `scan → categorize → plan → move`, and every filesystem touch passes through one path validator.
 
 ## Request lifecycle
 
@@ -35,7 +35,7 @@ src/
 │   ├── scan/              scanner.ts: recursive scan with depth/count limits
 │                           + disk-usage.ts: pure per-category byte summary
 │   ├── categorize/        rules + extension map + magic-byte sniff + custom rules
-│   ├── organize/          organizer, rename, rollback (+ manifest integrity)
+│   ├── organize/          organizer, rename, rollback (+ manifest integrity), plan-validation
 │   ├── hash/              SHA-256 hasher + duplicate finder
 │   ├── config/            platform-aware defaults, loader, allowed paths
 │   └── types/             shared FileInfo / Organize / category types
