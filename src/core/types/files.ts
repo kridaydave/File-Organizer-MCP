@@ -35,6 +35,8 @@ export interface FileWithSize {
   path: string;
   size: number;
   modified?: Date;
+  /** Last access time. Absent when the producer did not stat the file. */
+  accessed?: Date;
 }
 
 // ==================== Scan Types ====================
@@ -97,6 +99,22 @@ export interface BrokenSymlinkResult {
   escaping_count: number;
   circular_count: number;
   findings: BrokenSymlinkFinding[];
+}
+
+export interface EmptyDirectoryResult {
+  /** The root that was walked. */
+  directory: string;
+  /** Directories whose entries were listed. */
+  scanned_count: number;
+  /** True when a subdirectory past the depth cap was not walked. */
+  depth_limited: boolean;
+  /** True when the result cap left a subdirectory unexplored. */
+  result_limited: boolean;
+  /** The result cap that applied, so the caller knows what bounded the list. */
+  limit: number;
+  /** Empty directories found. Sorted, so the order is stable. */
+  total_count: number;
+  empty_dirs: string[];
 }
 
 export interface FileOrganizerConfig {
