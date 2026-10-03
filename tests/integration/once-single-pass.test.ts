@@ -21,8 +21,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { runOrganizePass } from "../../src/extensions/scheduler/organize-pass.js";
 import {
-  passExitCode,
+  ONCE_EXIT,
+  failureReport,
+  onceReport,
   parseOnceFlags,
+  passExitCode,
 } from "../../src/extensions/scheduler/once-cli.js";
 import { CONFIG } from "../../src/core/config/defaults.js";
 import { HistoryLoggerService } from "../../src/services/history-logger.service.js";
@@ -205,14 +208,17 @@ describe("once flag parsing and exit code", () => {
       directory: "/tmp/x",
       apply: false,
       recursive: false,
+      json: false,
       help: false,
     });
     expect(parseOnceFlags(["/tmp/x", "--apply", "--recursive"])).toEqual({
       directory: "/tmp/x",
       apply: true,
       recursive: true,
+      json: false,
       help: false,
     });
+    expect(parseOnceFlags(["/tmp/x", "--json"]).json).toBe(true);
   });
 
   it("refuses an unknown flag and a second directory", () => {
@@ -224,12 +230,96 @@ describe("once flag parsing and exit code", () => {
     });
   });
 
-  it("exits non-zero when a pass reported errors or aborted", () => {
-    expect(passExitCode({ errors: [], aborted: false })).toBe(0);
+  it("freezes three distinct exit codes", () => {
+    expect(ONCE_EXIT).toEqual({ nothing: 0, error: 1, moved: 2 });
+  });
+
+  it("separates moved, nothing to do, and failed", () => {
+    // A clean pass that moved files.
+    expect(passExitCode({ moved: 3, errors: [], aborted: false })).toBe(
+      ONCE_EXIT.moved,
+    );
+    // Nothing to do: an empty dir, or a dry run that moved nothing.
+    expect(passExitCode({ moved: 0, errors: [], aborted: false })).toBe(
+      ONCE_EXIT.nothing,
+    );
+    // Failure beats "moved" even when files did move.
     expect(
-      passExitCode({ errors: ["ENOENT on one file"], aborted: false }),
-    ).toBe(1);
-    expect(passExitCode({ errors: [], aborted: true })).toBe(1);
+      passExitCode({
+        moved: 2,
+        errors: ["ENOENT on one file"],
+        aborted: false,
+      }),
+    ).toBe(ONCE_EXIT.error);
+    expect(passExitCode({ moved: 0, errors: [], aborted: true })).toBe(
+      ONCE_EXIT.error,
+    );
+  });
+
+  it("reports the pass in one stable JSON shape", () => {
+    const result = {
+      directory: "/tmp/x",
+      dryRun: false,
+      scanned: 4,
+      planned: 3,
+      moved: 3,
+      skipped: 1,
+      errors: [],
+      aborted: false,
+      historyLogged: true,
+    };
+
+    const report = onceReport(passExitCode(result), result);
+
+    expect(report).toEqual({
+      ok: true,
+      exitCode: ONCE_EXIT.moved,
+      directory: "/tmp/x",
+      dryRun: false,
+      scanned: 4,
+      planned: 3,
+      moved: 3,
+      skipped: 1,
+      historyLogged: true,
+      aborted: false,
+      errors: [],
+    });
+    // The key set is part of the contract, so it survives a JSON round trip.
+    expect(Object.keys(JSON.parse(JSON.stringify(report))).sort()).toEqual([
+      "aborted",
+      "directory",
+      "dryRun",
+      "errors",
+      "exitCode",
+      "historyLogged",
+      "moved",
+      "ok",
+      "planned",
+      "scanned",
+      "skipped",
+    ]);
+  });
+
+  it("reports a failure that never ran in the same shape", () => {
+    const report = failureReport("Path is outside the allowed roots", "/tmp/x");
+
+    expect(report).toEqual({
+      ok: false,
+      exitCode: ONCE_EXIT.error,
+      directory: "/tmp/x",
+      dryRun: true,
+      scanned: 0,
+      planned: 0,
+      moved: 0,
+      skipped: 0,
+      historyLogged: false,
+      aborted: false,
+      errors: ["Path is outside the allowed roots"],
+    });
+    // A dry run that planned work is not a failure.
+    expect(onceReport(ONCE_EXIT.nothing, { moved: 0, errors: [] }).ok).toBe(
+      true,
+    );
   });
 });
 
@@ -245,18 +335,36 @@ describe("file-organizer-watch once (real CLI)", () => {
   let workDir: string;
   let childEnv: NodeJS.ProcessEnv;
 
-  function runCli(args: string[]): Promise<{ code: number; out: string }> {
+  /**
+   * stdout and stderr stay separate: the `--json` contract is that stdout
+   * carries one parseable document and nothing else, which cannot be observed
+   * if both streams are concatenated.
+   */
+  function runCli(
+    args: string[],
+  ): Promise<{ code: number; out: string; err: string }> {
     return new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [CLI_BIN, ...args], {
         cwd: REPO_ROOT,
         env: childEnv,
       });
       let out = "";
+      let err = "";
       child.stdout.on("data", (c: Buffer) => (out += c.toString()));
-      child.stderr.on("data", (c: Buffer) => (out += c.toString()));
+      child.stderr.on("data", (c: Buffer) => (err += c.toString()));
       child.on("error", reject);
-      child.on("close", (code) => resolve({ code: code ?? -1, out }));
+      child.on("close", (code) => resolve({ code: code ?? -1, out, err }));
     });
+  }
+
+  /** Parse a `--json` run's stdout. Throws if it is not exactly one object. */
+  function parseJsonReport(out: string): Record<string, unknown> {
+    const lines = out
+      .trim()
+      .split("\n")
+      .filter((l) => l.length > 0);
+    expect(lines).toHaveLength(1);
+    return JSON.parse(lines[0]) as Record<string, unknown>;
   }
 
   async function seed(files: Record<string, string>): Promise<void> {
@@ -309,7 +417,7 @@ describe("file-organizer-watch once (real CLI)", () => {
     await fs.rm(root, { recursive: true, force: true });
   });
 
-  it("exits 0 and moves every matching file on a clean applied pass", async () => {
+  it("exits 2 and moves every matching file on a clean applied pass", async () => {
     await seed({
       "notes.txt": "hello",
       "photo.jpg": "not-really-a-jpeg",
@@ -319,7 +427,7 @@ describe("file-organizer-watch once (real CLI)", () => {
     const { code, out } = await runCli(["once", workDir, "--apply"]);
 
     expect(out).toContain("Moved 3 file(s)");
-    expect(code).toBe(0);
+    expect(code).toBe(ONCE_EXIT.moved);
     // .pdf categorizes to Documents, not a PDFs folder (src/constants.ts:14).
     expect((await fs.readdir(workDir)).sort()).toEqual(["Documents", "Images"]);
     expect((await fs.readdir(path.join(workDir, "Documents"))).sort()).toEqual([
@@ -334,39 +442,112 @@ describe("file-organizer-watch once (real CLI)", () => {
     expect(entries).toHaveLength(1);
   }, 30000);
 
-  it("exits 1 on a dry run that plans moves it does not make", async () => {
+  it("exits 0 on a dry run, which moved nothing and is not a failure", async () => {
     await seed({ "notes.txt": "hello" });
 
-    // A dry run is not a failure, but it must still be an honest report:
-    // it moves nothing and writes nothing.
+    // A dry run planned a move it did not make, so the honest code is
+    // "nothing to do", not "moved" and not "failed".
     const { code, out } = await runCli(["once", workDir]);
 
     expect(out).toContain("Moved 0 file(s)");
     expect(out).toContain("Re-run with --apply");
-    expect(code).toBe(0);
+    expect(code).toBe(ONCE_EXIT.nothing);
     expect(await fs.readdir(workDir)).toEqual(["notes.txt"]);
     await expect(
       fs.access(path.join(configDir, "operations.jsonl")),
     ).rejects.toThrow();
   }, 30000);
 
+  it("exits 0 when the directory has nothing to organize", async () => {
+    // An empty directory: the pass ran clean and had no work to do.
+    const { code, out } = await runCli(["once", workDir, "--apply", "--json"]);
+
+    const report = parseJsonReport(out);
+    expect(code).toBe(ONCE_EXIT.nothing);
+    expect(report.ok).toBe(true);
+    expect(report.exitCode).toBe(ONCE_EXIT.nothing);
+    expect(report.scanned).toBe(0);
+    expect(report.moved).toBe(0);
+    expect(report.errors).toEqual([]);
+    expect(await fs.readdir(workDir)).toEqual([]);
+  }, 30000);
+
+  it("prints one JSON object on stdout when the pass moves files", async () => {
+    await seed({
+      "notes.txt": "hello",
+      "photo.jpg": "not-really-a-jpeg",
+      "report.pdf": "hello",
+    });
+
+    const { code, out } = await runCli(["once", workDir, "--apply", "--json"]);
+
+    const report = parseJsonReport(out);
+    expect(code).toBe(ONCE_EXIT.moved);
+    expect(report).toEqual({
+      ok: true,
+      exitCode: ONCE_EXIT.moved,
+      directory: workDir,
+      dryRun: false,
+      scanned: 3,
+      planned: 3,
+      moved: 3,
+      skipped: 0,
+      historyLogged: true,
+      aborted: false,
+      errors: [],
+    });
+    // No human report leaked onto stdout.
+    expect(out).not.toContain("###");
+    expect(out).not.toContain("Moved 3 file(s)");
+  }, 30000);
+
+  it("keeps stdout parseable when --json run fails", async () => {
+    await seed({ "notes.txt": "hello" });
+
+    const { code, out, err } = await runCli([
+      "once",
+      path.join(root, "not-allowed"),
+      "--apply",
+      "--json",
+    ]);
+
+    const report = parseJsonReport(out);
+    expect(code).toBe(ONCE_EXIT.error);
+    expect(report.ok).toBe(false);
+    expect(report.exitCode).toBe(ONCE_EXIT.error);
+    expect(report.moved).toBe(0);
+    expect((report.errors as string[]).length).toBeGreaterThan(0);
+    // The human-readable failure text is on stderr, where it belongs.
+    expect(err).toContain("Pass failed");
+    expect(err).not.toContain("fom-once-cli-");
+  }, 30000);
+
+  it("sends usage to stderr under --json", async () => {
+    const { code, out, err } = await runCli(["once", "--json", "--help"]);
+
+    expect(code).toBe(ONCE_EXIT.nothing);
+    expect(out).toBe("");
+    expect(err).toContain("Usage: file-organizer-watch once");
+    expect(err).toContain("--json");
+  }, 30000);
+
   it("exits 1 when a directory is refused by the path gate", async () => {
     await seed({ "notes.txt": "hello" });
 
-    const { code, out } = await runCli([
+    const { code, err } = await runCli([
       "once",
       path.join(root, "not-allowed"),
       "--apply",
     ]);
 
-    expect(out).toContain("Pass failed");
-    expect(code).toBe(1);
+    expect(err).toContain("Pass failed");
+    expect(code).toBe(ONCE_EXIT.error);
   }, 30000);
 
   it("exits 1 on an unknown flag", async () => {
-    const { code, out } = await runCli(["once", workDir, "--nope"]);
-    expect(out).toContain("Unknown flag for once: --nope");
-    expect(code).toBe(1);
+    const { code, err } = await runCli(["once", workDir, "--nope"]);
+    expect(err).toContain("Unknown flag for once: --nope");
+    expect(code).toBe(ONCE_EXIT.error);
   }, 30000);
 
   it("does not report success when the history lock is held and the entry is dropped", async () => {
@@ -386,20 +567,24 @@ describe("file-organizer-watch once (real CLI)", () => {
     ).rejects.toThrow();
     // ...which the CLI says out loud instead of exiting 0.
     expect(out).toContain("History entry was NOT written");
-    expect(code).toBe(1);
+    expect(code).toBe(ONCE_EXIT.error);
   }, 30000);
 
-  it("still exits 0 on the next pass once the lock is released", async () => {
+  it("recovers on the next pass once the lock is released", async () => {
     await fs.writeFile(path.join(configDir, "operations.lock"), "held");
     await seed({ "notes.txt": "hello" });
 
+    // The blocked pass moved the file, then lost its history entry. Exit 1,
+    // not 2: the missing undo record makes it a failure.
     const blocked = await runCli(["once", workDir, "--apply"]);
-    expect(blocked.code).toBe(1);
+    expect(blocked.code).toBe(ONCE_EXIT.error);
 
     await fs.unlink(path.join(configDir, "operations.lock"));
 
+    // The file is already in Documents, so there is nothing left to move.
+    // The new contract calls that 0 (nothing to do), not the old 0-by-default.
     const { code } = await runCli(["once", workDir, "--apply"]);
-    expect(code).toBe(0);
+    expect(code).toBe(ONCE_EXIT.nothing);
     const entries = (
       await fs.readFile(path.join(configDir, "operations.jsonl"), "utf-8")
     )

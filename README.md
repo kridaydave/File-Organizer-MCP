@@ -133,6 +133,61 @@ file-organizer-watch                                # start the daemon
 Watches are stored in the shared user config, so `add`/`remove` work even
 while the daemon is running (restart it to pick up changes).
 
+#### Single pass from an OS timer
+
+`once` runs one organization pass and exits, holding no watcher, no timer, and
+no open handle. That is the mode cron, launchd, a systemd timer, or Task
+Scheduler drives:
+
+```bash
+file-organizer-watch once ~/Downloads              # dry run, writes nothing
+file-organizer-watch once ~/Downloads --apply      # move, then exit
+file-organizer-watch once . --apply --recursive --json
+```
+
+##### Exit codes
+
+| Code | Meaning                                                    |
+| ---- | ---------------------------------------------------------- |
+| `0`  | Pass finished, moved nothing — empty dir or dry run        |
+| `1`  | Failed: bad flags, refused path, per-file errors, or abort |
+| `2`  | Pass finished clean and moved at least one file            |
+
+`1` wins over `2` even when files moved, so a partial pass never looks like
+success.
+
+##### `--json`
+
+`--json` prints exactly one JSON object on stdout and nothing else. Logs,
+usage, and failure text go to stderr, so stdout stays parseable whether the
+run succeeded or not.
+
+```json
+{
+  "ok": true,
+  "exitCode": 2,
+  "directory": "/home/you/Downloads",
+  "dryRun": false,
+  "scanned": 12,
+  "planned": 8,
+  "moved": 8,
+  "skipped": 4,
+  "historyLogged": true,
+  "aborted": false,
+  "errors": []
+}
+```
+
+Every key is always present, including on failure — a refused path reports the
+same shape with `ok` false, `exitCode` 1, and the reason in `errors`. `ok` is
+true for exit codes 0 and 2. `historyLogged: false` on an applied pass means
+the moves have no undo record.
+
+```bash
+# alert only when files actually moved
+file-organizer-watch once ~/Downloads --apply --json | jq -e '.moved > 0'
+```
+
 ---
 
 ## File categories
