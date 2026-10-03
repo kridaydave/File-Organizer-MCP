@@ -92,8 +92,9 @@ You can ask the assistant things like:
 - `file_organizer_read_file` - Read a file with 8-layer path validation. `path` is required; `encoding` is utf-8, base64, or binary.
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering. Checks the whole plan for name collisions first: if a real run would put two files on one name, or overwrite a name a different file already holds, the batch is rejected before anything moves and the conflicts come back as structured data.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
+- `file_organizer_search_history` - Filter the history by path glob (`path_glob`), date range (`from`/`to`), or operation type. Every filter is optional and they combine, so a long history stays queryable instead of one flat list.
 
-### Full tool list (29 tools)
+### Full tool list (30 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
@@ -118,6 +119,7 @@ You can ask the assistant things like:
 - `file_organizer_preview_organization`
 - `file_organizer_read_file`
 - `file_organizer_scan_directory`
+- `file_organizer_search_history`
 - `file_organizer_set_custom_rules`
 - `file_organizer_smart_suggest`
 - `file_organizer_system_organize`
