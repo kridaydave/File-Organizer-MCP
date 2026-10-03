@@ -239,6 +239,27 @@ export class RollbackService {
   }
 
   /**
+   * Delete a spent manifest. Quarantine calls this once a restore has landed,
+   * so a finished quarantine no longer offers itself as a restore target the
+   * same way rollback() retires the manifest it just applied.
+   */
+  async removeManifest(manifestId: string): Promise<void> {
+    if (!MANIFEST_ID_PATTERN.test(manifestId)) {
+      throw new ValidationError(`Invalid manifest ID format: ${manifestId}`);
+    }
+
+    await this.unlinkManifestFile(manifestId);
+  }
+
+  /**
+   * Remove the manifest file from storage. Callers are responsible for having
+   * resolved the id safely first.
+   */
+  private async unlinkManifestFile(manifestId: string): Promise<void> {
+    await fs.unlink(path.join(this.storageDir, `${manifestId}.json`));
+  }
+
+  /**
    * List available rollbacks
    *
    * SECURITY JUSTIFICATION (SEC-001):

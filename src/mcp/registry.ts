@@ -115,6 +115,12 @@ import {
   findBrokenSymlinksToolDefinition,
   handleFindBrokenSymlinks,
 } from "../tools/symlink-audit.js";
+import {
+  quarantineFilesToolDefinition,
+  handleQuarantineFiles,
+  restoreQuarantineToolDefinition,
+  handleRestoreQuarantine,
+} from "../tools/file-quarantine.js";
 
 function reg(def: ToolDefinition, handler: ToolHandler) {
   return defineTool({
@@ -157,6 +163,8 @@ const entries = [
   reg(organizePhotosToolDefinition, handleOrganizePhotos),
   reg(previewDeleteDuplicatesToolDefinition, handlePreviewDeleteDuplicates),
   reg(previewOrganizationToolDefinition, handlePreviewOrganization),
+  reg(quarantineFilesToolDefinition, handleQuarantineFiles),
+  reg(restoreQuarantineToolDefinition, handleRestoreQuarantine),
   reg(scanDirectoryToolDefinition, handleScanDirectory),
   reg(searchHistoryToolDefinition, handleSearchHistory),
   reg(setCustomRulesToolDefinition, handleSetCustomRules),
