@@ -33,7 +33,9 @@
 - [file_organizer_organize_photos](#file_organizer_organize_photos)
 - [file_organizer_preview_delete_duplicates](#file_organizer_preview_delete_duplicates)
 - [file_organizer_preview_organization](#file_organizer_preview_organization)
+- [file_organizer_quarantine_files](#file_organizer_quarantine_files)
 - [file_organizer_read_file](#file_organizer_read_file)
+- [file_organizer_restore_quarantine](#file_organizer_restore_quarantine)
 - [file_organizer_scan_directory](#file_organizer_scan_directory)
 - [file_organizer_search_history](#file_organizer_search_history)
 - [file_organizer_set_custom_rules](#file_organizer_set_custom_rules)
@@ -657,6 +659,126 @@ file_organizer_preview_organization({
   show_conflicts_only: true,
   response_format: "value",
   conflict_strategy: "value",
+});
+```
+
+---
+
+## file_organizer_quarantine_files
+
+[⬆ Back to Top](#top)
+
+**Description:** Sets flagged files aside in a quarantine directory so they can be reviewed without being deleted. Nothing is removed from disk: each file is moved into a hidden quarantine directory and recorded in a rollback manifest, so file_organizer_undo_last_operation or file_organizer_restore_quarantine puts every file back where it came from. Defaults to dry_run=true, which lists what would be quarantined and changes nothing. Same-basename files never overwrite each other; a collision becomes name_1.ext.
+
+### Parameters
+
+| Parameter         | Type     | Description                                                                                                     | Default    |
+| ----------------- | -------- | --------------------------------------------------------------------------------------------------------------- | ---------- |
+| `directory`       | string   | Directory the flagged files live in                                                                             | -          |
+| `files`           | string[] | Absolute paths of the flagged files, all inside `directory`                                                    | -          |
+| `quarantine_dir`  | string   | Where to move them. Defaults to a hidden `.file-organizer-quarantine` directory inside `directory`             | -          |
+| `reason`          | string   | Note recorded in the manifest, e.g. why these were flagged                                                      | -          |
+| `dry_run`         | boolean  | List what would be quarantined without moving anything                                                         | true       |
+| `response_format` | string   | `markdown` for human-readable, `json` for programmatic use                                                      | 'markdown' |
+
+### Response fields
+
+| Field             | Type     | Description                                                                  |
+| ----------------- | -------- | ---------------------------------------------------------------------------- |
+| `directory`       | string   | Validated directory the files were taken from                                |
+| `quarantine_dir`  | string   | Validated directory the files were (or would be) moved into                  |
+| `dry_run`         | boolean  | True when nothing was moved                                                  |
+| `requested`       | number   | How many file paths the caller asked for                                    |
+| `planned`         | number   | How many files have a destination (the whole plan on a dry run)             |
+| `quarantined`     | number   | Files actually moved. Always 0 on a dry run                                 |
+| `items`           | object[] | `{ file, from, to }` per file: the plan on a dry run, the moves that landed |
+| `skipped`         | object[] | `{ path, reason }` for files left out                                       |
+| `errors`          | string[] | Per-file failures and manifest-write failures                               |
+| `manifest_id`     | string   | Rollback manifest covering the moves. Absent on a dry run                   |
+| `reason`          | string   | The caller's note, when supplied                                            |
+
+Every path field above is an **absolute** path: `directory`, `quarantine_dir`,
+`items[].from`, `items[].to`, and `skipped[].path`. That matches
+`file_organizer_organize_files`, whose `actions[].from` / `actions[].to` are
+absolute too. Absolute paths are canonicalised through the path validator, so
+they are platform-dependent in *spelling*: Windows expands 8.3 short names
+(`C:\Users\RUNNER~1\...` comes back as `C:\Users\runneradmin\...`) and macOS
+rewrites `/var` to `/private/var`. Two spellings of the same file therefore
+compare unequal as strings. Compare basenames, or normalise both sides through
+the same function, rather than comparing raw path strings.
+
+### Notes
+
+- The quarantine directory is derived from `directory`, not hardcoded, and both
+  it and every listed file pass the same `validateStrictPath` gate as any other
+  input. A `quarantine_dir` outside your allowed directories is refused.
+- Every listed file must live inside `directory`. Paths are all validated before
+  the first move, so a batch containing one bad path moves nothing.
+- A same-basename collision becomes `name_1.ext`, so no file overwrites another.
+- The manifest is what makes this reversible: pass its id to
+  `file_organizer_restore_quarantine`, or call `file_organizer_undo_last_operation`.
+
+### Example
+
+```typescript
+file_organizer_quarantine_files({
+  directory: "/home/user/Downloads",
+  files: ["/home/user/Downloads/invoice.exe"],
+  reason: "flags as executable content",
+  dry_run: false,
+});
+```
+
+---
+
+## file_organizer_restore_quarantine
+
+[⬆ Back to Top](#top)
+
+**Description:** Puts quarantined files back at the exact paths they were taken from, using the manifest quarantine_files wrote. The restore records its own manifest, so file_organizer_undo_last_operation can undo the restore and put the files back into quarantine. Defaults to dry_run=true, which lists what would be restored and changes nothing.
+
+### Parameters
+
+| Parameter         | Type    | Description                                                             | Default    |
+| ----------------- | ------- | ----------------------------------------------------------------------- | ---------- |
+| `quarantine_id`   | string  | Manifest id returned by `quarantine_files`. Omit to restore the newest  | -          |
+| `dry_run`         | boolean | List what would be restored without moving anything                     | true       |
+| `response_format` | string  | `markdown` for human-readable, `json` for programmatic use              | 'markdown' |
+
+### Response fields
+
+| Field           | Type     | Description                                                                 |
+| --------------- | -------- | --------------------------------------------------------------------------- |
+| `dry_run`       | boolean  | True when nothing was moved                                                 |
+| `quarantine_id` | string   | Quarantine manifest this restore read                                       |
+| `requested`     | number   | Moves recorded in that manifest                                             |
+| `planned`       | number   | How many restores have a destination                                        |
+| `restored`      | number   | Files actually put back. Always 0 on a dry run                             |
+| `items`         | object[] | `{ file, from, to }` per file: the plan on a dry run, the moves that landed |
+| `errors`        | string[] | Per-file failures, manifest-write failures, and refused paths              |
+| `manifest_id`   | string   | Rollback manifest covering the restore, so the restore is undoable         |
+
+`items[].from` and `items[].to` are **absolute** canonical paths, the same
+contract `file_organizer_organize_files` uses. They are platform-dependent in
+spelling (Windows expands 8.3 short names, macOS rewrites `/var` to
+`/private/var`), so compare basenames or normalise both sides rather than
+comparing raw path strings.
+
+### Notes
+
+- The manifest is verified for integrity before any recorded path is trusted,
+  and each recorded path is re-checked against your allowed directories.
+- Omitting `quarantine_id` restores the most recent quarantine manifest. When
+  there is none, the call fails rather than guessing at some unrelated batch.
+- On success the quarantine manifest is retired, the same way undo retires a
+  spent manifest. The restore manifest carries the reverse mapping.
+
+### Example
+
+```typescript
+file_organizer_restore_quarantine({
+  quarantine_id: "5f2c1a90-8b3e-4d7a-9c11-2e6f0a4b7d38",
+  dry_run: false,
 });
 ```
 
