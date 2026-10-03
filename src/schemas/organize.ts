@@ -150,6 +150,66 @@ export const BatchRenameInputSchema = z
 export type BatchRenameInput = z.infer<typeof BatchRenameInputSchema>;
 
 /**
+ * Schema for quarantine_files tool
+ * Moves flagged files into a quarantine directory, reversibly
+ */
+export const QuarantineFilesInputSchema = z
+  .object({
+    directory: z
+      .string()
+      .min(1, "Directory path cannot be empty")
+      .describe("Directory the flagged files live in"),
+    files: z
+      .array(z.string().min(1))
+      .min(1, "At least one file is required")
+      .describe("Absolute paths of the flagged files, all inside directory"),
+    quarantine_dir: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Where to move them. Defaults to a hidden .file-organizer-quarantine directory inside `directory`",
+      ),
+    reason: z
+      .string()
+      .max(500)
+      .optional()
+      .describe("Note recorded in the manifest, e.g. why these were flagged"),
+    dry_run: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("If true, list what would be quarantined without moving anything"),
+  })
+  .merge(CommonParamsSchema);
+
+export type QuarantineFilesInput = z.infer<typeof QuarantineFilesInputSchema>;
+
+/**
+ * Schema for restore_quarantine tool
+ * Puts quarantined files back where they came from
+ */
+export const RestoreQuarantineInputSchema = z
+  .object({
+    quarantine_id: z
+      .string()
+      .optional()
+      .describe(
+        "Manifest id returned by quarantine_files. If omitted, restores the most recent quarantine.",
+      ),
+    dry_run: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe(
+        "If true, list what would be restored without moving anything",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type RestoreQuarantineInput = z.infer<typeof RestoreQuarantineInputSchema>;
+
+/**
  * Schema for undo_last_operation tool
  * Reverses file moves and renames from a previous organization task
  */
