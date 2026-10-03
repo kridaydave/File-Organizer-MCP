@@ -153,6 +153,16 @@ export const findBrokenSymlinksOutputSchema = z.object({
   ),
 });
 
+export const findEmptyDirectoriesOutputSchema = z.object({
+  directory: z.string(),
+  scanned_count: z.number(),
+  depth_limited: z.boolean(),
+  result_limited: z.boolean(),
+  limit: z.number(),
+  total_count: z.number(),
+  empty_dirs: z.array(z.string()),
+});
+
 export const undoOutputSchema = z.object({
   success: z.number(),
   failed: z.number(),
@@ -237,4 +247,7 @@ export const doctorOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const findBrokenSymlinksOutputJsonSchema = z.toJSONSchema(
   findBrokenSymlinksOutputSchema,
+) as JsonSchemaObject;
+export const findEmptyDirectoriesOutputJsonSchema = z.toJSONSchema(
+  findEmptyDirectoriesOutputSchema,
 ) as JsonSchemaObject;

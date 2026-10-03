@@ -18,6 +18,7 @@
 - [file_organizer_delete_duplicates](#file_organizer_delete_duplicates)
 - [file_organizer_doctor](#file_organizer_doctor)
 - [file_organizer_find_broken_symlinks](#file_organizer_find_broken_symlinks)
+- [file_organizer_find_empty_directories](#file_organizer_find_empty_directories)
 - [file_organizer_find_duplicate_files](#file_organizer_find_duplicate_files)
 - [file_organizer_find_largest_files](#file_organizer_find_largest_files)
 - [file_organizer_get_categories](#file_organizer_get_categories)
@@ -225,6 +226,49 @@ Containment is decided by the same whitelist check the validation layer uses, so
 ```typescript
 file_organizer_find_broken_symlinks({
   directory: "value",
+  response_format: "value",
+});
+```
+
+---
+
+## file_organizer_find_empty_directories
+
+[⬆ Back to Top](#top)
+
+**Description:** List directories under a root that contain no entries at all, for cleanup after a scan. Recurses by default, bounded by the configured max scan depth and a result cap. Emptiness is literal: a directory holding only dotfiles, only a subdirectory, or only a symlink has entries and is not reported, so a directory that merely looks idle is never proposed for removal. Read-only, so it is safe to run before organizing. Closes #37.
+
+### Parameters
+
+| Parameter         | Type    | Description                                          | Default          |
+| ----------------- | ------- | ---------------------------------------------------- | ---------------- |
+| `directory`       | string  | Full path to the directory                           | -                |
+| `include_subdirs` | boolean | Recurse into subdirectories                          | true             |
+| `max_depth`       | number  | Levels below the root to walk (0 = root only)        | configured max   |
+| `limit`           | number  | Maximum number of empty directories to return        | 100              |
+| `response_format` | string  | `json` or `markdown`                                 | 'markdown'       |
+
+### Findings
+
+| Field             | Type     | Description                                             |
+| ----------------- | -------- | ------------------------------------------------------- |
+| `directory`       | string   | The root that was walked                                |
+| `scanned_count`   | number   | Directories whose entries were listed                   |
+| `depth_limited`   | boolean  | True when a subdirectory past the depth cap was skipped |
+| `result_limited`  | boolean  | True when the result cap left a subdirectory unexplored |
+| `limit`           | number   | The result cap that applied                             |
+| `total_count`     | number   | Empty directories found                                 |
+| `empty_dirs[]`    | string[] | Full paths, sorted                                       |
+
+Read `depth_limited` and `result_limited` before treating a short list as complete. A directory is only reported when its listing came back with zero entries.
+
+### Example
+
+```typescript
+file_organizer_find_empty_directories({
+  directory: "value",
+  include_subdirs: true,
+  limit: 100,
   response_format: "value",
 });
 ```
