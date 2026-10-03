@@ -155,6 +155,29 @@ describe("buildConfigBundle", () => {
     expect(bundle.portability.requires_editing).toEqual([]);
   });
 
+  it("reports a tilde value the loader cannot expand instead of calling it portable", () => {
+    // expandHomePath only expands "~", "~/" and "~\". "~bob/docs" passes
+    // through it untouched and resolves against the working directory, so it is
+    // not a home-relative path and must not be reported as portable.
+    const bundle = buildConfigBundle(
+      { customAllowedDirectories: ["~bob/docs", "~/Documents"] },
+      { rebaseRoot: path.join(sandbox, "home"), now: NOW },
+    );
+
+    expect(bundle.portability.non_portable_paths).toEqual([
+      {
+        field: "customAllowedDirectories[0]",
+        value: "~bob/docs",
+        reason: "outside_rebase_root",
+      },
+    ]);
+    expect(bundle.portability.requires_editing).toEqual([
+      "customAllowedDirectories",
+    ]);
+    // The genuinely home-relative value still travels untouched.
+    expect(bundle.config.customAllowedDirectories?.[1]).toBe("~/Documents");
+  });
+
   it("exports watch rules and schedule untouched while rebasing the directory", async () => {
     const home = path.join(sandbox, "home");
     const bundle = buildConfigBundle(
@@ -231,6 +254,24 @@ describe("bundle file IO", () => {
     expect(() => loadConfigBundle("{ not json")).toThrow(ValidationError);
     expect(() => loadConfigBundle(JSON.stringify({ hello: "world" }))).toThrow(
       ValidationError,
+    );
+  });
+
+  it("rejects a bundle written by a format it does not implement", () => {
+    const bundle = buildConfigBundle({ conflictStrategy: "skip" }, { now: NOW });
+    const future = JSON.stringify({
+      ...bundle,
+      format_version: CONFIG_BUNDLE_FORMAT + 1,
+    });
+
+    // The error names the version it supports, so the check has to be real:
+    // a future format must fail rather than load as this one.
+    expect(() => loadConfigBundle(future)).toThrow(ValidationError);
+    expect(() => loadConfigBundle(future)).toThrow(
+      `v${CONFIG_BUNDLE_FORMAT} config bundle`,
+    );
+    expect(loadConfigBundle(JSON.stringify(bundle)).config.conflictStrategy).toBe(
+      "skip",
     );
   });
 
