@@ -178,6 +178,9 @@ npm run lint:fix                           # auto-fix
 npm run format                             # prettier src/
 
 npm run setup                              # TUI wizard
+
+npm run docs:sync                          # regenerate tool list/count in README + ARCHITECTURE
+npm run docs:check                         # fail if they drift from the registry (CI runs this)
 ```
 
 ## Quality gates
@@ -191,6 +194,7 @@ Before submitting changes:
 - [ ] New behavior has a test
 - [ ] Errors don't leak paths
 - [ ] Docs updated if you changed a tool shape or security rule
+- [ ] If you added or removed a tool: `npm run docs:sync`, and commit the result. Never hand-edit the tool count or the tool list in README.md / ARCHITECTURE.md — they are generated from the registry. CI runs `npm run docs:check`.
 
 ## Additional tips
 
