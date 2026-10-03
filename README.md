@@ -99,7 +99,6 @@ You can ask the assistant things like:
 =======
 ### Full tool list (29 tools)
 <!-- BEGIN GENERATED TOOL LIST -->
->>>>>>> origin/main
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
 - `file_organizer_batch_rename`
@@ -115,14 +114,10 @@ You can ask the assistant things like:
 - `file_organizer_get_categories`
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`
+- `file_organizer_organize_by_date`
 - `file_organizer_organize_by_project`
 - `file_organizer_organize_files`
 - `file_organizer_organize_music`
-<<<<<<< HEAD
-- `file_organizer_organize_by_date`
-- `file_organizer_organize_by_project`
-=======
->>>>>>> origin/main
 - `file_organizer_organize_photos`
 - `file_organizer_preview_delete_duplicates`
 - `file_organizer_preview_organization`
