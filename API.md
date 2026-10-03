@@ -42,6 +42,7 @@
 - [file_organizer_system_organize](#file_organizer_system_organize)
 - [file_organizer_undo_last_operation](#file_organizer_undo_last_operation)
 - [file_organizer_validate_organization_plan](#file_organizer_validate_organization_plan)
+- [file_organizer_verify_integrity](#file_organizer_verify_integrity)
 - [file_organizer_view_history](#file_organizer_view_history)
 
 > **Note:** The watch tools (`file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
@@ -1022,6 +1023,50 @@ file_organizer_validate_organization_plan({
   include_subdirs: true,
   response_format: "value",
   conflict_strategy: "value",
+});
+```
+
+---
+
+## file_organizer_verify_integrity
+
+[⬆ Back to Top](#top)
+
+**Description:** Rehashes the files a rollback manifest names and reports which have drifted since that operation ran: unchanged, modified, or missing. Read-only; it never moves, restores, or deletes anything. A manifest only stores a content digest for the files it could hash inside a 32 MB read budget, and manifests written before content hashing existed store none at all, so those files are reported as unverifiable and never as unchanged. `verified` is only true when every file the manifest names was rehashed and matched. Use it after organizing to confirm the files are still where they were put.
+
+### Parameters
+
+| Parameter         | Type   | Description                                                             | Default    |
+| ----------------- | ------ | ----------------------------------------------------------------------- | ---------- |
+| `manifest_id`     | string | ID of the operation to verify. If omitted, verifies the last operation. | -          |
+| `response_format` | string | 'json' or 'markdown'                                                     | 'markdown' |
+
+### Response fields
+
+| Field             | Type    | Description                                                                     |
+| ----------------- | ------- | ------------------------------------------------------------------------------- |
+| `manifest_id`     | string  | Manifest that was checked                                                      |
+| `description`     | string  | Operation the manifest recorded                                                |
+| `recorded_at`     | number  | When the operation ran                                                         |
+| `total_files`     | number  | Files the manifest names                                                       |
+| `checked`         | number  | Files actually rehashed and compared                                           |
+| `unchanged`       | number  | Rechecked and byte-identical                                                   |
+| `modified`        | number  | Rechecked and changed                                                          |
+| `missing`         | number  | Gone since the operation                                                       |
+| `unverifiable`    | number  | Could not be checked: no recorded digest, outside the allowed roots, or unreadable |
+| `drift_detected`  | boolean | Any file modified or missing                                                   |
+| `verified`        | boolean | True only when every file was rechecked and matched                           |
+| `files`           | array   | One entry per action: `path`, `status`, and `reason` / `expected_hash` / `actual_hash` |
+
+A `status` is `unchanged`, `modified`, `missing`, or `unverifiable`. `unverifiable`
+is never counted as `unchanged`, and it keeps `verified` false.
+
+### Example
+
+```typescript
+file_organizer_verify_integrity({
+  manifest_id: "value",
+  response_format: "value",
 });
 ```
 
