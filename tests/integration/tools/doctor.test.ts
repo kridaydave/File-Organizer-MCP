@@ -108,7 +108,12 @@ async function contextFromDisk(): Promise<ToolContext> {
 
 beforeEach(async () => {
   sandboxBaseDir = sandboxBase();
-  sandboxHome = await fs.mkdtemp(path.join(sandboxBaseDir, "fom-doctor-"));
+  // Canonicalise: os.tmpdir() is spelled with the Windows 8.3 short name
+  // (RUNNER~1) while realpath expands it (runneradmin), so paths built from
+  // the raw value disagree with what the validator returns.
+  sandboxHome = await fs.realpath(
+    await fs.mkdtemp(path.join(sandboxBaseDir, "fom-doctor-")),
+  );
   os.homedir = () => sandboxHome;
   process.env.XDG_CONFIG_HOME = path.join(sandboxHome, ".config");
   process.env.APPDATA = path.join(sandboxHome, "AppData", "Roaming");
