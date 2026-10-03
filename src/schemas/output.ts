@@ -206,6 +206,32 @@ export const doctorOutputSchema = z.object({
   healthy: z.boolean(),
 });
 
+export const exportConfigOutputSchema = z.object({
+  format_version: z.number(),
+  mode: z.enum(["absolute", "rebased"]),
+  rebase_root: z.string().nullable(),
+  output_path: z.string().nullable(),
+  written: z.boolean(),
+  bytes_written: z.number(),
+  config_file_present: z.boolean(),
+  counts: z.object({
+    custom_allowed_directories: z.number(),
+    custom_rules: z.number(),
+    rules: z.number(),
+    watch_entries: z.number(),
+  }),
+  requires_editing: z.array(z.string()),
+  non_portable_paths: z.array(
+    z.object({
+      field: z.string(),
+      value: z.string(),
+      reason: z.string(),
+    }),
+  ),
+  notes: z.array(z.string()),
+  config: z.record(z.string(), z.unknown()),
+});
+
 type JsonSchemaObject = {
   type: "object";
   properties: Record<string, unknown>;
@@ -237,4 +263,7 @@ export const doctorOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const findBrokenSymlinksOutputJsonSchema = z.toJSONSchema(
   findBrokenSymlinksOutputSchema,
+) as JsonSchemaObject;
+export const exportConfigOutputJsonSchema = z.toJSONSchema(
+  exportConfigOutputSchema,
 ) as JsonSchemaObject;

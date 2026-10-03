@@ -5,7 +5,6 @@
 import { z } from "zod";
 import { CommonParamsSchema } from "./common.js";
 
-
 /**
  * Schema for view_history tool
  * View the history of file organization operations
@@ -93,3 +92,53 @@ export const SetCustomRulesInputSchema = z
     ),
   })
   .merge(CommonParamsSchema);
+
+/**
+ * Schema for export_config tool.
+ *
+ * output_path is optional: omit it and the bundle comes back in the response
+ * without anything being written. rebaseRoot turns the machine-specific
+ * directory paths into `~/relative` values that survive a different home.
+ */
+export const ExportConfigInputSchema = z
+  .object({
+    output_path: PathSchema.optional().describe(
+      "Where to write the bundle JSON. Must pass path validation. The write refuses to overwrite an existing file. Omit to receive the bundle in the response instead of writing one.",
+    ),
+    rebase_root: PathSchema.optional().describe(
+      "Directory on this machine that the target machine's home directory is expected to occupy, normally the home directory. Paths under it are exported as ~-relative instead of absolute.",
+    ),
+  })
+  .merge(CommonParamsSchema);
+
+export type ExportConfigInput = z.infer<typeof ExportConfigInputSchema>;
+
+/**
+ * The exported bundle document, as read back off disk.
+ *
+ * `config` is deliberately loose: it is the config.json subset, already shaped
+ * by UserConfig when it is built, and a bundle written by another version may
+ * carry keys this one does not know. The envelope is what must match, so the
+ * envelope is what is checked.
+ */
+export const ConfigBundleSchema = z.object({
+  format_version: z.number().int(),
+  exported_by: z.string(),
+  exported_at: z.string(),
+  config: z.record(z.string(), z.unknown()),
+  portability: z.object({
+    mode: z.enum(["absolute", "rebased"]),
+    rebase_root: z.string().nullable(),
+    requires_editing: z.array(z.string()),
+    non_portable_paths: z.array(
+      z.object({
+        field: z.string(),
+        value: z.string(),
+        reason: z.literal("outside_rebase_root"),
+      }),
+    ),
+    notes: z.array(z.string()),
+  }),
+});
+
+export type ConfigBundle = z.infer<typeof ConfigBundleSchema>;

@@ -47,6 +47,8 @@ import {
   handleGetCategories,
   setCustomRulesToolDefinition,
   handleSetCustomRules,
+  exportConfigToolDefinition,
+  handleExportConfig,
 } from "../tools/file-management.js";
 import {
   analyzeDuplicatesToolDefinition,
@@ -131,6 +133,7 @@ const entries = [
   reg(batchReadFilesToolDefinition, handleBatchReadFiles),
   reg(getCategoriesToolDefinition, handleGetCategories),
   reg(setCustomRulesToolDefinition, handleSetCustomRules),
+  reg(exportConfigToolDefinition, handleExportConfig),
   reg(analyzeDuplicatesToolDefinition, handleAnalyzeDuplicates),
   reg(deleteDuplicatesToolDefinition, handleDeleteDuplicates),
   reg(undoLastOperationToolDefinition, handleUndoLastOperation),
