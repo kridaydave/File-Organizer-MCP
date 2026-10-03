@@ -178,6 +178,22 @@ export const findBrokenSymlinksOutputSchema = z.object({
   ),
 });
 
+export const diskUsageByCategoryOutputSchema = z.object({
+  directory: z.string(),
+  total_files: z.number(),
+  total_size: z.number(),
+  total_size_readable: z.string(),
+  categories: z.array(
+    z.object({
+      category: z.string(),
+      file_count: z.number(),
+      total_size: z.number(),
+      total_size_readable: z.string(),
+      percent_of_total: z.number(),
+    }),
+  ),
+});
+
 export const undoOutputSchema = z.object({
   success: z.number(),
   failed: z.number(),
@@ -265,4 +281,7 @@ export const doctorOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const findBrokenSymlinksOutputJsonSchema = z.toJSONSchema(
   findBrokenSymlinksOutputSchema,
+) as JsonSchemaObject;
+export const diskUsageByCategoryOutputJsonSchema = z.toJSONSchema(
+  diskUsageByCategoryOutputSchema,
 ) as JsonSchemaObject;

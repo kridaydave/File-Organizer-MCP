@@ -33,6 +33,7 @@ src/
 ├── core/
 │   ├── io/                readFile(): validate → sensitive-file gate → fs.readFile
 │   ├── scan/              scanner.ts: recursive scan with depth/count limits
+│                           + disk-usage.ts: pure per-category byte summary
 │   ├── categorize/        rules + extension map + magic-byte sniff + custom rules
 │   ├── organize/          organizer, rename, rollback (+ manifest integrity)
 │   ├── hash/              SHA-256 hasher + duplicate finder
