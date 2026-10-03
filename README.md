@@ -196,6 +196,16 @@ caller must not string-compare it against what it passed in.
 file-organizer-watch once ~/Downloads --apply --json | jq -e '.moved > 0'
 ```
 
+For a read-only sweep — scan plus `preview_organization` on a timer, no moves —
+see [examples/scheduling](examples/scheduling/README.md). It has ready-to-copy
+recipes for three surfaces:
+
+| Surface        | Trigger                | Config |
+| -------------- | ---------------------- | ------ |
+| Claude Desktop | headless `claude -p`   | [claude-desktop.config.json](examples/scheduling/claude-desktop.config.json) |
+| Codex          | `codex exec`           | [codex.config.toml](examples/scheduling/codex.config.toml) |
+| cron / systemd | `file-organizer-watch once` | [crontab.example](examples/scheduling/crontab.example), [systemd/](examples/scheduling/systemd/) |
+
 ---
 
 ## File categories
@@ -446,6 +456,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram and design notes.
 
 - [API.md](API.md) - Complete tool reference
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Design and architecture
+- [examples/scheduling](examples/scheduling/README.md) - Scan + preview sweep recipes for Claude Desktop, Codex, cron, and systemd
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [MIGRATION.md](MIGRATION.md) - v2 to v3 upgrade guide
 - [CHANGELOG.md](CHANGELOG.md) - Version history
