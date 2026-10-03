@@ -10,6 +10,7 @@ import {
   restoreLoggerOutput,
   createMockLogger,
 } from "./test-helper.js";
+import { at } from "../helpers/safe-index.js";
 
 describe("Logger Suppression", () => {
   let originalConsoleError: typeof console.error;
@@ -142,9 +143,9 @@ describe("Logger Suppression", () => {
         message: "Test info message",
         context: { data: "test" },
       });
-      expect(mockLogger.logs[1].level).toBe("error");
-      expect(mockLogger.logs[2].level).toBe("warn");
-      expect(mockLogger.logs[3].level).toBe("debug");
+      expect(at(mockLogger.logs, 1).level).toBe("error");
+      expect(at(mockLogger.logs, 2).level).toBe("warn");
+      expect(at(mockLogger.logs, 3).level).toBe("debug");
 
       // Test clear functionality
       mockLogger.clear();

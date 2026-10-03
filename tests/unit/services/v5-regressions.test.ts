@@ -37,7 +37,7 @@ import { handleSystemOrganization } from '../../../src/tools/system-organization
 import { handleOrganizePhotos } from '../../../src/tools/photo-organization.js';
 import { handleOrganizeMusic } from '../../../src/tools/music-organization.js';
 import { RollbackService } from '../../../src/core/organize/rollback.js';
-import type { FileWithSize } from '../../../src/types.js';
+import type { FileWithSize, RollbackManifest } from '../../../src/types.js';
 
 describe('v5 Critical Regressions Gate', () => {
   let tempDir: string;
@@ -62,9 +62,9 @@ describe('v5 Critical Regressions Gate', () => {
       await fs.writeFile(empty3, '');
 
       const files: FileWithSize[] = [
-        { path: empty1, name: '__init__.py', size: 0, extension: '.py' },
-        { path: empty2, name: '.gitkeep', size: 0, extension: '' },
-        { path: empty3, name: 'empty.txt', size: 0, extension: '.txt' },
+        { path: empty1, name: '__init__.py', size: 0 },
+        { path: empty2, name: '.gitkeep', size: 0 },
+        { path: empty3, name: 'empty.txt', size: 0 },
       ];
 
       const finder = new DuplicateFinderService();
@@ -88,7 +88,7 @@ describe('v5 Critical Regressions Gate', () => {
 
       const renamer = new RenamingService();
       const previews = await renamer.applyRenameRules([fileLower], [
-        { type: 'case', casing: 'upper' },
+        { type: 'case', conversion: 'uppercase' },
       ]);
 
       await renamer.executeRename(previews, false);
@@ -110,7 +110,7 @@ describe('v5 Critical Regressions Gate', () => {
       const renamer = new RenamingService();
 
       const preview = await renamer.applyRenameRules([file], [
-        { type: 'case', casing: 'upper' },
+        { type: 'case', conversion: 'uppercase' },
       ]);
 
       expect(preview).toHaveLength(1);
@@ -136,7 +136,7 @@ describe('v5 Critical Regressions Gate', () => {
       ];
 
       const hash = service1.computeHash(actions, timestamp);
-      const manifestBase = {
+      const manifestBase: Omit<RollbackManifest, 'signature'> = {
         id: 'test-manifest-1',
         version: '1.0',
         timestamp,
@@ -204,7 +204,7 @@ describe('v5 Critical Regressions Gate', () => {
   describe('6. File Classification & Security Screening Regressions', () => {
     it('does not flag JPEG and MPEG files as executables or suspicious', async () => {
       const validator = new PathValidatorService(tempDir, [tempDir]);
-      const categorizer = new CategorizerService(validator);
+      const categorizer = new CategorizerService([], validator);
 
       const jpegPath = path.join(tempDir, 'photo.jpg');
       const jpegHeader = Buffer.concat([
@@ -237,7 +237,7 @@ describe('v5 Critical Regressions Gate', () => {
 
     it('does not misclassify catalog.pdf, prescription.pdf, contest_entry.jpg as Logs/Scripts/Tests during content categorization', async () => {
       const validator = new PathValidatorService(tempDir, [tempDir]);
-      const categorizer = new CategorizerService(validator);
+      const categorizer = new CategorizerService([], validator);
 
       const catalogPdf = path.join(tempDir, 'catalog.pdf');
       const prescriptionPdf = path.join(tempDir, 'prescription.pdf');
@@ -385,7 +385,7 @@ describe('v5 Critical Regressions Gate', () => {
       await fs.writeFile(pngWithTxtExt, pngHeader);
 
       const files: FileWithSize[] = [
-        { path: pngWithTxtExt, name: 'image_named_txt.txt', size: pngHeader.length, extension: '.txt' },
+        { path: pngWithTxtExt, name: 'image_named_txt.txt', size: pngHeader.length },
       ];
 
       const validator = new PathValidatorService(tempDir, [tempDir]);
@@ -395,7 +395,8 @@ describe('v5 Critical Regressions Gate', () => {
 
       // Without content analysis it would be Documents/Text, with content analysis it detects Images
       expect(plan.moves.length).toBe(1);
-      expect(plan.moves[0].destination).toContain('Images');
+      const [firstMove] = plan.moves;
+      expect(firstMove?.destination).toContain('Images');
     });
   });
 
@@ -483,7 +484,6 @@ describe('v5 Critical Regressions Gate', () => {
           path: alreadyOrganizedFile,
           name: 'report.pdf',
           size: 17,
-          extension: '.pdf',
         },
       ];
 
@@ -493,8 +493,8 @@ describe('v5 Critical Regressions Gate', () => {
       // The plan should not schedule unnecessary move for already-organized file
       expect(plan.moves.length).toBe(0);
 
-      // Execute organize on the plan
-      const result = await organizer.organize(tempDir, plan, { conflictStrategy: 'rename' });
+      // Execute organize on the same input files
+      const result = await organizer.organize(tempDir, files, { conflictStrategy: 'rename' });
       expect(result.errors).toHaveLength(0);
 
       // Verify the original file is intact and no _1.pdf was created
@@ -637,6 +637,7 @@ describe('v5 Critical Regressions Gate', () => {
       const res = await photoService.organize({
         sourceDir: tempDir,
         targetDir: path.join(tempDir, 'out'),
+        dateFormat: 'YYYY-MM-DD',
         stripGPS: true,
         dryRun: false,
       });

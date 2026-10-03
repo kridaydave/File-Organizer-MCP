@@ -1,6 +1,6 @@
 # File Organizer MCP
 
-File Organizer MCP is a security-hardened Model Context Protocol server for intelligent file organization. A single Node process exposes typed tools over stdio — scan, categorize, deduplicate, organize, and rollback — with 8-layer path validation on every filesystem touch.
+File Organizer MCP is a security-hardened Model Context Protocol server for intelligent file organization. A single Node process exposes typed tools over stdio — scan, categorize, deduplicate, organize, and rollback — with layered path validation on every filesystem touch.
 
 You can think of it as a "bring-your-own-directory" organizer that works with any MCP client (Claude Desktop, Codex, Cursor, OpenCode) without leaking paths or holding state.
 
@@ -10,7 +10,7 @@ We have users who trust this with their real home directories. It's important we
 
 ### 1. Security without compromise
 
-Every path goes through 8-layer validation before we touch `fs`. Whitelist + blacklist, symlink containment per-component, `O_NOFOLLOW`, atomic moves, no path leaks in errors. If a change weakens this, it's wrong.
+Every path goes through `validatePathBase` before we touch `fs`. Whitelist + blacklist, symlink containment per-component, `O_NOFOLLOW`, atomic moves, no path leaks in errors. If a change weakens this, it's wrong.
 
 ### 2. Simple systems over clever ones
 
@@ -46,7 +46,7 @@ Use this language so we stay on the same page:
 
 2. **Killing by pattern.** Never `pkill -f node`, `pgrep | kill`, or `kill` a PID you matched by name/path. Your own agent has this worktree path in its argv and several dev servers may be running. Kill only a PID you spawned, or the port owner from `ss -H -ltnp` after checking `/proc/<pid>/cwd` is your worktree.
 
-3. **Baking in paths.** Never hardcode `process.cwd()`, `os.homedir()`, or absolute test paths into schemas, tools, or snapshots. Allowed roots are platform-aware and user-configurable via `src/core/config/loader.ts:100` (`loadCustomAllowedDirs`). Tests that bake `/home/kriday` will fail on Windows/macOS and leak intent. Derive from `CONFIG.paths` or inject via `ValidatePathOptions`.
+3. **Baking in paths.** Never hardcode `process.cwd()`, `os.homedir()`, or absolute test paths into schemas, tools, or snapshots. Allowed roots are platform-aware and user-configurable via `src/core/config/loader.ts:111` (`loadCustomAllowedDirs`). Tests that bake `/home/kriday` will fail on Windows/macOS and leak intent. Derive from `CONFIG.paths` or inject via `ValidatePathOptions`.
 
 ## Hit every surface
 
@@ -60,11 +60,45 @@ The most common defect here is a change that works for one tool and is missing e
 - **Contracts.** Anything crossing the wire is a `ToolDefinition` in `src/mcp/types.ts:16`. `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) must be honest or the client will make bad decisions.
 - **Docs.** Behavior a user notices → `README.md`; structural change → `ARCHITECTURE.md`; tool shape → `API.md` + `config.schema.json`; new vocabulary → `docs/FRAMEWORK.md`.
 
+## Skills
+
+**Project-local.** `verify-file-organizer` in `.opencode/skills/verify-file-organizer/`
+drives the real built server over stdio inside a throwaway sandbox. Reach for it
+whenever you touch a tool handler, the organizer, rollback, config loading, or
+the path validator, and before claiming a change works. Its `references/features/`
+maps all 24 tools to how to drive them. See [Proving a change](#proving-a-change).
+
+**Global.** Your skill list is already in context with each skill's own trigger
+conditions, so read those rather than a table here. Two things worth knowing
+that a list cannot tell you:
+
+```bash
+ls ~/.config/opencode/skills    # OpenCode; also ~/.claude/skills, ~/.agents/skills
+readlink -f ~/.config/opencode/skills/<id>   # which collection a skill came from
+```
+
+Skills arrive as symlinks from collection checkouts under `~/fleet/`, so an
+installed skill is someone else's source. Do not edit one to change this repo's
+workflow. `writing-for-agents` covers editing this file or any SKILL.md.
+
+Repo facts a generic skill does not know, which is where they belong:
+
+- Split parallel work by tool group and by test directory. Two workers in one
+  file produce a conflict, not a speedup. A subagent has your tools, so hand it
+  a disjoint file list plus the verification contract it must satisfy.
+- Delegated work needs the sandbox rule stated in the prompt. A subagent asked to
+  organize files will otherwise use the developer's real home directory.
+- A design for this repo belongs in `src/core/`, and external input is typed in
+  exactly one place, `src/schemas/`. New business logic does not go in
+  `src/services/`, which holds facades.
+- Name the principle that changed your decision in your reply. That is how the
+  next agent learns which one was load-bearing here.
+
 ## Dev servers
 
 - `npm install` installs. If module resolution looks broken, `dist/` is stale — run `npm run build`.
 - `npm run dev` builds and starts the stdio server. `npm run build:watch` for tight loops. State defaults to the OS config dir, not the worktree.
-- `npm run setup` runs the TUI wizard (`src/tui/setup-wizard.ts:1`).
+- `npm run setup` runs the TUI wizard (`src/tui/index.ts`).
 - Don't start a second server against the same OS config dir in another terminal without knowing it — you'll get lock contention on `history.jsonl`.
 - Stop what you started, by the PID you tracked. See rule 1.
 
@@ -87,10 +121,11 @@ An empty directory is a bad test. Seed with real shapes, but keep them in the sa
 ## Verifying
 
 - Smallest proof that the change works. `npm test tests/unit/services/your-service.test.ts` for the files you touched, targeted lint/typecheck for the scope you changed.
-- **Do not run repo-wide checks** unless asked. No `npm run test:coverage` sweep, no `npm run lint` across everything unless you changed the rule. CI owns the full suite.
+- **`npm run typecheck:tests` is a gate.** It sat at 327 errors in no gate for a long time, so nobody saw them. It is clean now and belongs in `verify:all` and CI. Run it whenever you touch a test or a type.
 - Backend behavior changes ship with focused tests for that behavior. Services are unit-tested in isolation; tools have integration tests in `tests/integration/`.
 - The organizer is async and event-ish (history logger, rollback). Wait on receipts/awaited promises, never on `setTimeout` polling. A test that needs a sleep to pass is wrong.
 - For user-visible tool output, check both `json` and `markdown` formats — both are part of the contract.
+- A passing unit test is not proof the tool works. `principle-prove-it-works` means the real artifact. Drive it through `verify-file-organizer`.
 
 ## Pull requests
 
@@ -110,7 +145,7 @@ An empty directory is a bad test. Seed with real shapes, but keep them in the sa
 
 ## How it works
 
-Client sends a JSON-RPC tool call over stdio → `src/server.ts` creates the MCP server and registers `TOOLS` from `src/mcp/registry.ts` (name → handler map) → handler validates with Zod (`src/schemas/*`) then `validateStrictPath` (`src/services/path-validator.service.ts:357`) → calls a service (`scan`, `categorize`, `organize`, `hash`, `rollback`) → formats `ToolResponse` (`src/mcp/types.ts:8`) → server returns it. Services are pure and stateless; per-request `ctx` carries config and history logger. Side effects (history, backups, rollback manifests) are file-backed, not in memory.
+Client sends a JSON-RPC tool call over stdio → `src/server.ts` creates the MCP server and registers `TOOLS` from `src/mcp/registry.ts` (name → handler map) → handler validates with Zod (`src/schemas/*`) then `validateStrictPath` (`src/services/path-validator.service.ts:369`) → calls a service (`scan`, `categorize`, `organize`, `hash`, `rollback`) → formats `ToolResponse` (`src/mcp/types.ts:16`) → server returns it. Services are pure and stateless; per-request `ctx` carries config and history logger. Side effects (history, backups, rollback manifests) are file-backed, not in memory.
 
 Full tour: `ARCHITECTURE.md` + `docs/FRAMEWORK.md`.
 
@@ -144,7 +179,9 @@ File-Organizer-MCP/
 ├── bin/                       # file-organizer-mcp, file-organizer-setup, file-organizer-watch
 ├── docs/                      # FRAMEWORK.md, implementation notes, docs/skills/
 ├── examples/                  # config.strict.json, config.sandboxed.json, mcp-clients/
-└── scripts/                   # postinstall, prepare, benchmarks, security-gates/
+├── scripts/                   # postinstall, prepare, benchmarks, security-gates, check-doc-citations
+├── tests/helpers/             # safe-index: throws on absent, so an assertion can't pass vacuously
+└── .opencode/skills/          # verify-file-organizer: drive the real server
 ```
 
 `dist/`, `node_modules/`, `coverage/`, `.jest-cache/`, `.file-organizer-*` are gitignored and generated.
@@ -153,32 +190,12 @@ File-Organizer-MCP/
 
 - Complexity belongs at the validation boundary. Services stay pure, tools stay thin, handlers stay honest.
 - Inferred types over annotations. `any` is the enemy — use `unknown` + Zod.
+- Model the domain in a type, not in scattered conditionals. `ToolResponse["content"]` is a non-empty tuple because every tool returns a text block; that one decision removed 122 type errors and stopped tests from guarding an empty response that cannot happen.
 - Comments describe how a thing is used and move when the code moves. Use them to describe functions, not to narrate every line.
 - Don't preserve complexity just because it already exists. Don't ship machinery that looks impressive but doesn't change the answer.
-- Errors are part of the interface. Never leak internal paths; use `sanitizeErrorMessage()` (`src/utils/error-handler.ts:1`). Throw `ValidationError` / `AccessDeniedError` (`src/mcp/types.ts:63`) and let `createErrorResponse` format them.
+- When you write the same instruction twice, encode it once. A lint, a script, or a schema constraint beats a paragraph someone has to remember. `npm run docs:check` is that rule applied to doc drift; `tests/helpers/safe-index.ts` is it applied to an absent array slot.
+- Errors are part of the interface. Never leak internal paths; use `sanitizeErrorMessage()` (`src/utils/error-handler.ts:64`). Throw `AccessDeniedError` (`src/mcp/types.ts:64`) or `ValidationError` (`src/mcp/types.ts:75`) and let `createErrorResponse` format them.
 - If a schema or tool adds a new field, grep `tests/` and `API.md` before calling it done.
-
-## Commands
-
-Quick reference you will actually use:
-
-```bash
-npm run build                              # tsc to dist/
-npm run build:watch                        # watch mode
-npm run dev                                # build + start stdio server
-npm run clean                              # rm dist/
-
-npm test                                   # all tests (Jest, ESM)
-npm test tests/unit/services/organizer.test.ts  # single file
-npm run test:security                      # path + access control suite
-npm run test:coverage                      # with coverage
-
-npm run lint                               # eslint src + tests
-npm run lint:fix                           # auto-fix
-npm run format                             # prettier src/
-
-npm run setup                              # TUI wizard
-```
 
 ## Quality gates
 
@@ -187,13 +204,93 @@ Before submitting changes:
 - [ ] `npm run build` succeeds
 - [ ] `npm run lint` is clean for files you touched
 - [ ] `npm test` for those files passes
+- [ ] `npm run typecheck:tests` is clean. It sat at 327 errors in no gate for a long time, so nobody saw them. It is a real gate now.
 - [ ] `npm run test:security` passes if you touched `path-validator` or `path-security`
-- [ ] New behavior has a test
+- [ ] New behavior has a test that fails without your change
 - [ ] Errors don't leak paths
 - [ ] Docs updated if you changed a tool shape or security rule
+- [ ] `npm run docs:check` passes if you edited a file whose `file:line` another doc cites
+- [ ] The behavior is proven on the real server via `verify-file-organizer`, not only by a unit test
+
+`npm run verify:all` runs the first four plus docs, security, and the full
+suite. Reach for it when the change is broad or when you are about to hand the
+work over.
+
+## Security notes worth knowing
+
+The validator is solid and its throw path leaks nothing. The gaps are elsewhere,
+so read this before assuming a tool is safe because it calls `validateStrictPath`.
+
+- **Derived destinations were the real risk.** A tool that validates its input
+  path and then joins a caller-supplied string onto it can still escape. Both
+  such fields, `local_fallback_prefix` and `unknown_date_folder`, now use
+  `FolderNameSchema`, which rejects separators and `..`. When you add a schema
+  field that becomes part of a path, a bare `z.string()` is the bug.
+- **`dry_run` must mean zero writes.** It means that in every tool except one.
+  When you add a `mkdir`, a backup, or a manifest write, put it behind the guard
+  and prove it with a test that asserts the write did not happen.
+- **`ToolResponse["content"]` is a non-empty tuple.** Indexing `[0]` is total.
+  A helper that throws on an empty response beats a non-null assertion in tests.
+- **Success payloads carry real paths by design.** `organize_files` returns full
+  `from` and `to`. Redaction is enforced on the error path, so a "no paths leak"
+  test targets `createErrorResponse`, not a successful organize.
+- **Six reserved-name implementations disagree** on Windows edge cases, and
+  `src/core/detect/tokens.ts` is the most correct. Prefer it if you touch that
+  logic. Seven is worse than two.
+
+## Proving a change
+
+Unit tests call handlers directly. They do not prove the server answers a
+handshake, that a tool is reachable by name, or that a move lands on disk and
+undo puts it back.
+
+Use the `verify-file-organizer` skill, in `.opencode/skills/verify-file-organizer/`.
+It ships a harness that drives the real built server over stdio inside a
+throwaway sandbox, so your real config dir and history are never touched.
+
+```bash
+C=.opencode/skills/verify-file-organizer/scripts/control-file-organizer.mjs
+node $C doctor      # build, handshake, tool count, one read-only call
+node $C tools       # all 24 tools
+node $C call organize_files --directory /tmp/file-organizer-verify/default/data \
+  --dry_run false --conflict_strategy rename --json
+node $C call undo_last_operation --json
+node $C cleanup
+```
+
+Reach for it when you touch a tool handler, the organizer, rollback, config
+loading, or the path validator. Read `references/features/` for what each
+capability does and how to drive it.
 
 ## Additional tips
 
 - Don't verify with browsers unless the user asks — this is a stdio server, not a web app.
 - Security matters but don't over-index for maintainer-only scripts. For user-facing tools, it matters absolutely.
 - When in doubt, do less. Ship the smallest model that makes the correct behavior unsurprising.
+- `docs/skills/SKILL.md` is the long-form guide. `AGENTS.md` wins on any conflict, and `npm run docs:check` catches a stale path reference in either.
+
+## Commands
+
+`npm run` lists them all. The ones you will reach for:
+
+```bash
+npm run build                              # tsc to dist/
+npm run build:watch                        # watch mode
+npm run dev                                # build + start stdio server
+
+npm test                                   # all tests (Jest, ESM)
+npm test tests/unit/services/organizer.test.ts  # single file
+npm run test:security                      # path + access control suite
+npm run typecheck:tests                    # tsc over src + tests, no emit
+
+npm run lint                               # eslint src + tests
+npm run lint:fix                           # auto-fix
+npm run format                             # prettier src/
+
+npm run docs:check                         # agent docs still point at real code
+npm run docs:check:fix                     # rewrite drifted file:line citations
+
+npm run verify:all                         # build, lint, typecheck, docs, security, tests
+
+npm run setup                              # TUI wizard
+```

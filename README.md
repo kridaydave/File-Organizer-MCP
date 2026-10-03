@@ -86,7 +86,7 @@ You can ask the assistant things like:
 ### Core tools
 
 - `file_organizer_scan_directory` - List a directory with detailed file info. `directory` is required; `include_subdirs` toggles recursion.
-- `file_organizer_read_file` - Read a file with 8-layer path validation. `path` is required; `encoding` is utf-8, base64, or binary.
+- `file_organizer_read_file` - Read a file through the validated path pipeline. `path` is required; `encoding` is utf-8, base64, or binary.
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 
@@ -339,7 +339,7 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 | Attack type         | Protection                                     |
 | ------------------- | ---------------------------------------------- |
 | Unauthorized access | Whitelist plus blacklist enforcement           |
-| Path traversal      | 8-layer validation pipeline                    |
+| Path traversal      | validatePathBase, see ARCHITECTURE.md         |
 | Symlink attacks     | Real path resolution                           |
 | DoS                 | Resource limits on file count, depth, and size |
 
@@ -371,7 +371,7 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 
 ## Architecture
 
-The server is stateless: each JSON-RPC request gets a fresh context (`config`, history logger) routed through an explicit tool registry into pure service modules under `src/core/`. The pipeline is `scan → categorize → plan → move`, every path passes 8-layer validation before any `fs` call, and all side effects are file-backed (history, rollback manifests), so nothing survives a restart except what you can undo.
+The server is stateless: each JSON-RPC request gets a fresh context (`config`, history logger) routed through an explicit tool registry into pure service modules under `src/core/`. The pipeline is `scan → categorize → plan → move`, every path passes `validatePathBase` before any `fs` call, and all side effects are file-backed (history, rollback manifests), so nothing survives a restart except what you can undo.
 
 Scheduled organization runs as a separate process (`file-organizer-watch`) so the stdio server stays request/response.
 

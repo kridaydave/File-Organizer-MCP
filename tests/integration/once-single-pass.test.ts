@@ -27,6 +27,7 @@ import {
 import { CONFIG } from "../../src/core/config/defaults.js";
 import { HistoryLoggerService } from "../../src/services/history-logger.service.js";
 import type { UserConfig } from "../../src/config.js";
+import { first } from "../helpers/safe-index.js";
 
 const emptyConfig: UserConfig = { conflictStrategy: "rename" };
 
@@ -115,9 +116,10 @@ describe("single-pass organize (once)", () => {
       .map((l) => JSON.parse(l) as Record<string, unknown>);
 
     expect(lines).toHaveLength(1);
-    expect(lines[0].operation).toBe("file_organizer_organize_files");
-    expect(lines[0].filesProcessed).toBe(2);
-    expect(lines[0].status).toBe("success");
+    const entry = first(lines);
+    expect(entry.operation).toBe("file_organizer_organize_files");
+    expect(entry.filesProcessed).toBe(2);
+    expect(entry.status).toBe("success");
   });
 
   it("leaves subdirectories alone unless recursive is asked for", async () => {

@@ -4,26 +4,52 @@ import {
   withMockedLogger,
   type MockLogger,
 } from "../../utils/logger-mock.js";
+import { at } from "../../helpers/safe-index.js";
 
-const mockReaddir = jest.fn();
-const mockStat = jest.fn();
-const mockAccess = jest.fn();
-const mockMkdir = jest.fn();
-const mockRename = jest.fn();
-const mockUnlink = jest.fn();
-const mockCopyFile = jest.fn();
-const mockWriteFile = jest.fn();
-const mockUtimes = jest.fn();
-const mockReadFile = jest.fn();
-const mockOpen = jest.fn();
-const mockRead = jest.fn();
+/** The slice of `Dirent` the service reads while walking the source directory. */
+interface DirentLike {
+  name: string;
+  isFile: () => boolean;
+}
 
-const mockPipeline = jest.fn();
-const mockCreateReadStream = jest.fn();
-const mockCreateWriteStream = jest.fn();
+/** The slice of `Stats` the service reads to derive a fallback date. */
+interface StatLike {
+  size: number;
+  birthtime: Date;
+  mtime: Date;
+}
 
-const mockExtractMetadata = jest.fn();
-const mockValidatePath = jest.fn();
+/** The slice of `FileHandle` used when stripping GPS data. */
+interface FileHandleLike {
+  read: ReturnType<typeof jest.fn<() => Promise<{ bytesRead: number }>>>;
+  close: ReturnType<typeof jest.fn<() => Promise<void>>>;
+}
+
+/** The metadata fields the organizer reads off an extracted photo record. */
+interface PhotoMetadataLike {
+  dateTaken?: string;
+  camera?: string;
+}
+
+const mockReaddir = jest.fn<() => Promise<Array<DirentLike>>>();
+const mockStat = jest.fn<() => Promise<StatLike>>();
+const mockAccess = jest.fn<() => Promise<void>>();
+const mockMkdir = jest.fn<() => Promise<void>>();
+const mockRename = jest.fn<() => Promise<void>>();
+const mockUnlink = jest.fn<() => Promise<void>>();
+const mockCopyFile = jest.fn<() => Promise<void>>();
+const mockWriteFile = jest.fn<() => Promise<void>>();
+const mockUtimes = jest.fn<() => Promise<void>>();
+const mockReadFile = jest.fn<() => Promise<Buffer>>();
+const mockOpen = jest.fn<() => Promise<FileHandleLike>>();
+const mockRead = jest.fn<() => Promise<{ bytesRead: number }>>();
+
+const mockPipeline = jest.fn<() => Promise<void>>();
+const mockCreateReadStream = jest.fn<() => NodeJS.ReadableStream>();
+const mockCreateWriteStream = jest.fn<() => NodeJS.WritableStream>();
+
+const mockExtractMetadata = jest.fn<() => Promise<PhotoMetadataLike>>();
+const mockValidatePath = jest.fn<(candidate: string) => string>();
 
 jest.unstable_mockModule("fs/promises", () => ({
   default: {
@@ -93,7 +119,7 @@ const sourceDir = "/photos-source";
 const targetDir = "/organized-target";
 
 describe("PhotoOrganizerService", () => {
-  let service: PhotoOrganizerService;
+  let service: InstanceType<typeof PhotoOrganizerService>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -225,10 +251,10 @@ describe("PhotoOrganizerService", () => {
         expect(result.success).toBe(true);
         expect(result.organizedFiles).toBe(1);
         expect(result.movedFiles).toHaveLength(1);
-        expect(result.movedFiles[0].originalPath).toBe(
+        expect(at(result.movedFiles, 0).originalPath).toBe(
           path.join(sourceDir, "photo.jpg"),
         );
-        expect(result.movedFiles[0].currentPath).toBe(
+        expect(at(result.movedFiles, 0).currentPath).toBe(
           path.join(targetDir, "2020", "05", "10", "photo.jpg"),
         );
         expect(mockRename).toHaveBeenCalledTimes(1);
@@ -301,7 +327,7 @@ describe("PhotoOrganizerService", () => {
 
         expect(result.organizedFiles).toBe(1);
         expect(result.errors).toHaveLength(1);
-        expect(result.errors[0].file).toBe(path.join(sourceDir, "photo1.jpg"));
+        expect(at(result.errors, 0).file).toBe(path.join(sourceDir, "photo1.jpg"));
       }),
     );
   });

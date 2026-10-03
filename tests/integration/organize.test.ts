@@ -1,8 +1,9 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { OrganizerService } from '../../src/core/organize/organizer';
-import { FileScannerService } from '../../src/core/scan/scanner';
+import { OrganizerService } from '../../src/core/organize/organizer.js';
+import { FileScannerService } from '../../src/core/scan/scanner.js';
+import { first } from '../helpers/safe-index.js';
 
 describe('OrganizerService', () => {
   let testDir: string;
@@ -29,8 +30,10 @@ describe('OrganizerService', () => {
     const result = await organizer.organize(testDir, files);
 
     expect(result.actions).toHaveLength(1);
-    expect(result.actions[0].file).toBe(unicodeFileName);
-    expect(result.actions[0].to).toContain(path.join('Documents', unicodeFileName));
+    expect(first(result.actions).file).toBe(unicodeFileName);
+    expect(first(result.actions).to).toContain(
+      path.join('Documents', unicodeFileName),
+    );
 
     const newPath = path.join(testDir, 'Documents', unicodeFileName);
     const stats = await fs.stat(newPath);

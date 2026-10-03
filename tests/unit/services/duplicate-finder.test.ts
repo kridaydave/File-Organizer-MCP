@@ -76,8 +76,10 @@ describe("DuplicateFinderService", () => {
       ]);
 
       expect(duplicates.length).toBe(1);
-      expect(duplicates[0].file_count).toBe(2);
-      expect(duplicates[0].files.map((f) => f.path).sort()).toEqual(
+      const [group] = duplicates;
+      if (!group) throw new Error("expected exactly one duplicate group");
+      expect(group.file_count).toBe(2);
+      expect(group.files.map((f) => f.path).sort()).toEqual(
         expect.arrayContaining([file1.path, file2.path].sort()),
       );
     });
@@ -98,6 +100,7 @@ describe("DuplicateFinderService", () => {
       // Service returns "recommended_keep" as the one with highest score
 
       const group = duplicates[0];
+      if (!group) throw new Error("expected exactly one duplicate group");
       const keepPath = group.recommended_keep;
 
       expect(keepPath).toBe(docFile.path);
@@ -125,6 +128,7 @@ describe("DuplicateFinderService", () => {
       );
 
       const group = duplicates[0];
+      if (!group) throw new Error("expected exactly one duplicate group");
       expect(group.recommended_keep).toBe(newFile.path); // Keep newest
     });
   });
@@ -168,7 +172,9 @@ describe("DuplicateFinderService", () => {
         path.join(testDir, "nonexistent.txt"),
       ]);
       expect(result.failed.length).toBe(1);
-      expect(result.failed[0].error).toContain("File not found");
+      const [failure] = result.failed;
+      if (!failure) throw new Error("expected exactly one failed deletion");
+      expect(failure.error).toContain("File not found");
     });
 
     // Updated Test: Simplified verification (accessibility only)
@@ -300,8 +306,10 @@ describe("DuplicateFinderService", () => {
       // Valid file deleted, invalid file failed
       expect(result.deleted).toContain(validFile.path);
       expect(result.failed.length).toBe(1);
-      expect(result.failed[0].path).toBe(invalidPath);
-      expect(result.failed[0].error).toContain("File not found");
+      const [failure] = result.failed;
+      if (!failure) throw new Error("expected exactly one failed deletion");
+      expect(failure.path).toBe(invalidPath);
+      expect(failure.error).toContain("File not found");
     });
 
     // Auto-Verification Tests
@@ -316,7 +324,9 @@ describe("DuplicateFinderService", () => {
       }); // autoVerify=true explicitly
 
       expect(result.failed.length).toBe(1);
-      expect(result.failed[0].error).toContain("last copy");
+      const [failure] = result.failed;
+      if (!failure) throw new Error("expected exactly one failed deletion");
+      expect(failure.error).toContain("last copy");
       expect(result.deleted.length).toBe(0);
     });
 

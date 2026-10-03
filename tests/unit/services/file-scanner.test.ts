@@ -68,7 +68,9 @@ describe('FileScannerService', () => {
             const results = await fileScanner.scanDirectory(testDir, { includeSubdirs: false });
 
             expect(results.length).toBe(1);
-            expect(results[0].name).toBe('root.txt');
+            const [onlyResult] = results;
+            if (!onlyResult) throw new Error('Expected exactly one scanned file');
+            expect(onlyResult.name).toBe('root.txt');
         });
 
         it('should respect maxDepth limit', async () => {
@@ -105,7 +107,9 @@ describe('FileScannerService', () => {
             const results = await fileScanner.scanDirectory(testDir, { includeSubdirs: true });
 
             expect(results.length).toBe(1);
-            expect(results[0].name).toBe('normal.txt');
+            const [onlyResult] = results;
+            if (!onlyResult) throw new Error('Expected exactly one scanned file');
+            expect(onlyResult.name).toBe('normal.txt');
         });
 
         it('should respect maxFiles limit', async () => {

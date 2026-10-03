@@ -1,31 +1,43 @@
 import { describe, it, expect } from '@jest/globals';
-import { ManifestIntegrityService } from '../../../src/core/organize/manifest-integrity';
+import { ManifestIntegrityService } from '../../../src/core/organize/manifest-integrity.js';
+import type { RollbackAction, RollbackManifest } from '../../../src/types.js';
 
-const actions = [
+const actions: RollbackAction[] = [
     {
-        type: 'move' as const,
+        type: 'move',
         originalPath: '/src/a.txt',
         currentPath: '/dest/a.txt',
         timestamp: 100,
     },
     {
-        type: 'copy' as const,
+        type: 'copy',
         originalPath: '/src/b.txt',
         currentPath: '/dest/b.txt',
         timestamp: 101,
     },
 ];
 
-function buildValidManifest(service: ManifestIntegrityService, overrides: Record<string, unknown> = {}) {
-    const base = {
+/** A manifest as accepted by computeSignature: everything but the signature. */
+type SignableManifest = Omit<RollbackManifest, 'signature'>;
+
+function signableManifest(overrides: Record<string, unknown> = {}): SignableManifest {
+    return {
         id: 'test-manifest',
         timestamp: 1700000000000,
         description: 'Test manifest',
         actions,
         version: '1.0',
+        hash: 'abc',
         ...overrides,
     };
-    const hash = service.computeHash(base.actions as typeof actions, base.timestamp as number);
+}
+
+function buildValidManifest(
+    service: ManifestIntegrityService,
+    overrides: Record<string, unknown> = {},
+): RollbackManifest {
+    const base = signableManifest(overrides);
+    const hash = service.computeHash(base.actions, base.timestamp);
     const signature = service.computeSignature({ ...base, hash });
     return { ...base, hash, signature };
 }
@@ -42,8 +54,10 @@ describe('ManifestIntegrityService', () => {
 
         it('should produce different hashes for different inputs', () => {
             const service = new ManifestIntegrityService();
-            const h1 = service.computeHash([actions[0]!], 123);
-            const h2 = service.computeHash([actions[0]!], 124);
+            const [firstAction] = actions;
+            if (!firstAction) throw new Error('Expected fixture actions to be present');
+            const h1 = service.computeHash([firstAction], 123);
+            const h2 = service.computeHash([firstAction], 124);
             expect(h1).not.toBe(h2);
         });
     });
@@ -51,7 +65,7 @@ describe('ManifestIntegrityService', () => {
     describe('computeSignature', () => {
         it('should compute a deterministic HMAC hex signature', () => {
             const service = new ManifestIntegrityService();
-            const manifest = {
+            const manifest: SignableManifest = {
                 id: 'x',
                 timestamp: 123,
                 description: 'd',
@@ -67,7 +81,7 @@ describe('ManifestIntegrityService', () => {
 
         it('should produce different signatures for different manifests', () => {
             const service = new ManifestIntegrityService();
-            const manifest = {
+            const manifest: SignableManifest = {
                 id: 'x',
                 timestamp: 123,
                 description: 'd',
@@ -93,9 +107,11 @@ describe('ManifestIntegrityService', () => {
 
         it('should return invalid for a missing manifest version', () => {
             const service = new ManifestIntegrityService();
-            const manifest = buildValidManifest(service) as { version?: string };
+            // A manifest missing its version is data a hostile/corrupt file
+            // system can hand us, so the local view makes version optional.
+            const manifest: { version?: string } = buildValidManifest(service);
             delete manifest.version;
-            expect(service.verifyManifest(manifest as never)).toEqual({
+            expect(service.verifyManifest(manifest as RollbackManifest)).toEqual({
                 valid: false,
                 error: 'Invalid or missing manifest version',
             });
@@ -103,9 +119,9 @@ describe('ManifestIntegrityService', () => {
 
         it('should return invalid for a missing manifest hash', () => {
             const service = new ManifestIntegrityService();
-            const manifest = buildValidManifest(service) as { hash?: string };
+            const manifest: { hash?: string } = buildValidManifest(service);
             delete manifest.hash;
-            expect(service.verifyManifest(manifest as never)).toEqual({
+            expect(service.verifyManifest(manifest as RollbackManifest)).toEqual({
                 valid: false,
                 error: 'Missing manifest hash',
             });
@@ -113,10 +129,8 @@ describe('ManifestIntegrityService', () => {
 
         it('should detect a hash mismatch when an action is tampered', () => {
             const service = new ManifestIntegrityService();
-            const manifest = buildValidManifest(service) as { actions: typeof actions };
-            manifest.actions = [
-                { type: 'delete' as const, originalPath: '/evil.txt', timestamp: 999 },
-            ];
+            const manifest = buildValidManifest(service);
+            manifest.actions = [{ type: 'delete', originalPath: '/evil.txt', timestamp: 999 }];
             expect(service.verifyManifest(manifest)).toEqual({
                 valid: false,
                 error: 'Manifest hash mismatch - possible tampering detected',
@@ -125,9 +139,9 @@ describe('ManifestIntegrityService', () => {
 
         it('should return invalid for a missing manifest signature', () => {
             const service = new ManifestIntegrityService();
-            const manifest = buildValidManifest(service) as { signature?: string };
+            const manifest: { signature?: string } = buildValidManifest(service);
             delete manifest.signature;
-            expect(service.verifyManifest(manifest as never)).toEqual({
+            expect(service.verifyManifest(manifest as RollbackManifest)).toEqual({
                 valid: false,
                 error: 'Missing manifest signature',
             });
@@ -135,7 +149,7 @@ describe('ManifestIntegrityService', () => {
 
         it('should detect a signature mismatch', () => {
             const service = new ManifestIntegrityService();
-            const manifest = buildValidManifest(service) as { signature: string };
+            const manifest = buildValidManifest(service);
             manifest.signature = 'deadbeef';
             expect(service.verifyManifest(manifest)).toEqual({
                 valid: false,

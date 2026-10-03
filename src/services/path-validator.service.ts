@@ -2,15 +2,18 @@
  * File Organizer MCP Server v5.0.0
  * Path Validator Service
  *
- * Implements 8-layer path validation for security:
- * 1. Type validation
- * 2. Expansion (env vars, ~)
- * 3. Character/length validation
- * 4. Absolute path resolution
- * 4.5. Security check (whitelist/blacklist)
- * 5. Symlink resolution
- * 6. Containment check
- * 7. Access permissions
+ * Path validation, applied in this order by validatePathBase:
+ * 1. Schema: type, length, NUL bytes, literal ".." segments
+ * 2. Normalization: URI-decode, Unicode NFC, ~ and $VAR expansion, path.normalize
+ * 3. Character rejection: control characters and <>"|?*
+ * 4. Windows device-name basename rejection
+ * 5. Resolution against basePath
+ * 6. isPathAllowed: blacklist, then the allowed-roots whitelist
+ * 7. Symlink resolution with per-component containment
+ * 8. Containment against allowedPaths
+ * 9. Existence and access, only when requireExists or checkWrite is set
+ *
+ * ARCHITECTURE.md documents the same pipeline for humans. Keep the two in step.
  */
 
 import fs from "fs/promises"; // for promise-based methods

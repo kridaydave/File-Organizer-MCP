@@ -370,9 +370,11 @@ describe("ImageMetadataService", () => {
 
       const metadata = await service.extract(filePath, { extractGPS: true });
 
-      // GPS timestamp may or may not be present
-      if (metadata.gps?.gpsTimestamp) {
-        expect(metadata.gps.gpsTimestamp).toBeInstanceOf(Date);
+      // The extractor records the GPS timestamp on the top-level metadata; the
+      // nested `gps` object only mirrors hasGPS/lat/lng/altitude. It is optional,
+      // so only assert when the fixture actually produced one.
+      if (metadata.gpsTimestamp) {
+        expect(metadata.gpsTimestamp).toBeInstanceOf(Date);
       }
     });
   });
@@ -724,9 +726,13 @@ describe("ImageMetadataService", () => {
       const results = await service.extractBatch(files, { extractGPS: true });
 
       expect(results).toHaveLength(3);
-      expect(results[0].camera?.make).toBe("Canon");
-      expect(results[1].hasEXIF).toBe(false);
-      expect(results[2].gps?.hasGPS).toBe(true);
+      const [full, empty, withGps] = results;
+      if (!full || !empty || !withGps) {
+        throw new Error("expected one extracted metadata result per file");
+      }
+      expect(full.camera?.make).toBe("Canon");
+      expect(empty.hasEXIF).toBe(false);
+      expect(withGps.gps?.hasGPS).toBe(true);
     });
   });
 });

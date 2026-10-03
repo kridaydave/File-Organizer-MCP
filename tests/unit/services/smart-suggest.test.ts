@@ -1,11 +1,12 @@
 import { jest } from "@jest/globals";
 import { SmartSuggestService } from "../../../src/services/smart-suggest.service.js";
 import type { FileWithSize } from "../../../src/types.js";
+import type { DuplicateScan } from "../../../src/core/types/organize.js";
 import * as fs from "fs/promises";
 
-const mockGetAllFiles = jest.fn();
-const mockFindDuplicates = jest.fn();
-const mockAccess = jest.fn();
+const mockGetAllFiles = jest.fn<() => Promise<FileWithSize[]>>();
+const mockFindDuplicates = jest.fn<() => Promise<DuplicateScan>>();
+const mockAccess = jest.fn<(path: string, mode?: number) => Promise<void>>();
 
 jest.mock("fs/promises", () => ({
   access: mockAccess,
