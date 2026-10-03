@@ -91,11 +91,17 @@ You can ask the assistant things like:
 - `file_organizer_read_file` - Read a file with 8-layer path validation. `path` is required; `encoding` is utf-8, base64, or binary.
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering. Checks the whole plan for name collisions first: if a real run would put two files on one name, or overwrite a name a different file already holds, the batch is rejected before anything moves and the conflicts come back as structured data.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
+<<<<<<< HEAD
 - `file_organizer_search_history` - Filter the history by path glob (`path_glob`), date range (`from`/`to`), or operation type. Every filter is optional and they combine, so a long history stays queryable instead of one flat list.
 - `file_organizer_verify_integrity` - Rehash what the last organization moved and report drift.
 
 ### Full tool list (30 tools)
 
+=======
+
+### Full tool list (29 tools)
+<!-- BEGIN GENERATED TOOL LIST -->
+>>>>>>> origin/main
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
 - `file_organizer_batch_rename`
@@ -107,15 +113,15 @@ You can ask the assistant things like:
 - `file_organizer_find_duplicate_files`
 - `file_organizer_find_empty_directories`
 - `file_organizer_find_largest_files`
-- `file_organizer_find_old_files` - Files untouched for N days, oldest first.
+- `file_organizer_find_old_files`
 - `file_organizer_get_categories`
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`
+- `file_organizer_organize_by_project`
 - `file_organizer_organize_files`
 - `file_organizer_organize_music`
-- `file_organizer_organize_by_project`
 - `file_organizer_organize_photos`
-- `file_organizer_preview_delete_duplicates` - Dry-run for duplicate deletion. Names the copy that survives per group under `newest`, `oldest`, or `keep_first`, and returns the `files_to_delete` list to hand to `file_organizer_delete_duplicates`. Deletes nothing.
+- `file_organizer_preview_delete_duplicates`
 - `file_organizer_preview_organization`
 - `file_organizer_read_file`
 - `file_organizer_scan_directory`
@@ -126,6 +132,7 @@ You can ask the assistant things like:
 - `file_organizer_undo_last_operation`
 - `file_organizer_verify_integrity`
 - `file_organizer_view_history`
+<!-- END GENERATED TOOL LIST -->
 
 For parameters and return shapes, see [API.md](API.md).
 
