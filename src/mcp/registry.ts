@@ -47,6 +47,8 @@ import {
 import {
   previewOrganizationToolDefinition,
   handlePreviewOrganization,
+  validateOrganizationPlanToolDefinition,
+  handleValidateOrganizationPlan,
 } from "../tools/organization-preview.js";
 import {
   getCategoriesToolDefinition,
@@ -169,6 +171,7 @@ const entries = [
   reg(smartSuggestToolDefinition, handleSmartSuggest),
   reg(systemOrganizationToolDefinition, handleSystemOrganization),
   reg(undoLastOperationToolDefinition, handleUndoLastOperation),
+  reg(validateOrganizationPlanToolDefinition, handleValidateOrganizationPlan),
   reg(viewHistoryToolDefinition, handleViewHistory),
 ];
 
