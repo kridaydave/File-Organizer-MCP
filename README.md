@@ -58,6 +58,7 @@ You can ask the assistant things like:
 - "Organize my Downloads folder"
 - "Find duplicate files in my Documents"
 - "Show me my largest files"
+- "Which categories take up the most space in my Downloads?"
 
 ### Install methods
 
@@ -73,6 +74,7 @@ You can ask the assistant things like:
 - Categorization into 12 or more file types.
 - Cron-based automatic organization and directory watch mode.
 - Duplicate detection by SHA-256 content hash.
+- Disk usage per category: which file types hold the space, in bytes and as a share.
 - Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
 - Dry-run preview, atomic moves, and rollback.
@@ -87,21 +89,24 @@ You can ask the assistant things like:
 
 - `file_organizer_scan_directory` - List a directory with detailed file info. `directory` is required; `include_subdirs` toggles recursion.
 - `file_organizer_read_file` - Read a file with 8-layer path validation. `path` is required; `encoding` is utf-8, base64, or binary.
-- `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
+- `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering. Checks the whole plan for name collisions first: if a real run would put two files on one name, or overwrite a name a different file already holds, the batch is rejected before anything moves and the conflicts come back as structured data.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 - `file_organizer_search_history` - Filter the history by path glob (`path_glob`), date range (`from`/`to`), or operation type. Every filter is optional and they combine, so a long history stays queryable instead of one flat list.
 
-### Full tool list (25 tools)
+### Full tool list (29 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
 - `file_organizer_batch_rename`
 - `file_organizer_categorize_by_type`
 - `file_organizer_delete_duplicates`
+- `file_organizer_disk_usage_by_category`
 - `file_organizer_doctor`
 - `file_organizer_find_broken_symlinks`
 - `file_organizer_find_duplicate_files`
+- `file_organizer_find_empty_directories`
 - `file_organizer_find_largest_files`
+- `file_organizer_find_old_files` - Files untouched for N days, oldest first.
 - `file_organizer_get_categories`
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`
@@ -109,6 +114,7 @@ You can ask the assistant things like:
 - `file_organizer_organize_music`
 - `file_organizer_organize_by_project`
 - `file_organizer_organize_photos`
+- `file_organizer_preview_delete_duplicates` - Dry-run for duplicate deletion. Names the copy that survives per group under `newest`, `oldest`, or `keep_first`, and returns the `files_to_delete` list to hand to `file_organizer_delete_duplicates`. Deletes nothing.
 - `file_organizer_preview_organization`
 - `file_organizer_read_file`
 - `file_organizer_scan_directory`
@@ -134,6 +140,93 @@ file-organizer-watch                                # start the daemon
 
 Watches are stored in the shared user config, so `add`/`remove` work even
 while the daemon is running (restart it to pick up changes).
+
+#### Single pass from an OS timer
+
+`once` runs one organization pass and exits, holding no watcher, no timer, and
+no open handle. That is the mode cron, launchd, a systemd timer, or Task
+Scheduler drives:
+
+```bash
+file-organizer-watch once ~/Downloads              # dry run, writes nothing
+file-organizer-watch once ~/Downloads --apply      # move, then exit
+file-organizer-watch once . --apply --recursive --json
+```
+
+##### Exit codes
+
+| Code | Meaning                                                    |
+| ---- | ---------------------------------------------------------- |
+| `0`  | Pass finished, moved nothing — empty dir or dry run        |
+| `1`  | Failed: bad flags, refused path, per-file errors, or abort |
+| `2`  | Pass finished clean and moved at least one file            |
+
+`1` wins over `2` even when files moved, so a partial pass never looks like
+success.
+
+##### `--json`
+
+`--json` prints exactly one JSON object on stdout and nothing else. Logs,
+usage, and failure text go to stderr, so stdout stays parseable whether the
+run succeeded or not.
+
+```json
+{
+  "ok": true,
+  "exitCode": 2,
+  "directory": "/home/you/Downloads",
+  "dryRun": false,
+  "scanned": 12,
+  "planned": 8,
+  "moved": 8,
+  "skipped": 4,
+  "historyLogged": true,
+  "aborted": false,
+  "errors": []
+}
+```
+
+Every key is always present, including on failure — a refused path reports the
+same shape with `ok` false, `exitCode` 1, and the reason in `errors`. `ok` is
+true for exit codes 0 and 2. `historyLogged: false` on an applied pass means
+the moves have no undo record.
+
+On a pass that ran, `directory` is the **resolved** path, not the argument
+verbatim — the same convention every tool uses (`file_organizer_organize_files`
+reports the directory its path validator approved). It is the path the gate
+checked and the pass scanned, so symlinks are already followed and `~` is
+expanded. The two forms differ on macOS (`/var/folders/...` →
+`/private/var/folders/...`) and on Windows (an 8.3 short name like `RUNNER~1`
+expands to the long name), so a caller must not string-compare it against what
+it passed in.
+
+The one exception is a failure that never reached a scan — a path the gate
+refused, or a thrown error. There is no approved path to report, so `directory`
+carries the original argument exactly as typed. Key your reports on `exitCode`
+and `errors`, not on `directory`.
+
+When scripting a pipeline, keep the CLI's exit code — without `pipefail` the
+pipeline reports `jq`'s status, and a pass that moved files and then failed
+would look like success:
+
+```bash
+set -o pipefail
+
+# alert only when files moved AND the pass was clean.
+# .ok rejects a partial pass that moved files but then failed.
+file-organizer-watch once ~/Downloads --apply --json \
+  | jq -e '.ok and (.moved > 0)' >/dev/null && echo "organized"
+```
+
+For a read-only sweep — scan plus `preview_organization` on a timer, no moves —
+see [examples/scheduling](examples/scheduling/README.md). It has ready-to-copy
+recipes for three surfaces:
+
+| Surface        | Trigger                     | Config                                                                                           |
+| -------------- | --------------------------- | ------------------------------------------------------------------------------------------------ |
+| Claude Desktop | headless `claude -p`        | [claude-desktop.config.json](examples/scheduling/claude-desktop.config.json)                     |
+| Codex          | `codex exec`                | [codex.config.toml](examples/scheduling/codex.config.toml)                                       |
+| cron / systemd | `file-organizer-watch once` | [crontab.example](examples/scheduling/crontab.example), [systemd/](examples/scheduling/systemd/) |
 
 ---
 
@@ -369,6 +462,19 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 3. Check for sufficient disk space.
 4. Read the operation summary for error messages.
 
+### Custom rules are missing after a restart
+
+`file_organizer_set_custom_rules` saves the accepted rules to `config.json` in your
+OS config directory and every later request reads them from there. Three things
+to know:
+
+- The call replaces the whole saved set, so it is not a per-rule merge.
+- Rules with an unknown category or a rejected pattern are skipped; the reply
+  says how many were applied.
+- If the write itself fails — read-only config directory, missing permissions —
+  the call returns an error instead of a success message, and the server log
+  holds the cause. Nothing is persisted in that case.
+
 ---
 
 ## Architecture
@@ -385,6 +491,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram and design notes.
 
 - [API.md](API.md) - Complete tool reference
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Design and architecture
+- [examples/scheduling](examples/scheduling/README.md) - Scan + preview sweep recipes for Claude Desktop, Codex, cron, and systemd
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [MIGRATION.md](MIGRATION.md) - v2 to v3 upgrade guide
 - [CHANGELOG.md](CHANGELOG.md) - Version history

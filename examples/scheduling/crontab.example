@@ -1,0 +1,35 @@
+# File Organizer MCP — crontab recipes
+#
+# Install:  crontab -l | cat - examples/scheduling/crontab.example | crontab -
+# Inspect:  crontab -l
+# Logs:     tail -f "$HOME/.local/state/file-organizer/sweep.log"
+#
+# cron runs a minimal environment: it sets HOME but not your shell PATH, so
+# use absolute paths (command -v file-organizer-watch) for the CLI, and $HOME
+# for the directories. A non-zero exit is kept in the log line rather than
+# mailed, so the timer never blocks on a mail queue.
+
+SHELL=/bin/sh
+
+# 1. Preview-only sweep of Downloads, weekdays at 09:05. Writes nothing:
+#    not the files, not a history entry. Exit 0 clean, 1 partial or aborted.
+5 9 * * 1-5 $HOME/bin/file-organizer-watch once "$HOME/Downloads" --dry-run >> "$HOME/.local/state/file-organizer/sweep.log" 2>&1
+
+# 2. Same sweep including subdirectories, Sundays at 18:00.
+0 18 * * 0 $HOME/bin/file-organizer-watch once "$HOME/Pictures" --recursive --dry-run >> "$HOME/.local/state/file-organizer/sweep.log" 2>&1
+
+# 3. Apply the plan unattended. Moves are logged to history, so the last run
+#    can be rolled back with file_organizer_undo_last_operation. Start with the
+#    --dry-run lines above and read a week of logs before enabling this one.
+30 2 * * * $HOME/bin/file-organizer-watch once "$HOME/Downloads" --apply >> "$HOME/.local/state/file-organizer/sweep.log" 2>&1
+
+# 4. Model-in-the-loop sweep through headless Claude Code. The tool allowlist
+#    keeps it to the two read-only scan tools. Move the binary off PATH here:
+#    $HOME/bin/claude -p "Scan $HOME/Downloads and preview the organization plan. Do not move anything." \
+#      --allowedTools "mcp__file-organizer__file_organizer_scan_directory,mcp__file-organizer__file_organizer_preview_organization" \
+#      --permission-mode plan >> "$HOME/.local/state/file-organizer/sweep.log" 2>&1
+
+# 5. Same sweep through Codex, which defaults to a read-only sandbox.
+#    $HOME/bin/codex exec --sandbox read-only \
+#      "Scan $HOME/Downloads and preview the organization plan. Do not move anything." \
+#      >> "$HOME/.local/state/file-organizer/sweep.log" 2>&1
