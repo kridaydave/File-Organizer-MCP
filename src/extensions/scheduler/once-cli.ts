@@ -85,6 +85,9 @@ Options:
                   stderr, so stdout stays parseable.
   --help, -h      Show this message.
 
+Every branch sets the exit code and returns rather than exiting outright, so
+the report always reaches a piped stdout in full.
+
 Examples:
   file-organizer-watch once ~/Downloads              # preview, writes nothing
   file-organizer-watch once ~/Downloads --apply      # organize, then exit
@@ -227,11 +230,18 @@ function reportUsage(json: boolean): void {
 }
 
 /**
- * Run one pass and exit. Never returns. The exit code follows ONCE_EXIT: 2 when
- * a clean pass moved files, 0 when it had nothing to do, and 1 for a usage
- * error, a refused path, a partial or aborted pass, or a thrown failure —
- * including a pass whose files moved but whose history entry could not be
- * written.
+ * Run one pass and exit. The exit code follows ONCE_EXIT: 2 when a clean pass
+ * moved files, 0 when it had nothing to do, and 1 for a usage error, a refused
+ * path, a partial or aborted pass, or a thrown failure — including a pass whose
+ * files moved but whose history entry could not be written.
+ *
+ * Every branch sets `process.exitCode` and returns instead of calling
+ * `process.exit()`. On a pipe, stdout writes are asynchronous, so exiting
+ * inside the handler can drop the tail of the report and hand a consuming
+ * script truncated JSON — the exact thing --json promises not to do. Returning
+ * lets Node flush stdout before it exits on its own. This command holds no
+ * watcher, no timer, and no open handle, so the loop drains immediately once
+ * the pass returns.
  */
 export async function once(args: string[]): Promise<void> {
   const flags = parseOnceFlags(args);
@@ -244,12 +254,14 @@ export async function once(args: string[]): Promise<void> {
     if (wantsJson) console.log(JSON.stringify(failureReport(flags.error)));
     console.error(`${flags.error}\n`);
     console.error(ONCE_USAGE);
-    process.exit(ONCE_EXIT.error);
+    process.exitCode = ONCE_EXIT.error;
+    return;
   }
 
   if (flags.help) {
     reportUsage(flags.json);
-    process.exit(ONCE_EXIT.nothing);
+    process.exitCode = ONCE_EXIT.nothing;
+    return;
   }
 
   if (!flags.directory) {
@@ -260,7 +272,8 @@ export async function once(args: string[]): Promise<void> {
     }
     console.error("once needs a directory.\n");
     console.error(ONCE_USAGE);
-    process.exit(ONCE_EXIT.error);
+    process.exitCode = ONCE_EXIT.error;
+    return;
   }
 
   try {
@@ -273,7 +286,7 @@ export async function once(args: string[]): Promise<void> {
       { config: loadUserConfig(), history: historyLogger },
     );
     reportPass(result, flags.json);
-    process.exit(passExitCode(result));
+    process.exitCode = passExitCode(result);
   } catch (error) {
     const message = sanitizeErrorMessage(
       error instanceof Error ? error.message : String(error),
@@ -284,6 +297,6 @@ export async function once(args: string[]): Promise<void> {
       );
     }
     console.error(`Pass failed: ${message}`);
-    process.exit(ONCE_EXIT.error);
+    process.exitCode = ONCE_EXIT.error;
   }
 }

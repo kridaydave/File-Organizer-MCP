@@ -186,27 +186,41 @@ same shape with `ok` false, `exitCode` 1, and the reason in `errors`. `ok` is
 true for exit codes 0 and 2. `historyLogged: false` on an applied pass means
 the moves have no undo record.
 
-`directory` is the **resolved** path, not the argument verbatim — the same
-convention every tool uses (`file_organizer_organize_files` reports the
-directory its path validator approved). It is the path the gate checked and the
-pass scanned, so symlinks are already followed and `~` is expanded. The two
-forms differ on macOS (`/var/folders/...` → `/private/var/folders/...`) and on
-Windows (an 8.3 short name like `RUNNER~1` expands to the long name), so a
-caller must not string-compare it against what it passed in.
+On a pass that ran, `directory` is the **resolved** path, not the argument
+verbatim — the same convention every tool uses (`file_organizer_organize_files`
+reports the directory its path validator approved). It is the path the gate
+checked and the pass scanned, so symlinks are already followed and `~` is
+expanded. The two forms differ on macOS (`/var/folders/...` →
+`/private/var/folders/...`) and on Windows (an 8.3 short name like `RUNNER~1`
+expands to the long name), so a caller must not string-compare it against what
+it passed in.
+
+The one exception is a failure that never reached a scan — a path the gate
+refused, or a thrown error. There is no approved path to report, so `directory`
+carries the original argument exactly as typed. Key your reports on `exitCode`
+and `errors`, not on `directory`.
+
+When scripting a pipeline, keep the CLI's exit code — without `pipefail` the
+pipeline reports `jq`'s status, and a pass that moved files and then failed
+would look like success:
 
 ```bash
-# alert only when files actually moved
-file-organizer-watch once ~/Downloads --apply --json | jq -e '.moved > 0'
+set -o pipefail
+
+# alert only when files moved AND the pass was clean.
+# .ok rejects a partial pass that moved files but then failed.
+file-organizer-watch once ~/Downloads --apply --json \
+  | jq -e '.ok and (.moved > 0)' >/dev/null && echo "organized"
 ```
 
 For a read-only sweep — scan plus `preview_organization` on a timer, no moves —
 see [examples/scheduling](examples/scheduling/README.md). It has ready-to-copy
 recipes for three surfaces:
 
-| Surface        | Trigger                | Config |
-| -------------- | ---------------------- | ------ |
-| Claude Desktop | headless `claude -p`   | [claude-desktop.config.json](examples/scheduling/claude-desktop.config.json) |
-| Codex          | `codex exec`           | [codex.config.toml](examples/scheduling/codex.config.toml) |
+| Surface        | Trigger                     | Config                                                                                           |
+| -------------- | --------------------------- | ------------------------------------------------------------------------------------------------ |
+| Claude Desktop | headless `claude -p`        | [claude-desktop.config.json](examples/scheduling/claude-desktop.config.json)                     |
+| Codex          | `codex exec`                | [codex.config.toml](examples/scheduling/codex.config.toml)                                       |
 | cron / systemd | `file-organizer-watch once` | [crontab.example](examples/scheduling/crontab.example), [systemd/](examples/scheduling/systemd/) |
 
 ---

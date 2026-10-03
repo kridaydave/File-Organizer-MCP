@@ -13,7 +13,14 @@
  * not on the shape of the returned object.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from "@jest/globals";
 import { spawn } from "child_process";
 import fs from "fs/promises";
 import os from "os";
@@ -23,6 +30,7 @@ import { runOrganizePass } from "../../src/extensions/scheduler/organize-pass.js
 import {
   ONCE_EXIT,
   failureReport,
+  once,
   onceReport,
   parseOnceFlags,
   passExitCode,
@@ -321,12 +329,85 @@ describe("once flag parsing and exit code", () => {
       true,
     );
   });
+
+  it("carries the original argument when no pass ever approved a path", () => {
+    // The failure branch reports flags.directory verbatim, because the gate
+    // threw before it could resolve anything. Documented in README.md as the
+    // one exception to the resolved-path rule; this pins that behavior so the
+    // doc and the code cannot drift apart silently.
+    const failure = failureReport(
+      "Path is outside the allowed roots",
+      "/tmp/./x",
+    );
+
+    expect(failure.directory).toBe("/tmp/./x");
+    // A completed pass reports the resolved path instead.
+    expect(
+      onceReport(ONCE_EXIT.nothing, { directory: "/private/tmp/x" }).directory,
+    ).toBe("/private/tmp/x");
+  });
+});
+
+describe("once exit does not truncate a piped report", () => {
+  const originalExit = process.exit;
+
+  afterEach(() => {
+    process.exit = originalExit;
+    process.exitCode = undefined;
+  });
+
+  /**
+   * Run `once()` in-process with `process.exit` booby-trapped. Calling it
+   * would kill the Jest worker before stdout could flush, so a report large
+   * enough to exceed the pipe buffer (64 KB on Linux) would arrive truncated
+   * and fail to parse. Returning and setting `process.exitCode` lets Node
+   * flush first. This asserts that mechanism directly: driving a real
+   * 64 KB+ report through a pipe would need thousands of failing files.
+   */
+  async function runOnceTrappingExit(args: string[]): Promise<number | never> {
+    let trapped = false;
+    process.exit = ((code?: number) => {
+      trapped = true;
+      throw new Error(`process.exit(${code}) called`);
+    }) as typeof process.exit;
+
+    await once(args);
+    expect(trapped).toBe(false);
+    return process.exitCode ?? 0;
+  }
+
+  it("returns instead of exiting after a usage error", async () => {
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await runOnceTrappingExit(["--nope"])).toBe(ONCE_EXIT.error);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("returns instead of exiting after --help", async () => {
+    const logged = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect(await runOnceTrappingExit(["--help"])).toBe(ONCE_EXIT.nothing);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("returns instead of exiting after a missing directory", async () => {
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await runOnceTrappingExit([])).toBe(ONCE_EXIT.error);
+    } finally {
+      logged.mockRestore();
+    }
+  });
 });
 
 /**
  * The real entry point. Spawning bin/file-organizer-watch.mjs proves the whole
  * chain — argv parsing in watch-cli.ts, runOrganizePass, passExitCode,
- * process.exit — actually produces the exit code a cron job would see.
+ * process.exitCode — actually produces the exit code a cron job would see.
  */
 describe("file-organizer-watch once (real CLI)", () => {
   let root: string;

@@ -9,9 +9,10 @@
  *   file-organizer-watch once <dir> [--apply] [--json]   one pass, then exit
  *
  * `once` is the mode an OS timer drives. It starts no watcher and holds no
- * handle, so the process ends on its own. Its exit code and `--json` output
- * are the scripting contract (ONCE_EXIT in once-cli.ts). See once-cli.ts and
- * organize-pass.ts.
+ * handle, so the process ends on its own: it sets `process.exitCode` and
+ * returns rather than calling `process.exit()`, which lets a piped stdout
+ * report flush. Its exit code and `--json` output are the scripting contract
+ * (ONCE_EXIT in once-cli.ts). See once-cli.ts and organize-pass.ts.
  *
  * Task state lives in the shared user config (watchList), so the daemon and
  * the CLI subcommands stay in sync without any in-memory coupling.
