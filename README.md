@@ -101,7 +101,6 @@ You can ask the assistant things like:
 
 ### Full tool list (29 tools)
 <!-- BEGIN GENERATED TOOL LIST -->
->>>>>>> origin/main
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
 - `file_organizer_batch_rename`
