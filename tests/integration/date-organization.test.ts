@@ -110,6 +110,24 @@ describe("organize_by_date tool", () => {
       [`${expectedFolder(january)}/jan.txt`, `${expectedFolder(february)}/feb.txt`].sort(),
     );
     expect(await relativeFiles(sourceDir)).toEqual([]);
+
+    // json and markdown must carry the same LOGICAL label: forward-slashed on
+    // every platform. Only `from`/`to` are filesystem paths.
+    expect(
+      parsed.moves
+        .map((move: { folder: string }) => move.folder)
+        .sort(),
+    ).toEqual([expectedFolder(january), expectedFolder(february)].sort());
+    expect(
+      parsed.moves.every((move: { folder: string }) => !move.folder.includes("\\")),
+    ).toBe(true);
+    expect(Object.keys(parsed.structure).sort()).toEqual(
+      [expectedFolder(january), expectedFolder(february)].sort(),
+    );
+    // ...while the paths themselves stay platform-native.
+    expect(parsed.moves.every((move: { to: string }) => move.to.includes(targetDir))).toBe(
+      true,
+    );
   });
 
   it("refuses a target nested inside the source", async () => {
@@ -156,6 +174,8 @@ describe("organize_by_date tool", () => {
     expect(preview.content[0]!.text).toContain("Date Organization Result");
     expect(preview.content[0]!.text).toContain("Dry Run");
     expect(preview.content[0]!.text).toContain(`\`${expectedFolder(when)}\``);
+    // A Windows separator here would advertise one folder level instead of two.
+    expect(preview.content[0]!.text).not.toContain(`${expectedFolder(when).replace("/", "\\")}\``);
     expect(preview.content[0]!.text).toContain("`report.txt` — mtime");
 
     const moved = await handleOrganizeByDate({

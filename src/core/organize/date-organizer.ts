@@ -45,10 +45,14 @@ export interface DateOrganizeOptions {
 export interface DateOrganizeMove {
   /** Base name of the source file. */
   file: string;
+  /** Absolute source path, platform-native (a real filesystem path). */
   from: string;
-  /** Destination actually used (or the planned one in a dry run). */
+  /** Absolute destination actually used, platform-native (a real filesystem path). */
   to: string;
-  /** Destination folder relative to targetDir, e.g. "2024/03". */
+  /**
+   * Logical destination folder label, always forward-slashed ("2024/03"),
+   * identical on every platform. Not a filesystem path — see `to`.
+   */
   folder: string;
   /** ISO timestamp of the date that chose the folder. */
   date: string;
@@ -63,7 +67,10 @@ export interface DateOrganizeResult {
   moves: DateOrganizeMove[];
   /** Files left untouched because no usable date was available. */
   noDateFiles: string[];
-  /** Folder (relative to targetDir) -> file names placed in it. */
+  /**
+   * Logical folder label (forward-slashed, relative to targetDir) -> file names
+   * placed in it. Keys are the same strings as `moves[].folder`.
+   */
   structure: Record<string, string[]>;
   manifestId?: string;
   /** False when moves happened but the manifest could not be written. */
@@ -175,8 +182,13 @@ export class DateOrganizerService {
   }
 
   /**
-   * Folder name for a date, e.g. "2024/03". Local calendar components, matching
-   * the rest of the organizer's metadata subpaths.
+   * Logical folder label for a date, in the documented `YYYY/MM` form.
+   *
+   * This is a LOGICAL identifier, not a filesystem path: the "/" is always a
+   * forward slash, on every platform. Two levels are always two levels, so an
+   * agent reading `structure` or `moves[].folder` gets the same answer on
+   * Windows as on Linux. Filesystem paths are derived from it in
+   * `resolveDestination`, where the platform separator belongs.
    */
   dateFolder(date: Date, format: DateFolderFormat): string {
     const year = String(date.getFullYear());
@@ -187,10 +199,10 @@ export class DateOrganizerService {
       case "YYYY":
         return year;
       case "YYYY/MM/DD":
-        return path.join(year, month, day);
+        return `${year}/${month}/${day}`;
       case "YYYY/MM":
       default:
-        return path.join(year, month);
+        return `${year}/${month}`;
     }
   }
 
@@ -252,8 +264,10 @@ export class DateOrganizerService {
 
   /**
    * Destination for one file, or null when the name could escape the target.
-   * The date folder is generated from a Date, so only the file name can carry
-   * traversal — check it anyway.
+   * The logical `folder` label ("2024/05") is split into its parts and rejoined
+   * with the platform separator here, which is the only place a separator may
+   * appear. The date folder is generated from a Date, so only the file name can
+   * carry traversal — check it anyway.
    */
   private resolveDestination(
     targetRoot: string,
@@ -269,7 +283,12 @@ export class DateOrganizerService {
       return null;
     }
 
-    const destination = path.join(targetRoot, folder, fileName);
+    const segments = folder.split("/").filter((segment) => segment.length > 0);
+    if (segments.some((segment) => segment === "." || segment === "..")) {
+      return null;
+    }
+
+    const destination = path.join(targetRoot, ...segments, fileName);
     if (!path.resolve(destination).startsWith(targetRoot + path.sep)) {
       return null;
     }

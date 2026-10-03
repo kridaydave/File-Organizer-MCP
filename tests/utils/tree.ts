@@ -48,18 +48,6 @@ export async function relativeDirs(root: string): Promise<string[]> {
   return found.sort();
 }
 
-/** Object keys normalized to "/", so structure assertions read the same everywhere. */
-export function posixKeys(
-  structure: Record<string, unknown>,
-): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(structure).map(([key, value]) => [
-      key.split(path.sep).join("/"),
-      value,
-    ]),
-  );
-}
-
 function toPosixRelative(root: string, full: string): string {
   return path.relative(root, full).split(path.sep).join("/");
 }

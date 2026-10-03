@@ -11,7 +11,7 @@ import path from "path";
 import piexif from "piexifjs";
 import { DateOrganizerService } from "../../../src/core/organize/date-organizer.js";
 import { RollbackService } from "../../../src/core/organize/rollback.js";
-import { relativeFiles, posixKeys } from "../../utils/tree.js";
+import { relativeFiles } from "../../utils/tree.js";
 
 /** EXIF tag numbers, spelled out because piexifjs ships no usable types. */
 const MAKE_TAG = 0x010f;
@@ -149,10 +149,31 @@ describe("DateOrganizerService.organize", () => {
       ].sort(),
     );
     expect(await relativeFiles(sourceDir)).toEqual([]);
-    expect(posixKeys(result.structure)).toEqual({
+    expect(result.structure).toEqual({
       [expectedFolder(march)]: ["march-notes.txt"],
       [expectedFolder(april)]: ["april-notes.txt"],
     });
+  });
+
+  it("reports folder labels as forward-slashed YYYY/MM on every platform", async () => {
+    const when = new Date(2024, 4, 20, 11, 0);
+    await writeWithMtime(sourceDir, "report.txt", when);
+
+    const result = await service.organize({
+      sourceDir,
+      targetDir,
+      dateFormat: "YYYY/MM/DD",
+      dateSource: "mtime",
+      dryRun: true,
+    });
+
+    // The label is a logical identifier, not a filesystem path: a Windows
+    // separator here would tell a caller the folder is one segment deep.
+    const label = result.moves[0]!.folder;
+    expect(label).toBe(`${expectedFolder(when)}/20`);
+    expect(label.includes("\\")).toBe(false);
+    expect(Object.keys(result.structure)).toEqual([label]);
+    expect(Object.keys(result.structure)[0]?.includes("\\")).toBe(false);
   });
 
   it("uses the EXIF date taken for photos and reports the source per file", async () => {
@@ -178,9 +199,7 @@ describe("DateOrganizerService.organize", () => {
     const exifInstant = new Date("2021-07-04T10:20:30Z");
     expect(photoMove?.dateSource).toBe("exif");
     expect(photoMove?.date).toBe(exifInstant.toISOString());
-    expect(photoMove?.folder.split(path.sep).join("/")).toBe(
-      expectedFolder(exifInstant),
-    );
+    expect(photoMove?.folder).toBe(expectedFolder(exifInstant));
     expect(textMove?.dateSource).toBe("mtime");
 
     // Each file landed in the folder matching the date it reported.
@@ -206,9 +225,7 @@ describe("DateOrganizerService.organize", () => {
 
     expect(result.organizedFiles).toBe(1);
     expect(result.moves[0]?.dateSource).toBe("mtime");
-    expect(result.moves[0]?.folder.split(path.sep).join("/")).toBe(
-      expectedFolder(fallbackDate),
-    );
+    expect(result.moves[0]?.folder).toBe(expectedFolder(fallbackDate));
   });
 
   it("leaves files without a usable date in place under date_source=exif", async () => {
@@ -255,20 +272,18 @@ describe("DateOrganizerService.organize", () => {
       dryRun: false,
     });
 
-    expect(posixKeys(wet.structure)).toEqual(posixKeys(dry.structure));
+    expect(wet.structure).toEqual(dry.structure);
   });
 
   it("de-duplicates an occupied destination name instead of overwriting it", async () => {
     const when = new Date(2024, 1, 8, 13, 0);
     const folder = expectedFolder(when);
-    await fs.mkdir(path.join(targetDir, folder), { recursive: true });
+    // The label is logical ("2024/02"); join its parts explicitly so the test
+    // does not lean on Windows tolerating a forward slash inside a path.
+    const folderPath = path.join(targetDir, ...folder.split("/"));
+    await fs.mkdir(folderPath, { recursive: true });
     await writeWithMtime(sourceDir, "note.txt", when, "from source");
-    await writeWithMtime(
-      path.join(targetDir, folder),
-      "note.txt",
-      when,
-      "already here",
-    );
+    await writeWithMtime(folderPath, "note.txt", when, "already here");
 
     const result = await service.organize({
       sourceDir,
@@ -281,10 +296,7 @@ describe("DateOrganizerService.organize", () => {
     expect(await relativeFiles(targetDir)).toEqual(
       [`${folder}/note (1).txt`, `${folder}/note.txt`].sort(),
     );
-    const kept = await fs.readFile(
-      path.join(targetDir, folder, "note.txt"),
-      "utf-8",
-    );
+    const kept = await fs.readFile(path.join(folderPath, "note.txt"), "utf-8");
     expect(kept).toBe("already here");
     expect(path.basename(result.moves[0]!.to)).toBe("note (1).txt");
   });
@@ -392,12 +404,12 @@ describe("DateOrganizerService.dateFolder", () => {
   const date = new Date(2023, 0, 2, 12, 0);
 
   it("formats each supported structure with zero-padded parts", () => {
-    expect(service.dateFolder(date, "YYYY/MM").split(path.sep).join("/")).toBe(
+    expect(service.dateFolder(date, "YYYY/MM")).toBe(
       expectedFolder(date, "YYYY/MM"),
     );
-    expect(
-      service.dateFolder(date, "YYYY/MM/DD").split(path.sep).join("/"),
-    ).toBe(expectedFolder(date, "YYYY/MM/DD"));
+    expect(service.dateFolder(date, "YYYY/MM/DD")).toBe(
+      expectedFolder(date, "YYYY/MM/DD"),
+    );
     expect(service.dateFolder(date, "YYYY")).toBe(String(date.getFullYear()));
   });
 });
