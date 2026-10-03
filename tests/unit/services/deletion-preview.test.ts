@@ -182,6 +182,8 @@ describe("DuplicateFinderService.previewDeletion", () => {
 
     await expect(fs.readFile(a.path, "utf-8")).resolves.toBe("shared");
     await expect(fs.readFile(b.path, "utf-8")).resolves.toBe("shared");
-    expect(await fs.readdir(testDir)).toEqual(["a.txt", "b.txt"]);
+    // Sorted: fs.readdir returns entries in filesystem order, which POSIX and
+    // Windows both decline to guarantee.
+    expect((await fs.readdir(testDir)).sort()).toEqual(["a.txt", "b.txt"]);
   });
 });
