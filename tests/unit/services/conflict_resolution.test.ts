@@ -46,10 +46,12 @@ describe("Conflict Resolution Strategies", () => {
     });
 
     expect(result.actions).toHaveLength(1);
-    expect(result.actions[0].to).toMatch(/document_1\.txt$/);
+    const [renamedAction] = result.actions;
+    if (!renamedAction) throw new Error("Expected exactly one rename action");
+    expect(renamedAction.to).toMatch(/document_1\.txt$/);
 
     // Verify file exists
-    const movedCtx = await fs.readFile(result.actions[0].to, "utf8");
+    const movedCtx = await fs.readFile(renamedAction.to, "utf8");
     expect(movedCtx).toBe("content");
   });
 
@@ -97,10 +99,12 @@ describe("Conflict Resolution Strategies", () => {
     });
 
     expect(result.actions).toHaveLength(1);
-    expect(result.actions[0].to).toMatch(/test\.txt$/); // No rename
+    const [overwrittenAction] = result.actions;
+    if (!overwrittenAction) throw new Error("Expected exactly one move action");
+    expect(overwrittenAction.to).toMatch(/test\.txt$/); // No rename
 
     // Verify content overwritten
-    const destContent = await fs.readFile(result.actions[0].to, "utf8");
+    const destContent = await fs.readFile(overwrittenAction.to, "utf8");
     expect(destContent).toBe("new content");
 
     // Verify backup logic? Backup dir should contain old content.

@@ -8,7 +8,9 @@
  * report and any future consumer read the same values.
  *
  * No config value comes from the environment. APPDATA, XDG_CONFIG_HOME and
- * OneDrive only steer where config.json is read from (see paths.ts).
+ * OneDrive only decide where the config directory sits, which is where
+ * config.json, operations.jsonl, the rollback manifests and the backups all
+ * live (see paths.ts). Setting XDG_CONFIG_HOME relocates all four together.
  */
 
 import fs from "fs";

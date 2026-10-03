@@ -90,8 +90,10 @@ describe('SchedulerStateService', () => {
       // Path is normalized (lowercase, forward slashes)
       const keys = Object.keys(state.directories);
       expect(keys.length).toBe(1);
-      expect(state.directories[keys[0]].lastRunTime).toBe('2026-02-08T09:00:00.000Z');
-      expect(state.directories[keys[0]].schedule).toBe('0 9 * * *');
+      const [onlyKey] = keys;
+      if (!onlyKey) throw new Error('expected one tracked directory key');
+      expect(state.directories[onlyKey].lastRunTime).toBe('2026-02-08T09:00:00.000Z');
+      expect(state.directories[onlyKey].schedule).toBe('0 9 * * *');
     });
 
     it('should read state from file correctly', async () => {
@@ -105,9 +107,11 @@ describe('SchedulerStateService', () => {
       // Path is normalized, so we need to check with normalized path
       const trackedDirs = newService.getTrackedDirectories();
       expect(trackedDirs.length).toBe(1);
-      const lastRun = newService.getLastRunTime(trackedDirs[0]);
+      const [onlyDir] = trackedDirs;
+      if (!onlyDir) throw new Error('expected one tracked directory');
+      const lastRun = newService.getLastRunTime(onlyDir);
       expect(lastRun?.toISOString()).toBe('2026-02-07T15:30:00.000Z');
-      expect(newService.getSchedule(trackedDirs[0])).toBe('0 */6 * * *');
+      expect(newService.getSchedule(onlyDir)).toBe('0 */6 * * *');
     });
 
     it('should handle multiple directories', async () => {

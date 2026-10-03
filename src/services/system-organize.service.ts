@@ -499,8 +499,6 @@ export class SystemOrganizeService {
         const targetDir = destResult.destination;
         const useLocalFallback = destResult.useLocalFallback;
 
-        await this.ensureDirectoryExists(targetDir);
-
         let targetPath = path.join(targetDir, fileName);
         targetPath = (await this.handleConflict(
           targetPath,
@@ -513,6 +511,7 @@ export class SystemOrganizeService {
         }
 
         if (!dryRun) {
+          await this.ensureDirectoryExists(targetDir);
           await this.moveOrCopyFile(sourcePath, targetPath, copyInsteadOfMove);
         }
 

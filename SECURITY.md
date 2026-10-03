@@ -25,28 +25,36 @@ We take the security of File-Organizer-MCP seriously. If you discover a security
 
 ---
 
-## 8-Layer Path Validation
+## Path validation
 
-File-Organizer-MCP implements a comprehensive **8-Layer Path Validation** pipeline to ensure secure file operations. This is a non-negotiable security requirement for all path-handling operations.
+Every path reaches the filesystem through `validatePathBase` in
+`src/services/path-validator.service.ts`. This is a non-negotiable requirement
+for all path-handling operations.
 
-Reference: [AGENTS.md - 8-Layer Path Validation](mestuff/AGENTS.md#-8-layer-path-validation-non-negotiable)
+Reference: [ARCHITECTURE.md - Path validation pipeline](../ARCHITECTURE.md#path-validation-pipeline)
 
-### Validation Layers
+### Validation layers
 
-| Layer                      | Purpose                               | Implementation                                       |
-| -------------------------- | ------------------------------------- | ---------------------------------------------------- |
-| **1. Zod Schema**          | Type and format validation            | Validate path structure against defined Zod schemas  |
-| **2. Env Expansion**       | Resolve environment variables         | Expand variables like `$HOME`, `%APPDATA%`           |
-| **3. Sanitization**        | Remove dangerous sequences            | Block `../`, null bytes, and invalid characters      |
-| **4. Absolute Resolution** | Convert to absolute paths             | Use `path.resolve()` with base directory enforcement |
-| **5. Security Check**      | Whitelist/blacklist validation        | Compare resolved paths against access control lists  |
-| **6. Symlink Safety**      | Follow or block symlinks              | Use `O_NOFOLLOW` flag where applicable               |
-| **7. Containment**         | Verify path stays within allowed root | Ensure path prefix matches permitted directories     |
-| **8. Permissions**         | OS-level access verification          | Final read/write/execute permission check            |
+Applied in this order. Steps 3 and 9 are conditional; the rest always run.
 
-### Code Reference
+| Step | Purpose | Implementation |
+| --- | --- | --- |
+| 1. Schema | Type, length, NUL bytes, literal `..` segments | `PathSchema` in `src/schemas/system.ts` |
+| 2. Normalization | URI-decode, Unicode NFC, `~` and `$VAR` expansion | `normalizePath` in `src/utils/file-utils.ts` |
+| 3. Character rejection | Block control characters and `<>`\|"?*` | `validatePathBase` |
+| 4. Device names | Reject a `CON`, `NUL`, `COM1`-`9` basename | `validatePathBase`, Windows |
+| 5. Resolution | Absolute path with base enforcement | `path.resolve` |
+| 6. Allow-list | Blacklist, then compare against allowed roots | `isPathAllowed` in `src/utils/path-security.ts` |
+| 7. Symlinks | Resolve and verify containment per component | `resolveSymlinks` |
+| 8. Containment | Path stays within an explicitly allowed path | `isSubPath` |
+| 9. Access | Existence and permission check | `fs.access`, only when `requireExists` or `checkWrite` |
 
-All path validation is centralized in `src/services/PathValidatorService.ts` and must be used for every file system operation.
+### Code reference
+
+Validation lives in `src/services/path-validator.service.ts`. `validateStrictPath`
+is the entry point most tool handlers call; `validatePathBase` takes options for
+the cases that need them. `openAndValidateFile` is the race-safe variant that
+opens with `O_NOFOLLOW` and verifies the file behind the descriptor.
 
 ---
 

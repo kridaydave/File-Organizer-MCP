@@ -22,7 +22,7 @@
     "test:security:static": "node dist/scripts/security-gates/static-analysis.js",
     "test:security:gates": "node dist/scripts/security-gates/run-all.js",
     "test:security": "npm run test:security:static && node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit/security_suite.test.ts tests/unit/security_repro.test.ts tests/unit/category_security.test.ts tests/unit/services/v5-regressions.test.ts tests/unit/services/adversarial-deep-audit.test.ts tests/unit/services/adversarial-deep-audit-2.test.ts tests/unit/services/adversarial-tool-gates.test.ts",
-    "verify:all": "npm run build && npm run lint && npm run test:security && npm test",
+    "verify:all": "npm run build && npm run lint && npm run typecheck:tests && npm run docs:check && npm run test:security && npm test",
     "setup": "node dist/src/tui/index.js",
     "postinstall": "node scripts/postinstall.cjs",
     "prepare": "node scripts/prepare.cjs",
@@ -31,6 +31,8 @@
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --no-warn-ignored",
     "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix --no-warn-ignored",
     "format": "prettier --write src/**/*.ts",
+    "docs:check": "node scripts/check-doc-citations.mjs",
+    "docs:check:fix": "node scripts/check-doc-citations.mjs --fix",
     "docs:generate": "node scripts/generate-docs.js",
     "clean": "rimraf dist"
   },

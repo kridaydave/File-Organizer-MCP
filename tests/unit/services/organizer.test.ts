@@ -210,7 +210,9 @@ describe("OrganizerService", () => {
 
       expect(result.errors).toHaveLength(0);
       expect(result.actions).toHaveLength(1);
-      expect(path.basename(result.actions[0].to)).toBe("invoice_2024_1.pdf");
+      const [invoiceAction] = result.actions;
+      if (!invoiceAction) throw new Error("Expected exactly one organize action");
+      expect(path.basename(invoiceAction.to)).toBe("invoice_2024_1.pdf");
     });
 
     it("should correctly rename files like archive_001.zip on conflict", async () => {
@@ -238,7 +240,9 @@ describe("OrganizerService", () => {
 
       expect(result.errors).toHaveLength(0);
       expect(result.actions).toHaveLength(1);
-      expect(path.basename(result.actions[0].to)).toBe("archive_001_1.zip");
+      const [archiveAction] = result.actions;
+      if (!archiveAction) throw new Error("Expected exactly one organize action");
+      expect(path.basename(archiveAction.to)).toBe("archive_001_1.zip");
     });
   });
 });

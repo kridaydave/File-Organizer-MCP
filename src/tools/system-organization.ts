@@ -89,7 +89,7 @@ export const systemOrganizationToolDefinition: ToolDefinition = {
       },
       local_fallback_prefix: {
         type: "string",
-        description: "Prefix for local fallback folder",
+        description: "Single folder name (no separators) for the local fallback",
         default: "Organized",
       },
       conflict_strategy: {

@@ -5,79 +5,19 @@ description: Development guide for the File Organizer MCP server codebase. Use w
 
 # File Organizer MCP - Development Guide
 
-This skill helps developers work on the File Organizer MCP server codebase.
+Read `AGENTS.md` at the repo root first. It is the maintained source of truth
+for this project's rules, commands and layout. This file is the longer worked
+guide; where the two disagree, `AGENTS.md` is right.
 
-## Quick Reference
+To prove a change works, use the `verify-file-organizer` skill. It drives the
+real server over stdio in a throwaway sandbox.
 
-### Essential Commands
+## Adding a tool
 
-```bash
-# Build
-npm run build              # Compile TypeScript to dist/
-npm run build:watch        # Watch mode
-npm run clean              # Remove dist/
+A tool is three edits: the tool file, one `reg()` line in the registry, and a
+test. There is no barrel file and no router switch.
 
-# Test
-npm test                   # Run all tests
-npm test -- tests/unit/services/organizer.test.ts  # Single test
-npm run test:coverage      # With coverage
-npm run test:security      # Security test suite
-
-# Lint/Format
-npm run lint               # ESLint
-npm run lint:fix           # Auto-fix
-npm run format             # Prettier
-
-# Dev
-npm run dev                # Build + start
-npm run setup              # TUI setup wizard
-```
-
-### Project Structure
-
-```
-src/
-├── server.ts              # MCP server entry
-├── index.ts               # Main entry
-├── types.ts               # TypeScript types
-├── constants.ts           # App constants
-├── config.ts              # Config loader
-├── errors.ts              # Error classes
-├── services/              # Business logic
-│   ├── path-validator.service.ts    # Security-critical
-│   ├── organizer.service.ts         # File organization
-│   ├── file-scanner.service.ts      # Directory scanning
-│   ├── categorizer.service.ts       # File categorization
-│   ├── hash-calculator.service.ts   # Duplicate detection
-│   ├── rollback.service.ts          # Undo operations
-│   └── metadata.service.ts          # EXIF/ID3 extraction
-├── tools/                 # MCP tool implementations
-│   ├── index.ts           # Tool registry
-│   ├── file-organization.ts
-│   ├── file-scanning.ts
-│   ├── file-duplicates.ts
-│   └── ...
-├── schemas/               # Zod validation schemas
-│   ├── common.schemas.ts
-│   ├── security.schemas.ts
-│   └── ...
-└── utils/                 # Utilities
-    ├── logger.ts
-    ├── error-handler.ts
-    ├── file-utils.ts
-    └── formatters.ts
-
-tests/
-├── unit/services/         # Service unit tests
-├── unit/tools/            # Tool unit tests
-└── unit/utils/            # Utility tests
-```
-
----
-
-## Adding a New MCP Tool
-
-### Step 1: Create Tool File
+### Step 1: the tool file
 
 Create `src/tools/my-feature.ts`:
 
@@ -85,27 +25,22 @@ Create `src/tools/my-feature.ts`:
 /**
  * File Organizer MCP Server
  * my_feature Tool
+ *
+ * @module tools/my-feature
  */
 
-import { z } from 'zod';
-import type { ToolDefinition, ToolResponse } from '../types.js';
-import { validateStrictPath } from '../services/path-validator.service.js';
-import { createErrorResponse } from '../utils/error-handler.js';
-import { CommonParamsSchema } from '../schemas/common.schemas.js';
+import { z } from "zod";
+import type { ToolDefinition, ToolResponse } from "../mcp/types.js";
+import { validateStrictPath } from "../services/path-validator.service.js";
+import { createErrorResponse } from "../utils/error-handler.js";
+import { CommonParamsSchema } from "../schemas/common.js";
 
 // ==================== Schema ====================
 
 export const MyFeatureInputSchema = z
   .object({
-    directory: z
-      .string()
-      .min(1, 'Directory path cannot be empty')
-      .describe('Full path to the directory'),
-    some_param: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe('Description of param'),
+    directory: z.string().min(1, "Directory path cannot be empty").describe("Full path to the directory"),
+    some_param: z.boolean().optional().default(false).describe("Description of param"),
   })
   .merge(CommonParamsSchema);
 
@@ -114,468 +49,237 @@ export type MyFeatureInput = z.infer<typeof MyFeatureInputSchema>;
 // ==================== Tool Definition ====================
 
 export const myFeatureToolDefinition: ToolDefinition = {
-  name: 'file_organizer_my_feature',
-  title: 'My Feature',
-  description: 'What this tool does. Be descriptive for LLM understanding.',
+  name: "file_organizer_my_feature",
+  title: "My Feature",
+  description: "What this tool does. Be descriptive for LLM understanding.",
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
-      directory: { type: 'string', description: 'Full path to the directory' },
-      some_param: { type: 'boolean', description: 'What it does', default: false },
-      response_format: { type: 'string', enum: ['json', 'markdown'], default: 'markdown' },
+      directory: { type: "string", description: "Full path to the directory" },
+      some_param: { type: "boolean", description: "What it does", default: false },
+      response_format: { type: "string", enum: ["json", "markdown"], default: "markdown" },
     },
-    required: ['directory'],
+    required: ["directory"],
   },
   annotations: {
-    readOnlyHint: true,      // true if doesn't modify files
-    destructiveHint: false,  // true if deletes/modifies files
-    idempotentHint: true,    // true if running twice = same result
-    openWorldHint: true,     // true if accesses filesystem
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
   },
 };
 
 // ==================== Handler ====================
 
-export async function handleMyFeature(args: Record<string, unknown>): Promise<ToolResponse> {
+export async function handleMyFeature(
+  args: Record<string, unknown>,
+): Promise<ToolResponse> {
   try {
-    // 1. Validate input
     const parsed = MyFeatureInputSchema.safeParse(args);
     if (!parsed.success) {
       return {
-        content: [
-          { type: 'text', text: `Error: ${parsed.error.issues.map((i) => i.message).join(', ')}` },
-        ],
+        content: [{ type: "text", text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}` }],
+        isError: true,
       };
     }
 
     const { directory, some_param, response_format } = parsed.data;
 
-    // 2. Validate path (SECURITY CRITICAL)
+    // Path validation is mandatory and comes before any service call.
     const validatedPath = await validateStrictPath(directory);
 
-    // 3. Call service layer
-    // const result = await myService.doSomething(validatedPath, some_param);
+    const result = await myService.doSomething(validatedPath, some_param);
 
-    // 4. Format response
-    if (response_format === 'json') {
+    if (response_format === "json") {
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        structuredContent: result as unknown as Record<string, unknown>,
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     }
-
-    const markdown = `### My Feature Result
-
-**Directory:** ${validatedPath}
-**Param:** ${some_param}
-
-Results here...`;
-
-    return {
-      content: [{ type: 'text', text: markdown }],
-    };
+    return { content: [{ type: "text", text: formatMyFeature(result) }] };
   } catch (error) {
-    // 5. Centralized error handling
     return createErrorResponse(error);
   }
 }
 ```
 
-### Step 2: Register in Tool Index
+Annotations must be honest. A client reads `destructiveHint` to decide whether to
+prompt a human, so a wrong hint is a user-facing bug.
 
-Edit `src/tools/index.ts`:
+### Step 2: register it
+
+Add an import and one `reg()` entry to `src/mcp/registry.ts`. The `entries`
+array near the bottom is the whole registry; `TOOLS` and `toolHandlers` are
+derived from it.
 
 ```typescript
-// Add export
-export {
+import {
   myFeatureToolDefinition,
   handleMyFeature,
-  MyFeatureInputSchema,
-} from './my-feature.js';
-export type { MyFeatureInput } from './my-feature.js';
+} from "../tools/my-feature.js";
 
-// Add to TOOLS array
-export const TOOLS: ToolDefinition[] = [
-  // ...existing tools
-  myFeatureToolDefinition,
-];
+// ...inside the entries array
+reg(myFeatureToolDefinition, handleMyFeature),
 ```
 
-### Step 3: Add to Server Router
+`src/server.ts` routes through `getToolHandler(name)` and needs no edit. Adding
+a case to a switch there would create a tool the client never sees.
 
-Edit `src/server.ts` - add import and route:
-
-```typescript
-import { handleMyFeature } from './tools/index.js';
-
-async function handleToolCall(name: string, args: Record<string, unknown>) {
-  switch (name) {
-    // ...existing cases
-    case 'file_organizer_my_feature':
-      return handleMyFeature(args);
-  }
-}
-```
-
-### Step 4: Write Tests
-
-Create `tests/unit/tools/my-feature.test.ts`:
+### Step 3: test it
 
 ```typescript
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
-import { handleMyFeature } from '../../../src/tools/my-feature.js';
+import { jest } from "@jest/globals";
+import fs from "fs/promises";
+import path from "path";
+import os from "os";
+import { handleMyFeature } from "../../../src/tools/my-feature.js";
 
-describe('handleMyFeature', () => {
+describe("handleMyFeature", () => {
   let testDir: string;
 
   beforeEach(async () => {
-    testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-myfeature-'));
+    testDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-myfeature-"));
   });
 
   afterEach(async () => {
+    // Windows holds file locks briefly; the delay avoids a flaky teardown.
+    await new Promise((resolve) => setTimeout(resolve, 100));
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
-  it('should process directory successfully', async () => {
-    const result = await handleMyFeature({
-      directory: testDir,
-      some_param: true,
-      response_format: 'json',
-    });
-
-    expect(result.content[0].text).toContain('expected content');
-  });
-
-  it('should reject invalid paths', async () => {
-    const result = await handleMyFeature({
-      directory: '/invalid/path',
-      response_format: 'json',
-    });
-
-    expect(result.content[0].text).toContain('Error');
+  it("rejects a path outside the allowed directories", async () => {
+    const result = await handleMyFeature({ directory: "/etc", response_format: "json" });
+    expect(result.content[0].text).toContain("Access Denied");
   });
 });
 ```
 
----
+Assert on observable behavior. A test that would still pass if the handler
+returned `undefined` is testing nothing.
 
-## Adding a New Service
+## Where code lives
 
-Create `src/services/my-service.service.ts`:
-
-```typescript
-/**
- * My Service - Business logic for X
- */
-
-import type { SomeType } from '../types.js';
-import { logger } from '../utils/logger.js';
-
-export interface MyServiceOptions {
-  option1?: boolean;
-  option2?: number;
-}
-
-export class MyService {
-  constructor(private options: MyServiceOptions = {}) {}
-
-  async doSomething(input: string): Promise<SomeType> {
-    logger.debug('Doing something', { input });
-    
-    // Implementation
-    
-    return result;
-  }
-}
+```
+src/
+├── server.ts              # MCP server, routes via getToolHandler
+├── mcp/                  # registry, defineTool, context, bootstrap, cli, types
+├── tools/                # one file per tool group: definition + handler
+├── schemas/              # Zod inputs: common, scan, organize, system, output
+├── core/                 # pure, stateless business logic
+│   ├── io/               # readFile(): validate, sensitive gate, fs
+│   ├── scan/  categorize/  organize/  hash/
+│   ├── config/           # platform defaults, loader, paths
+│   └── types/            # shared FileInfo, Organize, category types
+├── services/             # facades over core + metadata/{image,audio}
+├── security/             # archive validation, security constants
+├── tui/                  # setup wizard
+└── utils/                # logger, error-handler, path-security, formatters
 ```
 
----
+Business logic goes in `src/core/`, not `src/services/`. `src/services/` holds
+facades and metadata extraction. Tests live in `tests/unit/services/` and
+`tests/integration/` regardless of which source directory the code came from.
 
-## Security Guidelines (CRITICAL)
+## Security
 
-### 8-Layer Path Validation
-
-Every file path MUST go through validation:
+Every path reaches `fs` through the validator. Nothing bypasses it.
 
 ```typescript
-import { validateStrictPath } from '../services/path-validator.service.js';
+import { validateStrictPath } from "../services/path-validator.service.js";
 
-// Basic validation
-const validatedPath = await validateStrictPath(userInput);
-
-// With options
-import { validatePathBase } from '../services/path-validator.service.js';
-const path = await validatePathBase(input, {
-  basePath: '/base',
-  allowedPaths: ['/allowed'],
-  requireExists: true,
-  checkWrite: true,
-  allowSymlinks: false,
-});
+const validated = await validateStrictPath(userInput);
 ```
 
-### Security Rules
+A handler receives an optional `ToolContext` as its second argument. It carries
+config and the history logger; it is not a validation shortcut. Call
+`validateStrictPath` directly.
 
-1. **Never trust user paths** - Always validate
-2. **Use O_NOFOLLOW** - Prevent symlink attacks
-3. **Atomic operations** - Use COPYFILE_EXCL for race condition safety
-4. **No path traversal** - Block `../` sequences
-5. **Windows reserved names** - Block CON, PRN, AUX, NUL, COM1-9, LPT1-9
-6. **Sanitize errors** - Never expose internal paths in error messages
+The rules that matter:
 
-### Safe File Operations
+1. Validate before any filesystem call, including reads.
+2. Never trust a user-supplied path, even one that came from a previous tool.
+3. Use `O_NOFOLLOW` and per-component symlink containment so a link cannot
+   escape its allowed root.
+4. Use `constants.COPYFILE_EXCL` for atomic copies.
+5. Reject Windows reserved names on every entry point.
+6. Never put a real path in an error message. Use `sanitizeErrorMessage()` and
+   throw `AccessDeniedError` or `ValidationError`.
 
-```typescript
-import { constants } from 'fs';
-
-// Validate via file descriptor (TOCTOU protection)
-const validator = new PathValidatorService();
-const handle = await validator.openAndValidateFile(path);
-// ... use handle ...
-await handle.close();
-
-// Atomic copy (prevents race conditions)
-await fs.copyFile(source, dest, constants.COPYFILE_EXCL);
-
-// Safe overwrite (backup first)
-if (await fileExists(targetPath)) {
-  const backupPath = path.join('.file-organizer-backups', `${Date.now()}_${basename}`);
-  await fs.rename(targetPath, backupPath);
-}
-```
-
----
-
-## Testing Patterns
-
-### Unit Test Template
+## Testing
 
 ```typescript
-import { jest } from '@jest/globals';
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
-import { MyService } from '../../../src/services/my-service.service.js';
-
-describe('MyService', () => {
+describe("MyService", () => {
   let service: MyService;
   let testDir: string;
 
   beforeEach(async () => {
-    testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-'));
+    testDir = await fs.mkdtemp(path.join(os.tmpdir(), "test-"));
     service = new MyService();
   });
 
   afterEach(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 100)); // Windows cleanup
+    await new Promise((resolve) => setTimeout(resolve, 100));
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
-  it('should do something correctly', async () => {
-    // Arrange
-    const input = 'test';
-    
-    // Act
-    const result = await service.doSomething(input);
-    
-    // Assert
-    expect(result).toBe(expected);
-  });
-
-  it('should handle errors gracefully', async () => {
-    await expect(service.doSomething(invalidInput))
-      .rejects.toThrow(ExpectedError);
+  it("rejects a path outside the allowed directories", async () => {
+    await expect(service.doSomething("/etc/passwd")).rejects.toThrow(AccessDeniedError);
   });
 });
 ```
 
-### Security Test Pattern
+Seed fixtures with real shapes. An empty directory proves nothing.
 
-```typescript
-describe('Security', () => {
-  it('should block path traversal', async () => {
-    const result = await handleTool({
-      directory: '/allowed/../etc/passwd',
-    });
-    expect(result.content[0].text).toContain('Error');
-  });
+## Conventions
 
-  it('should block symlinks outside allowed paths', async () => {
-    // Test symlink handling
-  });
-});
-```
-
----
-
-## Code Style
-
-### Naming Conventions
-
-| Type | Convention | Example |
-|------|------------|---------|
+| Thing | Convention | Example |
+| --- | --- | --- |
 | Files | kebab-case | `path-validator.service.ts` |
 | Classes | PascalCase | `PathValidatorService` |
 | Functions | camelCase | `validatePath()` |
 | Constants | SCREAMING_SNAKE | `MAX_FILE_SIZE` |
 | Interfaces | PascalCase | `ToolResponse` |
 
-### TypeScript Imports
+Imports use `.js` extensions because the build is ESM. Relative paths only, no
+path aliases.
+
+## Available utilities
+
+Verify a helper exists before using it. `src/utils/formatters.ts` exports
+`formatBytes` and `formatDate`; `src/utils/file-utils.ts` exports `fileExists`,
+`ensureDir`, `expandHomePath`, `expandEnvVars`, `normalizePath` and `isSubPath`.
+There is no `pluralize` helper.
 
 ```typescript
-// Node built-ins
-import fs from 'fs/promises';
-import { constants } from 'fs';
-import path from 'path';
-
-// Third-party
-import { z } from 'zod';
-
-// Project imports (with .js extension for ESM)
-import { validateStrictPath } from '../services/path-validator.service.js';
-import type { ToolResponse } from '../types.js';
+import { fileExists } from "../utils/file-utils.js";
+import { formatBytes } from "../utils/formatters.js";
 ```
 
-### Zod Schema Pattern
+## Commands
 
-```typescript
-export const MyInputSchema = z
-  .object({
-    directory: z.string().min(1, 'Directory cannot be empty'),
-    dry_run: z.boolean().optional().default(false),
-    limit: z.number().int().positive().max(1000).default(100),
-  })
-  .merge(CommonParamsSchema);
-
-export type MyInput = z.infer<typeof MyInputSchema>;
-```
-
-### Error Handling Pattern
-
-```typescript
-import { createErrorResponse } from '../utils/error-handler.js';
-import { ValidationError } from '../types.js';
-
-try {
-  // ... code
-} catch (error) {
-  if (error instanceof ValidationError) {
-    // Handle specific error
-  }
-  return createErrorResponse(error);
-}
-```
-
----
-
-## Common Utilities
-
-### Logger
-
-```typescript
-import { logger } from '../utils/logger.js';
-
-logger.debug('Debug message', { context: 'value' });
-logger.info('Info message');
-logger.warn('Warning', { detail: 'value' });
-logger.error('Error message', error, { context: 'value' });
-```
-
-### File Utilities
-
-```typescript
-import { fileExists, formatBytes } from '../utils/file-utils.js';
-
-if (await fileExists(path)) { }
-const readable = formatBytes(1024); // "1 KB"
-```
-
-### Formatters
-
-```typescript
-import { formatDate, pluralize } from '../utils/formatters.js';
-
-formatDate(new Date()); // ISO format
-pluralize(5, 'file'); // "5 files"
-```
-
----
-
-## Key Types Reference
-
-### File Types
-
-```typescript
-interface FileWithSize {
-  name: string;
-  path: string;
-  size: number;
-  modified?: Date;
-}
-
-type CategoryName = 
-  | 'Executables' | 'Videos' | 'Documents' | 'Presentations'
-  | 'Spreadsheets' | 'Images' | 'Audio' | 'Archives' 
-  | 'Code' | 'Installers' | 'Ebooks' | 'Fonts' | 'Others';
-```
-
-### Tool Types
-
-```typescript
-interface ToolDefinition {
-  name: string;
-  description: string;
-  inputSchema: {
-    type: 'object';
-    properties: Record<string, unknown>;
-    required: string[];
-  };
-  annotations?: {
-    readOnlyHint?: boolean;
-    destructiveHint?: boolean;
-    idempotentHint?: boolean;
-    openWorldHint?: boolean;
-  };
-}
-
-type ToolResponse = {
-  content: Array<{ type: 'text'; text: string }>;
-  [key: string]: unknown;
-};
-```
-
----
-
-## Debugging Tips
-
-### Enable Debug Logging
-
-Set environment variable:
 ```bash
-$env:LOG_LEVEL = "debug"
+npm run build           # tsc to dist/
+npm test                # jest
+npm test tests/unit/services/organizer.test.ts   # one file
+npm run test:security   # path and access control suite
+npm run lint
+npm run format
+node scripts/check-doc-citations.mjs   # agent docs still point at real code
 ```
 
-### Common Issues
+## Common problems
 
-| Issue | Solution |
-|-------|----------|
-| Path validation fails | Check `config.json` allowed directories |
-| Windows file locks | Add 100ms delay before cleanup in tests |
-| ESM import errors | Use `.js` extension in imports |
-| Type errors | Run `npm run build` to check |
-| Test timeouts | Check for unclosed file handles |
+| Symptom | Cause |
+| --- | --- |
+| Tool not visible to the client | Missing `reg()` entry in `src/mcp/registry.ts` |
+| `Path is outside allowed directories` | Directory not in `customAllowedDirectories`; run `file_organizer_doctor` |
+| `Cannot find module` after editing | Stale `dist/`, run `npm run build` |
+| Type error after a signature change | A caller still passes the old shape |
+| Windows test flake on cleanup | Add the 100ms delay before `fs.rm` |
+| Import error at runtime | Missing `.js` extension |
 
----
+## Before you finish
 
-## Development Workflow
-
-1. **Create feature branch**
-2. **Implement changes** following patterns above
-3. **Add tests** for new functionality
-4. **Run full test suite**: `npm test`
-5. **Run lint**: `npm run lint`
-6. **Build**: `npm run build`
-7. **Test manually**: `npm run dev`
-8. **Security review** (for path handling changes)
+Run the build, lint the files you touched, and run the tests for them. If you
+changed path validation or anything crossing into `fs`, run
+`npm run test:security`. Then prove the real behavior through the
+`verify-file-organizer` skill rather than trusting the unit tests alone.
