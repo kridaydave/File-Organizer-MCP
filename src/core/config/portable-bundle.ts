@@ -107,7 +107,13 @@ function rebasePath(
   value: string,
   rebaseRoot: string | null,
 ): { value: string; portable: boolean } {
-  if (value.startsWith("~")) return { value, portable: true };
+  // Only the forms expandHomePath — which the config loader runs on this value —
+  // actually expands. `~bob/docs` is left alone by it and resolves against the
+  // working directory, so calling that portable would hand the target a path
+  // that means nothing there.
+  if (value === "~" || value.startsWith("~/") || value.startsWith("~\\")) {
+    return { value, portable: true };
+  }
   if (rebaseRoot === null) return { value, portable: false };
 
   if (!isSubPath(rebaseRoot, value)) return { value, portable: false };

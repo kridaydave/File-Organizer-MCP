@@ -167,9 +167,13 @@ export type ExportConfigInput = z.infer<typeof ExportConfigInputSchema>;
  * by UserConfig when it is built, and a bundle written by another version may
  * carry keys this one does not know. The envelope is what must match, so the
  * envelope is what is checked.
+ *
+ * format_version is a literal, not a range: loadConfigBundle names the version
+ * it supports when it rejects a file, and a bundle of some future format must
+ * fail here rather than load as this one.
  */
 export const ConfigBundleSchema = z.object({
-  format_version: z.number().int(),
+  format_version: z.literal(1),
   exported_by: z.string(),
   exported_at: z.string(),
   config: z.record(z.string(), z.unknown()),
