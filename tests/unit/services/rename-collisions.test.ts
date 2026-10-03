@@ -128,8 +128,15 @@ describe("detectRenameCollisions", () => {
     const [collision] = detectRenameCollisions(previews);
     expect(collision?.destination).toBe("invoice_a.txt");
     expect(collision?.sources).toEqual(["Invoice A.txt", "Invoice-A.txt"]);
-    // The sandbox path must not reach the caller through a collision.
-    expect(JSON.stringify(collision)).not.toContain(testDir);
+
+    // Checked for separators rather than against testDir: a raw temp path
+    // differs by platform (macOS realpath rewrites /var to /private/var,
+    // Windows expands 8.3 short names), so comparing the literal string would
+    // pass vacuously on some runners and cannot fail on any. A base name
+    // carries no separator on any platform.
+    for (const name of [collision?.destination, ...(collision?.sources ?? [])]) {
+      expect(name ?? "").not.toMatch(/[\\/]/);
+    }
   });
 });
 
@@ -191,7 +198,8 @@ describe("a rule cannot steer a rename out of its directory", () => {
 
     expect(previews[0].error).toContain("outside the source directory");
     expect(previews[0].willChange).toBe(false);
-    // The file is still there under its own name.
+    // The file is still there under its own name. Sorted, because readdir
+    // order is not guaranteed between two calls on the same directory.
     expect((await fs.readdir(testDir)).sort()).toEqual([".env"]);
   });
 });

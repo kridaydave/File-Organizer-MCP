@@ -59,6 +59,19 @@ describe("batch_rename collision preview", () => {
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
+  /**
+   * Directory contents, sorted.
+   *
+   * fs.readdir returns entries in filesystem order, which POSIX and Windows
+   * both decline to guarantee and which is not stable between two calls on the
+   * same directory. Sorting both sides keeps these assertions exact rather
+   * than approximate: a rename that slipped through still shows up as a
+   * difference in the sorted list.
+   */
+  async function listing(dir: string): Promise<string[]> {
+    return (await fs.readdir(dir)).sort();
+  }
+
   async function write(...names: string[]): Promise<string[]> {
     const paths: string[] = [];
     for (const name of names) {
@@ -115,7 +128,7 @@ describe("batch_rename collision preview", () => {
         "Invoice-A.txt",
         "clear file.txt",
       );
-      const before = (await fs.readdir(testDir)).sort();
+      const before = await listing(testDir);
 
       const res = await handleBatchRename({
         files,
@@ -126,7 +139,7 @@ describe("batch_rename collision preview", () => {
       expect(res.isError).toBe(true);
       // "clear file.txt" would have renamed cleanly on its own. The batch is
       // rejected as a unit, so it stays put too.
-      expect(await fs.readdir(testDir)).toEqual(before);
+      expect(await listing(testDir)).toEqual(before);
       expect(before).toEqual(
         ["Invoice A.txt", "Invoice-A.txt", "clear file.txt"].sort(),
       );
@@ -134,7 +147,7 @@ describe("batch_rename collision preview", () => {
 
     it("refuses a run whose destination is already taken", async () => {
       const files = await write("a.txt", "b.txt");
-      const before = (await fs.readdir(testDir)).sort();
+      const before = await listing(testDir);
 
       const res = await handleBatchRename({
         files: [files[0]],
@@ -152,7 +165,7 @@ describe("batch_rename collision preview", () => {
           sources: ["a.txt"],
         },
       ]);
-      expect(await fs.readdir(testDir)).toEqual(before);
+      expect(await listing(testDir)).toEqual(before);
       // b.txt still holds its own content, not a.txt's.
       expect(await fs.readFile(path.join(testDir, "b.txt"), "utf8")).toBe("b.txt");
     });
@@ -178,7 +191,7 @@ describe("batch_rename collision preview", () => {
       expect(payload(res).conflicts).toHaveLength(1);
     });
 
-    it("does not echo the sandbox path through a collision", async () => {
+    it("names files by base name, never by path", async () => {
       const files = await write("Invoice A.txt", "Invoice-A.txt");
 
       const res = await handleBatchRename({
@@ -187,15 +200,28 @@ describe("batch_rename collision preview", () => {
         dry_run: false,
       });
 
-      expect(res.content[0]?.text ?? "").not.toContain(testDir);
-      expect(JSON.stringify(res.structuredContent)).not.toContain(testDir);
+      // Checked for separators rather than against testDir: a raw temp path
+      // differs by platform (macOS realpath rewrites /var to /private/var,
+      // Windows expands 8.3 short names), so comparing the literal path would
+      // pass vacuously on some runners and cannot fail on any. A base name has
+      // no separator in it anywhere.
+      const [collision] = payload(res).conflicts;
+      expect(collision?.destination).toBe("invoice_a.txt");
+      for (const name of [collision?.destination, ...(collision?.sources ?? [])]) {
+        expect(name ?? "").not.toMatch(/[\\/]/);
+      }
+
+      const markdown = res.content[0]?.text ?? "";
+      expect(markdown).not.toMatch(
+        new RegExp(`[\\\\/]${path.basename(testDir)}`),
+      );
     });
   });
 
   describe("a dry run", () => {
     it("reports collisions without rejecting", async () => {
       const files = await write("Invoice A.txt", "Invoice-A.txt");
-      const before = (await fs.readdir(testDir)).sort();
+      const before = await listing(testDir);
 
       const res = await handleBatchRename({
         files,
@@ -209,7 +235,7 @@ describe("batch_rename collision preview", () => {
       expect(out.rejected).toBe(false);
       expect(out.conflicts).toHaveLength(1);
       expect(out.conflicts[0]?.kind).toBe("duplicate_target");
-      expect(await fs.readdir(testDir)).toEqual(before);
+      expect(await listing(testDir)).toEqual(before);
     });
 
     it("shows the collisions in the markdown preview", async () => {
@@ -249,7 +275,7 @@ describe("batch_rename collision preview", () => {
       expect(out.rejected).toBe(false);
       expect(out.renamed).toBe(2);
       expect(out.conflicts).toEqual([]);
-      expect((await fs.readdir(testDir)).sort()).toEqual(["a.txt", "b.txt"]);
+      expect(await listing(testDir)).toEqual(["a.txt", "b.txt"]);
     });
 
     it("treats a directory scan that is already consistent as clear", async () => {
