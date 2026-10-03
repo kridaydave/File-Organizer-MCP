@@ -44,7 +44,7 @@
   "Unknown Date" bucket. `dry_run` defaults to `true`, an occupied destination is
   de-duplicated as `name (1).ext` rather than overwritten, and every performed
   move is recorded in a rollback manifest for `file_organizer_undo_last_operation`.
-  The server serves 27 tools (was 26).
+  The server serves 28 tools (was 27).
 - `file_organizer_delete_duplicates` accepts `verify_before_delete` (default
   `true`) and `candidate_directories`, for when a surviving copy lives outside
   the searched parent directories.

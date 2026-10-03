@@ -93,7 +93,7 @@ You can ask the assistant things like:
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering. Checks the whole plan for name collisions first: if a real run would put two files on one name, or overwrite a name a different file already holds, the batch is rejected before anything moves and the conflicts come back as structured data.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 
-### Full tool list (27 tools)
+### Full tool list (28 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
