@@ -12,7 +12,14 @@
  * through path.basename or through the canonical form from fs.realpath.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from "@jest/globals";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
@@ -30,7 +37,10 @@ import type {
   SensitiveReason,
   SensitiveSkippedFile,
 } from "../../../../src/types.js";
-import { jpegWithExif, jpegWithoutExif } from "../../../helpers/exif-fixture.js";
+import {
+  jpegWithExif,
+  jpegWithoutExif,
+} from "../../../helpers/exif-fixture.js";
 
 // Symlink creation on Windows needs Administrator or Developer Mode, so the one
 // link test skips there with that reason rather than failing on EPERM.
@@ -88,7 +98,9 @@ describe("risk bands", () => {
 describe("scoreExifTags", () => {
   it("returns nothing for tags that carry no personal data", () => {
     expect(scoreExifTags({})).toEqual([]);
-    expect(scoreExifTags({ ISO: 400, FNumber: 1.8, Orientation: 6 })).toEqual([]);
+    expect(scoreExifTags({ ISO: 400, FNumber: 1.8, Orientation: 6 })).toEqual(
+      [],
+    );
   });
 
   it("adds up the weights of the reasons it produced", () => {
@@ -278,7 +290,9 @@ describe("assessExifBuffer", () => {
   });
 
   it("refuses to score a buffer that is not an analyzable image", () => {
-    expect(assessExifBuffer(Buffer.from("not an image at all"))).toBeUndefined();
+    expect(
+      assessExifBuffer(Buffer.from("not an image at all")),
+    ).toBeUndefined();
     expect(assessExifBuffer(Buffer.alloc(0))).toBeUndefined();
     // PNG magic: a real image, but not one whose EXIF this scan reads.
     expect(
@@ -457,6 +471,73 @@ describe("scanForSensitiveData", () => {
       await fs.rm(outside, { recursive: true, force: true });
     }
   });
+
+  // The window this pins: readdir reports `photo.jpg` as a regular file, and
+  // between that decision and the read it is replaced with a symlink pointing
+  // out of the scanned tree. Without a containment re-check and a
+  // no-follow open, the scan reads the outside file and reports its metadata
+  // as if it had come from inside the root.
+  itWithSymlinks(
+    "does not read a file swapped for a symlink after listing",
+    async () => {
+      const outside = await fs.mkdtemp(
+        path.join(os.tmpdir(), "sensitive-outside-"),
+      );
+      try {
+        // Distinctive payload: a GPS fix the clean photo does not carry.
+        await fs.writeFile(
+          path.join(outside, "secret.jpg"),
+          jpegWithExif({
+            latitude: [51, 30, 26.4, "N"],
+            longitude: [0, 7, 39.6, "W"],
+            cameraOwnerName: "Outside Owner",
+          }),
+        );
+        await writeJpeg("photo.jpg");
+
+        const realRoot = await fs.realpath(testDir);
+        const realReaddir = fs.readdir;
+        let swapped = false;
+        const spy = jest
+          .spyOn(fs, "readdir")
+          .mockImplementation(async (target, options) => {
+            const entries = await realReaddir(target, options);
+            // Swap inside the readdir wrapper, so the swap lands exactly in the
+            // window between the listing and the read.
+            if (!swapped && (target as string) === realRoot) {
+              swapped = true;
+              await fs.rm(path.join(testDir, "photo.jpg"));
+              await fs.symlink(
+                path.join(outside, "secret.jpg"),
+                path.join(testDir, "photo.jpg"),
+              );
+            }
+            return entries;
+          });
+
+        try {
+          const result = await scanForSensitiveData(testDir);
+
+          // Nothing from outside the root may come back. The outside file scores
+          // 70 (GPS + owner name); if the scan followed the link, that is what it
+          // would report for a photo that was clean when it was listed.
+          expect(result.highest_risk_score).toBe(0);
+          expect(result.flagged_count).toBe(0);
+          expect(result.files).toEqual([]);
+
+          const leaked = JSON.stringify(result);
+          expect(leaked).not.toContain("Outside Owner");
+          expect(leaked).not.toContain("gps_coordinates");
+        } finally {
+          spy.mockRestore();
+          await fs.rm(outside, { recursive: true, force: true });
+        }
+      } finally {
+        // The swap leaves a link behind; recursive rm handles it on POSIX.
+        await fs.rm(testDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("carries the coverage caveat on every response, including a clean one", async () => {
     await writeJpeg("plain.jpg");
