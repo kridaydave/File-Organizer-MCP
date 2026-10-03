@@ -65,6 +65,8 @@ import {
 import {
   undoLastOperationToolDefinition,
   handleUndoLastOperation,
+  verifyIntegrityToolDefinition,
+  handleVerifyIntegrity,
 } from "../tools/rollback.js";
 import {
   batchRenameToolDefinition,
@@ -147,6 +149,7 @@ const entries = [
   reg(deleteDuplicatesToolDefinition, handleDeleteDuplicates),
   reg(previewDeleteDuplicatesToolDefinition, handlePreviewDeleteDuplicates),
   reg(undoLastOperationToolDefinition, handleUndoLastOperation),
+  reg(verifyIntegrityToolDefinition, handleVerifyIntegrity),
   reg(batchRenameToolDefinition, handleBatchRename),
   reg(inspectMetadataToolDefinition, handleInspectMetadata),
   reg(fileReaderToolDefinition, handleReadFile),

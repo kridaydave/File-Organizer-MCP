@@ -10,14 +10,44 @@ import { constants } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 
-import type { RollbackManifest, RollbackAction } from "../../types.js";
+import {
+  ValidationError,
+  type RollbackManifest,
+  type RollbackAction,
+} from "../../types.js";
 import { fileExists } from "../../utils/file-utils.js";
 import { logger } from "../../utils/logger.js";
 import { CONFIG } from "../../config.js";
 import { getRollbackDirectory } from "../../core/config/paths.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
-import { manifestIntegrityService } from "./manifest-integrity.js";
+import {
+  manifestIntegrityService,
+  manifestActionTarget,
+  MANIFEST_ID_PATTERN,
+} from "./manifest-integrity.js";
 import { safeAtomicMove } from "../io/atomic-move.js";
+import { HashCalculatorService } from "../hash/hasher.js";
+
+/**
+ * How much file content one manifest may re-read to fill in per-file hashes.
+ *
+ * A digest is only obtainable by reading every byte of the file, so recording
+ * hashes for an unbounded organize would add a second full pass over the whole
+ * batch and make organize's cost scale with the directory. The budget caps that
+ * pass: files are hashed in manifest order until the cap is spent and the rest
+ * are left unrecorded. A manifest is therefore only partially verifiable, which
+ * `verifyManifestFiles` reports as `unverifiable` — never as "unchanged".
+ */
+const DEFAULT_HASH_BUDGET_BYTES = 32 * 1024 * 1024;
+
+/** How much of a batch `createManifest` spends on content hashes. */
+export interface ManifestIntegrityOptions {
+  /**
+   * Content bytes this manifest may read to record hashes. Pass 0 to record
+   * none, e.g. for a caller that is already paying for its own hashing.
+   */
+  hashBudgetBytes?: number;
+}
 
 export class RollbackService {
   private storageDir: string;
@@ -71,18 +101,26 @@ export class RollbackService {
   async createManifest(
     description: string,
     actions: RollbackAction[],
+    options: ManifestIntegrityOptions = {},
   ): Promise<string> {
     await this.ensureStorage();
 
     const id = randomUUID();
     const timestamp = Date.now();
-    const hash = manifestIntegrityService.computeHash(actions, timestamp);
+    const recordedActions = await this.recordContentHashes(
+      actions,
+      options.hashBudgetBytes ?? DEFAULT_HASH_BUDGET_BYTES,
+    );
+    const hash = manifestIntegrityService.computeHash(
+      recordedActions,
+      timestamp,
+    );
 
     const manifest: RollbackManifest = {
       id,
       timestamp,
       description,
-      actions,
+      actions: recordedActions,
       version: "1.0",
       hash,
     };
@@ -95,6 +133,109 @@ export class RollbackService {
 
     logger.info(`Created rollback manifest: ${id} (${actions.length} actions)`);
     return id;
+  }
+
+  /**
+   * Copy the actions, adding a content digest to each one whose file could be
+   * read inside the remaining budget.
+   *
+   * The caller's actions are left untouched: a manifest that could only hash
+   * part of its batch is still a valid manifest, and an action that cannot be
+   * hashed simply carries no digest, which is how the format already reads.
+   */
+  private async recordContentHashes(
+    actions: RollbackAction[],
+    budgetBytes: number,
+  ): Promise<RollbackAction[]> {
+    if (budgetBytes <= 0 || actions.length === 0) return actions;
+
+    const hasher = new HashCalculatorService();
+    const recorded: RollbackAction[] = [];
+    let remaining = budgetBytes;
+
+    for (const action of actions) {
+      const target = manifestActionTarget(action);
+      if (!target) {
+        recorded.push(action);
+        continue;
+      }
+
+      let size: number;
+      try {
+        size = (await fs.stat(target)).size;
+      } catch {
+        // Gone or unreadable: there is no digest to record, and that must not
+        // fail the operation that the manifest is being written for.
+        recorded.push(action);
+        continue;
+      }
+      // Skipping rather than stopping keeps one large file from spending the
+      // whole budget while smaller ones behind it go unrecorded.
+      if (size > remaining) {
+        recorded.push(action);
+        continue;
+      }
+
+      let hashed: RollbackAction = action;
+      try {
+        const identity = await hasher.calculateContentIdentity(target);
+        hashed = {
+          ...action,
+          contentHash: identity.digest,
+          hashMethod: identity.method,
+        };
+      } catch (e) {
+        logger.warn(
+          `No content hash recorded for one rollback action: ${(e as Error).message}`,
+        );
+      }
+      remaining -= size;
+      recorded.push(hashed);
+    }
+
+    return recorded;
+  }
+
+  /**
+   * Read one manifest and confirm it is the one this machine wrote.
+   *
+   * Verification is not optional: the paths inside a manifest are read by
+   * callers, so an unauthenticated manifest file must never be trusted. A
+   * caller that has no use for the actions gets the ids from `listManifests`
+   * instead.
+   */
+  async getManifest(manifestId: string): Promise<RollbackManifest> {
+    if (!MANIFEST_ID_PATTERN.test(manifestId)) {
+      throw new ValidationError(`Invalid manifest ID format: ${manifestId}`);
+    }
+
+    await this.ensureStorage();
+    const filePath = path.join(this.storageDir, `${manifestId}.json`);
+
+    if (!(await fileExists(filePath))) {
+      throw new ValidationError(`Manifest ${manifestId} not found`);
+    }
+
+    let manifest: RollbackManifest;
+    try {
+      const content = await fs.readFile(filePath, "utf-8");
+      manifest = JSON.parse(content);
+    } catch (error) {
+      throw new ValidationError(
+        `Failed to parse manifest ${manifestId}: ${(error as Error).message}`,
+        { field: "manifest_id" },
+      );
+    }
+
+    const verification = manifestIntegrityService.verifyManifest(manifest);
+    if (!verification.valid) {
+      throw new ValidationError(
+        `Manifest integrity check failed: ${verification.error}`,
+        { field: "manifest_id" },
+      );
+    }
+
+    return manifest;
   }
 
   /**
@@ -150,37 +291,11 @@ export class RollbackService {
   async rollback(
     manifestId: string,
   ): Promise<{ success: number; failed: number; errors: string[] }> {
-    // Security: Validate ID format (UUID)
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        manifestId,
-      )
-    ) {
-      throw new Error(`Invalid manifest ID format: ${manifestId}`);
-    }
-
     await this.ensureStorage();
+    // getManifest validates the id as a UUID before it is joined onto the
+    // storage directory, so filePath is only built from an already-safe value.
+    const manifest = await this.getManifest(manifestId);
     const filePath = path.join(this.storageDir, `${manifestId}.json`);
-
-    if (!(await fileExists(filePath))) {
-      throw new Error(`Manifest ${manifestId} not found`);
-    }
-
-    let manifest: RollbackManifest;
-    try {
-      const content = await fs.readFile(filePath, "utf-8");
-      manifest = JSON.parse(content);
-    } catch (error) {
-      throw new Error(
-        `Failed to parse manifest ${manifestId}: ${(error as Error).message}`,
-        { cause: error },
-      );
-    }
-
-    const verification = manifestIntegrityService.verifyManifest(manifest);
-    if (!verification.valid) {
-      throw new Error(`Manifest integrity check failed: ${verification.error}`);
-    }
 
     const results = { success: 0, failed: 0, errors: [] as string[] };
 
