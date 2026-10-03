@@ -16,10 +16,8 @@ import fs from "fs/promises";
 import path from "path";
 import ExifParser from "exif-parser";
 import { CONFIG, SKIP_DIRECTORIES } from "../../config.js";
-import {
-  detectImageFormat,
-  readImageFile,
-} from "../../services/metadata/image-privacy.js";
+import { detectImageFormat } from "../../services/metadata/image-privacy.js";
+import { PathValidatorService } from "../../services/path-validator.service.js";
 import { isErrnoException } from "../../utils/error-handler.js";
 import { isSubPath } from "../../utils/file-utils.js";
 import { logger } from "../../utils/logger.js";
@@ -351,6 +349,65 @@ function skip(
 }
 
 /**
+ * Read the head of one candidate file, closing the two windows a plain
+ * `stat` + `open` leaves open.
+ *
+ * The `readdir` entry that named this file is a snapshot. By the time we open
+ * it, the entry can have been replaced by a symlink pointing outside the
+ * scanned tree, and both `fs.stat` and `fs.open` follow that link. So:
+ *
+ *  1. Re-resolve the path and check it is still under the scan root — the
+ *     same containment check the walker applies before descending into a
+ *     directory, for the same reason.
+ *  2. Open through `openAndValidateFile`, the shared validator idiom: a single
+ *     `O_NOFOLLOW` open with no pre-check window, then a post-open `isFile()`
+ *     on the handle, a realpath containment check, and an inode/device match
+ *     against the path to catch a swap after the open.
+ *
+ * Returns undefined when the file cannot be read safely, which the caller
+ * reports as skipped rather than as a clean file.
+ */
+async function readHeadForScan(
+  filePath: string,
+  rootReal: string,
+  validator: PathValidatorService,
+): Promise<Buffer | undefined> {
+  let childReal: string | undefined;
+  try {
+    const resolved = await resolveExistingAncestor(filePath);
+    if (resolved.exists) childReal = resolved.resolvedPath;
+  } catch {
+    // Unresolvable below this point; the containment check below rejects it.
+  }
+  if (childReal === undefined || !isSubPath(rootReal, childReal)) {
+    return undefined;
+  }
+
+  let handle: fs.FileHandle | undefined;
+  try {
+    handle = await validator.openAndValidateFile(filePath);
+    const stats = await handle.stat();
+    if (!stats.isFile()) {
+      return undefined;
+    }
+    const readSize = Math.min(stats.size, EXIF_HEADER_BYTES);
+    if (readSize === 0) {
+      return Buffer.alloc(0);
+    }
+    const buffer = Buffer.alloc(readSize);
+    const { bytesRead } = await handle.read(buffer, 0, readSize, 0);
+    return bytesRead === readSize ? buffer : buffer.subarray(0, bytesRead);
+  } catch {
+    // O_NOFOLLOW raises ELOOP when the entry became a link; the validator also
+    // rejects containment and inode mismatches. All of them mean "not a file
+    // we may read", not "a file that is clean".
+    return undefined;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+/**
  * Read one candidate file and score it.
  *
  * A file whose extension says image but whose bytes do not is skipped rather
@@ -358,20 +415,18 @@ function skip(
  */
 async function assessFile(
   filePath: string,
+  rootReal: string,
+  validator: PathValidatorService,
 ): Promise<
   { finding?: SensitiveFileFinding; skipped?: SensitiveSkippedFile } | undefined
 > {
-  let buffer: Buffer;
-  try {
-    buffer = await readImageFile(filePath, EXIF_HEADER_BYTES);
-  } catch (error) {
+  const buffer = await readHeadForScan(filePath, rootReal, validator);
+  if (buffer === undefined) {
     return {
       skipped: skip(
         filePath,
         "unreadable",
-        isErrnoException(error) && error.code === "ENOENT"
-          ? "File disappeared before it could be read"
-          : "File could not be read",
+        "File was replaced, moved outside the scanned directory, or could not be opened safely, so it was not read",
       ),
     };
   }
@@ -432,6 +487,10 @@ export async function scanForSensitiveData(
   } catch {
     rootReal = path.resolve(directory);
   }
+
+  // Shared open-and-validate helper: O_NOFOLLOW open plus the post-open
+  // containment and inode checks. One instance per scan, reused per file.
+  const validator = new PathValidatorService([rootReal]);
 
   const walk = async (dir: string, depth: number): Promise<void> => {
     if (depth > CONFIG.security.maxScanDepth) {
@@ -514,7 +573,7 @@ export async function scanForSensitiveData(
         continue;
       }
 
-      const outcome = await assessFile(fullPath);
+      const outcome = await assessFile(fullPath, rootReal, validator);
       if (outcome?.finding) {
         files.push(outcome.finding);
       } else if (outcome?.skipped) {
