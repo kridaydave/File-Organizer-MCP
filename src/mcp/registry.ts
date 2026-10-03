@@ -119,6 +119,10 @@ import {
   restoreQuarantineToolDefinition,
   handleRestoreQuarantine,
 } from "../tools/file-quarantine.js";
+import {
+  sensitiveScanToolDefinition,
+  handleSensitiveScan,
+} from "../tools/sensitive-scan.js";
 
 function reg(def: ToolDefinition, handler: ToolHandler) {
   return defineTool({
@@ -165,6 +169,7 @@ const entries = [
   reg(restoreQuarantineToolDefinition, handleRestoreQuarantine),
   reg(scanDirectoryToolDefinition, handleScanDirectory),
   reg(searchHistoryToolDefinition, handleSearchHistory),
+  reg(sensitiveScanToolDefinition, handleSensitiveScan),
   reg(setCustomRulesToolDefinition, handleSetCustomRules),
   reg(smartSuggestToolDefinition, handleSmartSuggest),
   reg(systemOrganizationToolDefinition, handleSystemOrganization),
