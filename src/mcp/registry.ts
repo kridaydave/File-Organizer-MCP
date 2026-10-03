@@ -91,6 +91,8 @@ import {
   handleReadFile,
 } from "../tools/file-reader.tool.js";
 import {
+  searchHistoryToolDefinition,
+  handleSearchHistory,
   viewHistoryToolDefinition,
   handleViewHistory,
 } from "../tools/view-history.js";
@@ -138,6 +140,7 @@ const entries = [
   reg(inspectMetadataToolDefinition, handleInspectMetadata),
   reg(fileReaderToolDefinition, handleReadFile),
   reg(viewHistoryToolDefinition, handleViewHistory),
+  reg(searchHistoryToolDefinition, handleSearchHistory),
   reg(organizeByProjectToolDefinition, handleOrganizeByProject),
   reg(doctorToolDefinition, handleDoctor),
   reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
