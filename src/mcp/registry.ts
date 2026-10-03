@@ -53,6 +53,8 @@ import {
   handleAnalyzeDuplicates,
   deleteDuplicatesToolDefinition,
   handleDeleteDuplicates,
+  previewDeleteDuplicatesToolDefinition,
+  handlePreviewDeleteDuplicates,
 } from "../tools/duplicate-management.js";
 import {
   undoLastOperationToolDefinition,
@@ -133,6 +135,7 @@ const entries = [
   reg(setCustomRulesToolDefinition, handleSetCustomRules),
   reg(analyzeDuplicatesToolDefinition, handleAnalyzeDuplicates),
   reg(deleteDuplicatesToolDefinition, handleDeleteDuplicates),
+  reg(previewDeleteDuplicatesToolDefinition, handlePreviewDeleteDuplicates),
   reg(undoLastOperationToolDefinition, handleUndoLastOperation),
   reg(batchRenameToolDefinition, handleBatchRename),
   reg(inspectMetadataToolDefinition, handleInspectMetadata),

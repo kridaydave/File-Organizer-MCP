@@ -270,6 +270,30 @@ export type AnalyzeDuplicatesInput = z.infer<
 >;
 
 /**
+ * Schema for previewing a duplicate deletion
+ */
+export const PreviewDeleteDuplicatesInputSchema = z
+  .object({
+    directory: z.string().min(1, "Directory path cannot be empty"),
+    /**
+     * Which copy of each group survives. Unlike analyze_duplicates these name
+     * the survivor outright instead of blending path depth and location into a
+     * score, so "newest" always means the most recently modified copy.
+     */
+    keep_strategy: z
+      .enum(["newest", "oldest", "keep_first"])
+      .default("newest")
+      .describe(
+        'Survivor per group: "newest" (most recently modified), "oldest", or "keep_first" (first found by the scan)',
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type PreviewDeleteDuplicatesInput = z.infer<
+  typeof PreviewDeleteDuplicatesInputSchema
+>;
+
+/**
  * Schema for deleting duplicate files
  */
 export const DeleteDuplicatesInputSchema = z
