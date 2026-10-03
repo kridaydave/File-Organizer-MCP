@@ -79,6 +79,7 @@ You can ask the assistant things like:
 - Smart organization that picks the right strategy per file type.
 - Date sorting into `YYYY/MM` folders from EXIF date taken (photos) or file mtime, reporting which date each file used.
 - Dry-run preview, atomic moves, and rollback.
+- Plan validation before you organize: name collisions, occupied destinations, cross-device moves, and files the sensitive-file gate blocks.
 - Path traversal protection, TOCTOU mitigation.
 - Windows, macOS, and Linux.
 
@@ -129,6 +130,7 @@ You can ask the assistant things like:
 - `file_organizer_smart_suggest`
 - `file_organizer_system_organize`
 - `file_organizer_undo_last_operation`
+- `file_organizer_validate_organization_plan`
 - `file_organizer_view_history`
 <!-- END GENERATED TOOL LIST -->
 

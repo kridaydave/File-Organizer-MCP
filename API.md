@@ -42,6 +42,7 @@
 - [file_organizer_smart_suggest](#file_organizer_smart_suggest)
 - [file_organizer_system_organize](#file_organizer_system_organize)
 - [file_organizer_undo_last_operation](#file_organizer_undo_last_operation)
+- [file_organizer_validate_organization_plan](#file_organizer_validate_organization_plan)
 - [file_organizer_view_history](#file_organizer_view_history)
 
 > **Note:** The watch tools (`file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
@@ -965,6 +966,63 @@ file_organizer_system_organize({
 file_organizer_undo_last_operation({
   manifest_id: "value",
   response_format: "value",
+});
+```
+
+---
+
+## file_organizer_validate_organization_plan
+
+[⬆ Back to Top](#top)
+
+**Description:** Checks the organization plan organize_files would execute and returns an ok / not-ok verdict. Read-only: nothing is moved, renamed, or deleted. Flags two or more sources landing on one destination name, destinations that already exist, moves that cross a device boundary (compared with fs.stat device ids), and sources the sensitive-file gate would refuse. Reports `checked` and `not_checked` so a clean result is not read as a guarantee. Builds the plan with the same conflict_strategy organize_files would use; pass include_subdirs=true to check a plan over subdirectories, which organize_files itself does not scan. Every path it reports (directory, sources, destinations) is an absolute filesystem path in the platform's native form, byte-identical to what preview_organization and organize_files report for the same plan; no separator normalization is applied, so match them with path-aware logic rather than string equality.
+
+### Parameters
+
+| Parameter           | Type    | Description                                                                                          | Default    |
+| ------------------- | ------- | ---------------------------------------------------------------------------------------------------- | ---------- |
+| `directory`         | string  | Full path to the directory                                                                             | -          |
+| `include_subdirs`   | boolean | Validate a plan built over subdirectories. Default false matches the depth organize_files scans      | false      |
+| `response_format`   | string  | -                                                                                                      | 'markdown' |
+| `conflict_strategy` | string  | How to handle file conflicts for the validated plan. Uses config default if not specified              | -          |
+
+### Output
+
+```typescript
+{
+  // Absolute filesystem path, platform-native form (see description).
+  directory: string;
+  // False when any finding has severity "error".
+  ok: boolean;
+  moves_checked: number;
+  counts: { error: number; warning: number };
+  findings: Array<{
+    kind:
+      | "destination_name_collision"
+      | "destination_exists"
+      | "cross_device_move"
+      | "sensitive_source"
+      | "incomplete_plan";
+    severity: "error" | "warning";
+    // Absolute filesystem paths, platform-native form.
+    sources: string[];
+    destinations: string[];
+    detail: string;
+  }>;
+  // What this check looked at, and what it did not.
+  checked: string[];
+  not_checked: string[];
+}
+```
+
+### Example
+
+```typescript
+file_organizer_validate_organization_plan({
+  directory: "value",
+  include_subdirs: true,
+  response_format: "value",
+  conflict_strategy: "value",
 });
 ```
 
