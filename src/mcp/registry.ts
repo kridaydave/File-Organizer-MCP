@@ -133,9 +133,6 @@ function reg(def: ToolDefinition, handler: ToolHandler) {
 // Sorted by tool name, not by when the tool was added. Two people adding
 // different tools at the same time then insert at different coordinates
 // instead of the same one, so their branches merge instead of colliding.
-// Sorted by tool name, not by when the tool was added. Two people adding
-// different tools at the same time then insert at different coordinates
-// instead of the same one, so their branches merge instead of colliding.
 const entries = [
   reg(analyzeDuplicatesToolDefinition, handleAnalyzeDuplicates),
   reg(batchReadFilesToolDefinition, handleBatchReadFiles),
