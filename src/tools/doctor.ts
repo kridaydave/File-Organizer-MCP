@@ -25,7 +25,7 @@ export const doctorToolDefinition: ToolDefinition = {
   name: "file_organizer_doctor",
   title: "Diagnose Configuration",
   description:
-    "Report the effective configuration after built-in defaults and config.json are layered, and flag every configured allowed directory that is missing, blocked by security policy, or rejected by the home-directory gate. No config value comes from the environment: APPDATA, XDG_CONFIG_HOME and OneDrive only decide where config.json is read from. Use this first when a call fails unexpectedly: it explains which directories are actually usable.",
+    "Report the effective configuration after built-in defaults and config.json are layered, and flag every configured allowed directory that is missing, blocked by security policy, or rejected by the home-directory gate. No config value comes from the environment: APPDATA, XDG_CONFIG_HOME and OneDrive only decide where the config directory sits, which holds config.json, operations.jsonl, the rollback manifests and the backups. On Linux and Windows, setting XDG_CONFIG_HOME or APPDATA relocates all four. Use this first when a call fails unexpectedly: it explains which directories are actually usable.",
   inputSchema: {
     type: "object",
     properties: {

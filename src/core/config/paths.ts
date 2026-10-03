@@ -103,49 +103,53 @@ export function getDefaultAllowedDirs(): string[] {
 }
 
 /**
- * Get path to user config file
+ * Get the platform config directory that holds config.json, operations.jsonl,
+ * rollbacks and backups.
+ *
+ * All four state locations derive from this one function. When config.json and
+ * the rest resolved independently, setting XDG_CONFIG_HOME moved the history and
+ * rollback dirs while leaving config.json in the real home directory, so a
+ * sandboxed run could still read the developer's allow-list. One base path means
+ * one env var relocates all of it.
+ *
+ * macOS keeps its own convention rather than honoring XDG_CONFIG_HOME: the
+ * platform convention is ~/Library/Application Support, and a user who sets
+ * XDG_CONFIG_HOME on a Mac expects Linux-style paths in their shell tooling, not
+ * in an app's config.
  */
-export function getUserConfigPath(): string {
+export function getConfigDirectory(): string {
   const platform = os.platform();
   const home = os.homedir();
 
   if (platform === "win32") {
-    // Windows: %APPDATA%\file-organizer-mcp\config.json
     const appData =
       process.env.APPDATA || path.join(home, "AppData", "Roaming");
-    return path.join(appData, "file-organizer-mcp", "config.json");
-  } else if (platform === "darwin") {
-    // macOS: ~/Library/Application Support/file-organizer-mcp/config.json
+    return path.join(appData, "file-organizer-mcp");
+  }
+  if (platform === "darwin") {
     return path.join(
       home,
       "Library",
       "Application Support",
       "file-organizer-mcp",
-      "config.json",
     );
-  } else {
-    // Linux: ~/.config/file-organizer-mcp/config.json
-    return path.join(home, ".config", "file-organizer-mcp", "config.json");
   }
+  const basePath = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
+  return path.join(basePath, "file-organizer-mcp");
+}
+
+/**
+ * Get path to user config file
+ */
+export function getUserConfigPath(): string {
+  return path.join(getConfigDirectory(), "config.json");
 }
 
 /**
  * Get the history directory path
  */
 export function getHistoryDirectory(): string {
-  const platform = process.platform;
-  const home = os.homedir();
-
-  let basePath: string;
-  if (platform === "win32") {
-    basePath = process.env.APPDATA || path.join(home, "AppData", "Roaming");
-  } else if (platform === "darwin") {
-    basePath = path.join(home, "Library", "Application Support");
-  } else {
-    basePath = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
-  }
-
-  return path.join(basePath, "file-organizer-mcp");
+  return getConfigDirectory();
 }
 
 /**
