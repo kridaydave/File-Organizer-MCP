@@ -32,6 +32,8 @@
     "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix --no-warn-ignored",
     "format": "prettier --write src/**/*.ts",
     "docs:generate": "node scripts/generate-docs.js",
+    "docs:sync": "npm run build && node scripts/sync-tool-docs.mjs",
+    "docs:check": "npm run build && node scripts/sync-tool-docs.mjs --check",
     "clean": "rimraf dist"
   },
   "keywords": [
