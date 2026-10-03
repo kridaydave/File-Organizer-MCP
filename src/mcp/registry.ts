@@ -145,7 +145,6 @@ const entries = [
   reg(batchReadFilesToolDefinition, handleBatchReadFiles),
   reg(getCategoriesToolDefinition, handleGetCategories),
   reg(setCustomRulesToolDefinition, handleSetCustomRules),
-  reg(exportConfigToolDefinition, handleExportConfig),
   reg(analyzeDuplicatesToolDefinition, handleAnalyzeDuplicates),
   reg(deleteDuplicatesToolDefinition, handleDeleteDuplicates),
   reg(previewDeleteDuplicatesToolDefinition, handlePreviewDeleteDuplicates),
@@ -157,6 +156,7 @@ const entries = [
   reg(searchHistoryToolDefinition, handleSearchHistory),
   reg(organizeByProjectToolDefinition, handleOrganizeByProject),
   reg(doctorToolDefinition, handleDoctor),
+  reg(exportConfigToolDefinition, handleExportConfig),
   reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
   reg(findEmptyDirectoriesToolDefinition, handleFindEmptyDirectories),
 ];
