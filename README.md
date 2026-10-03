@@ -125,9 +125,9 @@ You can ask the assistant things like:
 - `file_organizer_restore_quarantine`
 - `file_organizer_scan_directory`
 - `file_organizer_search_history`
+- `file_organizer_sensitive_scan`
 - `file_organizer_set_custom_rules`
 - `file_organizer_smart_suggest`
-- `file_organizer_sensitive_scan`
 - `file_organizer_system_organize`
 - `file_organizer_undo_last_operation`
 - `file_organizer_validate_organization_plan`
