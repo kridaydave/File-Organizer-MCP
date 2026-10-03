@@ -1,0 +1,42 @@
+[Unit]
+Description=File Organizer MCP — one preview pass over a directory
+Documentation=https://github.com/kridaydave/File-Organizer-MCP
+# The pass reads the shared user config, which may be created on first use, so
+# do not require the config dir to exist before the timer fires.
+After=default.target
+
+[Service]
+Type=oneshot
+
+# Absolute path to the CLI, from `command -v file-organizer-watch`.
+#
+# `once` defaults to a dry run: it scans, prints the plan, and writes nothing —
+# not the files, not a history entry. Exit 0 on a clean pass, 1 on a partial or
+# aborted one, so a failed pass shows up as a failed unit.
+#
+# Override per directory or mode with a drop-in instead of editing this file:
+#   systemctl --user edit file-organizer-sweep.service
+#     [Service]
+#     Environment=WATCH_DIR=/home/you/Pictures
+#     ExecStart=
+#     ExecStart=/home/you/.local/bin/file-organizer-watch once ${WATCH_DIR} --recursive --apply
+# An --apply pass also writes history and rollback manifests into the shared
+# user config dir, so that dir has to be in ReadWritePaths below as well.
+Environment=WATCH_DIR=/home/you/Downloads
+ExecStart=/home/you/.local/bin/file-organizer-watch once ${WATCH_DIR} --dry-run
+
+# One append-only log file instead of the journal, so a pass that ran while you
+# were logged out still leaves a trace.
+StandardOutput=append:/home/you/.local/state/file-organizer/sweep.log
+StandardError=append:/home/you/.local/state/file-organizer/sweep.log
+
+# The pass only touches WATCH_DIR and its log. PrivateTmp and NoNewPrivileges
+# are free; the rest keeps a runaway pass from editing the rest of the box.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/you/Downloads /home/you/.local/state/file-organizer
+
+[Install]
+WantedBy=default.target
