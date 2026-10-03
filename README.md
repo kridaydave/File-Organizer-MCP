@@ -58,6 +58,7 @@ You can ask the assistant things like:
 - "Organize my Downloads folder"
 - "Find duplicate files in my Documents"
 - "Show me my largest files"
+- "Which categories take up the most space in my Downloads?"
 
 ### Install methods
 
@@ -73,6 +74,7 @@ You can ask the assistant things like:
 - Categorization into 12 or more file types.
 - Cron-based automatic organization and directory watch mode.
 - Duplicate detection by SHA-256 content hash.
+- Disk usage per category: which file types hold the space, in bytes and as a share.
 - Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
 - Dry-run preview, atomic moves, and rollback.
@@ -90,13 +92,14 @@ You can ask the assistant things like:
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 
-### Full tool list (24 tools)
+### Full tool list (25 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
 - `file_organizer_batch_rename`
 - `file_organizer_categorize_by_type`
 - `file_organizer_delete_duplicates`
+- `file_organizer_disk_usage_by_category`
 - `file_organizer_doctor`
 - `file_organizer_find_broken_symlinks`
 - `file_organizer_find_duplicate_files`
