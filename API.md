@@ -22,6 +22,7 @@
 - [file_organizer_find_broken_symlinks](#file_organizer_find_broken_symlinks)
 - [file_organizer_find_duplicate_files](#file_organizer_find_duplicate_files)
 - [file_organizer_find_largest_files](#file_organizer_find_largest_files)
+- [file_organizer_find_old_files](#file_organizer_find_old_files)
 - [file_organizer_get_categories](#file_organizer_get_categories)
 - [file_organizer_inspect_metadata](#file_organizer_inspect_metadata)
 - [file_organizer_list_files](#file_organizer_list_files)
@@ -376,6 +377,55 @@ file_organizer_find_largest_files({
   response_format: "value",
 });
 ```
+
+---
+
+## file_organizer_find_old_files
+
+[⬆ Back to Top](#top)
+
+**Description:** Find files in a directory that have not been touched for N days, oldest first. Age is measured from the last modification time by default, or from the last access time when asked. Read-only: nothing is moved or deleted.
+
+### Parameters
+
+| Parameter         | Type    | Description                                                                   | Default    |
+| ----------------- | ------- | ----------------------------------------------------------------------------- | ---------- |
+| `directory`       | string  | Full path to the directory                                                   | -          |
+| `include_subdirs` | boolean | Include subdirectories                                                        | false      |
+| `older_than_days` | number  | Only return files untouched for at least this many days (1-36500)              | 365        |
+| `age_source`      | string  | Timestamp to measure age from: `mtime` (last modified) or `atime` (last accessed) | mtime  |
+| `top_n`           | number  | Number of oldest files to return                                              | 10         |
+| `response_format` | string  | `json` or `markdown`                                                          | 'markdown' |
+
+### Example
+
+```typescript
+file_organizer_find_old_files({
+  directory: "value",
+  include_subdirs: true,
+  older_than_days: 365,
+  age_source: "mtime",
+  top_n: 10,
+  response_format: "json",
+});
+```
+
+### Result fields (`json`)
+
+| Field                   | Type    | Description                                                     |
+| ----------------------- | ------- | --------------------------------------------------------------- |
+| `directory`             | string  | Validated directory that was searched                          |
+| `age_source`            | string  | Timestamp the ages were measured from                          |
+| `older_than_days`       | number  | Threshold that was applied                                    |
+| `total_count`           | number  | Files that matched, before `top_n` cut the list                |
+| `returned_count`        | number  | Entries in `old_files`                                         |
+| `old_files[]`           | array   | Oldest first                                                   |
+| `old_files[].name`      | string  | File name                                                      |
+| `old_files[].path`      | string  | Full path                                                     |
+| `old_files[].size`      | number  | Size in bytes                                                 |
+| `old_files[].size_readable` | string | Human-readable size                                       |
+| `old_files[].age_days`  | number  | Whole days since the chosen timestamp                          |
+| `old_files[].accessed_or_modified` | string | ISO 8601 timestamp the age was measured from        |
 
 ---
 

@@ -105,6 +105,7 @@ You can ask the assistant things like:
 - `file_organizer_find_broken_symlinks`
 - `file_organizer_find_duplicate_files`
 - `file_organizer_find_largest_files`
+- `file_organizer_find_old_files` - Files untouched for N days, oldest first.
 - `file_organizer_get_categories`
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`

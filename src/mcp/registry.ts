@@ -31,6 +31,8 @@ import {
   handleFindLargestFiles,
   diskUsageByCategoryToolDefinition,
   handleDiskUsageByCategory,
+  findOldFilesToolDefinition,
+  handleFindOldFiles,
 } from "../tools/file-analysis.js";
 import {
   findDuplicateFilesToolDefinition,
@@ -126,6 +128,7 @@ const entries = [
   reg(categorizeByTypeToolDefinition, handleCategorizeByType),
   reg(findLargestFilesToolDefinition, handleFindLargestFiles),
   reg(diskUsageByCategoryToolDefinition, handleDiskUsageByCategory),
+  reg(findOldFilesToolDefinition, handleFindOldFiles),
   reg(findDuplicateFilesToolDefinition, handleFindDuplicateFiles),
   reg(organizeFilesToolDefinition, handleOrganizeFiles),
   reg(previewOrganizationToolDefinition, handlePreviewOrganization),
