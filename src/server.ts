@@ -169,9 +169,23 @@ async function handleToolCall(
         durationMs: logEntry.durationMs,
         details: hasError ? `Failed ${name}` : `Completed ${name}`,
         error: logEntry.error ? { message: logEntry.error } : undefined,
+        // Every path-taking tool names its root `directory`. Recording it is
+        // what makes the history searchable by path; a value that is not a
+        // plain single-line string is dropped rather than half-validated here.
+        paths: historyPathsFromArgs(args),
       });
     } catch {
       // History logging should never break operations
     }
   }
+}
+
+/** The `directory` argument of a tool call, when it is usable as a path. */
+function historyPathsFromArgs(
+  args: Record<string, unknown>,
+): string[] | undefined {
+  const directory = args.directory;
+  if (typeof directory !== "string" || directory.length === 0) return undefined;
+  if (directory.length > 4096 || directory.includes("\0")) return undefined;
+  return [directory];
 }

@@ -116,6 +116,7 @@ export async function runOrganizePass(
       filesProcessed: result.moved,
       filesSkipped: result.skipped,
       details: `Single pass over ${files.length} file(s): ${result.moved} moved, ${result.skipped} skipped`,
+      paths: [validatedPath],
     });
     result.historyLogged = true;
   } catch (error) {

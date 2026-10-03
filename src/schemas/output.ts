@@ -198,6 +198,16 @@ const renamePreviewSchema = z.object({
  * branch on: it is true only when a real run was stopped before the first
  * rename, which is the only case where nothing moved.
  */
+export const findEmptyDirectoriesOutputSchema = z.object({
+  directory: z.string(),
+  scanned_count: z.number(),
+  depth_limited: z.boolean(),
+  result_limited: z.boolean(),
+  limit: z.number(),
+  total_count: z.number(),
+  empty_dirs: z.array(z.string()),
+});
+
 export const batchRenameOutputSchema = z.object({
   dry_run: z.boolean(),
   rejected: z.boolean(),
@@ -353,6 +363,9 @@ export const undoOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const doctorOutputJsonSchema = z.toJSONSchema(
   doctorOutputSchema,
+) as JsonSchemaObject;
+export const findEmptyDirectoriesOutputJsonSchema = z.toJSONSchema(
+  findEmptyDirectoriesOutputSchema,
 ) as JsonSchemaObject;
 export const findBrokenSymlinksOutputJsonSchema = z.toJSONSchema(
   findBrokenSymlinksOutputSchema,

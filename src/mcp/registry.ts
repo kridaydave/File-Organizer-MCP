@@ -29,10 +29,12 @@ import {
 import {
   findLargestFilesToolDefinition,
   handleFindLargestFiles,
-  diskUsageByCategoryToolDefinition,
+diskUsageByCategoryToolDefinition,
   handleDiskUsageByCategory,
   findOldFilesToolDefinition,
   handleFindOldFiles,
+  findEmptyDirectoriesToolDefinition,
+  handleFindEmptyDirectories,
 } from "../tools/file-analysis.js";
 import {
   findDuplicateFilesToolDefinition,
@@ -97,6 +99,8 @@ import {
   handleReadFile,
 } from "../tools/file-reader.tool.js";
 import {
+  searchHistoryToolDefinition,
+  handleSearchHistory,
   viewHistoryToolDefinition,
   handleViewHistory,
 } from "../tools/view-history.js";
@@ -153,9 +157,11 @@ const entries = [
   reg(inspectMetadataToolDefinition, handleInspectMetadata),
   reg(fileReaderToolDefinition, handleReadFile),
   reg(viewHistoryToolDefinition, handleViewHistory),
+  reg(searchHistoryToolDefinition, handleSearchHistory),
   reg(organizeByProjectToolDefinition, handleOrganizeByProject),
   reg(doctorToolDefinition, handleDoctor),
   reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
+  reg(findEmptyDirectoriesToolDefinition, handleFindEmptyDirectories),
   reg(quarantineFilesToolDefinition, handleQuarantineFiles),
   reg(restoreQuarantineToolDefinition, handleRestoreQuarantine),
 ];

@@ -93,8 +93,9 @@ You can ask the assistant things like:
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 - `file_organizer_quarantine_files` - Set flagged files aside for review, reversibly. See below.
 - `file_organizer_restore_quarantine` - Put quarantined files back where they came from.
+- `file_organizer_search_history` - Filter the history by path glob (`path_glob`), date range (`from`/`to`), or operation type. Every filter is optional and they combine, so a long history stays queryable instead of one flat list.
 
-### Full tool list (29 tools)
+### Full tool list (31 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
@@ -105,6 +106,7 @@ You can ask the assistant things like:
 - `file_organizer_doctor`
 - `file_organizer_find_broken_symlinks`
 - `file_organizer_find_duplicate_files`
+- `file_organizer_find_empty_directories`
 - `file_organizer_find_largest_files`
 - `file_organizer_find_old_files` - Files untouched for N days, oldest first.
 - `file_organizer_get_categories`
@@ -120,6 +122,7 @@ You can ask the assistant things like:
 - `file_organizer_read_file`
 - `file_organizer_restore_quarantine`
 - `file_organizer_scan_directory`
+- `file_organizer_search_history`
 - `file_organizer_set_custom_rules`
 - `file_organizer_smart_suggest`
 - `file_organizer_system_organize`
