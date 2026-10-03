@@ -73,6 +73,49 @@ export const FindLargestFilesInputSchema = z
   .merge(CommonParamsSchema);
 
 /**
+ * Schema for find_old_files tool
+ *
+ * 100 years is the ceiling: past that the threshold is a typo, not an intent,
+ * and it silently returns every file in the directory.
+ */
+export const FindOldFilesInputSchema = z
+  .object({
+    directory: z
+      .string()
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to search"),
+    include_subdirs: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Include subdirectories in search"),
+    older_than_days: z
+      .number()
+      .int("older_than_days must be a whole number of days")
+      .positive("older_than_days must be greater than 0")
+      .max(36500, "older_than_days must be 36500 or less")
+      .optional()
+      .default(365)
+      .describe("Only return files untouched for at least this many days"),
+    age_source: z
+      .enum(["mtime", "atime"])
+      .optional()
+      .default("mtime")
+      .describe(
+        "Timestamp to measure age from: mtime (last modified, default) or atime (last accessed)",
+      ),
+    top_n: z
+      .number()
+      .int()
+      .positive()
+      .max(100)
+      .optional()
+      .default(10)
+      .describe("Number of oldest files to return"),
+  })
+  .merge(CommonParamsSchema);
+
+/**
  * Schema for find_duplicate_files tool
  */
 export const FindDuplicateFilesInputSchema = z
@@ -128,6 +171,7 @@ export type FindBrokenSymlinksInput = z.infer<
 export type ListFilesInput = z.infer<typeof ListFilesInputSchema>;
 export type ScanDirectoryInput = z.infer<typeof ScanDirectoryInputSchema>;
 export type FindLargestFilesInput = z.infer<typeof FindLargestFilesInputSchema>;
+export type FindOldFilesInput = z.infer<typeof FindOldFilesInputSchema>;
 export type FindDuplicateFilesInput = z.infer<
   typeof FindDuplicateFilesInputSchema
 >;
