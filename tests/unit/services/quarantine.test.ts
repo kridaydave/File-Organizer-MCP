@@ -21,17 +21,16 @@ import {
   jest,
 } from "@jest/globals";
 import fs from "fs/promises";
-import { realpathSync } from "fs";
 import os from "os";
 import path from "path";
 
 const { CONFIG } = await import("../../../src/core/config/defaults.js");
 const { QuarantineService } =
   await import("../../../src/core/organize/quarantine.js");
-const { RollbackService } = await import("../../../src/core/organize/rollback.js");
-const { getQuarantineDirectory } = await import(
-  "../../../src/core/config/paths.js"
-);
+const { RollbackService } =
+  await import("../../../src/core/organize/rollback.js");
+const { getQuarantineDirectory } =
+  await import("../../../src/core/config/paths.js");
 
 describe("QuarantineService", () => {
   let testDir: string;
@@ -41,7 +40,9 @@ describe("QuarantineService", () => {
 
   beforeEach(async () => {
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-quarantine-"));
-    manifestDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-quarantine-man-"));
+    manifestDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "fom-quarantine-man-"),
+    );
     restoreCustomAllowed = CONFIG.paths._overrideCustomAllowed;
     CONFIG.paths.customAllowed = [os.tmpdir()];
     service = new QuarantineService(new RollbackService(manifestDir));
@@ -55,19 +56,50 @@ describe("QuarantineService", () => {
   });
 
   /**
-   * `target` relative to the sandbox root, so assertions never pin one
-   * platform's absolute spelling.
+   * `target` relative to the sandbox root, with BOTH sides canonicalized
+   * through the same async fs.realpath the service uses.
    *
-   * The base is the CANONICAL root, not testDir: the service returns
-   * realpath'd paths, and on macOS a /var temp dir canonicalizes to
-   * /private/var, so relative() against the raw root would produce a
-   * ../..-prefixed string rather than the path being asserted.
+   * Canonicalizing the base differently from the target is what breaks this
+   * on Windows. The service resolves through fs.realpath (fs/promises), which
+   * expands an 8.3 short name (RUNNER~1 -> runneradmin); fs.realpathSync (the
+   * "fs" export, the JS implementation) does not. Mix the two and
+   * path.relative no longer sees a shared prefix, so it climbs to the drive
+   * root and walks back down: "invoice.exe" comes back as
+   * "../../../runneradmin/AppData/Local/Temp/.../invoice.exe". macOS has the
+   * mirror-image trap (/var -> /private/var). One function on both sides makes
+   * the comparison spelling-independent.
    */
-  function rel(target: string): string {
-    return path
-      .relative(realpathSync(testDir), target)
-      .split(path.sep)
-      .join("/");
+  async function rel(target: string): Promise<string> {
+    const [base, resolvedTarget] = await Promise.all([
+      fs.realpath(testDir),
+      canonicalize(target),
+    ]);
+    return path.relative(base, resolvedTarget).split(path.sep).join("/");
+  }
+
+  /**
+   * Canonical form of `target`, which may not exist yet: on a dry run neither
+   * the destination file nor the quarantine directory has been created. Resolve
+   * the nearest existing ancestor and re-append the rest, which is how the
+   * service's own resolver treats a not-yet-created path.
+   */
+  async function canonicalize(target: string): Promise<string> {
+    const missing: string[] = [];
+    let current = target;
+
+    for (;;) {
+      try {
+        const real = await fs.realpath(current);
+        return missing.length > 0
+          ? path.join(real, ...missing.reverse())
+          : real;
+      } catch {
+        const parent = path.dirname(current);
+        if (parent === current) return target;
+        missing.push(path.basename(current));
+        current = parent;
+      }
+    }
   }
 
   async function write(name: string, content: string): Promise<string> {
@@ -86,7 +118,7 @@ describe("QuarantineService", () => {
     }
   }
 
-    describe("quarantine", () => {
+  describe("quarantine", () => {
     it("defaults to a dry run that moves nothing", async () => {
       const flagged = await write("invoice.exe", "suspicious");
 
@@ -101,8 +133,8 @@ describe("QuarantineService", () => {
       expect(result.quarantined).toBe(0);
       expect(result.items).toHaveLength(1);
       expect(result.items[0]?.file).toBe("invoice.exe");
-      expect(rel(result.items[0]?.from ?? "")).toBe("invoice.exe");
-      expect(rel(result.items[0]?.to ?? "")).toBe(
+      expect(await rel(result.items[0]?.from ?? "")).toBe("invoice.exe");
+      expect(await rel(result.items[0]?.to ?? "")).toBe(
         ".file-organizer-quarantine/invoice.exe",
       );
       // No manifest either — nothing to undo means nothing to claim.
@@ -122,10 +154,10 @@ describe("QuarantineService", () => {
       // Not a fixed path: derived from the source directory. The service returns the
       // canonical form, so compare against the canonical source too.
       const realTestDir = await fs.realpath(testDir);
-      expect(result.quarantine_dir).toBe(
-        getQuarantineDirectory(realTestDir),
+      expect(result.quarantine_dir).toBe(getQuarantineDirectory(realTestDir));
+      expect(await rel(result.quarantine_dir)).toBe(
+        ".file-organizer-quarantine",
       );
-      expect(rel(result.quarantine_dir)).toBe(".file-organizer-quarantine");
     });
 
     it("honours an explicit quarantine directory inside the allowed roots", async () => {
@@ -138,8 +170,8 @@ describe("QuarantineService", () => {
         quarantineDir: custom,
       });
 
-      expect(rel(result.quarantine_dir)).toBe("set-aside");
-      expect(rel(result.items[0]?.to ?? "")).toBe("set-aside/a.txt");
+      expect(await rel(result.quarantine_dir)).toBe("set-aside");
+      expect(await rel(result.items[0]?.to ?? "")).toBe("set-aside/a.txt");
     });
 
     it("refuses a quarantine directory outside the allowed roots", async () => {
@@ -195,8 +227,10 @@ describe("QuarantineService", () => {
       };
       expect(manifest.actions).toHaveLength(1);
       expect(manifest.actions[0]?.type).toBe("move");
-      expect(rel(manifest.actions[0]?.originalPath ?? "")).toBe("invoice.exe");
-      expect(rel(manifest.actions[0]?.currentPath ?? "")).toBe(
+      expect(await rel(manifest.actions[0]?.originalPath ?? "")).toBe(
+        "invoice.exe",
+      );
+      expect(await rel(manifest.actions[0]?.currentPath ?? "")).toBe(
         ".file-organizer-quarantine/invoice.exe",
       );
     });
@@ -216,7 +250,9 @@ describe("QuarantineService", () => {
       // Neither file overwrote the other: the plan resolved the clash into
       // two distinct destinations.
       expect(new Set(result.items.map((i) => i.to)).size).toBe(2);
-      expect(result.items.map((i) => rel(i.to)).sort()).toEqual([
+      expect(
+        (await Promise.all(result.items.map((i) => rel(i.to)))).sort(),
+      ).toEqual([
         ".file-organizer-quarantine/notes.txt",
         ".file-organizer-quarantine/notes_1.txt",
       ]);
@@ -269,7 +305,9 @@ describe("QuarantineService", () => {
 
       const second = await service.quarantine({
         directory: testDir,
-        files: [path.join(testDir, ".file-organizer-quarantine", "invoice.exe")],
+        files: [
+          path.join(testDir, ".file-organizer-quarantine", "invoice.exe"),
+        ],
       });
 
       expect(second.planned).toBe(0);
@@ -281,7 +319,9 @@ describe("QuarantineService", () => {
 
     it("refuses a file outside the directory being quarantined", async () => {
       const inside = await write("inside.txt", "a");
-      const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-outside-"));
+      const outsideDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "fom-outside-"),
+      );
       const outside = path.join(outsideDir, "outside.txt");
       await fs.writeFile(outside, "b");
 
@@ -302,6 +342,65 @@ describe("QuarantineService", () => {
       }
     });
 
+    // Local proof of the mechanism, on the platform CI cannot reproduce here:
+    // a symlinked directory gives "two spellings, one directory" the same way
+    // an 8.3 short name does on Windows, so a helper that canonicalizes only
+    // one side fails here too. Windows gets the real thing from the test below
+    // (symlink creation needs Administrator or Developer Mode there).
+    const describeSymlinks =
+      process.platform === "win32" ? describe.skip : describe;
+
+    it("stays spelling-independent when the raw path differs from the canonical one", async () => {
+      // The Windows failure this suite shipped with: os.tmpdir() hands back a
+      // path spelled with an 8.3 short name (C:\Users\RUNNER~1\...) while the
+      // service returns the expanded long name (C:\Users\runneradmin\...). If
+      // only one side is canonicalized, path.relative stops seeing a shared
+      // prefix and returns "../../..\runneradmin\AppData\Local\Temp\...\file"
+      // instead of the bare filename. On Windows `raw` below really is the
+      // short-name spelling, so this is the regression test for that bug.
+      const raw = path.join(testDir, "invoice.exe");
+      await write("invoice.exe", "suspicious");
+
+      const out = await service.quarantine({
+        directory: testDir,
+        files: [raw],
+      });
+
+      // Both spellings of the same file compare equal to the bare name.
+      expect(await rel(raw)).toBe("invoice.exe");
+      expect(await rel(out.items[0]?.from ?? "")).toBe("invoice.exe");
+      expect(await rel(path.join(testDir, ".file-organizer-quarantine"))).toBe(
+        ".file-organizer-quarantine",
+      );
+    });
+
+    describeSymlinks("across two spellings of the same directory", () => {
+      it("compares equal to a bare filename through a symlinked root", async () => {
+        // The same-directory-two-spellings case the 8.3 short name creates on
+        // Windows, reproducible here. `viaLink` and `viaReal` name one file.
+        const alias = `${testDir}-alias`;
+        await fs.symlink(testDir, alias);
+        try {
+          const viaReal = path.join(testDir, "invoice.exe");
+          await write("invoice.exe", "suspicious");
+          const viaLink = path.join(alias, "invoice.exe");
+
+          // The service canonicalizes the alias to the real path, so its
+          // answer and the alias spelling are the two forms compared here.
+          const out = await service.quarantine({
+            directory: alias,
+            files: [viaLink],
+          });
+
+          expect(await rel(viaLink)).toBe("invoice.exe");
+          expect(await rel(viaReal)).toBe("invoice.exe");
+          expect(await rel(out.items[0]?.from ?? "")).toBe("invoice.exe");
+        } finally {
+          await fs.rm(alias, { force: true });
+        }
+      });
+    });
+
     it("reports an empty file list as nothing to do", async () => {
       const result = await service.quarantine({
         directory: testDir,
@@ -316,9 +415,7 @@ describe("QuarantineService", () => {
 
   describe("restore", () => {
     /** Quarantine a batch and return the manifest id. */
-    async function quarantineNow(
-      files: string[],
-    ): Promise<string> {
+    async function quarantineNow(files: string[]): Promise<string> {
       const result = await service.quarantine({
         directory: testDir,
         files,
@@ -388,10 +485,12 @@ describe("QuarantineService", () => {
         actions: { originalPath: string; currentPath: string }[];
       };
       // The restore manifest points forward, not back at quarantine.
-      expect(rel(manifest.actions[0]?.originalPath ?? "")).toBe(
+      expect(await rel(manifest.actions[0]?.originalPath ?? "")).toBe(
         ".file-organizer-quarantine/invoice.exe",
       );
-      expect(rel(manifest.actions[0]?.currentPath ?? "")).toBe("invoice.exe");
+      expect(await rel(manifest.actions[0]?.currentPath ?? "")).toBe(
+        "invoice.exe",
+      );
     });
 
     it("defaults to a dry run that moves nothing", async () => {
@@ -405,7 +504,9 @@ describe("QuarantineService", () => {
       expect(result.restored).toBe(0);
       // The file is still in quarantine: a restore preview is not a restore.
       expect(
-        await exists(path.join(testDir, ".file-organizer-quarantine", "invoice.exe")),
+        await exists(
+          path.join(testDir, ".file-organizer-quarantine", "invoice.exe"),
+        ),
       ).toBe(true);
       expect(await exists(flagged)).toBe(false);
     });
@@ -497,7 +598,9 @@ describe("QuarantineService", () => {
       // The file was not moved on the strength of a tampered manifest.
       expect(await exists(flagged)).toBe(false);
       expect(
-        await exists(path.join(testDir, ".file-organizer-quarantine", "invoice.exe")),
+        await exists(
+          path.join(testDir, ".file-organizer-quarantine", "invoice.exe"),
+        ),
       ).toBe(true);
     });
 
@@ -517,7 +620,9 @@ describe("QuarantineService", () => {
       expect(result.failed).toBe(0);
       expect(await exists(flagged)).toBe(false);
       expect(
-        await exists(path.join(testDir, ".file-organizer-quarantine", "invoice.exe")),
+        await exists(
+          path.join(testDir, ".file-organizer-quarantine", "invoice.exe"),
+        ),
       ).toBe(true);
     });
   });

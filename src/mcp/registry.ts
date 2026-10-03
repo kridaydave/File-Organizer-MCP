@@ -29,6 +29,10 @@ import {
 import {
   findLargestFilesToolDefinition,
   handleFindLargestFiles,
+  diskUsageByCategoryToolDefinition,
+  handleDiskUsageByCategory,
+  findOldFilesToolDefinition,
+  handleFindOldFiles,
 } from "../tools/file-analysis.js";
 import {
   findDuplicateFilesToolDefinition,
@@ -53,6 +57,8 @@ import {
   handleAnalyzeDuplicates,
   deleteDuplicatesToolDefinition,
   handleDeleteDuplicates,
+  previewDeleteDuplicatesToolDefinition,
+  handlePreviewDeleteDuplicates,
 } from "../tools/duplicate-management.js";
 import {
   undoLastOperationToolDefinition,
@@ -127,6 +133,8 @@ const entries = [
   reg(scanDirectoryToolDefinition, handleScanDirectory),
   reg(categorizeByTypeToolDefinition, handleCategorizeByType),
   reg(findLargestFilesToolDefinition, handleFindLargestFiles),
+  reg(diskUsageByCategoryToolDefinition, handleDiskUsageByCategory),
+  reg(findOldFilesToolDefinition, handleFindOldFiles),
   reg(findDuplicateFilesToolDefinition, handleFindDuplicateFiles),
   reg(organizeFilesToolDefinition, handleOrganizeFiles),
   reg(previewOrganizationToolDefinition, handlePreviewOrganization),
@@ -139,6 +147,7 @@ const entries = [
   reg(setCustomRulesToolDefinition, handleSetCustomRules),
   reg(analyzeDuplicatesToolDefinition, handleAnalyzeDuplicates),
   reg(deleteDuplicatesToolDefinition, handleDeleteDuplicates),
+  reg(previewDeleteDuplicatesToolDefinition, handlePreviewDeleteDuplicates),
   reg(undoLastOperationToolDefinition, handleUndoLastOperation),
   reg(batchRenameToolDefinition, handleBatchRename),
   reg(inspectMetadataToolDefinition, handleInspectMetadata),

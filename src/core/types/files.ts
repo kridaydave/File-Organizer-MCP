@@ -35,6 +35,8 @@ export interface FileWithSize {
   path: string;
   size: number;
   modified?: Date;
+  /** Last access time. Absent when the producer did not stat the file. */
+  accessed?: Date;
 }
 
 // ==================== Scan Types ====================

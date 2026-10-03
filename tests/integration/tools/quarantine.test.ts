@@ -23,23 +23,17 @@ import {
   jest,
 } from "@jest/globals";
 import fs from "fs/promises";
-import { realpathSync } from "fs";
 import os from "os";
 import path from "path";
 
 const { CONFIG } = await import("../../../src/core/config/defaults.js");
-const {
-  quarantineFilesToolDefinition,
-  restoreQuarantineToolDefinition,
-} = await import("../../../src/tools/file-quarantine.js");
-const { handleQuarantineFiles, handleRestoreQuarantine } = await import(
-  "../../../src/tools/file-quarantine.js"
-);
+const { quarantineFilesToolDefinition, restoreQuarantineToolDefinition } =
+  await import("../../../src/tools/file-quarantine.js");
+const { handleQuarantineFiles, handleRestoreQuarantine } =
+  await import("../../../src/tools/file-quarantine.js");
 const { getToolHandler } = await import("../../../src/mcp/registry.js");
-const {
-  quarantineFilesOutputSchema,
-  restoreQuarantineOutputSchema,
-} = await import("../../../src/schemas/output.js");
+const { quarantineFilesOutputSchema, restoreQuarantineOutputSchema } =
+  await import("../../../src/schemas/output.js");
 
 type QuarantineShape = {
   directory: string;
@@ -95,16 +89,50 @@ describe("quarantine tools", () => {
   });
 
   /**
-   * `target` relative to the CANONICAL sandbox root. The handlers return
-   * realpath'd paths, and on macOS a /var temp dir canonicalizes to
-   * /private/var, so relative() against the raw root would produce a
-   * ../..-prefixed string instead of the path being asserted.
+   * `target` relative to the sandbox root, with BOTH sides canonicalized
+   * through the same async fs.realpath the handlers use.
+   *
+   * Canonicalizing the base differently from the target is what breaks this on
+   * Windows. The handlers resolve through fs.realpath (fs/promises), which
+   * expands an 8.3 short name (RUNNER~1 -> runneradmin); fs.realpathSync (the
+   * "fs" export, the JS implementation) does not. Mix the two and path.relative
+   * no longer sees a shared prefix, so it climbs to the drive root and walks
+   * back down: "invoice.exe" comes back as
+   * "../../../runneradmin/AppData/Local/Temp/.../invoice.exe". macOS has the
+   * mirror-image trap (/var -> /private/var). One function on both sides makes
+   * the comparison spelling-independent.
    */
-  function rel(target: string): string {
-    return path
-      .relative(realpathSync(testDir), target)
-      .split(path.sep)
-      .join("/");
+  async function rel(target: string): Promise<string> {
+    const [base, resolvedTarget] = await Promise.all([
+      fs.realpath(testDir),
+      canonicalize(target),
+    ]);
+    return path.relative(base, resolvedTarget).split(path.sep).join("/");
+  }
+
+  /**
+   * Canonical form of `target`, which may not exist yet: on a dry run neither
+   * the destination file nor the quarantine directory has been created. Resolve
+   * the nearest existing ancestor and re-append the rest, which is how the
+   * service's own resolver treats a not-yet-created path.
+   */
+  async function canonicalize(target: string): Promise<string> {
+    const missing: string[] = [];
+    let current = target;
+
+    for (;;) {
+      try {
+        const real = await fs.realpath(current);
+        return missing.length > 0
+          ? path.join(real, ...missing.reverse())
+          : real;
+      } catch {
+        const parent = path.dirname(current);
+        if (parent === current) return target;
+        missing.push(path.basename(current));
+        current = parent;
+      }
+    }
   }
 
   async function write(name: string, content: string): Promise<string> {
@@ -149,7 +177,9 @@ describe("quarantine tools", () => {
   describe("registration and schema", () => {
     it("registers both tools with a handler", () => {
       expect(getToolHandler(quarantineFilesToolDefinition.name)).toBeDefined();
-      expect(getToolHandler(restoreQuarantineToolDefinition.name)).toBeDefined();
+      expect(
+        getToolHandler(restoreQuarantineToolDefinition.name),
+      ).toBeDefined();
     });
 
     it("is not read-only and is not idempotent for either tool", () => {
@@ -191,7 +221,7 @@ describe("quarantine tools", () => {
       expect(out.quarantined).toBe(0);
       expect(out.manifest_id).toBeUndefined();
       expect(out.items[0]?.file).toBe("invoice.exe");
-      expect(rel(out.items[0]?.from ?? "")).toBe("invoice.exe");
+      expect(await rel(out.items[0]?.from ?? "")).toBe("invoice.exe");
       expect(await exists(flagged)).toBe(true);
       // A dry run is a preview, so it leaves no audit trail either.
       expect(logged).toEqual([]);
@@ -232,6 +262,23 @@ describe("quarantine tools", () => {
         "notes.txt",
         "notes_1.txt",
       ]);
+    });
+
+    it("stays spelling-independent when the raw path differs from the canonical one", async () => {
+      // The Windows failure this suite shipped with: os.tmpdir() hands back a
+      // path spelled with an 8.3 short name (C:\Users\RUNNER~1\...) while the
+      // handlers return the expanded long name (C:\Users\runneradmin\...). If
+      // only one side is canonicalized, path.relative stops seeing a shared
+      // prefix and returns a "../../..\runneradmin\...\file" chain instead of
+      // the bare filename. On Windows `raw` below really is the short-name
+      // spelling, so this is the regression test for that bug.
+      const raw = path.join(testDir, "invoice.exe");
+      await write("invoice.exe", "suspicious");
+
+      const out = await quarantine([raw]);
+
+      expect(await rel(raw)).toBe("invoice.exe");
+      expect(await rel(out.items[0]?.from ?? "")).toBe("invoice.exe");
     });
 
     it("refuses a quarantine directory outside the allowed roots", async () => {
@@ -309,7 +356,9 @@ describe("quarantine tools", () => {
       await expect(fs.readFile(first, "utf-8")).resolves.toBe("first");
       await expect(fs.readFile(second, "utf-8")).resolves.toBe("second");
       expect(
-        (await fs.readdir(path.join(testDir, ".file-organizer-quarantine"))).sort(),
+        (
+          await fs.readdir(path.join(testDir, ".file-organizer-quarantine"))
+        ).sort(),
       ).toEqual([]);
     });
 
