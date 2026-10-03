@@ -115,6 +115,12 @@ import {
   findBrokenSymlinksToolDefinition,
   handleFindBrokenSymlinks,
 } from "../tools/symlink-audit.js";
+import {
+  quarantineFilesToolDefinition,
+  handleQuarantineFiles,
+  restoreQuarantineToolDefinition,
+  handleRestoreQuarantine,
+} from "../tools/file-quarantine.js";
 
 function reg(def: ToolDefinition, handler: ToolHandler) {
   return defineTool({
@@ -128,6 +134,9 @@ function reg(def: ToolDefinition, handler: ToolHandler) {
   });
 }
 
+// Sorted by tool name, not by when the tool was added. Two people adding
+// different tools at the same time then insert at different coordinates
+// instead of the same one, so their branches merge instead of colliding.
 // Sorted by tool name, not by when the tool was added. Two people adding
 // different tools at the same time then insert at different coordinates
 // instead of the same one, so their branches merge instead of colliding.
@@ -154,6 +163,8 @@ const entries = [
   reg(organizePhotosToolDefinition, handleOrganizePhotos),
   reg(previewDeleteDuplicatesToolDefinition, handlePreviewDeleteDuplicates),
   reg(previewOrganizationToolDefinition, handlePreviewOrganization),
+  reg(quarantineFilesToolDefinition, handleQuarantineFiles),
+  reg(restoreQuarantineToolDefinition, handleRestoreQuarantine),
   reg(scanDirectoryToolDefinition, handleScanDirectory),
   reg(searchHistoryToolDefinition, handleSearchHistory),
   reg(setCustomRulesToolDefinition, handleSetCustomRules),
