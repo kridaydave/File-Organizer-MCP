@@ -159,6 +159,30 @@ export const previewOrganizationOutputSchema = z.object({
   skipped_files: z.array(z.object({ path: z.string(), reason: z.string() })),
 });
 
+export const validateOrganizationPlanOutputSchema = z.object({
+  directory: z.string(),
+  ok: z.boolean(),
+  moves_checked: z.number(),
+  counts: z.object({ error: z.number(), warning: z.number() }),
+  findings: z.array(
+    z.object({
+      kind: z.enum([
+        "destination_name_collision",
+        "destination_exists",
+        "cross_device_move",
+        "sensitive_source",
+        "incomplete_plan",
+      ]),
+      severity: z.enum(["error", "warning"]),
+      sources: z.array(z.string()),
+      destinations: z.array(z.string()),
+      detail: z.string(),
+    }),
+  ),
+  checked: z.array(z.string()),
+  not_checked: z.array(z.string()),
+});
+
 export const findBrokenSymlinksOutputSchema = z.object({
   directory: z.string(),
   scanned_count: z.number(),
@@ -408,6 +432,9 @@ export const organizeFilesOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const previewOrganizationOutputJsonSchema = z.toJSONSchema(
   previewOrganizationOutputSchema,
+) as JsonSchemaObject;
+export const validateOrganizationPlanOutputJsonSchema = z.toJSONSchema(
+  validateOrganizationPlanOutputSchema,
 ) as JsonSchemaObject;
 export const undoOutputJsonSchema = z.toJSONSchema(
   undoOutputSchema,
