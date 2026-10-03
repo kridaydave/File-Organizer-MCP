@@ -16,6 +16,7 @@
 - [file_organizer_batch_rename](#file_organizer_batch_rename)
 - [file_organizer_categorize_by_type](#file_organizer_categorize_by_type)
 - [file_organizer_delete_duplicates](#file_organizer_delete_duplicates)
+- [file_organizer_disk_usage_by_category](#file_organizer_disk_usage_by_category)
 - [file_organizer_doctor](#file_organizer_doctor)
 - [file_organizer_find_broken_symlinks](#file_organizer_find_broken_symlinks)
 - [file_organizer_find_duplicate_files](#file_organizer_find_duplicate_files)
@@ -41,7 +42,9 @@
 > `file_organizer_list_watches`) are no longer part of the MCP server. Scheduled organization
 > runs as a standalone process — see `file-organizer-watch` (`bin/file-organizer-watch.mjs`)
 > with `add` / `remove` / `list` / `once` / `run` subcommands. `once` runs a single
-> organization pass and exits, so an OS timer can be the scheduler. No MCP tool shape changed.
+> organization pass and exits, so an OS timer can be the scheduler. It takes `--json`
+> for one parseable object on stdout and exits 0 (nothing to do), 1 (failed), or 2
+> (moved files) — see README.md for the full contract. No MCP tool shape changed.
 
 ---
 
@@ -77,7 +80,20 @@ file_organizer_analyze_duplicates({
 
 [⬆ Back to Top](#top)
 
-**Description:** Rename multiple files using rules (find/replace, case, add text, numbering).
+**Description:** Rename multiple files using rules (find/replace, case, add text, numbering). The whole plan is checked for name collisions before the first file moves. Closes #44.
+
+### Collision preview
+
+Two files aimed at one name, or one file aimed at a name a different file already holds, are reported as collisions:
+
+| Kind                | Meaning                                                    |
+| ------------------- | ---------------------------------------------------------- |
+| `duplicate_target`  | Two or more sources collapse onto the same destination name |
+| `destination_exists` | A different file already holds the destination name        |
+
+A dry run reports collisions and changes nothing. A real run (`dry_run: false`) with any collision is **rejected before the first rename**, so no file is renamed at all, even the ones with no clash. Adjust the rules or move the files already holding those names, then run again.
+
+Collisions are returned as structured data in both response formats, and name the files by base name only, so a rejected plan does not echo directory layout back to the caller.
 
 ### Parameters
 
@@ -90,6 +106,21 @@ file_organizer_analyze_duplicates({
 | `items`           | object  | -                                                  | -          |
 | `dry_run`         | boolean | Simulate renaming                                  | true       |
 | `response_format` | string  | -                                                  | 'markdown' |
+
+### Response
+
+| Field                          | Type     | Description                                                            |
+| ------------------------------ | -------- | ---------------------------------------------------------------------- |
+| `dry_run`                      | boolean  | Whether the call was a simulation                                      |
+| `rejected`                     | boolean  | `true` only when a real run was stopped before the first rename         |
+| `renamed`                      | number   | Files renamed. `0` on a dry run and on a rejection                      |
+| `processed`                    | number   | Files the rules were evaluated against                                 |
+| `conflicts[]`                  | array    | Collisions found. Empty when the plan is clear                          |
+| `conflicts[].kind`             | string   | `duplicate_target` or `destination_exists`                             |
+| `conflicts[].destination`      | string   | Contested destination file name                                         |
+| `conflicts[].sources`          | array    | Base names of the files aimed at that destination                      |
+| `previews[]`                   | array    | Per-file plan. Present on a dry run                                    |
+| `result`                       | object   | Execution statistics and errors. Present on a real run                 |
 
 ### Example
 
@@ -143,24 +174,24 @@ file_organizer_categorize_by_type({
 
 ### Parameters
 
-| Parameter                | Type    | Description | Default    |
-| ------------------------ | ------- | ----------- | ---------- |
-| `files_to_delete`        | array   | -           | -          |
-| `items`                  | string  | -           | -          |
-| `create_backup_manifest` | boolean | -           | true       |
-| `verify_before_delete`   | boolean | Hash each candidate and refuse to delete a file with no surviving copy | true |
-| `candidate_directories`  | array   | Extra directories to search for surviving copies during verification, walked the same way as the candidate's parent and grandparent | `[]` |
-| `response_format`        | string  | -           | 'markdown' |
+| Parameter                | Type    | Description                                                                                                                         | Default    |
+| ------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `files_to_delete`        | array   | -                                                                                                                                   | -          |
+| `items`                  | string  | -                                                                                                                                   | -          |
+| `create_backup_manifest` | boolean | -                                                                                                                                   | true       |
+| `verify_before_delete`   | boolean | Hash each candidate and refuse to delete a file with no surviving copy                                                              | true       |
+| `candidate_directories`  | array   | Extra directories to search for surviving copies during verification, walked the same way as the candidate's parent and grandparent | `[]`       |
+| `response_format`        | string  | -                                                                                                                                   | 'markdown' |
 
 ### Response fields
 
-| Field           | Type   | Description                                             |
-| --------------- | ------ | ------------------------------------------------------- |
-| `deleted_count` | number | Files removed                                            |
-| `failed_count`  | number | Files refused or errored                                 |
-| `verified`      | boolean | Whether the surviving-copy check ran                     |
-| `manifest_id`   | string | Pass to `file_organizer_undo_last_operation` to restore   |
-| `partially_verified_files` | array | Deleted files whose check used a sampled identity (see below) |
+| Field                      | Type    | Description                                                   |
+| -------------------------- | ------- | ------------------------------------------------------------- |
+| `deleted_count`            | number  | Files removed                                                 |
+| `failed_count`             | number  | Files refused or errored                                      |
+| `verified`                 | boolean | Whether the surviving-copy check ran                          |
+| `manifest_id`              | string  | Pass to `file_organizer_undo_last_operation` to restore       |
+| `partially_verified_files` | array   | Deleted files whose check used a sampled identity (see below) |
 
 Verification walks each file's parent and grandparent directory recursively, so a
 copy in a subfolder of the parent is found. The walk is bounded by the scanner's
@@ -190,6 +221,51 @@ file_organizer_delete_duplicates({
 
 ---
 
+## file_organizer_disk_usage_by_category
+
+[⬆ Back to Top](#top)
+
+**Description:** Report how much space a directory holds per category: bytes, file count, and share of the total. Categories come from the same categorizer `categorize_by_type` and `organize_files` use, custom rules included, and sizes are summed from the scan rather than from a second directory walk. `include_subdirs` defaults to `true` because the space a category holds usually sits below the directory you point at. Read-only. Closes #43.
+
+### Parameters
+
+| Parameter         | Type    | Description                | Default    |
+| ----------------- | ------- | -------------------------- | ---------- |
+| `directory`       | string  | Full path to the directory | -          |
+| `include_subdirs` | boolean | Include subdirectories     | true       |
+| `response_format` | string  | `json` or `markdown`       | 'markdown' |
+
+### Response fields
+
+| Field                        | Type     | Description                                          |
+| ---------------------------- | -------- | ---------------------------------------------------- |
+| `directory`                  | string   | The measured directory                                |
+| `total_files`                | number   | Files counted across all categories                  |
+| `total_size`                 | number   | Total bytes counted                                  |
+| `total_size_readable`        | string   | Total bytes as a readable size                       |
+| `categories[]`               | array    | One entry per category, largest first                |
+| `categories[].category`      | string   | Category name from the categorizer                   |
+| `categories[].file_count`    | number   | Files in that category                               |
+| `categories[].total_size`    | number   | Bytes in that category                               |
+| `categories[].total_size_readable` | string | Bytes as a readable size                      |
+| `categories[].percent_of_total` | number | Share of the total, rounded to two decimals     |
+
+`percent_of_total` is rounded per category, so the shares of a directory with
+many small categories add up to 100 within a rounding error rather than exactly.
+Empty directories report zero totals instead of dividing by zero.
+
+### Example
+
+```typescript
+file_organizer_disk_usage_by_category({
+  directory: "value",
+  include_subdirs: true,
+  response_format: "value",
+});
+```
+
+---
+
 ## file_organizer_find_broken_symlinks
 
 [⬆ Back to Top](#top)
@@ -198,26 +274,26 @@ file_organizer_delete_duplicates({
 
 ### Parameters
 
-| Parameter         | Type   | Description                       | Default    |
-| ----------------- | ------ | --------------------------------- | ---------- |
-| `directory`       | string | Full path to the directory        | -          |
-| `response_format` | string | `json` or `markdown`              | 'markdown' |
+| Parameter         | Type   | Description                | Default    |
+| ----------------- | ------ | -------------------------- | ---------- |
+| `directory`       | string | Full path to the directory | -          |
+| `response_format` | string | `json` or `markdown`       | 'markdown' |
 
 ### Findings
 
-| Field                        | Type     | Description                                        |
-| ---------------------------- | -------- | -------------------------------------------------- |
-| `directory`                  | string   | The audited directory                              |
-| `scanned_count`              | number   | Symlinks examined                                  |
-| `total_count`                | number   | Findings reported                                  |
-| `dangling_count`             | number   | Findings whose `kind` is `dangling`                |
-| `escaping_count`             | number   | Findings whose `kind` is `escapes_allowed_roots`   |
-| `circular_count`             | number   | Findings whose `kind` is `circular`                |
-| `findings[].path`            | string   | Full path of the link itself, not its target       |
-| `findings[].link_target`     | string   | Raw link value as stored on disk                   |
-| `findings[].kind`            | string   | `dangling`, `escapes_allowed_roots`, or `circular` |
-| `findings[].detail`          | string   | Plain-English explanation                          |
-| `findings[].resolved_target` | string   | Canonical absolute target. Absent for a loop        |
+| Field                        | Type   | Description                                        |
+| ---------------------------- | ------ | -------------------------------------------------- |
+| `directory`                  | string | The audited directory                              |
+| `scanned_count`              | number | Symlinks examined                                  |
+| `total_count`                | number | Findings reported                                  |
+| `dangling_count`             | number | Findings whose `kind` is `dangling`                |
+| `escaping_count`             | number | Findings whose `kind` is `escapes_allowed_roots`   |
+| `circular_count`             | number | Findings whose `kind` is `circular`                |
+| `findings[].path`            | string | Full path of the link itself, not its target       |
+| `findings[].link_target`     | string | Raw link value as stored on disk                   |
+| `findings[].kind`            | string | `dangling`, `escapes_allowed_roots`, or `circular` |
+| `findings[].detail`          | string | Plain-English explanation                          |
+| `findings[].resolved_target` | string | Canonical absolute target. Absent for a loop       |
 
 Containment is decided by the same whitelist check the validation layer uses, so this tool and `organize_files` agree on what "outside the allowed roots" means.
 
@@ -252,15 +328,15 @@ file_organizer_find_broken_symlinks({
 Duplicate detection cannot compare every file. Anything left out is reported
 rather than dropped, so a partial analysis is never returned as an exhaustive one.
 
-| Field           | Type     | Description                                        |
-| --------------- | -------- | -------------------------------------------------- |
-| `skipped`       | array    | One entry per unanalyzed file                      |
-| `skipped[].path`| string   | Full path                                          |
-| `skipped[].name`| string   | File name                                          |
-| `skipped[].size_bytes` | number | Size in bytes                                 |
-| `skipped[].reason` | string | `empty_file`, `exceeds_size_cap`, `hash_failed`, or `timed_out` |
-| `skipped[].detail` | string | Plain-English explanation of the skip           |
-| `skipped_bytes` | number   | Total bytes belonging to skipped files             |
+| Field                  | Type   | Description                                                     |
+| ---------------------- | ------ | --------------------------------------------------------------- |
+| `skipped`              | array  | One entry per unanalyzed file                                   |
+| `skipped[].path`       | string | Full path                                                       |
+| `skipped[].name`       | string | File name                                                       |
+| `skipped[].size_bytes` | number | Size in bytes                                                   |
+| `skipped[].reason`     | string | `empty_file`, `exceeds_size_cap`, `hash_failed`, or `timed_out` |
+| `skipped[].detail`     | string | Plain-English explanation of the skip                           |
+| `skipped_bytes`        | number | Total bytes belonging to skipped files                          |
 
 ### Example
 
@@ -554,19 +630,19 @@ file_organizer_scan_directory({
 
 [⬆ Back to Top](#top)
 
-**Description:** Customize how files are categorized. Rules persist to your user config and apply to every future request.
+**Description:** Customize how files are categorized. Persists custom rules to user configuration, replacing any rules saved earlier. Invalid rules are skipped; if the rules cannot be written to disk the call reports an error instead of a success.
 
 ### Parameters
 
-| Parameter          | Type   | Description | Default |
-| ------------------ | ------ | ----------- | ------- |
-| `rules`            | array  | -           | -       |
-| `items`            | object | -           | -       |
-| `properties`       | string | -           | -       |
-| `category`         | string | -           | -       |
-| `extensions`       | array  | -           | -       |
-| `filename_pattern` | string | -           | -       |
-| `priority`         | number | -           | -       |
+| Parameter          | Type   | Description          | Default    |
+| ------------------ | ------ | -------------------- | ---------- |
+| `rules`            | array  | -                    | -          |
+| `items`            | object | -                    | -          |
+| `properties`       | string | -                    | -          |
+| `category`         | string | -                    | -          |
+| `extensions`       | array  | -                    | -          |
+| `filename_pattern` | string | -                    | -          |
+| `priority`         | number | -                    | -          |
 | `response_format`  | string | 'json' or 'markdown' | 'markdown' |
 
 ### Example
@@ -594,16 +670,16 @@ file_organizer_set_custom_rules({
 
 ### Parameters
 
-| Parameter            | Type    | Description                    | Default   |
-| -------------------- | ------- | ------------------------------ | --------- |
-| `directory`          | string  | Directory to analyze           | -         |
-| `include_subdirs`    | boolean | Include subdirectories         | true      |
-| `include_duplicates` | boolean | Check for duplicates (slower)  | true      |
-| `max_files`          | number  | Maximum files to scan          | 10000     |
-| `timeout_seconds`    | number  | Timeout in seconds             | 60        |
-| `sample_rate`        | number  | Sample rate for large dirs     | 1         |
-| `use_cache`          | boolean | Use cached results             | true      |
-| `response_format`    | string  | 'json' or 'markdown'           | 'markdown' |
+| Parameter            | Type    | Description                   | Default    |
+| -------------------- | ------- | ----------------------------- | ---------- |
+| `directory`          | string  | Directory to analyze          | -          |
+| `include_subdirs`    | boolean | Include subdirectories        | true       |
+| `include_duplicates` | boolean | Check for duplicates (slower) | true       |
+| `max_files`          | number  | Maximum files to scan         | 10000      |
+| `timeout_seconds`    | number  | Timeout in seconds            | 60         |
+| `sample_rate`        | number  | Sample rate for large dirs    | 1          |
+| `use_cache`          | boolean | Use cached results            | true       |
+| `response_format`    | string  | 'json' or 'markdown'          | 'markdown' |
 
 ### Example
 
@@ -623,17 +699,17 @@ file_organizer_smart_suggest({
 
 ### Parameters
 
-| Parameter               | Type    | Description                                        | Default    |
-| ----------------------- | ------- | -------------------------------------------------- | ---------- |
-| `source_dir`            | string  | Source directory (Downloads, Desktop, or Temp)     | -          |
-| `use_system_dirs`       | boolean | Use OS system directories                          | true       |
-| `create_subfolders`     | boolean | Create organized subfolders                        | true       |
-| `fallback_to_local`     | boolean | Fallback to local folder if system dir not writable| true       |
-| `local_fallback_prefix` | string  | Prefix for local fallback folder                   | 'Organized'|
-| `conflict_strategy`     | string  | 'skip', 'rename', or 'overwrite'                   | 'rename'   |
-| `dry_run`               | boolean | Preview without moving                             | true       |
-| `copy_instead_of_move`  | boolean | Copy instead of move                               | false      |
-| `response_format`       | string  | 'json' or 'markdown'                               | 'markdown' |
+| Parameter               | Type    | Description                                         | Default     |
+| ----------------------- | ------- | --------------------------------------------------- | ----------- |
+| `source_dir`            | string  | Source directory (Downloads, Desktop, or Temp)      | -           |
+| `use_system_dirs`       | boolean | Use OS system directories                           | true        |
+| `create_subfolders`     | boolean | Create organized subfolders                         | true        |
+| `fallback_to_local`     | boolean | Fallback to local folder if system dir not writable | true        |
+| `local_fallback_prefix` | string  | Prefix for local fallback folder                    | 'Organized' |
+| `conflict_strategy`     | string  | 'skip', 'rename', or 'overwrite'                    | 'rename'    |
+| `dry_run`               | boolean | Preview without moving                              | true        |
+| `copy_instead_of_move`  | boolean | Copy instead of move                                | false       |
+| `response_format`       | string  | 'json' or 'markdown'                                | 'markdown'  |
 
 ### Example
 
@@ -678,16 +754,16 @@ file_organizer_undo_last_operation({
 
 ### Parameters
 
-| Parameter         | Type   | Description                                                        | Default    |
-| ----------------- | ------ | ------------------------------------------------------------------ | ---------- |
-| `limit`           | number | Maximum number of entries to return (1-1000)                       | 20         |
-| `since`           | string | ISO date string - return entries after this time                   | -          |
-| `until`           | string | ISO date string - return entries before this time                  | -          |
-| `operation`       | string | Filter by operation name                                           | -          |
-| `status`          | string | 'success', 'error', or 'partial'                                   | -          |
-| `source`          | string | 'manual' or 'scheduled'                                            | -          |
-| `privacy_mode`    | string | 'full', 'redacted', or 'none'                                      | -          |
-| `response_format` | string | 'json' or 'markdown'                                               | 'markdown' |
+| Parameter         | Type   | Description                                       | Default    |
+| ----------------- | ------ | ------------------------------------------------- | ---------- |
+| `limit`           | number | Maximum number of entries to return (1-1000)      | 20         |
+| `since`           | string | ISO date string - return entries after this time  | -          |
+| `until`           | string | ISO date string - return entries before this time | -          |
+| `operation`       | string | Filter by operation name                          | -          |
+| `status`          | string | 'success', 'error', or 'partial'                  | -          |
+| `source`          | string | 'manual' or 'scheduled'                           | -          |
+| `privacy_mode`    | string | 'full', 'redacted', or 'none'                     | -          |
+| `response_format` | string | 'json' or 'markdown'                              | 'markdown' |
 
 ### Example
 
@@ -709,9 +785,9 @@ file_organizer_view_history({
 
 ### Parameters
 
-| Parameter         | Type   | Description                          | Default    |
-| ----------------- | ------ | ------------------------------------ | ---------- |
-| `response_format` | string | 'json' or 'markdown'                 | 'markdown' |
+| Parameter         | Type   | Description          | Default    |
+| ----------------- | ------ | -------------------- | ---------- |
+| `response_format` | string | 'json' or 'markdown' | 'markdown' |
 
 ### Returned fields
 
@@ -719,7 +795,7 @@ file_organizer_view_history({
 | ------------------------- | ---------------------------------------------------------------------- |
 | `version`                 | Server version                                                         |
 | `platform`                | `process.platform` the report was built on                             |
-| `config_file_present`     | Whether a config.json was found (false means defaults only)           |
+| `config_file_present`     | Whether a config.json was found (false means defaults only)            |
 | `security`                | Effective security settings after config.json is layered over defaults |
 | `conflict_strategy`       | Effective conflict strategy                                            |
 | `allow_external_volumes`  | Whether external volumes are allowed                                   |
@@ -727,8 +803,8 @@ file_organizer_view_history({
 | `default_allowed`         | Platform default allowed roots that exist                              |
 | `configured_allowed_dirs` | One entry per `customAllowedDirectories` entry                         |
 | `effective_allowed_dirs`  | The configured entries the security gate kept                          |
-| `unknown_config_keys`     | config.json keys the loader does not understand                         |
-| `problems`                | Human-readable list of what is wrong                                  |
+| `unknown_config_keys`     | config.json keys the loader does not understand                        |
+| `problems`                | Human-readable list of what is wrong                                   |
 | `healthy`                 | True when `problems` is empty                                          |
 
 Each `configured_allowed_dirs` entry carries `configured` (as written in
@@ -827,16 +903,16 @@ file_organizer_organize_photos({
 
 ### Parameters
 
-| Parameter          | Type    | Description                                                             | Default      |
-| ------------------ | ------- | ----------------------------------------------------------------------- | ------------ |
-| `directory`        | string  | Full path to the directory containing files to read                     | -            |
-| `include_subdirs`  | boolean | Include subdirectories in the batch read                                | `false`      |
-| `max_files`        | number  | Maximum number of files to process (safety limit)                       | `50`         |
-| `max_file_size_mb` | number  | Maximum file size in MB to read content (larger files get metadata only)| `10`         |
-| `include_content`  | boolean | Include file content for text files                                     | `true`       |
-| `include_metadata` | boolean | Include metadata for all files                                          | `true`       |
-| `file_types`       | array   | Filter by specific file extensions (e.g., `[".txt", ".pdf"]`)           | -            |
-| `response_format`  | string  | Output format: `'markdown'` or `'json'`                                 | `'markdown'` |
+| Parameter          | Type    | Description                                                              | Default      |
+| ------------------ | ------- | ------------------------------------------------------------------------ | ------------ |
+| `directory`        | string  | Full path to the directory containing files to read                      | -            |
+| `include_subdirs`  | boolean | Include subdirectories in the batch read                                 | `false`      |
+| `max_files`        | number  | Maximum number of files to process (safety limit)                        | `50`         |
+| `max_file_size_mb` | number  | Maximum file size in MB to read content (larger files get metadata only) | `10`         |
+| `include_content`  | boolean | Include file content for text files                                      | `true`       |
+| `include_metadata` | boolean | Include metadata for all files                                           | `true`       |
+| `file_types`       | array   | Filter by specific file extensions (e.g., `[".txt", ".pdf"]`)            | -            |
+| `response_format`  | string  | Output format: `'markdown'` or `'json'`                                  | `'markdown'` |
 
 ### Example
 
@@ -857,13 +933,13 @@ file_organizer_batch_read_files({
 
 ### Parameters
 
-| Parameter         | Type    | Description                                              | Default     |
-| ----------------- | ------- | -------------------------------------------------------- | ----------- |
-| `source_dir`      | string  | Directory containing files to organize                   | -           |
-| `target_dir`      | string  | Directory where detected projects will be placed         | -           |
-| `dry_run`         | boolean | Preview the grouping without moving files                | `true`      |
-| `recursive`       | boolean | Scan subdirectories recursively                          | `true`      |
-| `response_format` | string  | Output format                                            | `'markdown'`|
+| Parameter         | Type    | Description                                      | Default      |
+| ----------------- | ------- | ------------------------------------------------ | ------------ |
+| `source_dir`      | string  | Directory containing files to organize           | -            |
+| `target_dir`      | string  | Directory where detected projects will be placed | -            |
+| `dry_run`         | boolean | Preview the grouping without moving files        | `true`       |
+| `recursive`       | boolean | Scan subdirectories recursively                  | `true`       |
+| `response_format` | string  | Output format                                    | `'markdown'` |
 
 ### Example
 

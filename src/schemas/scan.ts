@@ -153,6 +153,29 @@ export const CategorizeByTypeInputSchema = z
   .merge(CommonParamsSchema);
 
 /**
+ * Schema for disk_usage_by_category tool
+ */
+export const DiskUsageByCategoryInputSchema = z
+  .object({
+    directory: z
+      .string()
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to measure"),
+    include_subdirs: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe(
+        "Include subdirectories in the breakdown. Defaults to true because the space a category holds usually sits below the directory you point at",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type DiskUsageByCategoryInput = z.infer<
+  typeof DiskUsageByCategoryInputSchema
+>;
+
+/**
  * Schema for find_broken_symlinks tool
  */
 export const FindBrokenSymlinksInputSchema = z
