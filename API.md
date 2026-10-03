@@ -30,6 +30,7 @@
 - [file_organizer_organize_files](#file_organizer_organize_files)
 - [file_organizer_organize_music](#file_organizer_organize_music)
 - [file_organizer_organize_photos](#file_organizer_organize_photos)
+- [file_organizer_preview_delete_duplicates](#file_organizer_preview_delete_duplicates)
 - [file_organizer_preview_organization](#file_organizer_preview_organization)
 - [file_organizer_read_file](#file_organizer_read_file)
 - [file_organizer_scan_directory](#file_organizer_scan_directory)
@@ -528,6 +529,61 @@ file_organizer_organize_files({
   conflict_strategy: "value",
   use_content_analysis: false,
   response_format: "value",
+});
+```
+
+---
+
+## file_organizer_preview_delete_duplicates
+
+[⬆ Back to Top](#top)
+
+**Description:** Dry-run for file_organizer_delete_duplicates. Groups duplicates and names the single copy that would survive under the keep_strategy you pick (newest, oldest, or keep_first), plus the flat list of files that would be deleted. Read-only: nothing is moved or removed. Pass files_to_delete to file_organizer_delete_duplicates to act on it. Files the scan could not compare are listed under skipped, so a 'nothing to delete' answer can still be partial.
+
+### Parameters
+
+| Parameter         | Type   | Description                                                                          | Default    |
+| ----------------- | ------ | ------------------------------------------------------------------------------------ | ---------- |
+| `directory`       | string | Full path to the directory                                                           | -          |
+| `keep_strategy`   | string | Survivor per group: `newest` (most recently modified), `oldest`, or `keep_first` (first found by the scan) | 'newest' |
+| `response_format` | string | `json` or `markdown`                                                                 | 'markdown' |
+
+`keep_strategy` names the survivor outright. It is deliberately not
+`recommendation_strategy`: analyze_duplicates blends path depth and location
+quality into a score, so a preview labelled `newest` has to mean the most
+recently modified copy and nothing else.
+
+### Response fields
+
+| Field                                | Type   | Description                                                     |
+| ------------------------------------ | ------ | --------------------------------------------------------------- |
+| `dry_run`                            | boolean | Always `true`. Nothing was moved or removed                     |
+| `keep_strategy`                      | string | The strategy that was applied                                   |
+| `summary.total_duplicate_groups`     | number | Duplicate groups found                                          |
+| `summary.total_files_to_delete`      | number | Files a delete would remove                                     |
+| `summary.total_wasted_space_bytes`   | number | Bytes those deletions would reclaim                             |
+| `not_analyzed_files` / `not_analyzed_bytes` | number | Files the scan could not compare — the blind spot of this answer |
+| `duplicate_groups[].keep`            | string | The one copy in the group that survives                         |
+| `duplicate_groups[].would_delete`    | array  | Every other copy in the group                                   |
+| `files_to_delete`                    | array  | Flat, de-duplicated list, ready to pass to `file_organizer_delete_duplicates` |
+
+`skipped` lists files the scan could not compare (empty files, files over the
+hashing cap, unreadable files, files dropped by the scan timeout). An empty
+`files_to_delete` alongside a non-empty `skipped` means "nothing found", not
+"nothing wrong" — the two are reported separately for that reason.
+
+### Example
+
+```typescript
+const preview = file_organizer_preview_delete_duplicates({
+  directory: "~/Downloads",
+  keep_strategy: "newest",
+  response_format: "json",
+});
+
+// Nothing deleted yet. Act on exactly what was previewed:
+file_organizer_delete_duplicates({
+  files_to_delete: preview.files_to_delete,
 });
 ```
 

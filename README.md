@@ -114,6 +114,7 @@ You can ask the assistant things like:
 - `file_organizer_organize_by_date`
 - `file_organizer_organize_by_project`
 - `file_organizer_organize_photos`
+- `file_organizer_preview_delete_duplicates` - Dry-run for duplicate deletion. Names the copy that survives per group under `newest`, `oldest`, or `keep_first`, and returns the `files_to_delete` list to hand to `file_organizer_delete_duplicates`. Deletes nothing.
 - `file_organizer_preview_organization`
 - `file_organizer_read_file`
 - `file_organizer_scan_directory`
