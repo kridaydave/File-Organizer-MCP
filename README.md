@@ -58,6 +58,7 @@ You can ask the assistant things like:
 - "Organize my Downloads folder"
 - "Find duplicate files in my Documents"
 - "Show me my largest files"
+- "Which categories take up the most space in my Downloads?"
 
 ### Install methods
 
@@ -73,6 +74,7 @@ You can ask the assistant things like:
 - Categorization into 12 or more file types.
 - Cron-based automatic organization and directory watch mode.
 - Duplicate detection by SHA-256 content hash.
+- Disk usage per category: which file types hold the space, in bytes and as a share.
 - Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
 - Dry-run preview, atomic moves, and rollback.
@@ -90,13 +92,14 @@ You can ask the assistant things like:
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering. Checks the whole plan for name collisions first: if a real run would put two files on one name, or overwrite a name a different file already holds, the batch is rejected before anything moves and the conflicts come back as structured data.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 
-### Full tool list (24 tools)
+### Full tool list (25 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
 - `file_organizer_batch_rename`
 - `file_organizer_categorize_by_type`
 - `file_organizer_delete_duplicates`
+- `file_organizer_disk_usage_by_category`
 - `file_organizer_doctor`
 - `file_organizer_find_broken_symlinks`
 - `file_organizer_find_duplicate_files`
@@ -132,6 +135,16 @@ file-organizer-watch                                # start the daemon
 
 Watches are stored in the shared user config, so `add`/`remove` work even
 while the daemon is running (restart it to pick up changes).
+
+For a read-only sweep — scan plus `preview_organization` on a timer, no moves —
+see [examples/scheduling](examples/scheduling/README.md). It has ready-to-copy
+recipes for three surfaces:
+
+| Surface        | Trigger                | Config |
+| -------------- | ---------------------- | ------ |
+| Claude Desktop | headless `claude -p`   | [claude-desktop.config.json](examples/scheduling/claude-desktop.config.json) |
+| Codex          | `codex exec`           | [codex.config.toml](examples/scheduling/codex.config.toml) |
+| cron / systemd | `file-organizer-watch once` | [crontab.example](examples/scheduling/crontab.example), [systemd/](examples/scheduling/systemd/) |
 
 ---
 
@@ -367,6 +380,19 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 3. Check for sufficient disk space.
 4. Read the operation summary for error messages.
 
+### Custom rules are missing after a restart
+
+`file_organizer_set_custom_rules` saves the accepted rules to `config.json` in your
+OS config directory and every later request reads them from there. Three things
+to know:
+
+- The call replaces the whole saved set, so it is not a per-rule merge.
+- Rules with an unknown category or a rejected pattern are skipped; the reply
+  says how many were applied.
+- If the write itself fails — read-only config directory, missing permissions —
+  the call returns an error instead of a success message, and the server log
+  holds the cause. Nothing is persisted in that case.
+
 ---
 
 ## Architecture
@@ -383,6 +409,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram and design notes.
 
 - [API.md](API.md) - Complete tool reference
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Design and architecture
+- [examples/scheduling](examples/scheduling/README.md) - Scan + preview sweep recipes for Claude Desktop, Codex, cron, and systemd
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [MIGRATION.md](MIGRATION.md) - v2 to v3 upgrade guide
 - [CHANGELOG.md](CHANGELOG.md) - Version history
