@@ -62,6 +62,53 @@ export const PathSchema = z
   });
 
 /**
+ * Schema for search_history tool — the filtered read over the same history.
+ * Every filter is optional; supplied filters combine.
+ */
+export const SearchHistoryInputSchema = z
+  .object({
+    path_glob: PathSchema.optional().describe(
+      "Glob matched against the paths each entry recorded (full path, POSIX-style full path, or bare filename)",
+    ),
+    from: z
+      .string()
+      .optional()
+      .describe("ISO date string - return entries at or after this time"),
+    to: z
+      .string()
+      .optional()
+      .describe("ISO date string - return entries at or before this time"),
+    operation: z
+      .string()
+      .optional()
+      .describe("Filter by operation name"),
+    status: z
+      .enum(["success", "error", "partial"])
+      .optional()
+      .describe("Filter by operation status"),
+    source: z
+      .enum(["manual", "scheduled"])
+      .optional()
+      .describe("Filter by operation source"),
+    limit: z
+      .number()
+      .min(1)
+      .max(1000)
+      .optional()
+      .default(20)
+      .describe("Maximum number of entries to return"),
+    privacy_mode: z
+      .enum(["full", "redacted", "none"])
+      .optional()
+      .describe(
+        "Privacy mode for output: full (all details), redacted (paths hidden), none (minimal info)",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type SearchHistoryInput = z.infer<typeof SearchHistoryInputSchema>;
+
+/**
  * Schema for security mode configuration
  */
 const SecurityModeSchema = z.enum(["strict", "sandboxed", "unrestricted"]);

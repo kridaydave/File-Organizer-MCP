@@ -14,19 +14,23 @@ import { formatBytes, renderSkippedNotice } from "../utils/formatters.js";
 import {
   AnalyzeDuplicatesInputSchema,
   DeleteDuplicatesInputSchema,
+  PreviewDeleteDuplicatesInputSchema,
 } from "../schemas/scan.js";
 import {
   analyzeDuplicatesOutputJsonSchema,
   deleteDuplicatesOutputJsonSchema,
+  previewDeleteDuplicatesOutputJsonSchema,
 } from "../schemas/output.js";
 
 export {
   AnalyzeDuplicatesInputSchema,
   DeleteDuplicatesInputSchema,
+  PreviewDeleteDuplicatesInputSchema,
 } from "../schemas/scan.js";
 export type {
   AnalyzeDuplicatesInput,
   DeleteDuplicatesInput,
+  PreviewDeleteDuplicatesInput,
 } from "../schemas/scan.js";
 export const analyzeDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_analyze_duplicates",
@@ -52,6 +56,39 @@ export const analyzeDuplicatesToolDefinition: ToolDefinition = {
     required: ["directory"],
   },
   outputSchema: analyzeDuplicatesOutputJsonSchema,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+};
+
+export const previewDeleteDuplicatesToolDefinition: ToolDefinition = {
+  name: "file_organizer_preview_delete_duplicates",
+  title: "Preview Duplicate Deletion",
+  description:
+    "Dry-run for file_organizer_delete_duplicates. Groups duplicates and names the single copy that would survive under the keep_strategy you pick (newest, oldest, or keep_first), plus the flat list of files that would be deleted. Read-only: nothing is moved or removed. Pass files_to_delete to file_organizer_delete_duplicates to act on it. Files the scan could not compare are listed under skipped, so a 'nothing to delete' answer can still be partial.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      directory: { type: "string", description: "Full path to the directory" },
+      keep_strategy: {
+        type: "string",
+        enum: ["newest", "oldest", "keep_first"],
+        default: "newest",
+        description:
+          'Which copy of each group survives: "newest" (most recently modified), "oldest", or "keep_first" (first found by the scan)',
+      },
+      response_format: {
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
+      },
+    },
+    required: ["directory"],
+  },
+  outputSchema: previewDeleteDuplicatesOutputJsonSchema,
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,
@@ -206,6 +243,92 @@ ${g.files
         duplicate_groups: analyzed,
         skipped: analysis.skipped,
       },
+    };
+  } catch (error) {
+    return createErrorResponse(error);
+  }
+}
+
+export async function handlePreviewDeleteDuplicates(
+  args: Record<string, unknown>,
+): Promise<ToolResponse> {
+  try {
+    const parsed = PreviewDeleteDuplicatesInputSchema.safeParse(args);
+    if (!parsed.success) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const { directory, keep_strategy, response_format } = parsed.data;
+    const validatedPath = await validateStrictPath(directory);
+
+    const scanner = new FileScannerService();
+    const duplicateFinder = new DuplicateFinderService(); // Stateless service is fine
+
+    // Recursive, matching analyze_duplicates: duplicates usually sit in
+    // subfolders and a shallow scan would under-report them.
+    const files = await scanner.getAllFiles(validatedPath, true);
+    const preview = await duplicateFinder.previewDeletion(files, keep_strategy);
+
+    const output = {
+      dry_run: true,
+      keep_strategy: preview.keep_strategy,
+      summary: {
+        total_duplicate_groups: preview.groups.length,
+        total_files_to_delete: preview.total_would_delete,
+        total_wasted_space_bytes: preview.total_wasted_space_bytes,
+        total_wasted_space_readable: formatBytes(
+          preview.total_wasted_space_bytes,
+        ),
+        not_analyzed_files: preview.skipped.length,
+        not_analyzed_bytes: preview.skipped_bytes,
+      },
+      duplicate_groups: preview.groups,
+      files_to_delete: preview.files_to_delete,
+      skipped: preview.skipped,
+    };
+
+    if (response_format === "json") {
+      return {
+        content: [{ type: "text", text: JSON.stringify(output, null, 2) }],
+        structuredContent: output as unknown as Record<string, unknown>,
+      };
+    }
+
+    const skippedNotice = renderSkippedNotice(
+      preview.skipped,
+      preview.skipped_bytes,
+      "the preview above is partial.",
+    );
+
+    const markdown = `### Deletion Preview for \`${directory}\`
+**Keep Strategy:** ${preview.keep_strategy}
+**Would Delete:** ${output.summary.total_files_to_delete} files
+**Wasted Space:** ${output.summary.total_wasted_space_readable}
+**Duplicate Groups:** ${output.summary.total_duplicate_groups}
+${preview.groups
+  .map(
+    (g, i) => `
+#### Group ${i + 1} (${formatBytes(g.size_bytes)})
+**Keep:** \`${g.keep}\`
+**Would Delete:**
+${g.would_delete.map((f) => `- \`${f}\``).join("\n")}
+`,
+  )
+  .join("\n")}
+🔎 **Dry run:** nothing was deleted. Pass \`files_to_delete\` to \`file_organizer_delete_duplicates\` to act on this.${skippedNotice ? `\n${skippedNotice}` : ""}
+`;
+
+    return {
+      content: [{ type: "text", text: markdown }],
+      structuredContent: output as unknown as Record<string, unknown>,
     };
   } catch (error) {
     return createErrorResponse(error);

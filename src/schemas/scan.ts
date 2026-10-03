@@ -191,6 +191,44 @@ export type FindBrokenSymlinksInput = z.infer<
   typeof FindBrokenSymlinksInputSchema
 >;
 
+/**
+ * Schema for find_empty_directories tool
+ */
+export const FindEmptyDirectoriesInputSchema = z
+  .object({
+    directory: z
+      .string()
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to search for empty directories"),
+    include_subdirs: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Recurse into subdirectories (default true)"),
+    max_depth: z
+      .number()
+      .int()
+      .min(0)
+      .max(100)
+      .optional()
+      .describe(
+        "Levels below the root to walk (0 = root only). Defaults to the configured max scan depth",
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .optional()
+      .default(100)
+      .describe("Maximum number of empty directories to return"),
+  })
+  .merge(CommonParamsSchema);
+
+export type FindEmptyDirectoriesInput = z.infer<
+  typeof FindEmptyDirectoriesInputSchema
+>;
+
 export type ListFilesInput = z.infer<typeof ListFilesInputSchema>;
 export type ScanDirectoryInput = z.infer<typeof ScanDirectoryInputSchema>;
 export type FindLargestFilesInput = z.infer<typeof FindLargestFilesInputSchema>;
@@ -334,6 +372,30 @@ export const AnalyzeDuplicatesInputSchema = z
 
 export type AnalyzeDuplicatesInput = z.infer<
   typeof AnalyzeDuplicatesInputSchema
+>;
+
+/**
+ * Schema for previewing a duplicate deletion
+ */
+export const PreviewDeleteDuplicatesInputSchema = z
+  .object({
+    directory: z.string().min(1, "Directory path cannot be empty"),
+    /**
+     * Which copy of each group survives. Unlike analyze_duplicates these name
+     * the survivor outright instead of blending path depth and location into a
+     * score, so "newest" always means the most recently modified copy.
+     */
+    keep_strategy: z
+      .enum(["newest", "oldest", "keep_first"])
+      .default("newest")
+      .describe(
+        'Survivor per group: "newest" (most recently modified), "oldest", or "keep_first" (first found by the scan)',
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type PreviewDeleteDuplicatesInput = z.infer<
+  typeof PreviewDeleteDuplicatesInputSchema
 >;
 
 /**

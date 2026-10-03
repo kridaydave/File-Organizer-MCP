@@ -92,6 +92,31 @@ export const deleteDuplicatesOutputSchema = z.object({
   partially_verified_files: z.array(z.string()),
 });
 
+const previewDeleteGroupSchema = z.object({
+  hash: z.string(),
+  size_bytes: z.number(),
+  file_count: z.number(),
+  keep: z.string(),
+  would_delete: z.array(z.string()),
+  wasted_space_bytes: z.number(),
+});
+
+export const previewDeleteDuplicatesOutputSchema = z.object({
+  dry_run: z.boolean(),
+  keep_strategy: z.enum(["newest", "oldest", "keep_first"]),
+  summary: z.object({
+    total_duplicate_groups: z.number(),
+    total_files_to_delete: z.number(),
+    total_wasted_space_bytes: z.number(),
+    total_wasted_space_readable: z.string(),
+    not_analyzed_files: z.number(),
+    not_analyzed_bytes: z.number(),
+  }),
+  duplicate_groups: z.array(previewDeleteGroupSchema),
+  files_to_delete: z.array(z.string()),
+  skipped: z.array(skippedFileSchema),
+});
+
 export const organizeFilesOutputSchema = z.object({
   directory: z.string(),
   dry_run: z.boolean(),
@@ -173,6 +198,16 @@ const renamePreviewSchema = z.object({
  * branch on: it is true only when a real run was stopped before the first
  * rename, which is the only case where nothing moved.
  */
+export const findEmptyDirectoriesOutputSchema = z.object({
+  directory: z.string(),
+  scanned_count: z.number(),
+  depth_limited: z.boolean(),
+  result_limited: z.boolean(),
+  limit: z.number(),
+  total_count: z.number(),
+  empty_dirs: z.array(z.string()),
+});
+
 export const batchRenameOutputSchema = z.object({
   dry_run: z.boolean(),
   rejected: z.boolean(),
@@ -309,6 +344,9 @@ export const analyzeDuplicatesOutputJsonSchema = z.toJSONSchema(
 export const deleteDuplicatesOutputJsonSchema = z.toJSONSchema(
   deleteDuplicatesOutputSchema,
 ) as JsonSchemaObject;
+export const previewDeleteDuplicatesOutputJsonSchema = z.toJSONSchema(
+  previewDeleteDuplicatesOutputSchema,
+) as JsonSchemaObject;
 export const organizeFilesOutputJsonSchema = z.toJSONSchema(
   organizeFilesOutputSchema,
 ) as JsonSchemaObject;
@@ -320,6 +358,9 @@ export const undoOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const doctorOutputJsonSchema = z.toJSONSchema(
   doctorOutputSchema,
+) as JsonSchemaObject;
+export const findEmptyDirectoriesOutputJsonSchema = z.toJSONSchema(
+  findEmptyDirectoriesOutputSchema,
 ) as JsonSchemaObject;
 export const findBrokenSymlinksOutputJsonSchema = z.toJSONSchema(
   findBrokenSymlinksOutputSchema,

@@ -20,6 +20,7 @@
 - [file_organizer_doctor](#file_organizer_doctor)
 - [file_organizer_export_config](#file_organizer_export_config)
 - [file_organizer_find_broken_symlinks](#file_organizer_find_broken_symlinks)
+- [file_organizer_find_empty_directories](#file_organizer_find_empty_directories)
 - [file_organizer_find_duplicate_files](#file_organizer_find_duplicate_files)
 - [file_organizer_find_largest_files](#file_organizer_find_largest_files)
 - [file_organizer_find_old_files](#file_organizer_find_old_files)
@@ -30,9 +31,11 @@
 - [file_organizer_organize_files](#file_organizer_organize_files)
 - [file_organizer_organize_music](#file_organizer_organize_music)
 - [file_organizer_organize_photos](#file_organizer_organize_photos)
+- [file_organizer_preview_delete_duplicates](#file_organizer_preview_delete_duplicates)
 - [file_organizer_preview_organization](#file_organizer_preview_organization)
 - [file_organizer_read_file](#file_organizer_read_file)
 - [file_organizer_scan_directory](#file_organizer_scan_directory)
+- [file_organizer_search_history](#file_organizer_search_history)
 - [file_organizer_set_custom_rules](#file_organizer_set_custom_rules)
 - [file_organizer_smart_suggest](#file_organizer_smart_suggest)
 - [file_organizer_system_organize](#file_organizer_system_organize)
@@ -309,6 +312,49 @@ file_organizer_find_broken_symlinks({
 
 ---
 
+## file_organizer_find_empty_directories
+
+[⬆ Back to Top](#top)
+
+**Description:** List directories under a root that contain no entries at all, for cleanup after a scan. Recurses by default, bounded by the configured max scan depth and a result cap. Emptiness is literal: a directory holding only dotfiles, only a subdirectory, or only a symlink has entries and is not reported, so a directory that merely looks idle is never proposed for removal. Read-only, so it is safe to run before organizing. Closes #37.
+
+### Parameters
+
+| Parameter         | Type    | Description                                          | Default          |
+| ----------------- | ------- | ---------------------------------------------------- | ---------------- |
+| `directory`       | string  | Full path to the directory                           | -                |
+| `include_subdirs` | boolean | Recurse into subdirectories                          | true             |
+| `max_depth`       | number  | Levels below the root to walk (0 = root only)        | configured max   |
+| `limit`           | number  | Maximum number of empty directories to return        | 100              |
+| `response_format` | string  | `json` or `markdown`                                 | 'markdown'       |
+
+### Findings
+
+| Field             | Type     | Description                                             |
+| ----------------- | -------- | ------------------------------------------------------- |
+| `directory`       | string   | The root that was walked                                |
+| `scanned_count`   | number   | Directories whose entries were listed                   |
+| `depth_limited`   | boolean  | True when a subdirectory past the depth cap was skipped |
+| `result_limited`  | boolean  | True when the result cap left a subdirectory unexplored |
+| `limit`           | number   | The result cap that applied                             |
+| `total_count`     | number   | Empty directories found                                 |
+| `empty_dirs[]`    | string[] | Full paths, sorted                                       |
+
+Read `depth_limited` and `result_limited` before treating a short list as complete. A directory is only reported when its listing came back with zero entries.
+
+### Example
+
+```typescript
+file_organizer_find_empty_directories({
+  directory: "value",
+  include_subdirs: true,
+  limit: 100,
+  response_format: "value",
+});
+```
+
+---
+
 ## file_organizer_find_duplicate_files
 
 [⬆ Back to Top](#top)
@@ -528,6 +574,61 @@ file_organizer_organize_files({
   conflict_strategy: "value",
   use_content_analysis: false,
   response_format: "value",
+});
+```
+
+---
+
+## file_organizer_preview_delete_duplicates
+
+[⬆ Back to Top](#top)
+
+**Description:** Dry-run for file_organizer_delete_duplicates. Groups duplicates and names the single copy that would survive under the keep_strategy you pick (newest, oldest, or keep_first), plus the flat list of files that would be deleted. Read-only: nothing is moved or removed. Pass files_to_delete to file_organizer_delete_duplicates to act on it. Files the scan could not compare are listed under skipped, so a 'nothing to delete' answer can still be partial.
+
+### Parameters
+
+| Parameter         | Type   | Description                                                                          | Default    |
+| ----------------- | ------ | ------------------------------------------------------------------------------------ | ---------- |
+| `directory`       | string | Full path to the directory                                                           | -          |
+| `keep_strategy`   | string | Survivor per group: `newest` (most recently modified), `oldest`, or `keep_first` (first found by the scan) | 'newest' |
+| `response_format` | string | `json` or `markdown`                                                                 | 'markdown' |
+
+`keep_strategy` names the survivor outright. It is deliberately not
+`recommendation_strategy`: analyze_duplicates blends path depth and location
+quality into a score, so a preview labelled `newest` has to mean the most
+recently modified copy and nothing else.
+
+### Response fields
+
+| Field                                | Type   | Description                                                     |
+| ------------------------------------ | ------ | --------------------------------------------------------------- |
+| `dry_run`                            | boolean | Always `true`. Nothing was moved or removed                     |
+| `keep_strategy`                      | string | The strategy that was applied                                   |
+| `summary.total_duplicate_groups`     | number | Duplicate groups found                                          |
+| `summary.total_files_to_delete`      | number | Files a delete would remove                                     |
+| `summary.total_wasted_space_bytes`   | number | Bytes those deletions would reclaim                             |
+| `not_analyzed_files` / `not_analyzed_bytes` | number | Files the scan could not compare — the blind spot of this answer |
+| `duplicate_groups[].keep`            | string | The one copy in the group that survives                         |
+| `duplicate_groups[].would_delete`    | array  | Every other copy in the group                                   |
+| `files_to_delete`                    | array  | Flat, de-duplicated list, ready to pass to `file_organizer_delete_duplicates` |
+
+`skipped` lists files the scan could not compare (empty files, files over the
+hashing cap, unreadable files, files dropped by the scan timeout). An empty
+`files_to_delete` alongside a non-empty `skipped` means "nothing found", not
+"nothing wrong" — the two are reported separately for that reason.
+
+### Example
+
+```typescript
+const preview = file_organizer_preview_delete_duplicates({
+  directory: "~/Downloads",
+  keep_strategy: "newest",
+  response_format: "json",
+});
+
+// Nothing deleted yet. Act on exactly what was previewed:
+file_organizer_delete_duplicates({
+  files_to_delete: preview.files_to_delete,
 });
 ```
 
@@ -766,10 +867,64 @@ file_organizer_undo_last_operation({
 | `privacy_mode`    | string | 'full', 'redacted', or 'none'                     | -          |
 | `response_format` | string | 'json' or 'markdown'                              | 'markdown' |
 
+Entries may carry a `paths` array — the paths that operation touched, recorded
+when the tool call named a directory. `privacy_mode` treats it like the other
+path-bearing fields: redacted in `redacted`, absent in `none`.
+[`file_organizer_search_history`](#file_organizer_search_history) filters on it.
+
 ### Example
 
 ```typescript
 file_organizer_view_history({
+  limit: 20,
+});
+```
+
+---
+
+## file_organizer_search_history
+
+[⬆ Back to Top](#top)
+
+**Description:** Search the file organization history. Filter entries by path glob, date range (`from` / `to`), operation type, status, or source — every filter is optional and the ones you pass combine. Reads the same history as `file_organizer_view_history`; use `view_history` for the plain newest-first list and this tool when the list has grown past that.
+
+**Read-only.** No path on disk is read or written by the filters — the glob is matched against the paths already recorded in each history entry, not against the filesystem.
+
+### Parameters
+
+| Parameter         | Type   | Description                                                                          | Default    |
+| ----------------- | ------ | ------------------------------------------------------------------------------------ | ---------- |
+| `path_glob`       | string | Glob matched against the paths each entry recorded                                    | -          |
+| `from`            | string | ISO date string - return entries at or after this time                               | -          |
+| `to`              | string | ISO date string - return entries at or before this time                              | -          |
+| `operation`       | string | Filter by operation name                                                             | -          |
+| `status`          | string | 'success', 'error', or 'partial'                                                     | -          |
+| `source`          | string | 'manual' or 'scheduled'                                                              | -          |
+| `limit`           | number | Maximum number of entries to return (1-1000)                                         | 20         |
+| `privacy_mode`    | string | 'full', 'redacted', or 'none'                                                        | -          |
+| `response_format` | string | 'json' or 'markdown'                                                                 | 'markdown' |
+
+### `path_glob` semantics
+
+One pattern is tried three ways against each recorded path, so whichever form you write works:
+
+| Pattern          | Matches                                                             |
+| ---------------- | ------------------------------------------------------------------- |
+| `**/Downloads`   | the full recorded path, e.g. `/home/you/Downloads`                   |
+| `**/Downloads/**`| anything under that directory                                       |
+| `*.pdf`          | the bare filename, so the pattern does not need the full path        |
+
+Recorded Windows paths are matched with `\` folded to `/`, so `**/Downloads` still matches `C:\Users\you\Downloads`. `path_glob` is bounded like any other path input (non-empty, no null byte, no `..`), and a pattern minimatch cannot compile is rejected as a `ValidationError` instead of quietly matching nothing.
+
+An entry only matches a `path_glob` if it recorded a path. Operations that never touch a directory (`file_organizer_get_categories`, a failed call with no directory argument) do not match any glob.
+
+### Example
+
+```typescript
+file_organizer_search_history({
+  path_glob: "**/Downloads/**",
+  from: "2026-01-01T00:00:00.000Z",
+  operation: "file_organizer_organize_files",
   limit: 20,
 });
 ```
