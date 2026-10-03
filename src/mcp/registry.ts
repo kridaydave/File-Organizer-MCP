@@ -132,38 +132,44 @@ function reg(def: ToolDefinition, handler: ToolHandler) {
   });
 }
 
+// Sorted by tool name, not by when the tool was added. Two people adding
+// different tools at the same time then insert at different coordinates
+// instead of the same one, so their branches merge instead of colliding.
+// Sorted by tool name, not by when the tool was added. Two people adding
+// different tools at the same time then insert at different coordinates
+// instead of the same one, so their branches merge instead of colliding.
 const entries = [
-  reg(listFilesToolDefinition, handleListFiles),
-  reg(scanDirectoryToolDefinition, handleScanDirectory),
+  reg(analyzeDuplicatesToolDefinition, handleAnalyzeDuplicates),
+  reg(batchReadFilesToolDefinition, handleBatchReadFiles),
+  reg(batchRenameToolDefinition, handleBatchRename),
   reg(categorizeByTypeToolDefinition, handleCategorizeByType),
-  reg(findLargestFilesToolDefinition, handleFindLargestFiles),
+  reg(deleteDuplicatesToolDefinition, handleDeleteDuplicates),
   reg(diskUsageByCategoryToolDefinition, handleDiskUsageByCategory),
-  reg(findOldFilesToolDefinition, handleFindOldFiles),
+  reg(doctorToolDefinition, handleDoctor),
+  reg(fileReaderToolDefinition, handleReadFile),
+  reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
   reg(findDuplicateFilesToolDefinition, handleFindDuplicateFiles),
+  reg(findEmptyDirectoriesToolDefinition, handleFindEmptyDirectories),
+  reg(findLargestFilesToolDefinition, handleFindLargestFiles),
+  reg(findOldFilesToolDefinition, handleFindOldFiles),
+  reg(getCategoriesToolDefinition, handleGetCategories),
+  reg(inspectMetadataToolDefinition, handleInspectMetadata),
+  reg(listFilesToolDefinition, handleListFiles),
+  reg(organizeByProjectToolDefinition, handleOrganizeByProject),
   reg(organizeFilesToolDefinition, handleOrganizeFiles),
-  reg(previewOrganizationToolDefinition, handlePreviewOrganization),
   reg(organizeMusicToolDefinition, handleOrganizeMusic),
   reg(organizePhotosToolDefinition, handleOrganizePhotos),
-  reg(smartSuggestToolDefinition, handleSmartSuggest),
-  reg(systemOrganizationToolDefinition, handleSystemOrganization),
-  reg(batchReadFilesToolDefinition, handleBatchReadFiles),
-  reg(getCategoriesToolDefinition, handleGetCategories),
-  reg(setCustomRulesToolDefinition, handleSetCustomRules),
-  reg(analyzeDuplicatesToolDefinition, handleAnalyzeDuplicates),
-  reg(deleteDuplicatesToolDefinition, handleDeleteDuplicates),
   reg(previewDeleteDuplicatesToolDefinition, handlePreviewDeleteDuplicates),
-  reg(undoLastOperationToolDefinition, handleUndoLastOperation),
-  reg(batchRenameToolDefinition, handleBatchRename),
-  reg(inspectMetadataToolDefinition, handleInspectMetadata),
-  reg(fileReaderToolDefinition, handleReadFile),
-  reg(viewHistoryToolDefinition, handleViewHistory),
-  reg(searchHistoryToolDefinition, handleSearchHistory),
-  reg(organizeByProjectToolDefinition, handleOrganizeByProject),
-  reg(doctorToolDefinition, handleDoctor),
-  reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
-  reg(findEmptyDirectoriesToolDefinition, handleFindEmptyDirectories),
+  reg(previewOrganizationToolDefinition, handlePreviewOrganization),
   reg(quarantineFilesToolDefinition, handleQuarantineFiles),
   reg(restoreQuarantineToolDefinition, handleRestoreQuarantine),
+  reg(scanDirectoryToolDefinition, handleScanDirectory),
+  reg(searchHistoryToolDefinition, handleSearchHistory),
+  reg(setCustomRulesToolDefinition, handleSetCustomRules),
+  reg(smartSuggestToolDefinition, handleSmartSuggest),
+  reg(systemOrganizationToolDefinition, handleSystemOrganization),
+  reg(undoLastOperationToolDefinition, handleUndoLastOperation),
+  reg(viewHistoryToolDefinition, handleViewHistory),
 ];
 
 export const TOOLS: ToolDefinition[] = entries.map((e) => e.definition);
