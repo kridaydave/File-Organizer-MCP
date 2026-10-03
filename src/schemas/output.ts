@@ -178,6 +178,66 @@ export const findBrokenSymlinksOutputSchema = z.object({
   ),
 });
 
+const renameCollisionSchema = z.object({
+  kind: z.enum(["duplicate_target", "destination_exists"]),
+  destination: z.string(),
+  sources: z.array(z.string()),
+});
+
+const renamePreviewSchema = z.object({
+  original: z.string(),
+  new: z.string(),
+  willChange: z.boolean(),
+  conflict: z.boolean(),
+  error: z.string().optional(),
+});
+
+/**
+ * batch_rename reports collisions on every response, in both formats, so an
+ * agent can act on them without re-running in json. `rejected` is the field to
+ * branch on: it is true only when a real run was stopped before the first
+ * rename, which is the only case where nothing moved.
+ */
+export const batchRenameOutputSchema = z.object({
+  dry_run: z.boolean(),
+  rejected: z.boolean(),
+  renamed: z.number(),
+  processed: z.number(),
+  rules: z.array(z.record(z.string(), z.unknown())),
+  conflicts: z.array(renameCollisionSchema),
+  previews: z.array(renamePreviewSchema).optional(),
+  result: z
+    .object({
+      statistics: z.object({
+        total: z.number(),
+        renamed: z.number(),
+        skipped: z.number(),
+        failed: z.number(),
+      }),
+      successes: z.array(
+        z.object({ original: z.string(), new: z.string() }),
+      ),
+      errors: z.array(z.string()),
+    })
+    .optional(),
+});
+
+export const diskUsageByCategoryOutputSchema = z.object({
+  directory: z.string(),
+  total_files: z.number(),
+  total_size: z.number(),
+  total_size_readable: z.string(),
+  categories: z.array(
+    z.object({
+      category: z.string(),
+      file_count: z.number(),
+      total_size: z.number(),
+      total_size_readable: z.string(),
+      percent_of_total: z.number(),
+    }),
+  ),
+});
+
 export const undoOutputSchema = z.object({
   success: z.number(),
   failed: z.number(),
@@ -265,4 +325,10 @@ export const doctorOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const findBrokenSymlinksOutputJsonSchema = z.toJSONSchema(
   findBrokenSymlinksOutputSchema,
+) as JsonSchemaObject;
+export const batchRenameOutputJsonSchema = z.toJSONSchema(
+  batchRenameOutputSchema,
+) as JsonSchemaObject;
+export const diskUsageByCategoryOutputJsonSchema = z.toJSONSchema(
+  diskUsageByCategoryOutputSchema,
 ) as JsonSchemaObject;
