@@ -44,10 +44,19 @@
   "Unknown Date" bucket. `dry_run` defaults to `true`, an occupied destination is
   de-duplicated as `name (1).ext` rather than overwritten, and every performed
   move is recorded in a rollback manifest for `file_organizer_undo_last_operation`.
-  The server serves 29 tools (was 28).
+  The server serves 30 tools (was 29).
 - `file_organizer_delete_duplicates` accepts `verify_before_delete` (default
   `true`) and `candidate_directories`, for when a surviving copy lives outside
   the searched parent directories.
+- **`file_organizer_search_history`** — filter the operation history by path
+  glob (`path_glob`), date range (`from`/`to`), operation type, status, or
+  source. Every filter is optional and the ones supplied combine, so a long
+  history stays queryable. It reads the same history as
+  `file_organizer_view_history`, which is unchanged; both now go through one
+  `HistoryLoggerService.searchHistory()` read. Path-glob matching needs paths
+  on the entry, so history entries gained an optional `paths` array — recorded
+  for the directory a tool call touched and for the single organize pass — and
+  `privacy_mode` redacts or drops it like the rest of the path-bearing fields.
 
 ## [5.0.0] - 2026-08-22
 

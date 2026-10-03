@@ -11,8 +11,10 @@
 import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import { minimatch } from "minimatch";
 import { logger } from "../utils/logger.js";
 import { getHistoryDirectory } from "../core/config/paths.js";
+import { ValidationError } from "../types.js";
 
 export interface HistoryEntry {
   id: string;
@@ -25,6 +27,9 @@ export interface HistoryEntry {
   filesSkipped?: number;
   details?: string;
   error?: { message: string; code?: string };
+  /** Paths this operation touched, when the caller knows them. Path-glob
+   *  filters match against these; entries without them never match a glob. */
+  paths?: string[];
 }
 
 export interface HistoryQuery {
@@ -36,6 +41,11 @@ export interface HistoryQuery {
   limit?: number;
   offset?: number;
   privacyMode?: "full" | "redacted" | "none";
+}
+
+export interface HistorySearchQuery extends HistoryQuery {
+  /** Glob matched against the paths an entry recorded. */
+  pathGlob?: string;
 }
 
 export interface HistoryResult {
@@ -241,7 +251,17 @@ export class HistoryLoggerService {
     }
   }
 
+  /** Flat, newest-first read. Same as searchHistory without a path glob. */
   async getHistory(query: HistoryQuery = {}): Promise<HistoryResult> {
+    return this.searchHistory(query);
+  }
+
+  /**
+   * The one history read path: getHistory() delegates here so every caller
+   * shares one read, filter, paginate, and privacy pass. Every filter is
+   * optional and combinable.
+   */
+  async searchHistory(query: HistorySearchQuery = {}): Promise<HistoryResult> {
     if (!this.initialized) {
       await this.init();
     }
@@ -252,10 +272,17 @@ export class HistoryLoggerService {
       operation,
       status,
       source,
+      pathGlob,
       limit = 100,
       offset = 0,
       privacyMode = "full",
     } = query;
+
+    // Compiled once: an unparseable glob is a caller error, not a bad entry.
+    // `!== undefined` rather than truthy, so an empty pattern fails loudly
+    // instead of silently dropping the filter.
+    const matchesPathGlob =
+      pathGlob === undefined ? null : compilePathGlob(pathGlob);
 
     const allEntries: HistoryEntry[] = [];
     const lockAcquired = await this.tryAcquireLock();
@@ -310,6 +337,9 @@ export class HistoryLoggerService {
     if (source) {
       filtered = filtered.filter((e) => e.source === source);
     }
+    if (matchesPathGlob) {
+      filtered = filtered.filter((e) => matchesPathGlob(e.paths ?? []));
+    }
 
     const total = filtered.length;
     const paged = filtered
@@ -342,6 +372,7 @@ export class HistoryLoggerService {
 
       return {
         ...entry,
+        paths: entry.paths?.map((p) => this.redactPaths(p)),
         details: entry.details ? this.redactPaths(entry.details) : undefined,
         error: entry.error
           ? { message: this.redactPaths(entry.error.message) }
@@ -360,6 +391,47 @@ export class HistoryLoggerService {
     );
     return redacted;
   }
+}
+
+/**
+ * Build a predicate that decides whether an entry's recorded paths match a
+ * glob. One pattern is tried three ways so callers can write whichever is
+ * natural: the full stored path, that path with Windows separators folded to
+ * "/", and the bare filename.
+ *
+ * @throws {ValidationError} When the pattern is not a parseable glob.
+ */
+function compilePathGlob(pattern: string): (paths: string[]) => boolean {
+  if (pattern.length === 0) {
+    throw new ValidationError("path_glob cannot be empty", {
+      field: "path_glob",
+      constraint: "min_length",
+    });
+  }
+
+  // minimatch reports an unparseable pattern as false; older shapes throw.
+  // Both are a caller error, never a reason to return the whole history.
+  let compiled: RegExp | false;
+  try {
+    compiled = minimatch.makeRe(pattern, { dot: true });
+  } catch {
+    compiled = false;
+  }
+  if (!compiled) {
+    throw new ValidationError("path_glob is not a valid glob pattern", {
+      field: "path_glob",
+      constraint: "glob_syntax",
+    });
+  }
+  const matches = (candidate: string): boolean => compiled.test(candidate);
+
+  return (paths) =>
+    paths.some((p) => {
+      if (matches(p)) return true;
+      const posix = p.replace(/\\/g, "/");
+      if (posix !== p && matches(posix)) return true;
+      return matches(path.posix.basename(posix));
+    });
 }
 
 export const historyLogger = new HistoryLoggerService();
