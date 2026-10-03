@@ -183,6 +183,14 @@ same shape with `ok` false, `exitCode` 1, and the reason in `errors`. `ok` is
 true for exit codes 0 and 2. `historyLogged: false` on an applied pass means
 the moves have no undo record.
 
+`directory` is the **resolved** path, not the argument verbatim — the same
+convention every tool uses (`file_organizer_organize_files` reports the
+directory its path validator approved). It is the path the gate checked and the
+pass scanned, so symlinks are already followed and `~` is expanded. The two
+forms differ on macOS (`/var/folders/...` → `/private/var/folders/...`) and on
+Windows (an 8.3 short name like `RUNNER~1` expands to the long name), so a
+caller must not string-compare it against what it passed in.
+
 ```bash
 # alert only when files actually moved
 file-organizer-watch once ~/Downloads --apply --json | jq -e '.moved > 0'

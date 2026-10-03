@@ -483,10 +483,20 @@ describe("file-organizer-watch once (real CLI)", () => {
 
     const report = parseJsonReport(out);
     expect(code).toBe(ONCE_EXIT.moved);
+    // `directory` is the validated path, not the string typed on the command
+    // line. Every tool in this repo reports the resolved directory
+    // (`file-organization.ts:132` and the rest hand back `validatedPath`),
+    // because that is the path the gate checked and the pass scanned. Resolve
+    // the expectation through the same function, or this assertion is wrong on
+    // every platform where realpath normalizes: macOS rewrites /var to
+    // /private/var, and Windows expands the 8.3 short name in a temp dir
+    // (RUNNER~1 -> runneradmin). Linux agrees with both forms, which is why
+    // only CI caught it.
+    const resolvedWorkDir = await fs.realpath(workDir);
     expect(report).toEqual({
       ok: true,
       exitCode: ONCE_EXIT.moved,
-      directory: workDir,
+      directory: resolvedWorkDir,
       dryRun: false,
       scanned: 3,
       planned: 3,
