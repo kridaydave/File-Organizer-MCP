@@ -550,7 +550,7 @@ file_organizer_scan_directory({
 
 [⬆ Back to Top](#top)
 
-**Description:** Customize how files are categorized. Rules persist to your user config and apply to every future request.
+**Description:** Customize how files are categorized. Persists custom rules to user configuration, replacing any rules saved earlier. Invalid rules are skipped; if the rules cannot be written to disk the call reports an error instead of a success.
 
 ### Parameters
 

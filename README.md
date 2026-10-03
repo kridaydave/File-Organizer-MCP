@@ -380,6 +380,19 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 3. Check for sufficient disk space.
 4. Read the operation summary for error messages.
 
+### Custom rules are missing after a restart
+
+`file_organizer_set_custom_rules` saves the accepted rules to `config.json` in your
+OS config directory and every later request reads them from there. Three things
+to know:
+
+- The call replaces the whole saved set, so it is not a per-rule merge.
+- Rules with an unknown category or a rejected pattern are skipped; the reply
+  says how many were applied.
+- If the write itself fails — read-only config directory, missing permissions —
+  the call returns an error instead of a success message, and the server log
+  holds the cause. Nothing is persisted in that case.
+
 ---
 
 ## Architecture
