@@ -5,7 +5,6 @@
 import { z } from "zod";
 import { CommonParamsSchema } from "./common.js";
 
-
 /**
  * Schema for organize_files tool
  */
@@ -63,6 +62,37 @@ export const PreviewOrganizationInputSchema = z
 
 export type PreviewOrganizationInput = z.infer<
   typeof PreviewOrganizationInputSchema
+>;
+
+/**
+ * Schema for validate_organization_plan tool
+ * Dry-run check of the plan organize would execute: name collisions, occupied
+ * destinations, cross-device moves, and files the sensitive-file gate refuses.
+ */
+export const ValidateOrganizationPlanInputSchema = z
+  .object({
+    directory: z
+      .string()
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to validate the plan for"),
+    include_subdirs: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Validate a plan built over subdirectories. Defaults to false, which is the depth organize_files itself scans",
+      ),
+    conflict_strategy: z
+      .enum(["rename", "skip", "overwrite"])
+      .optional()
+      .describe(
+        "How to handle file conflicts for the validated plan. Uses config default if not specified",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type ValidateOrganizationPlanInput = z.infer<
+  typeof ValidateOrganizationPlanInputSchema
 >;
 
 export const FindReplaceRuleSchema = z.object({
@@ -392,7 +422,9 @@ export const OrganizeByProjectInputSchema = z
       .boolean()
       .optional()
       .default(true)
-      .describe("If true, only preview the project grouping without moving files"),
+      .describe(
+        "If true, only preview the project grouping without moving files",
+      ),
     recursive: z
       .boolean()
       .optional()
@@ -401,4 +433,6 @@ export const OrganizeByProjectInputSchema = z
   })
   .merge(CommonParamsSchema);
 
-export type OrganizeByProjectInput = z.infer<typeof OrganizeByProjectInputSchema>;
+export type OrganizeByProjectInput = z.infer<
+  typeof OrganizeByProjectInputSchema
+>;

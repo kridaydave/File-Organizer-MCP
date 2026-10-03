@@ -76,6 +76,7 @@ You can ask the assistant things like:
 - Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
 - Dry-run preview, atomic moves, and rollback.
+- Plan validation before you organize: name collisions, occupied destinations, cross-device moves, and files the sensitive-file gate blocks.
 - Path traversal protection, TOCTOU mitigation.
 - Windows, macOS, and Linux.
 
@@ -90,7 +91,7 @@ You can ask the assistant things like:
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 
-### Full tool list (24 tools)
+### Full tool list (25 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
@@ -115,6 +116,7 @@ You can ask the assistant things like:
 - `file_organizer_smart_suggest`
 - `file_organizer_system_organize`
 - `file_organizer_undo_last_operation`
+- `file_organizer_validate_organization_plan`
 - `file_organizer_view_history`
 
 For parameters and return shapes, see [API.md](API.md).

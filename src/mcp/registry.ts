@@ -41,6 +41,8 @@ import {
 import {
   previewOrganizationToolDefinition,
   handlePreviewOrganization,
+  validateOrganizationPlanToolDefinition,
+  handleValidateOrganizationPlan,
 } from "../tools/organization-preview.js";
 import {
   getCategoriesToolDefinition,
@@ -124,6 +126,7 @@ const entries = [
   reg(findDuplicateFilesToolDefinition, handleFindDuplicateFiles),
   reg(organizeFilesToolDefinition, handleOrganizeFiles),
   reg(previewOrganizationToolDefinition, handlePreviewOrganization),
+  reg(validateOrganizationPlanToolDefinition, handleValidateOrganizationPlan),
   reg(organizeMusicToolDefinition, handleOrganizeMusic),
   reg(organizePhotosToolDefinition, handleOrganizePhotos),
   reg(smartSuggestToolDefinition, handleSmartSuggest),
