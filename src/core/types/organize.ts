@@ -75,6 +75,48 @@ export interface OrganizationPlan {
   warnings: string[];
 }
 
+// ==================== Plan Validation Types ====================
+
+export type PlanFindingKind =
+  /** Two or more sources resolved to one destination name. */
+  | "destination_name_collision"
+  /** A planned destination is already occupied on disk. */
+  | "destination_exists"
+  /** Source and destination sit on different devices. */
+  | "cross_device_move"
+  /** The sensitive-file gate would refuse this source. */
+  | "sensitive_source"
+  /** The planner gave up part-way, so this plan is not the whole run. */
+  | "incomplete_plan";
+
+export type PlanFindingSeverity = "error" | "warning";
+
+export interface PlanFinding {
+  kind: PlanFindingKind;
+  severity: PlanFindingSeverity;
+  /** Files involved, in plan order. */
+  sources: string[];
+  /** Destinations involved, in plan order. */
+  destinations: string[];
+  detail: string;
+}
+
+export interface PlanValidationResult {
+  directory: string;
+  /** False when any finding has severity `error`. */
+  ok: boolean;
+  moves_checked: number;
+  counts: {
+    error: number;
+    warning: number;
+  };
+  findings: PlanFinding[];
+  /** What this check actually looked at. */
+  checked: string[];
+  /** What it did not look at, so a clean run is not read as a guarantee. */
+  not_checked: string[];
+}
+
 export interface DuplicateResult extends PaginatedResult<DuplicateGroup> {
   directory: string;
   duplicate_groups: number;
