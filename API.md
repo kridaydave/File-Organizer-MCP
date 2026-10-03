@@ -79,7 +79,20 @@ file_organizer_analyze_duplicates({
 
 [⬆ Back to Top](#top)
 
-**Description:** Rename multiple files using rules (find/replace, case, add text, numbering).
+**Description:** Rename multiple files using rules (find/replace, case, add text, numbering). The whole plan is checked for name collisions before the first file moves. Closes #44.
+
+### Collision preview
+
+Two files aimed at one name, or one file aimed at a name a different file already holds, are reported as collisions:
+
+| Kind                | Meaning                                                    |
+| ------------------- | ---------------------------------------------------------- |
+| `duplicate_target`  | Two or more sources collapse onto the same destination name |
+| `destination_exists` | A different file already holds the destination name        |
+
+A dry run reports collisions and changes nothing. A real run (`dry_run: false`) with any collision is **rejected before the first rename**, so no file is renamed at all, even the ones with no clash. Adjust the rules or move the files already holding those names, then run again.
+
+Collisions are returned as structured data in both response formats, and name the files by base name only, so a rejected plan does not echo directory layout back to the caller.
 
 ### Parameters
 
@@ -92,6 +105,21 @@ file_organizer_analyze_duplicates({
 | `items`           | object  | -                                                  | -          |
 | `dry_run`         | boolean | Simulate renaming                                  | true       |
 | `response_format` | string  | -                                                  | 'markdown' |
+
+### Response
+
+| Field                          | Type     | Description                                                            |
+| ------------------------------ | -------- | ---------------------------------------------------------------------- |
+| `dry_run`                      | boolean  | Whether the call was a simulation                                      |
+| `rejected`                     | boolean  | `true` only when a real run was stopped before the first rename         |
+| `renamed`                      | number   | Files renamed. `0` on a dry run and on a rejection                      |
+| `processed`                    | number   | Files the rules were evaluated against                                 |
+| `conflicts[]`                  | array    | Collisions found. Empty when the plan is clear                          |
+| `conflicts[].kind`             | string   | `duplicate_target` or `destination_exists`                             |
+| `conflicts[].destination`      | string   | Contested destination file name                                         |
+| `conflicts[].sources`          | array    | Base names of the files aimed at that destination                      |
+| `previews[]`                   | array    | Per-file plan. Present on a dry run                                    |
+| `result`                       | object   | Execution statistics and errors. Present on a real run                 |
 
 ### Example
 
