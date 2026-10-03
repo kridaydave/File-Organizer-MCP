@@ -1,10 +1,55 @@
-import { jest } from '@jest/globals';
-import {
-    handleGetCategories,
-    handleSetCustomRules
-} from '../../../src/tools/file-management.js';
+/**
+ * file-management tools: get_categories + set_custom_rules
+ *
+ * set_custom_rules writes to the user config, so this suite redirects
+ * getUserConfigPath at a temp dir. The previous version of this file called
+ * the handler for real, which meant running the unit suite rewrote the
+ * developer's own config.json.
+ *
+ * Assertions read the written file back rather than trusting the reply text,
+ * so they fail if the handler stops persisting (or persists the wrong shape).
+ */
+import { jest, describe, it, expect, beforeEach, afterAll } from '@jest/globals';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import type { CustomRule, UserConfig } from '../../../src/types.js';
+
+const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'test-custom-rules-'));
+const configPath = path.join(tempDir, 'config.json');
+let activeConfigPath = configPath;
+
+// Import the real module before registering the mock — importing the same
+// specifier inside the factory would resolve to the mock and loop forever.
+const actualPaths = await import('../../../src/core/config/paths.js');
+
+jest.unstable_mockModule('../../../src/core/config/paths.js', () => ({
+    ...actualPaths,
+    getUserConfigPath: () => activeConfigPath,
+}));
+
+const { handleGetCategories, handleSetCustomRules } = await import(
+    '../../../src/tools/file-management.js'
+);
+const { loadUserConfig } = await import('../../../src/config.js');
+
+function readPersistedConfig(): UserConfig {
+    return JSON.parse(fs.readFileSync(configPath, 'utf-8')) as UserConfig;
+}
 
 describe('File Management Tools', () => {
+    beforeEach(() => {
+        activeConfigPath = configPath;
+        fs.rmSync(configPath, { force: true, recursive: true });
+        fs.rmSync(path.join(tempDir, 'blocked.json'), { force: true, recursive: true });
+    });
+
+    afterAll(async () => {
+        // Windows keeps handles briefly after a write; give them a moment.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
     describe('handleGetCategories', () => {
         it('should return categories in markdown format by default', async () => {
             const result = await handleGetCategories({});
@@ -32,7 +77,7 @@ describe('File Management Tools', () => {
             const result = await handleGetCategories({});
 
             expect(result.content).toBeDefined();
-            expect(result.content[0].type).toBe('text');
+            expect(result.content.length).toBeGreaterThan(0);
         });
 
         it('should include standard categories', async () => {
@@ -47,8 +92,8 @@ describe('File Management Tools', () => {
     });
 
     describe('handleSetCustomRules', () => {
-        it('should apply custom rules successfully', async () => {
-            const customRules = {
+        it('should write the accepted rules to the user config', async () => {
+            const result = await handleSetCustomRules({
                 rules: [
                     {
                         category: 'ProjectFiles',
@@ -56,121 +101,144 @@ describe('File Management Tools', () => {
                         priority: 10
                     }
                 ]
-            };
+            });
 
-            const result = await handleSetCustomRules(customRules);
+            expect(result.isError).toBeFalsy();
+            expect(result.content[0].text).toContain('Applied 1 custom organization rules');
 
-            expect(result.content).toBeDefined();
-            expect(result.content[0].type).toBe('text');
-            expect(result.content[0].text).toContain('Applied');
-            expect(result.content[0].text).toContain('custom organization rules');
+            const expected: CustomRule[] = [
+                { category: 'ProjectFiles', extensions: ['vue', 'svelte'], priority: 10 }
+            ];
+            expect(readPersistedConfig().customRules).toEqual(expected);
         });
 
-        it('should handle multiple rules', async () => {
-            const customRules = {
-                rules: [
-                    {
-                        category: 'WebDev',
-                        extensions: ['html', 'css', 'js'],
-                        priority: 5
-                    },
-                    {
-                        category: 'DataFiles',
-                        extensions: ['csv', 'json', 'xml'],
-                        priority: 3
-                    }
-                ]
-            };
+        it('should persist snake_case patterns as the internal camelCase shape', async () => {
+            await handleSetCustomRules({
+                rules: [{ category: 'ConfigFiles', filename_pattern: '.*\\.config\\..*', priority: 8 }]
+            });
 
-            const result = await handleSetCustomRules(customRules);
-
-            expect(result.content[0].text).toContain('2');
+            const persisted = readPersistedConfig().customRules ?? [];
+            expect(persisted).toHaveLength(1);
+            expect(persisted[0].filenamePattern).toBe('.*\\.config\\..*');
+            expect(persisted[0].filename_pattern).toBeUndefined();
         });
 
-        it('should handle rules with filename patterns', async () => {
-            const customRules = {
+        it('should load the persisted rules on the next request', async () => {
+            await handleSetCustomRules({
+                rules: [{ category: 'Widgets', filename_pattern: '\\.widget$', priority: 100 }]
+            });
+
+            // A later request builds its context from the config file, so this
+            // is what survives a restart rather than in-memory state.
+            const reloaded = loadUserConfig().customRules ?? [];
+            expect(reloaded).toHaveLength(1);
+            expect(reloaded[0].category).toBe('Widgets');
+            expect(reloaded[0].filenamePattern).toBe('\\.widget$');
+            expect(reloaded[0].priority).toBe(100);
+        });
+
+        it('should persist every valid rule in a multi-rule call', async () => {
+            const result = await handleSetCustomRules({
                 rules: [
-                    {
-                        category: 'ConfigFiles',
-                        filename_pattern: '.*\\.config\\..*',
-                        priority: 8
-                    }
+                    { category: 'WebDev', extensions: ['html', 'css', 'js'], priority: 5 },
+                    { category: 'DataFiles', extensions: ['csv', 'json', 'xml'], priority: 3 }
                 ]
-            };
+            });
 
-            const result = await handleSetCustomRules(customRules);
+            expect(result.content[0].text).toContain('2 custom organization rules');
+            const persisted = readPersistedConfig().customRules ?? [];
+            expect(persisted.map((rule) => rule.category)).toEqual(['WebDev', 'DataFiles']);
+        });
 
-            expect(result.content[0].text).toContain('Applied');
+        it('should skip invalid rules and persist the rest', async () => {
+            const result = await handleSetCustomRules({
+                rules: [
+                    { category: 'Widgets', filename_pattern: '\\.widget$', priority: 100 },
+                    { category: '', filename_pattern: 'invalid', priority: 10 }
+                ]
+            });
+
+            expect(result.content[0].text).toContain('1 custom organization rules');
+            const persisted = readPersistedConfig().customRules ?? [];
+            expect(persisted).toHaveLength(1);
+            expect(persisted[0].category).toBe('Widgets');
+        });
+
+        it('should replace the rules saved by an earlier call', async () => {
+            await handleSetCustomRules({
+                rules: [{ category: 'Widgets', filename_pattern: '\\.widget$', priority: 100 }]
+            });
+            await handleSetCustomRules({
+                rules: [{ category: 'Gadgets', extensions: ['gadget'], priority: 1 }]
+            });
+
+            const persisted = readPersistedConfig().customRules ?? [];
+            expect(persisted).toHaveLength(1);
+            expect(persisted[0].category).toBe('Gadgets');
+        });
+
+        it('should not claim success when the rules cannot be written', async () => {
+            const blockedPath = path.join(tempDir, 'blocked.json');
+            fs.mkdirSync(blockedPath, { recursive: true });
+            activeConfigPath = blockedPath;
+
+            const result = await handleSetCustomRules({
+                rules: [{ category: 'Widgets', filename_pattern: '\\.widget$', priority: 100 }]
+            });
+
+            // Silent failure here is the bug: the caller would believe the
+            // rules are saved and they would vanish on the next session.
+            expect(result.isError).toBe(true);
+            expect(result.content[0].text).toContain('could not be written');
+            expect(fs.readdirSync(tempDir)).toEqual(['blocked.json']);
+        });
+
+        it('should not leak the config path in an error reply', async () => {
+            const result = await handleSetCustomRules({
+                rules: [{ category: 'Bad[', filename_pattern: '((', priority: 1 }]
+            });
+
+            expect(result.isError).toBe(true);
+            expect(result.content[0].text).not.toContain(tempDir);
         });
 
         it('should return error for invalid rules format', async () => {
-            const invalidRules = {
-                rules: 'not-an-array'
-            };
+            const result = await handleSetCustomRules({ rules: 'not-an-array' });
 
-            const result = await handleSetCustomRules(invalidRules as any);
-
+            expect(result.isError).toBe(true);
             expect(result.content[0].text).toContain('Error');
         });
 
         it('should return error for missing rules', async () => {
             const result = await handleSetCustomRules({});
 
+            expect(result.isError).toBe(true);
             expect(result.content[0].text).toContain('Error');
         });
 
-        it('should handle rules with extensions only', async () => {
-            const customRules = {
-                rules: [
-                    {
-                        category: 'CustomCategory',
-                        extensions: ['custom1', 'custom2'],
-                        priority: 0
-                    }
-                ]
-            };
-
-            const result = await handleSetCustomRules(customRules);
-
-            expect(result.content[0].text).toContain('Applied');
-        });
-
         it('should validate priority is an integer', async () => {
-            const customRules = {
-                rules: [
-                    {
-                        category: 'TestCategory',
-                        extensions: ['test'],
-                        priority: 3.5 // Should fail - not an integer
-                    }
-                ]
-            };
-
-            const result = await handleSetCustomRules(customRules);
+            const result = await handleSetCustomRules({
+                rules: [{ category: 'TestCategory', extensions: ['test'], priority: 3.5 }]
+            });
 
             // Zod should reject non-integer priority
+            expect(result.isError).toBe(true);
             expect(result.content[0].text).toContain('Error');
         });
 
         it('should validate priority is non-negative', async () => {
-            const customRules = {
-                rules: [
-                    {
-                        category: 'TestCategory',
-                        extensions: ['test'],
-                        priority: -1 // Should fail - negative
-                    }
-                ]
-            };
+            const result = await handleSetCustomRules({
+                rules: [{ category: 'TestCategory', extensions: ['test'], priority: -1 }]
+            });
 
-            const result = await handleSetCustomRules(customRules);
-
+            expect(result.isError).toBe(true);
             expect(result.content[0].text).toContain('Error');
         });
 
         it('should handle empty rules array', async () => {
             const result = await handleSetCustomRules({ rules: [] });
 
+            expect(result.isError).toBe(true);
             expect(result.content[0].text).toContain('No valid Custom Rules');
         });
     });
