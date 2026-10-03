@@ -162,6 +162,28 @@ export interface LargestFilesResult {
   largest_files: LargestFileInfo[];
 }
 
+export interface OldFileInfo {
+  name: string;
+  path: string;
+  size: number;
+  size_readable: string;
+  /** Whole days since the chosen timestamp (mtime by default, atime on request). */
+  age_days: number;
+  /** The timestamp the age was measured from. */
+  accessed_or_modified: string;
+}
+
+export interface OldFilesResult {
+  directory: string;
+  /** Which timestamp the ages were measured from. */
+  age_source: "mtime" | "atime";
+  older_than_days: number;
+  /** Files that matched, before top_n cut the list. */
+  total_count: number;
+  returned_count: number;
+  old_files: OldFileInfo[];
+}
+
 // ==================== System Organize Types ====================
 
 export interface SystemDirs {
