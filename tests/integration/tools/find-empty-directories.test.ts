@@ -8,6 +8,12 @@
  *
  * The sandbox lives under os.tmpdir() and is granted through
  * CONFIG.paths.customAllowed, the same allowlist validateStrictPath reads.
+ *
+ * Reported paths are asserted as offsets from the root the tool walked, not as
+ * absolute strings. validateStrictPath realpaths its input, so the absolute
+ * prefix of a temp directory is a platform detail — macOS reports /var where
+ * realpath says /private/var, and a Windows temp dir arrives as the 8.3 short
+ * name that realpath expands to the long one.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
@@ -32,12 +38,10 @@ type EmptyResult = {
 
 describe("find_empty_directories", () => {
   let testDir: string;
-  let realTestDir: string;
   let restoreCustomAllowed: string[] | undefined;
 
   beforeEach(async () => {
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), "tool-empty-dirs-"));
-    realTestDir = await fs.realpath(testDir);
     restoreCustomAllowed = CONFIG.paths._overrideCustomAllowed;
     CONFIG.paths.customAllowed = [os.tmpdir()];
   });
@@ -48,8 +52,17 @@ describe("find_empty_directories", () => {
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
-  async function real(...segments: string[]): Promise<string> {
-    return fs.realpath(path.join(testDir, ...segments));
+  /**
+   * The reported paths as offsets from the root the tool walked. An empty
+   * offset is the root itself.
+   *
+   * The root is checked by its mkdtemp name, which is unique per run, so this
+   * still proves the tool walked this sandbox rather than somewhere else — it
+   * just does not pin the part of the path the platform owns.
+   */
+  function offsetsFromRoot(out: EmptyResult): string[] {
+    expect(path.basename(out.directory)).toBe(path.basename(testDir));
+    return out.empty_dirs.map((p) => path.relative(out.directory, p));
   }
 
   it("is registered with an honest read-only annotation", () => {
@@ -77,7 +90,7 @@ describe("find_empty_directories", () => {
     expect(res.isError).toBeUndefined();
     const out = res.structuredContent as EmptyResult;
     expect(out.total_count).toBe(1);
-    expect(out.empty_dirs).toEqual([await real("empty-one")]);
+    expect(offsetsFromRoot(out)).toEqual([path.join("empty-one")]);
     expect(out.scanned_count).toBe(4);
     expect(out.limit).toBe(100);
     // The json text block carries the same data the structured content does.
@@ -95,11 +108,16 @@ describe("find_empty_directories", () => {
 
     expect(res.isError).toBeUndefined();
     const markdown = (res.content[0] as { text: string }).text;
+    const out = res.structuredContent as EmptyResult;
     expect(markdown).toContain("Found 1 empty directory(ies)");
-    expect(markdown).toContain(await real("empty-one"));
+    // The named directory is spelled the way the tool spells the root it
+    // walked, so the assertion follows the platform's prefix instead of
+    // hardcoding one.
+    expect(markdown).toContain(path.join(out.directory, "empty-one"));
+    expect(offsetsFromRoot(out)).toEqual([path.join("empty-one")]);
     // Markdown still carries structuredContent because the tool declares an
     // outputSchema and the SDK rejects a result without it.
-    expect((res.structuredContent as EmptyResult).total_count).toBe(1);
+    expect(out.total_count).toBe(1);
   });
 
   it("recurses by default", async () => {
@@ -111,7 +129,7 @@ describe("find_empty_directories", () => {
     });
 
     const out = res.structuredContent as EmptyResult;
-    expect(out.empty_dirs).toEqual([await real("a", "b")]);
+    expect(offsetsFromRoot(out)).toEqual([path.join("a", "b")]);
   });
 
   it("stays at the root when include_subdirs is false", async () => {
@@ -182,8 +200,6 @@ describe("find_empty_directories", () => {
       response_format: "json",
     });
 
-    expect((res.structuredContent as EmptyResult).empty_dirs).toEqual([
-      realTestDir,
-    ]);
+    expect(offsetsFromRoot(res.structuredContent as EmptyResult)).toEqual([""]);
   });
 });

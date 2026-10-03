@@ -7,9 +7,14 @@
  * because it "looked empty" would take .git with it.
  *
  * The sandbox lives under os.tmpdir() and is granted through
- * CONFIG.paths.customAllowed. Paths are compared against fs.realpath of the
- * temp dir because validation and resolveExistingAncestor both realpath, and
- * macOS answers /private/var for a /var path.
+ * CONFIG.paths.customAllowed. Reported paths are asserted as offsets from that
+ * root rather than as absolute strings. The walk returns each path in the shape
+ * the caller handed it — path.join from the caller's own root, with no
+ * realpath applied — while the absolute prefix of a temp directory is a
+ * platform detail: macOS reports /var where realpath says /private/var, and a
+ * Windows temp dir carries the 8.3 short name that realpath expands to the long
+ * one. Comparing offsets keeps the assertion about which directories were
+ * reported, which is the behavior under test, on every platform.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
@@ -23,12 +28,10 @@ const { findEmptyDirectories } =
 
 describe("findEmptyDirectories", () => {
   let testDir: string;
-  let realTestDir: string;
   let restoreCustomAllowed: string[] | undefined;
 
   beforeEach(async () => {
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), "empty-dirs-"));
-    realTestDir = await fs.realpath(testDir);
     restoreCustomAllowed = CONFIG.paths._overrideCustomAllowed;
     CONFIG.paths.customAllowed = [os.tmpdir()];
   });
@@ -39,9 +42,16 @@ describe("findEmptyDirectories", () => {
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
-  /** Resolve an absolute path under the sandbox to its canonical form. */
-  async function real(...segments: string[]): Promise<string> {
-    return fs.realpath(path.join(testDir, ...segments));
+  /**
+   * The reported paths as offsets from the sandbox root, in the order the tool
+   * returned them. An empty offset is the root itself.
+   *
+   * path.relative does the work that fs.realpath used to do by accident: it
+   * holds on to the part of the path the test controls — the segments below the
+   * temp dir — and drops the prefix the platform owns.
+   */
+  function offsetsFromRoot(found: readonly string[]): string[] {
+    return found.map((p) => path.relative(testDir, p));
   }
 
   it("reports nested empty directories but not the root that holds them", async () => {
@@ -54,8 +64,9 @@ describe("findEmptyDirectories", () => {
     // c is the only leaf with no entries. b holds c and a holds b, so neither
     // is empty, and the root holds a.
     expect(out.total_count).toBe(1);
-    expect(out.empty_dirs).toEqual([await real("a", "b", "c")]);
-    expect(out.empty_dirs).not.toContain(realTestDir);
+    expect(offsetsFromRoot(out.empty_dirs)).toEqual([path.join("a", "b", "c")]);
+    // An empty offset means the root itself, which holds a and so is not empty.
+    expect(offsetsFromRoot(out.empty_dirs)).not.toContain("");
     expect(out.depth_limited).toBe(false);
     expect(out.result_limited).toBe(false);
   });
@@ -79,7 +90,9 @@ describe("findEmptyDirectories", () => {
     const out = await findEmptyDirectories(testDir);
 
     // dotonly holds entries so it is not reported; .hiddendir holds none.
-    expect(out.empty_dirs).toEqual([await real("dotonly", ".hiddendir")]);
+    expect(offsetsFromRoot(out.empty_dirs)).toEqual([
+      path.join("dotonly", ".hiddendir"),
+    ]);
   });
 
   it("treats a directory holding a file as non-empty", async () => {
@@ -99,14 +112,14 @@ describe("findEmptyDirectories", () => {
 
     const out = await findEmptyDirectories(testDir);
 
-    expect(out.empty_dirs).toEqual([await real("a", "b")]);
+    expect(offsetsFromRoot(out.empty_dirs)).toEqual([path.join("a", "b")]);
   });
 
   it("reports the root itself when it holds nothing", async () => {
     const out = await findEmptyDirectories(testDir);
 
     expect(out.total_count).toBe(1);
-    expect(out.empty_dirs).toEqual([realTestDir]);
+    expect(offsetsFromRoot(out.empty_dirs)).toEqual([""]);
   });
 
   it("scans only the root when recursion is off", async () => {
@@ -172,10 +185,12 @@ describe("findEmptyDirectories", () => {
 
     const out = await findEmptyDirectories(testDir);
 
-    expect(out.empty_dirs).toEqual([
-      await real("a"),
-      await real("b"),
-      await real("c"),
+    // Order is by path as the tool spells it, so compare offsets: c, a, b were
+    // created in that order and come back a, b, c.
+    expect(offsetsFromRoot(out.empty_dirs)).toEqual([
+      path.join("a"),
+      path.join("b"),
+      path.join("c"),
     ]);
   });
 });
