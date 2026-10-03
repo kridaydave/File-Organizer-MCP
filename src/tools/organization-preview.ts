@@ -200,7 +200,7 @@ export const validateOrganizationPlanToolDefinition: ToolDefinition = {
   name: "file_organizer_validate_organization_plan",
   title: "Validate Organization Plan",
   description:
-    "Checks the organization plan organize_files would execute and returns an ok / not-ok verdict. Read-only: nothing is moved, renamed, or deleted. Flags two or more sources landing on one destination name, destinations that already exist, moves that cross a device boundary (compared with fs.stat device ids), and sources the sensitive-file gate would refuse. Reports `checked` and `not_checked` so a clean result is not read as a guarantee. Builds the plan with the same conflict_strategy organize_files would use; pass include_subdirs=true to check a plan over subdirectories, which organize_files itself does not scan.",
+    "Checks the organization plan organize_files would execute and returns an ok / not-ok verdict. Read-only: nothing is moved, renamed, or deleted. Flags two or more sources landing on one destination name, destinations that already exist, moves that cross a device boundary (compared with fs.stat device ids), and sources the sensitive-file gate would refuse. Reports `checked` and `not_checked` so a clean result is not read as a guarantee. Builds the plan with the same conflict_strategy organize_files would use; pass include_subdirs=true to check a plan over subdirectories, which organize_files itself does not scan. Every path it reports (directory, sources, destinations) is an absolute filesystem path in the platform's native form, byte-identical to what preview_organization and organize_files report for the same plan; no separator normalization is applied, so match them with path-aware logic rather than string equality.",
   inputSchema: {
     type: "object",
     properties: {
@@ -280,7 +280,9 @@ ${findings}
 ${result.checked.map((c) => `- ${c}`).join("\n")}
 
 **Not checked:**
-${result.not_checked.map((c) => `- ${c}`).join("\n")}`;
+${result.not_checked.map((c) => `- ${c}`).join("\n")}
+
+_All paths above are absolute and in the platform's native form, the same strings preview_organization and organize_files report._`;
 }
 
 export async function handleValidateOrganizationPlan(

@@ -80,7 +80,19 @@ describe("validateOrganizationPlan", () => {
     return full;
   }
 
-  const rel = (full: string) => path.relative(root, full);
+  // The tool reports native filesystem paths, so a relative path derived from
+  // them carries the platform separator. Normalize to "/" so the literals below
+  // read the same on Linux, macOS, and Windows. Replacing the backslash
+  // explicitly, instead of splitting on path.sep, keeps the transformation
+  // verifiable from a POSIX host.
+  const toPosix = (p: string) => p.replace(/\\/g, "/");
+  const rel = (full: string) => toPosix(path.relative(root, full));
+
+  it("normalizes a native path to a POSIX-style relative identifier", () => {
+    // The mechanism the Windows run depended on, pinned on every platform.
+    expect(toPosix("a\\report.txt")).toBe("a/report.txt");
+    expect(toPosix("a/report.txt")).toBe("a/report.txt");
+  });
 
   describe("destination name collisions", () => {
     it("reports two sources the plan renamed apart", async () => {
