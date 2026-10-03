@@ -301,6 +301,37 @@ export const doctorOutputSchema = z.object({
   healthy: z.boolean(),
 });
 
+const quarantineItemSchema = z.object({
+  file: z.string(),
+  from: z.string(),
+  to: z.string(),
+});
+
+export const quarantineFilesOutputSchema = z.object({
+  directory: z.string(),
+  quarantine_dir: z.string(),
+  dry_run: z.boolean(),
+  requested: z.number(),
+  planned: z.number(),
+  quarantined: z.number(),
+  items: z.array(quarantineItemSchema),
+  skipped: z.array(z.object({ path: z.string(), reason: z.string() })),
+  errors: z.array(z.string()),
+  manifest_id: z.string().optional(),
+  reason: z.string().optional(),
+});
+
+export const restoreQuarantineOutputSchema = z.object({
+  dry_run: z.boolean(),
+  quarantine_id: z.string(),
+  requested: z.number(),
+  planned: z.number(),
+  restored: z.number(),
+  items: z.array(quarantineItemSchema),
+  errors: z.array(z.string()),
+  manifest_id: z.string().optional(),
+});
+
 type JsonSchemaObject = {
   type: "object";
   properties: Record<string, unknown>;
@@ -344,4 +375,10 @@ export const batchRenameOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const diskUsageByCategoryOutputJsonSchema = z.toJSONSchema(
   diskUsageByCategoryOutputSchema,
+) as JsonSchemaObject;
+export const quarantineFilesOutputJsonSchema = z.toJSONSchema(
+  quarantineFilesOutputSchema,
+) as JsonSchemaObject;
+export const restoreQuarantineOutputJsonSchema = z.toJSONSchema(
+  restoreQuarantineOutputSchema,
 ) as JsonSchemaObject;
