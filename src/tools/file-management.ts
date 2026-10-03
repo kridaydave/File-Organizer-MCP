@@ -47,7 +47,7 @@ export const setCustomRulesToolDefinition: ToolDefinition = {
   name: "file_organizer_set_custom_rules",
   title: "Set Custom Organization Rules",
   description:
-    "Customize how files are categorized. Persists custom rules to user configuration.",
+    "Customize how files are categorized. Persists custom rules to user configuration, replacing any rules saved earlier. Invalid rules are skipped; if the rules cannot be written to disk the call reports an error instead of a success.",
   inputSchema: {
     type: "object",
     properties: {
@@ -74,8 +74,12 @@ export const setCustomRulesToolDefinition: ToolDefinition = {
   },
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: false,
+    // The write replaces the whole persisted customRules array, so rules saved
+    // by an earlier call are lost — that is a destructive update to user config.
+    destructiveHint: true,
+    // Repeating the same call converges on the same config file; nothing is
+    // appended or consumed.
+    idempotentHint: true,
     openWorldHint: false,
   },
 };
@@ -162,7 +166,22 @@ export async function handleSetCustomRules(
       };
     }
 
-    updateUserConfig({ customRules: validRules });
+    // The write is the whole point of this tool: in-memory-only rules are lost
+    // on restart. A failed write must not be reported as success — the caller
+    // would believe the rules are saved and they would be gone next session.
+    // updateUserConfig logs the underlying cause (including the config path)
+    // server-side; the reply stays path-free.
+    if (!updateUserConfig({ customRules: validRules })) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${validRules.length} custom rules validated but could not be written to the user configuration. They are not saved and will be lost on restart. See the server log for the underlying cause.`,
+          },
+        ],
+        isError: true,
+      };
+    }
 
     return {
       content: [
