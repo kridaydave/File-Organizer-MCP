@@ -58,6 +58,7 @@ You can ask the assistant things like:
 - "Organize my Downloads folder"
 - "Find duplicate files in my Documents"
 - "Show me my largest files"
+- "Which categories take up the most space in my Downloads?"
 
 ### Install methods
 
@@ -73,6 +74,7 @@ You can ask the assistant things like:
 - Categorization into 12 or more file types.
 - Cron-based automatic organization and directory watch mode.
 - Duplicate detection by SHA-256 content hash.
+- Disk usage per category: which file types hold the space, in bytes and as a share.
 - Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
 - Dry-run preview, atomic moves, and rollback.
@@ -98,6 +100,7 @@ You can ask the assistant things like:
 - `file_organizer_batch_rename`
 - `file_organizer_categorize_by_type`
 - `file_organizer_delete_duplicates`
+- `file_organizer_disk_usage_by_category`
 - `file_organizer_doctor`
 - `file_organizer_find_broken_symlinks`
 - `file_organizer_find_duplicate_files`
@@ -378,6 +381,19 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 2. Close programs that may be locking the files.
 3. Check for sufficient disk space.
 4. Read the operation summary for error messages.
+
+### Custom rules are missing after a restart
+
+`file_organizer_set_custom_rules` saves the accepted rules to `config.json` in your
+OS config directory and every later request reads them from there. Three things
+to know:
+
+- The call replaces the whole saved set, so it is not a per-rule merge.
+- Rules with an unknown category or a rejected pattern are skipped; the reply
+  says how many were applied.
+- If the write itself fails — read-only config directory, missing permissions —
+  the call returns an error instead of a success message, and the server log
+  holds the cause. Nothing is persisted in that case.
 
 ---
 
