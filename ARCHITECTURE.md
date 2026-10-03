@@ -35,7 +35,7 @@ src/
 │   ├── scan/              scanner.ts: recursive scan with depth/count limits
 │                           + disk-usage.ts: pure per-category byte summary
 │   ├── categorize/        rules + extension map + magic-byte sniff + custom rules
-│   ├── organize/          organizer, rename, rollback (+ manifest integrity)
+│   ├── organize/          organizer, rename, rollback (+ manifest integrity), plan-validation
 │   ├── hash/              SHA-256 hasher + duplicate finder
 │   ├── config/            platform-aware defaults, loader, allowed paths
 │   └── types/             shared FileInfo / Organize / category types
