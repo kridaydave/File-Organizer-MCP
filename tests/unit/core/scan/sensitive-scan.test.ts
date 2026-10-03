@@ -539,6 +539,33 @@ describe("scanForSensitiveData", () => {
     },
   );
 
+  // macOS hands out a tmpdir under /var, which is itself a symlink to
+  // /private/var. The walk builds paths from the caller's spelling while the
+  // containment boundary is the canonical root, so comparing the two directly
+  // refuses every file. This pins the spelling-independent behaviour using a
+  // symlinked alias, which is the same shape on any platform.
+  itWithSymlinks(
+    "scans a directory reached through a symlinked alias",
+    async () => {
+      await writeJpeg("photo.jpg", {
+        latitude: [51, 30, 26.4, "N"],
+        longitude: [0, 7, 39.6, "W"],
+      });
+      const alias = `${testDir}-alias`;
+      await fs.symlink(testDir, alias);
+
+      try {
+        const result = await scanForSensitiveData(alias);
+
+        expect(result.scanned_count).toBe(1);
+        expect(result.skipped_count).toBe(0);
+        expect(fileNamed(result.files, "photo.jpg").risk_score).toBe(40);
+      } finally {
+        await fs.rm(alias, { force: true });
+      }
+    },
+  );
+
   it("carries the coverage caveat on every response, including a clean one", async () => {
     await writeJpeg("plain.jpg");
 

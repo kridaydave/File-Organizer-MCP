@@ -358,7 +358,9 @@ function skip(
  *
  *  1. Re-resolve the path and check it is still under the scan root — the
  *     same containment check the walker applies before descending into a
- *     directory, for the same reason.
+ *     directory, for the same reason. Both sides of that comparison are
+ *     canonical, so a symlinked parent (`/var` → `/private/var` on macOS)
+ *     does not make every file look out of bounds.
  *  2. Open through `openAndValidateFile`, the shared validator idiom: a single
  *     `O_NOFOLLOW` open with no pre-check window, then a post-open `isFile()`
  *     on the handle, a realpath containment check, and an inode/device match
@@ -385,7 +387,12 @@ async function readHeadForScan(
 
   let handle: fs.FileHandle | undefined;
   try {
-    handle = await validator.openAndValidateFile(filePath);
+    // Open the canonical path, not the caller's spelling of it. The walk builds
+    // paths from whatever the caller passed, which on macOS is a `/var/...`
+    // prefix while the canonical root is `/private/var/...`. Comparing the two
+    // directly fails containment and refuses every file. childReal and
+    // rootReal are both canonical, so the comparison is spelling-independent.
+    handle = await validator.openAndValidateFile(childReal);
     const stats = await handle.stat();
     if (!stats.isFile()) {
       return undefined;
