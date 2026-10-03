@@ -98,6 +98,10 @@ import {
   organizeByProjectToolDefinition,
   handleOrganizeByProject,
 } from "../tools/project-organization.js";
+import {
+  organizeByDateToolDefinition,
+  handleOrganizeByDate,
+} from "../tools/date-organization.js";
 import { doctorToolDefinition, handleDoctor } from "../tools/doctor.js";
 import {
   findBrokenSymlinksToolDefinition,
@@ -139,6 +143,7 @@ const entries = [
   reg(fileReaderToolDefinition, handleReadFile),
   reg(viewHistoryToolDefinition, handleViewHistory),
   reg(organizeByProjectToolDefinition, handleOrganizeByProject),
+  reg(organizeByDateToolDefinition, handleOrganizeByDate),
   reg(doctorToolDefinition, handleDoctor),
   reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
 ];

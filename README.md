@@ -75,6 +75,7 @@ You can ask the assistant things like:
 - Duplicate detection by SHA-256 content hash.
 - Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
+- Date sorting into `YYYY/MM` folders from EXIF date taken (photos) or file mtime, reporting which date each file used.
 - Dry-run preview, atomic moves, and rollback.
 - Path traversal protection, TOCTOU mitigation.
 - Windows, macOS, and Linux.
@@ -90,7 +91,7 @@ You can ask the assistant things like:
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
 
-### Full tool list (24 tools)
+### Full tool list (25 tools)
 
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
@@ -106,6 +107,7 @@ You can ask the assistant things like:
 - `file_organizer_list_files`
 - `file_organizer_organize_files`
 - `file_organizer_organize_music`
+- `file_organizer_organize_by_date`
 - `file_organizer_organize_by_project`
 - `file_organizer_organize_photos`
 - `file_organizer_preview_organization`

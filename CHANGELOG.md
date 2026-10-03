@@ -34,6 +34,17 @@
 
 ### Added
 
+- **`file_organizer_organize_by_date`** - sorts any file into `YYYY/MM` folders
+  (`YYYY/MM/DD` and `YYYY` too). Photos take their folder from EXIF
+  `DateTimeOriginal` (`CreateDate` when that is absent); every other file uses its
+  modification time. `date_source` selects `auto` (EXIF, else mtime), `exif`
+  (EXIF only), or `mtime`. Each moved file reports the source that chose its
+  folder, so an EXIF-to-mtime fallback is never silent, and files with no usable
+  date stay where they are and are listed instead of landing in an
+  "Unknown Date" bucket. `dry_run` defaults to `true`, an occupied destination is
+  de-duplicated as `name (1).ext` rather than overwritten, and every performed
+  move is recorded in a rollback manifest for `file_organizer_undo_last_operation`.
+  The server serves 25 tools (was 24).
 - `file_organizer_delete_duplicates` accepts `verify_before_delete` (default
   `true`) and `candidate_directories`, for when a surviving copy lives outside
   the searched parent directories.

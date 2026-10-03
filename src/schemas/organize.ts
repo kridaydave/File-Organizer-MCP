@@ -262,6 +262,54 @@ export const OrganizePhotosInputSchema = z
 export type OrganizePhotosInput = z.infer<typeof OrganizePhotosInputSchema>;
 
 /**
+ * Schema for organize_by_date tool
+ * Sorts any file into YYYY/MM folders using EXIF date taken (photos) or mtime.
+ *
+ * date_source:
+ * - "auto"  EXIF DateTimeOriginal when a photo has one, otherwise mtime
+ * - "exif"  EXIF only; files without a usable EXIF date are left in place
+ * - "mtime" filesystem modification time only, never reads metadata
+ */
+export const OrganizeByDateInputSchema = z
+  .object({
+    source_dir: z
+      .string()
+      .min(1, "Source directory path cannot be empty")
+      .describe("Full path to the directory containing files to sort"),
+    target_dir: z
+      .string()
+      .min(1, "Target directory path cannot be empty")
+      .describe(
+        "Full path to the directory where the YYYY/MM folders will be created",
+      ),
+    date_format: z
+      .enum(["YYYY/MM", "YYYY/MM/DD", "YYYY"])
+      .optional()
+      .default("YYYY/MM")
+      .describe("Date folder structure"),
+    date_source: z
+      .enum(["auto", "exif", "mtime"])
+      .optional()
+      .default("auto")
+      .describe(
+        "Where the folder date comes from: EXIF date taken for photos, file mtime, or auto",
+      ),
+    recursive: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Scan subdirectories of source_dir"),
+    dry_run: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("If true, only preview the date folders without moving files"),
+  })
+  .merge(CommonParamsSchema);
+
+export type OrganizeByDateInput = z.infer<typeof OrganizeByDateInputSchema>;
+
+/**
  * Schema for system_organization tool
  * Organizes files into OS-standard system directories (Music, Documents, Pictures, Videos)
  */
