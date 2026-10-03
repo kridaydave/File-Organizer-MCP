@@ -16,6 +16,7 @@
 - [file_organizer_batch_rename](#file_organizer_batch_rename)
 - [file_organizer_categorize_by_type](#file_organizer_categorize_by_type)
 - [file_organizer_delete_duplicates](#file_organizer_delete_duplicates)
+- [file_organizer_disk_usage_by_category](#file_organizer_disk_usage_by_category)
 - [file_organizer_doctor](#file_organizer_doctor)
 - [file_organizer_find_broken_symlinks](#file_organizer_find_broken_symlinks)
 - [file_organizer_find_duplicate_files](#file_organizer_find_duplicate_files)
@@ -183,6 +184,51 @@ file_organizer_delete_duplicates({
   create_backup_manifest: true,
   verify_before_delete: true,
   candidate_directories: [],
+  response_format: "value",
+});
+```
+
+---
+
+## file_organizer_disk_usage_by_category
+
+[⬆ Back to Top](#top)
+
+**Description:** Report how much space a directory holds per category: bytes, file count, and share of the total. Categories come from the same categorizer `categorize_by_type` and `organize_files` use, custom rules included, and sizes are summed from the scan rather than from a second directory walk. `include_subdirs` defaults to `true` because the space a category holds usually sits below the directory you point at. Read-only. Closes #43.
+
+### Parameters
+
+| Parameter         | Type    | Description                | Default    |
+| ----------------- | ------- | -------------------------- | ---------- |
+| `directory`       | string  | Full path to the directory | -          |
+| `include_subdirs` | boolean | Include subdirectories     | true       |
+| `response_format` | string  | `json` or `markdown`       | 'markdown' |
+
+### Response fields
+
+| Field                        | Type     | Description                                          |
+| ---------------------------- | -------- | ---------------------------------------------------- |
+| `directory`                  | string   | The measured directory                                |
+| `total_files`                | number   | Files counted across all categories                  |
+| `total_size`                 | number   | Total bytes counted                                  |
+| `total_size_readable`        | string   | Total bytes as a readable size                       |
+| `categories[]`               | array    | One entry per category, largest first                |
+| `categories[].category`      | string   | Category name from the categorizer                   |
+| `categories[].file_count`    | number   | Files in that category                               |
+| `categories[].total_size`    | number   | Bytes in that category                               |
+| `categories[].total_size_readable` | string | Bytes as a readable size                      |
+| `categories[].percent_of_total` | number | Share of the total, rounded to two decimals     |
+
+`percent_of_total` is rounded per category, so the shares of a directory with
+many small categories add up to 100 within a rounding error rather than exactly.
+Empty directories report zero totals instead of dividing by zero.
+
+### Example
+
+```typescript
+file_organizer_disk_usage_by_category({
+  directory: "value",
+  include_subdirs: true,
   response_format: "value",
 });
 ```
