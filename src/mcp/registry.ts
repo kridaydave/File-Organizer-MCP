@@ -29,10 +29,12 @@ import {
 import {
   findLargestFilesToolDefinition,
   handleFindLargestFiles,
-  diskUsageByCategoryToolDefinition,
+diskUsageByCategoryToolDefinition,
   handleDiskUsageByCategory,
   findOldFilesToolDefinition,
   handleFindOldFiles,
+  findEmptyDirectoriesToolDefinition,
+  handleFindEmptyDirectories,
 } from "../tools/file-analysis.js";
 import {
   findDuplicateFilesToolDefinition,
@@ -150,6 +152,7 @@ const entries = [
   reg(organizeByProjectToolDefinition, handleOrganizeByProject),
   reg(doctorToolDefinition, handleDoctor),
   reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
+  reg(findEmptyDirectoriesToolDefinition, handleFindEmptyDirectories),
 ];
 
 export const TOOLS: ToolDefinition[] = entries.map((e) => e.definition);

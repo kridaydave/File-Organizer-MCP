@@ -191,6 +191,44 @@ export type FindBrokenSymlinksInput = z.infer<
   typeof FindBrokenSymlinksInputSchema
 >;
 
+/**
+ * Schema for find_empty_directories tool
+ */
+export const FindEmptyDirectoriesInputSchema = z
+  .object({
+    directory: z
+      .string()
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to search for empty directories"),
+    include_subdirs: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Recurse into subdirectories (default true)"),
+    max_depth: z
+      .number()
+      .int()
+      .min(0)
+      .max(100)
+      .optional()
+      .describe(
+        "Levels below the root to walk (0 = root only). Defaults to the configured max scan depth",
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .optional()
+      .default(100)
+      .describe("Maximum number of empty directories to return"),
+  })
+  .merge(CommonParamsSchema);
+
+export type FindEmptyDirectoriesInput = z.infer<
+  typeof FindEmptyDirectoriesInputSchema
+>;
+
 export type ListFilesInput = z.infer<typeof ListFilesInputSchema>;
 export type ScanDirectoryInput = z.infer<typeof ScanDirectoryInputSchema>;
 export type FindLargestFilesInput = z.infer<typeof FindLargestFilesInputSchema>;

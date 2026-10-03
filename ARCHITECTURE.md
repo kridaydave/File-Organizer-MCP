@@ -1,6 +1,6 @@
 # Architecture
 
-File Organizer MCP is a stateless stdio MCP server. One Node process exposes 27 typed tools over JSON-RPC. There is no session state, no in-memory cache of your files, and no background work in the core server. The core loop is `scan → categorize → plan → move`, and every filesystem touch passes through one path validator.
+One Node process exposes 28 typed tools over JSON-RPC.
 
 ## Request lifecycle
 
