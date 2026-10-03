@@ -34,6 +34,7 @@
 - [file_organizer_preview_organization](#file_organizer_preview_organization)
 - [file_organizer_read_file](#file_organizer_read_file)
 - [file_organizer_scan_directory](#file_organizer_scan_directory)
+- [file_organizer_search_history](#file_organizer_search_history)
 - [file_organizer_set_custom_rules](#file_organizer_set_custom_rules)
 - [file_organizer_smart_suggest](#file_organizer_smart_suggest)
 - [file_organizer_system_organize](#file_organizer_system_organize)
@@ -865,10 +866,64 @@ file_organizer_undo_last_operation({
 | `privacy_mode`    | string | 'full', 'redacted', or 'none'                     | -          |
 | `response_format` | string | 'json' or 'markdown'                              | 'markdown' |
 
+Entries may carry a `paths` array — the paths that operation touched, recorded
+when the tool call named a directory. `privacy_mode` treats it like the other
+path-bearing fields: redacted in `redacted`, absent in `none`.
+[`file_organizer_search_history`](#file_organizer_search_history) filters on it.
+
 ### Example
 
 ```typescript
 file_organizer_view_history({
+  limit: 20,
+});
+```
+
+---
+
+## file_organizer_search_history
+
+[⬆ Back to Top](#top)
+
+**Description:** Search the file organization history. Filter entries by path glob, date range (`from` / `to`), operation type, status, or source — every filter is optional and the ones you pass combine. Reads the same history as `file_organizer_view_history`; use `view_history` for the plain newest-first list and this tool when the list has grown past that.
+
+**Read-only.** No path on disk is read or written by the filters — the glob is matched against the paths already recorded in each history entry, not against the filesystem.
+
+### Parameters
+
+| Parameter         | Type   | Description                                                                          | Default    |
+| ----------------- | ------ | ------------------------------------------------------------------------------------ | ---------- |
+| `path_glob`       | string | Glob matched against the paths each entry recorded                                    | -          |
+| `from`            | string | ISO date string - return entries at or after this time                               | -          |
+| `to`              | string | ISO date string - return entries at or before this time                              | -          |
+| `operation`       | string | Filter by operation name                                                             | -          |
+| `status`          | string | 'success', 'error', or 'partial'                                                     | -          |
+| `source`          | string | 'manual' or 'scheduled'                                                              | -          |
+| `limit`           | number | Maximum number of entries to return (1-1000)                                         | 20         |
+| `privacy_mode`    | string | 'full', 'redacted', or 'none'                                                        | -          |
+| `response_format` | string | 'json' or 'markdown'                                                                 | 'markdown' |
+
+### `path_glob` semantics
+
+One pattern is tried three ways against each recorded path, so whichever form you write works:
+
+| Pattern          | Matches                                                             |
+| ---------------- | ------------------------------------------------------------------- |
+| `**/Downloads`   | the full recorded path, e.g. `/home/you/Downloads`                   |
+| `**/Downloads/**`| anything under that directory                                       |
+| `*.pdf`          | the bare filename, so the pattern does not need the full path        |
+
+Recorded Windows paths are matched with `\` folded to `/`, so `**/Downloads` still matches `C:\Users\you\Downloads`. `path_glob` is bounded like any other path input (non-empty, no null byte, no `..`), and a pattern minimatch cannot compile is rejected as a `ValidationError` instead of quietly matching nothing.
+
+An entry only matches a `path_glob` if it recorded a path. Operations that never touch a directory (`file_organizer_get_categories`, a failed call with no directory argument) do not match any glob.
+
+### Example
+
+```typescript
+file_organizer_search_history({
+  path_glob: "**/Downloads/**",
+  from: "2026-01-01T00:00:00.000Z",
+  operation: "file_organizer_organize_files",
   limit: 20,
 });
 ```
