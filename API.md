@@ -1138,7 +1138,7 @@ file_organizer_search_history({
 | `custom_rule_count`       | Number of custom categorization rules                                  |
 | `default_allowed`         | Platform default allowed roots that exist                              |
 | `configured_allowed_dirs` | One entry per `customAllowedDirectories` entry                         |
-| `effective_allowed_dirs`  | The configured entries the security gate kept                          |
+| `effective_allowed_dirs`  | The configured entries the security gate kept, with `~` expanded        |
 | `unknown_config_keys`     | config.json keys the loader does not understand                        |
 | `problems`                | Human-readable list of what is wrong                                   |
 | `healthy`                 | True when `problems` is empty                                          |
