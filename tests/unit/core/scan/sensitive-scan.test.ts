@@ -474,9 +474,18 @@ describe("scanForSensitiveData", () => {
 
   // The window this pins: readdir reports `photo.jpg` as a regular file, and
   // between that decision and the read it is replaced with a symlink pointing
-  // out of the scanned tree. Without a containment re-check and a
-  // no-follow open, the scan reads the outside file and reports its metadata
-  // as if it had come from inside the root.
+  // out of the scanned tree. Without a containment re-check and a no-follow
+  // open, the scan reads the outside file and reports its metadata as if it
+  // had come from inside the root.
+  //
+  // HONEST SCOPE: the swap is fired from the readdir wrapper, so it is
+  // deterministic here on Linux. On macOS the timing has not been verified to
+  // land before the read, and a green macOS run must NOT be read as proof the
+  // race was exercised there — on that platform the scan may return the clean
+  // pre-swap photo. What this test guarantees on every platform is the security
+  // property below: no content from outside the root is ever read or reported.
+  // Whether the entry is reported as skipped, or read and found clean, is an
+  // implementation detail and is deliberately not asserted.
   itWithSymlinks(
     "does not read a file swapped for a symlink after listing",
     async () => {
@@ -495,16 +504,22 @@ describe("scanForSensitiveData", () => {
         );
         await writeJpeg("photo.jpg");
 
-        const realRoot = await fs.realpath(testDir);
         const realReaddir = fs.readdir;
         let swapped = false;
         const spy = jest
           .spyOn(fs, "readdir")
           .mockImplementation(async (target, options) => {
             const entries = await realReaddir(target, options);
-            // Swap inside the readdir wrapper, so the swap lands exactly in the
-            // window between the listing and the read.
-            if (!swapped && (target as string) === realRoot) {
+            // Swap inside the readdir wrapper, so the swap lands in the window
+            // between the listing and the read.
+            //
+            // Matched on the first call rather than on a path comparison: the
+            // walker readdirs the spelling the caller passed, which on macOS is
+            // a /var/... prefix and never equals its own realpath
+            // (/private/var/...). Comparing against realpath meant the swap
+            // never fired there. The root is the only directory scanned in this
+            // test, so the first call is the root.
+            if (!swapped) {
               swapped = true;
               await fs.rm(path.join(testDir, "photo.jpg"));
               await fs.symlink(
@@ -518,16 +533,34 @@ describe("scanForSensitiveData", () => {
         try {
           const result = await scanForSensitiveData(testDir);
 
+          // Without this the test can pass vacuously: if the swap never fires,
+          // the entry is a clean photo and the assertions below hold for the
+          // uninteresting reason.
+          expect(swapped).toBe(true);
+
           // Nothing from outside the root may come back. The outside file scores
           // 70 (GPS + owner name); if the scan followed the link, that is what it
           // would report for a photo that was clean when it was listed.
-          expect(result.highest_risk_score).toBe(0);
           expect(result.flagged_count).toBe(0);
-          expect(result.files).toEqual([]);
+          expect(result.highest_risk_score).toBe(0);
 
-          const leaked = JSON.stringify(result);
-          expect(leaked).not.toContain("Outside Owner");
-          expect(leaked).not.toContain("gps_coordinates");
+          // The property under test is that nothing sourced from outside the
+          // root is read or reported — not that the entry is skipped. Whether a
+          // replaced file is dropped or read-and-found-clean is an
+          // implementation detail, and asserting it made this test fail on
+          // macOS for the wrong reason. The outside file carries a GPS fix and
+          // an owner name, so any read through the link surfaces here.
+          for (const file of result.files) {
+            expect(file.risk_score).toBe(0);
+            expect(file.reasons).toEqual([]);
+          }
+
+          // And nothing from outside may appear anywhere in the payload, in any
+          // field, including the entries we skipped.
+          const payload = JSON.stringify(result);
+          expect(payload).not.toContain("Outside Owner");
+          expect(payload).not.toContain("gps_coordinates");
+          expect(payload).not.toContain("secret");
         } finally {
           spy.mockRestore();
           await fs.rm(outside, { recursive: true, force: true });
