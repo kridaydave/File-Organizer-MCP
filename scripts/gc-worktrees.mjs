@@ -27,22 +27,29 @@ function git(args, dir = cwd) {
   return execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim()
 }
 
-// 'main' unless origin/HEAD says otherwise. A wrong guess here would only make us
-// skip a worktree, never delete the default branch, because the path and cwd checks
-// catch the checkout we are standing in.
+// The default branch name, or null when origin/HEAD is not set. Deliberately no
+// fallback guess: a renamed default would otherwise be indistinguishable from an
+// ordinary merged branch, and skipReason refuses to remove anything while this
+// is unknown.
 function defaultBranch() {
   try {
     return git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']).replace(/^origin\//, '')
   } catch {
-    return 'main'
+    return null
   }
 }
 
 // Why this worktree must be kept, or null when it is safe to remove.
 function skipReason(wt) {
-  if (wt.path === cwd) return 'you are standing in it'
+  // The repo's primary checkout is not always the default branch (someone may have
+  // switched it to a feature branch), and "no PR found" would not save it. Never
+  // delete the checkout git lists first.
+  if (wt.path === primary) return 'primary checkout'
   if (cwd === wt.path || cwd.startsWith(wt.path + path.sep)) return 'contains your working directory'
   if (wt.detached || !wt.branch) return 'detached HEAD, cannot attribute it to a branch'
+  // Guessing the default branch would let a renamed default look like an ordinary
+  // merged branch. Refuse everything instead.
+  if (MAIN === null) return 'default branch unknown, refusing to remove it'
   if (wt.branch === MAIN) return `default branch (${MAIN})`
 
   const dirty = git(['status', '--porcelain'], wt.path)
@@ -87,6 +94,7 @@ function listWorktrees() {
 }
 
 const MAIN = defaultBranch()
+const primary = listWorktrees()[0].path
 const doomed = []
 const kept = []
 
@@ -116,9 +124,21 @@ if (!FORCE) {
   process.exit(0)
 }
 
+// One locked or dirty worktree must not stop the rest, so failures collect and
+// the exit code reports them at the end.
+const failed = []
 for (const d of doomed) {
-  git(['worktree', 'remove', d.path])
   try {
+    git(['worktree', 'remove', d.path])
+  } catch (err) {
+    failed.push(`${d.name}: ${err.stderr?.trim() ?? err.message}`)
+    console.log(`  FAIL  ${d.name}`)
+    continue
+  }
+  try {
+    // -d not -D on purpose. Under squash merges the branch is never an ancestor of
+    // HEAD, so this usually refuses and the branch is kept. That is the safe
+    // outcome, not a failure.
     git(['branch', '-d', d.branch])
   } catch {
     console.log(`  note: kept branch ${d.branch}, not fully merged locally`)
@@ -127,4 +147,11 @@ for (const d of doomed) {
 }
 
 git(['worktree', 'prune'])
+
+if (failed.length > 0) {
+  console.error(`\n${failed.length} worktree(s) could not be removed:`)
+  for (const f of failed) console.error(`  ${f}`)
+  process.exit(1)
+}
+
 console.log('\nDone.')
