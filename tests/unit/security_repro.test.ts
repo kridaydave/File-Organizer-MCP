@@ -6,6 +6,7 @@ import os from 'os';
 import { validateStrictPath } from '../../src/services/path-validator.service.js';
 import { DuplicateFinderService } from '../../src/core/hash/duplicate-finder.js';
 import { handleScanDirectory } from '../../src/tools/file-scanning.js';
+import { first } from '../helpers/safe-index.js';
 
 describe('Security Repro Suite (Refactored)', () => {
 
@@ -56,7 +57,7 @@ describe('Security Repro Suite (Refactored)', () => {
             });
 
             expect(result.failed).toHaveLength(1);
-            const errorMsg = result.failed[0].error;
+            const errorMsg = first(result.failed).error;
             expect(errorMsg).toMatch(/Access denied|outside the allowed directory|Path is outside|reserved name/i);
         });
     });

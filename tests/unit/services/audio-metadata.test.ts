@@ -655,7 +655,7 @@ describe("AudioMetadataService", () => {
         0x00, // Size: 256 bytes
       ]);
 
-      const frames = [
+      const frames: Array<[string, string]> = [
         // TIT2 - Title
         ["TIT2", "Complete Test Song"],
         // TPE1 - Artist

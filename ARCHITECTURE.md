@@ -39,7 +39,7 @@ src/
 │   ├── hash/              SHA-256 hasher + duplicate finder
 │   ├── config/            platform-aware defaults, loader, allowed paths
 │   └── types/             shared FileInfo / Organize / category types
-├── services/              facade re-exports + metadata/{image,audio} + history logger + path validator (8-layer, see Security)
+├── services/              facade re-exports + metadata/{image,audio} + history logger + path validator (see Security)
 ├── extensions/scheduler/  cron watch daemon + its own bin (bin/file-organizer-watch.mjs)
 └── utils/                 logger, error-handler (path-safe messages), formatters
 ```
@@ -62,26 +62,37 @@ A manifest carries two different digests. `manifest.hash` and `manifest.signatur
 
 ## Security
 
-### 8-layer path validation pipeline
+### Path validation pipeline
 
-Every path goes through this before any `fs` call:
+Every path reaches `fs` through `validatePathBase` in
+`src/services/path-validator.service.ts`, which applies these checks in order.
+`validateStrictPath` is the entry point most tools use.
 
 ```
 Input Path
     ↓
-1. Type Validation (Zod Schema)
-2. Null Byte & Basic Sanitization
-3. Path Normalization & Windows Case Adjustment
-4. Traversal Sequence Prevention (../)
-5. Absolute Path Resolution
-6. Security Check (Whitelist & Blacklist)
-7. Symlink Resolution & Target Validation
-8. Existence & Access Check
+1.  Schema: string, length, no NUL, no literal ".." segment   (PathSchema)
+2.  Normalize: URI-decode, Unicode NFC, strip ~ and $VAR, path.normalize
+3.  Reject control characters and the characters <>"|?*
+4.  Reject a basename that is a Windows device name
+5.  Resolve against basePath
+6.  isPathAllowed: blacklist, then the allowed-roots whitelist
+7.  Symlink containment: realpath, checked per component
+8.  Existence and access: fs.access
     ↓
 Validated Path
 ```
 
-Implementation: `src/services/path-validator.service.ts` (`validateStrictPath`). Allowed roots are platform-aware and user-configured; nothing hardcodes a home directory.
+Two of these are conditional. Step 8 runs only when a caller asks for
+`requireExists` or `checkWrite`, and `validateStrictPath` asks for neither, so a
+plain tool call does not stat the path. Step 7 always runs.
+
+`allowSymlinks` defaults to true. When a caller sets it false, an extra `lstat`
+walk runs before step 7 to reject symlinked components.
+
+Allowed roots are platform-aware and user-configured; nothing hardcodes a home
+directory. `file_organizer_doctor` reports the effective allow-list and flags
+any entry that is missing or policy-blocked.
 
 ### TOCTOU protection
 

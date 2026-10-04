@@ -20,6 +20,7 @@ import {
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
+import type { ToolResponse } from "../../../src/mcp/types.js";
 
 const { CONFIG } = await import("../../../src/config.js");
 const { handleBatchRename } = await import(
@@ -82,9 +83,7 @@ describe("batch_rename collision preview", () => {
     return paths;
   }
 
-  function payload(res: {
-    structuredContent?: unknown;
-  }): BatchRenamePayload {
+  function payload(res: ToolResponse): BatchRenamePayload {
     expect(res.structuredContent).toBeDefined();
     return res.structuredContent as BatchRenamePayload;
   }

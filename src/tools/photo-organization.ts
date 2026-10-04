@@ -62,7 +62,8 @@ export const organizePhotosToolDefinition: ToolDefinition = {
       },
       unknown_date_folder: {
         type: "string",
-        description: "Folder name for photos without date metadata",
+        description:
+          "Single folder name (no separators) for photos without date metadata",
         default: "Unknown Date",
       },
       response_format: {

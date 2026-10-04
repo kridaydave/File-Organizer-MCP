@@ -62,6 +62,32 @@ export const PathSchema = z
   });
 
 /**
+* Schema for a user-supplied FOLDER NAME — a single path segment, not a path.
+ *
+ * These values get joined onto an already-validated directory and then
+ * mkdir'd, so anything that could walk out of that directory (separators,
+ * "..", NUL, control characters) is rejected outright rather than sanitized
+ * into something the caller did not ask for. Legitimate names such as
+ * "Unknown Date" or "2024 Unsorted" pass untouched.
+ */
+export const FolderNameSchema = z
+  .string()
+  .min(1, "Folder name cannot be empty")
+  .max(255, "Folder name too long")
+  .refine((name) => !/[/\\]/.test(name), {
+    message: "Folder name cannot contain path separators",
+  })
+  .refine((name) => !name.includes(".."), {
+    message: "Folder name cannot contain parent directory traversal",
+  })
+  .refine((name) => !/[\x00-\x1F]/.test(name), {
+    message: "Folder name cannot contain control characters",
+  })
+  .refine((name) => name.trim() !== "", {
+    message: "Folder name cannot be blank",
+  });
+
+/**
  * Schema for search_history tool — the filtered read over the same history.
  * Every filter is optional; supplied filters combine.
  */

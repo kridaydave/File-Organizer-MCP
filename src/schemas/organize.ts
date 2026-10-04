@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 import { CommonParamsSchema } from "./common.js";
+import { FolderNameSchema } from "./system.js";
 
 /**
  * Schema for organize_files tool
@@ -358,11 +359,11 @@ export const OrganizePhotosInputSchema = z
       .optional()
       .default(false)
       .describe("Strip GPS location data from photos for privacy"),
-    unknown_date_folder: z
-      .string()
-      .optional()
+    unknown_date_folder: FolderNameSchema.optional()
       .default("Unknown Date")
-      .describe("Folder name for photos without date metadata"),
+      .describe(
+        "Single folder name (no separators) for photos without date metadata",
+      ),
   })
   .merge(CommonParamsSchema);
 
@@ -443,11 +444,9 @@ export const SystemOrganizationInputSchema = z
       .describe(
         "Fallback to local Organized folder if system dir not writable",
       ),
-    local_fallback_prefix: z
-      .string()
-      .optional()
+    local_fallback_prefix: FolderNameSchema.optional()
       .default("Organized")
-      .describe("Prefix for local fallback folder"),
+      .describe("Single folder name (no separators) for the local fallback"),
     conflict_strategy: z
       .enum(["skip", "rename", "overwrite"])
       .optional()

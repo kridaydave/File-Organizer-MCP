@@ -67,9 +67,11 @@ describe('HashCalculatorService', () => {
         const { groups: duplicates } = await hashService.findDuplicates(files);
 
         expect(duplicates.length).toBe(1);
-        expect(duplicates[0].count).toBe(2);
-        expect(duplicates[0].files.map(f => f.name)).toContain('file1.txt');
-        expect(duplicates[0].files.map(f => f.name)).toContain('file2.txt');
+        const [group] = duplicates;
+        if (!group) throw new Error('expected exactly one duplicate group');
+        expect(group.count).toBe(2);
+        expect(group.files.map(f => f.name)).toContain('file1.txt');
+        expect(group.files.map(f => f.name)).toContain('file2.txt');
     });
 
     describe('skipped-file reporting (issue #22)', () => {
@@ -106,7 +108,9 @@ describe('HashCalculatorService', () => {
             ]);
 
             expect(scan.groups).toHaveLength(1);
-            expect(scan.groups[0].count).toBe(2);
+            const [group] = scan.groups;
+            if (!group) throw new Error('expected exactly one duplicate group');
+            expect(group.count).toBe(2);
             expect(scan.skipped.map(s => s.name)).toEqual(['big.bin']);
         });
 

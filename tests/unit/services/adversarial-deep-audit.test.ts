@@ -21,6 +21,7 @@ import { assertNotSensitive } from '../../../src/core/io/sensitive-files.js';
 import { sanitizeErrorMessage } from '../../../src/utils/error-handler.js';
 import { parseJsonc } from '../../../src/tui/client-detector.js';
 import { CONFIG } from '../../../src/core/config/defaults.js';
+import { first, required } from '../../helpers/safe-index.js';
 
 describe('Adversarial Deep Edge-Case Suite', () => {
   let tempDir: string;
@@ -93,12 +94,12 @@ describe('Adversarial Deep Edge-Case Suite', () => {
 
       const renamer = new RenamingService();
       const preview = await renamer.applyRenameRules([file], [
-        { type: 'case', casing: 'snake' },
+        { type: 'case', conversion: 'snake_case' },
       ]);
 
-      expect(preview[0]?.new).toBeDefined();
+      expect(first(preview).new).toBeDefined();
       // Should preserve résumé rather than stripping it to r_sum
-      expect(path.basename(preview[0]!.new)).toContain('résumé');
+      expect(path.basename(required(first(preview).new, 'preview[0].new'))).toContain('résumé');
     });
   });
 

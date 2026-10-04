@@ -993,17 +993,17 @@ file_organizer_smart_suggest({
 
 ### Parameters
 
-| Parameter               | Type    | Description                                         | Default     |
-| ----------------------- | ------- | --------------------------------------------------- | ----------- |
-| `source_dir`            | string  | Source directory (Downloads, Desktop, or Temp)      | -           |
-| `use_system_dirs`       | boolean | Use OS system directories                           | true        |
-| `create_subfolders`     | boolean | Create organized subfolders                         | true        |
-| `fallback_to_local`     | boolean | Fallback to local folder if system dir not writable | true        |
-| `local_fallback_prefix` | string  | Prefix for local fallback folder                    | 'Organized' |
-| `conflict_strategy`     | string  | 'skip', 'rename', or 'overwrite'                    | 'rename'    |
-| `dry_run`               | boolean | Preview without moving                              | true        |
-| `copy_instead_of_move`  | boolean | Copy instead of move                                | false       |
-| `response_format`       | string  | 'json' or 'markdown'                                | 'markdown'  |
+| Parameter               | Type    | Description                                        | Default    |
+| ----------------------- | ------- | -------------------------------------------------- | ---------- |
+| `source_dir`            | string  | Source directory (Downloads, Desktop, or Temp)     | -          |
+| `use_system_dirs`       | boolean | Use OS system directories                          | true       |
+| `create_subfolders`     | boolean | Create organized subfolders                        | true       |
+| `fallback_to_local`     | boolean | Fallback to local folder if system dir not writable| true       |
+| `local_fallback_prefix` | string  | Single folder name (no separators) for local fallback | 'Organized'|
+| `conflict_strategy`     | string  | 'skip', 'rename', or 'overwrite'                   | 'rename'   |
+| `dry_run`               | boolean | Preview without moving                             | true       |
+| `copy_instead_of_move`  | boolean | Copy instead of move                               | false      |
+| `response_format`       | string  | 'json' or 'markdown'                               | 'markdown' |
 
 ### Example
 
@@ -1398,7 +1398,7 @@ file_organizer_organize_music({
 | `date_format`          | string  | Date folder structure: 'YYYY/MM/DD', 'YYYY-MM-DD', 'YYYY/MM', 'YYYY' | 'YYYY/MM'      |
 | `group_by_camera`      | boolean | Group photos by camera model within date folders                     | false          |
 | `strip_gps`            | boolean | Strip GPS location data from photos                                  | false          |
-| `unknown_date_folder`  | string  | Folder name for photos without date metadata                         | 'Unknown Date' |
+| `unknown_date_folder`  | string  | Single folder name (no separators) for photos without date metadata   | 'Unknown Date' |
 | `dry_run`              | boolean | Preview changes without moving files                                 | true           |
 | `copy_instead_of_move` | boolean | Copy files instead of moving them                                    | false          |
 | `response_format`      | string  | Output format                                                        | 'markdown'     |

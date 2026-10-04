@@ -86,9 +86,14 @@ nextReadme = replaceHeading(nextReadme, count, 'README.md');
 const nextArch = replaceArchitecture(originalArch, count);
 
 if (checkOnly) {
+  // The generator emits \n. On a checkout with autocrlf, the file on disk is
+  // \r\n, so a byte comparison reports drift on Windows for a document that is
+  // already correct. Compare with line endings normalised; the write path keeps
+  // whatever the checkout already uses.
+  const normalizeEol = (s) => s.replace(/\r\n/g, '\n');
   const drift = [];
-  if (nextReadme !== originalReadme) drift.push('README.md');
-  if (nextArch !== originalArch) drift.push('ARCHITECTURE.md');
+  if (normalizeEol(nextReadme) !== normalizeEol(originalReadme)) drift.push('README.md');
+  if (normalizeEol(nextArch) !== normalizeEol(originalArch)) drift.push('ARCHITECTURE.md');
   if (drift.length > 0) {
     console.error(
       `✗ Tool docs out of sync with the registry (${count} tools): ${drift.join(', ')}\n` +

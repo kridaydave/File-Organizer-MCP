@@ -37,25 +37,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Setup test directories
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            if [ ! -d "tests/temp" ]; then mkdir -p tests/temp; fi
-            if [ ! -d "test-fixtures" ]; then mkdir -p test-fixtures; fi
-            if [ ! -d "test-fixtures-e2e" ]; then mkdir -p test-fixtures-e2e; fi
-          else
-            mkdir -p tests/temp
-            mkdir -p test-fixtures
-            mkdir -p test-fixtures-e2e
-          fi
-          echo "Test directories created"
+      # tests/temp is created by tests/setup.ts, which runs before any suite.
+      # test-fixtures and test-fixtures-e2e were referenced by no test.
 
       - name: Run linter
         run: npm run lint
 
       - name: Build project
         run: npm run build
+
+      - name: Typecheck src and tests
+        run: npm run typecheck:tests
+
+      - name: Check agent docs still point at real code
+        run: npm run docs:check
 
       - name: Clean Jest cache (if exists)
         shell: bash

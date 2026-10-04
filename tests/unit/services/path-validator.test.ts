@@ -8,7 +8,11 @@ import { jest, describe, it, expect, afterEach } from '@jest/globals';
 // Mock fs/promises with default wrapper (matching how source imports it)
 jest.unstable_mockModule('fs/promises', () => ({
   default: {
-    access: jest.fn<() => Promise<void>>().mockImplementation(() => Promise.resolve()),
+    // Typed with the real fs.access arity so the "called with path and mode"
+    // assertions below check what the code actually passes.
+    access: jest
+      .fn<(p: string, mode?: number) => Promise<void>>()
+      .mockImplementation(() => Promise.resolve()),
     constants: { W_OK: 2, R_OK: 4 },
   },
 }));
@@ -18,10 +22,12 @@ const { checkAccess } = await import('../../../src/services/path-validator.servi
 const fs = (await import('fs/promises')).default;
 
 describe('path-validator.service', () => {
-  let mockAccess: jest.Mock<() => Promise<void>>;
+  let mockAccess: jest.Mock<(p: string, mode?: number) => Promise<void>>;
 
   beforeEach(() => {
-    mockAccess = fs.access as unknown as jest.Mock<() => Promise<void>>;
+    mockAccess = fs.access as unknown as jest.Mock<
+      (p: string, mode?: number) => Promise<void>
+    >;
     mockAccess.mockReset();
   });
 

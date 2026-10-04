@@ -11,6 +11,7 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import type { RenameRule } from "../../../src/schemas/organize.js";
+import { first } from "../../helpers/safe-index.js";
 import {
   RenamingService,
   detectRenameCollisions,
@@ -91,7 +92,14 @@ describe("detectRenameCollisions", () => {
 
   it("reports a destination name a different file already holds", async () => {
     const previews = await previewOf(["b.txt", "a.txt"], [
-      { type: "find_replace", find: "a", replace: "b", global: false },
+      {
+        type: "find_replace",
+        find: "a",
+        replace: "b",
+        use_regex: false,
+        case_sensitive: false,
+        global: false,
+      },
     ]);
 
     const collisions = detectRenameCollisions(previews);
@@ -177,11 +185,18 @@ describe("a rule cannot steer a rename out of its directory", () => {
     await fs.writeFile(file, "content");
 
     const previews = await new RenamingService().applyRenameRules([file], [
-      { type: "find_replace", find: "safe", replace: "../escaped" },
+      {
+        type: "find_replace",
+        find: "safe",
+        replace: "../escaped",
+        use_regex: false,
+        case_sensitive: false,
+        global: true,
+      },
     ]);
 
-    expect(previews[0].error).toContain("outside the source directory");
-    expect(previews[0].willChange).toBe(false);
+    expect(first(previews).error).toContain("outside the source directory");
+    expect(first(previews).willChange).toBe(false);
     // No preview entry can name a file outside the sandbox.
     expect(detectRenameCollisions(previews)).toEqual([]);
   });
@@ -193,11 +208,18 @@ describe("a rule cannot steer a rename out of its directory", () => {
     await fs.writeFile(file, "SECRET=1");
 
     const previews = await new RenamingService().applyRenameRules([file], [
-      { type: "find_replace", find: ".env", replace: "" },
+      {
+        type: "find_replace",
+        find: ".env",
+        replace: "",
+        use_regex: false,
+        case_sensitive: false,
+        global: true,
+      },
     ]);
 
-    expect(previews[0].error).toContain("outside the source directory");
-    expect(previews[0].willChange).toBe(false);
+    expect(first(previews).error).toContain("outside the source directory");
+    expect(first(previews).willChange).toBe(false);
     // The file is still there under its own name. Sorted, because readdir
     // order is not guaranteed between two calls on the same directory.
     expect((await fs.readdir(testDir)).sort()).toEqual([".env"]);
