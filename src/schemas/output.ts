@@ -272,6 +272,57 @@ export const diskUsageByCategoryOutputSchema = z.object({
   ),
 });
 
+/**
+ * sensitive_scan. `limits` is part of the contract, not decoration: the risk
+ * score is a heuristic and a caller that drops the caveat reads a zero as a
+ * clearance the scan never gave.
+ */
+export const sensitiveScanOutputSchema = z.object({
+  directory: z.string(),
+  scanned_count: z.number(),
+  skipped_count: z.number(),
+  flagged_count: z.number(),
+  highest_risk_score: z.number(),
+  truncated: z.boolean(),
+  files: z.array(
+    z.object({
+      path: z.string(),
+      name: z.string(),
+      format: z.string(),
+      risk_score: z.number(),
+      risk_level: z.enum(["none", "low", "medium", "high"]),
+      reasons: z.array(
+        z.object({
+          kind: z.enum([
+            "gps_coordinates",
+            "gps_altitude",
+            "gps_timestamp",
+            "owner_name",
+            "serial_number",
+            "camera_device",
+            "copyright",
+            "software",
+            "notes_or_comment",
+          ]),
+          weight: z.number(),
+          detail: z.string(),
+          exif_tags: z.array(z.string()),
+          value: z.string().optional(),
+        }),
+      ),
+    }),
+  ),
+  skipped: z.array(
+    z.object({
+      path: z.string(),
+      name: z.string(),
+      reason: z.enum(["format_not_analyzed", "unreadable"]),
+      detail: z.string(),
+    }),
+  ),
+  limits: z.array(z.string()),
+});
+
 export const undoOutputSchema = z.object({
   success: z.number(),
   failed: z.number(),
@@ -463,4 +514,7 @@ export const restoreQuarantineOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const exportConfigOutputJsonSchema = z.toJSONSchema(
   exportConfigOutputSchema,
+) as JsonSchemaObject;
+export const sensitiveScanOutputJsonSchema = z.toJSONSchema(
+  sensitiveScanOutputSchema,
 ) as JsonSchemaObject;

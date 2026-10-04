@@ -40,6 +40,7 @@
 - [file_organizer_scan_directory](#file_organizer_scan_directory)
 - [file_organizer_search_history](#file_organizer_search_history)
 - [file_organizer_set_custom_rules](#file_organizer_set_custom_rules)
+- [file_organizer_sensitive_scan](#file_organizer_sensitive_scan)
 - [file_organizer_smart_suggest](#file_organizer_smart_suggest)
 - [file_organizer_system_organize](#file_organizer_system_organize)
 - [file_organizer_undo_last_operation](#file_organizer_undo_last_operation)
@@ -884,6 +885,72 @@ file_organizer_set_custom_rules({
   filename_pattern: "value",
   priority: 123,
   response_format: "markdown",
+});
+```
+
+---
+
+## file_organizer_sensitive_scan
+
+[⬆ Back to Top](#top)
+
+**Description:** Screen a directory for files carrying personal metadata and score each one 0-100 for the risk of sharing it. Detects EXIF GPS coordinates and altitude, GPS fix timestamps, owner/artist names, camera and lens serial numbers, camera or computer make and model, copyright lines, capture/editing software, and free-text notes. Read-only. Closes #34.
+
+> **Heuristic detection, not redaction.** The tool reports; it never modifies or
+> strips anything. **A risk score of 0 means no recognized EXIF tag was found —
+> it does NOT mean the file is safe to share.** Metadata outside EXIF (PDF
+> annotations, XMP, IPTC, embedded thumbnails), file names, and the visible image
+> content are not analyzed, and only the first 256 KB of each file is read. Every
+> response carries this caveat in its `limits` field, in both response formats.
+> Treat the scan output itself as sensitive: it echoes the values it found.
+
+### Parameters
+
+| Parameter         | Type    | Description                                                            | Default    |
+| ----------------- | ------- | ---------------------------------------------------------------------- | ---------- |
+| `directory`       | string  | Full path to the directory to screen                                    | -          |
+| `include_subdirs` | boolean | Descend into real subdirectories. Symbolic links are never followed.   | false      |
+| `response_format` | string  | `json` or `markdown`                                                    | 'markdown' |
+
+Only the head of each file is read, so a large photo is never loaded whole.
+
+### Response fields
+
+| Field                        | Type     | Description                                                              |
+| ---------------------------- | -------- | ------------------------------------------------------------------------ |
+| `directory`                  | string   | The scanned directory                                                    |
+| `scanned_count`              | number   | Files whose metadata was actually parsed                                 |
+| `skipped_count`              | number   | Files present but outside what this scan can analyze                     |
+| `flagged_count`              | number   | Scanned files carrying at least one finding                              |
+| `highest_risk_score`         | number   | Highest score seen, or 0                                                 |
+| `truncated`                  | boolean  | A subdirectory past the max scan depth was not walked                    |
+| `files[].name`               | string   | File name                                                                |
+| `files[].path`               | string   | Full path                                                                |
+| `files[].format`             | string   | Detected format, `jpeg` or `tiff`. Trusted over the extension.           |
+| `files[].risk_score`         | number   | 0-100, the sum of the reason weights, capped at 100                     |
+| `files[].risk_level`         | string   | `none`, `low` (1-24), `medium` (25-59), or `high` (60+)                 |
+| `files[].reasons[].kind`     | string   | What kind of personal data the tag carries                               |
+| `files[].reasons[].weight`   | number   | Points this reason added. The weights sum to `risk_score`.               |
+| `files[].reasons[].detail`   | string   | Plain-English statement naming the tag                                   |
+| `files[].reasons[].exif_tags` | string[] | EXIF tag names behind the finding                                       |
+| `files[].reasons[].value`    | string   | Detected value, capped in length. Absent for tags that are not a readable string or number. |
+| `skipped[].reason`           | string   | `format_not_analyzed` or `unreadable`                                    |
+| `skipped[].detail`           | string   | Why this file was skipped                                                |
+| `limits`                     | string[] | The coverage caveat. Required reading, not decoration.                   |
+
+`files` is sorted by risk score descending, then by path, so the worst file is first. A
+symbolic link is reported under `skipped` rather than followed.
+
+Reason weights: `gps_coordinates` 40, `owner_name` 30, `serial_number` 25, `camera_device` 15,
+`notes_or_comment` 10, `gps_altitude` 5, `gps_timestamp` 5, `copyright` 5, `software` 5.
+
+### Example
+
+```typescript
+file_organizer_sensitive_scan({
+  directory: "value",
+  include_subdirs: true,
+  response_format: "value",
 });
 ```
 
