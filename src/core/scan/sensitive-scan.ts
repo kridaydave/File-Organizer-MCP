@@ -307,7 +307,11 @@ export function assessExifBuffer(
 
   let tags: Record<string, unknown>;
   try {
-    tags = extractTags(ExifParser.create(buffer).parse() as unknown);
+    tags = extractTags(
+      ExifParser.create(
+        format === "tiff" ? tiffAsJpegSegment(buffer) : buffer,
+      ).parse() as unknown,
+    );
   } catch (error) {
     // Corrupt EXIF is common in the wild and says nothing about the file's
     // safety, so it downgrades to "nothing found" rather than an error.
@@ -316,6 +320,41 @@ export function assessExifBuffer(
   }
 
   return { format, reasons: scoreExifTags(tags) };
+}
+
+/**
+ * A TIFF's metadata block read by exif-parser.
+ *
+ * exif-parser@0.1.12 has one public entry point, and it walks JPEG APP1
+ * segments: `parseSections` throws "Invalid JPEG section offset" on the first
+ * byte of a TIFF. Its TIFF header code is reachable, but only from inside a
+ * JPEG segment, so every TIFF used to fall into the corrupt-EXIF catch and
+ * score 0 while the report counted it as analyzed.
+ *
+ * The IFD a TIFF carries is the same structure that follows `Exif\0\0` inside
+ * an APP1 segment, so wrapping the bytes in that segment makes the same public
+ * call read them. Nothing here is a private API: the wrapper is built from the
+ * JPEG byte layout, and a TIFF that does not parse still throws exactly as
+ * before.
+ */
+function tiffAsJpegSegment(tiff: Buffer): Buffer {
+  const SOI = [0xff, 0xd8];
+  const APP1 = [0xff, 0xe1];
+  const EOI = [0xff, 0xd9];
+  const EXIF_HEADER = Buffer.from("Exif\0\0", "binary");
+
+  const payload = Buffer.concat([EXIF_HEADER, tiff]);
+  // The segment length covers the two length bytes themselves, not the marker.
+  const length = Buffer.alloc(2);
+  length.writeUInt16BE(payload.length + 2);
+
+  return Buffer.concat([
+    Buffer.from(SOI),
+    Buffer.from(APP1),
+    length,
+    payload,
+    Buffer.from(EOI),
+  ]);
 }
 
 /** exif-parser tags sit under an optional `tags` key and may be absent. */
