@@ -27,6 +27,7 @@
 - [file_organizer_get_categories](#file_organizer_get_categories)
 - [file_organizer_inspect_metadata](#file_organizer_inspect_metadata)
 - [file_organizer_list_files](#file_organizer_list_files)
+- [file_organizer_organize_by_date](#file_organizer_organize_by_date)
 - [file_organizer_organize_by_project](#file_organizer_organize_by_project)
 - [file_organizer_organize_files](#file_organizer_organize_files)
 - [file_organizer_organize_music](#file_organizer_organize_music)
@@ -1378,6 +1379,73 @@ file_organizer_batch_read_files({
   file_types: [".txt", ".md", ".json"],
 });
 ```
+
+## file_organizer_organize_by_date
+
+[⬆ Back to Top](#top)
+
+**Description:** Sort any file into `YYYY/MM` folders. Photos use EXIF `DateTimeOriginal` (`CreateDate` when that is absent); everything else uses the file's modification time. Every file reports which source chose its folder, so an EXIF→mtime fallback is never silent. Files with no usable date stay where they are and are listed under "Left In Place" — there is no `Unknown Date` bucket.
+
+### Parameters
+
+| Parameter         | Type    | Description                                                                                                     | Default     |
+| ----------------- | ------- | --------------------------------------------------------------------------------------------------------------- | ----------- |
+| `source_dir`      | string  | Directory containing files to sort                                                                              | -           |
+| `target_dir`      | string  | Directory where the date folders are created. Cannot be inside `source_dir`, and `source_dir` cannot be inside it | -           |
+| `date_format`     | string  | Folder structure: `'YYYY/MM'`, `'YYYY/MM/DD'`, `'YYYY'`                                                          | `'YYYY/MM'` |
+| `date_source`     | string  | `'auto'` (EXIF, else mtime), `'exif'` (EXIF only — files without one are left in place), or `'mtime'`             | `'auto'`    |
+| `recursive`       | boolean | Scan subdirectories of `source_dir`                                                                             | `false`     |
+| `dry_run`         | boolean | Preview the folders without moving files                                                                         | `true`      |
+| `response_format` | string  | Output format: `'markdown'` or `'json'`                                                                          | `'markdown'`|
+
+### Result (json)
+
+| Field                        | Description                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `organizedFiles`             | Files moved (or that a dry run would move)                                         |
+| `skippedFiles`               | Files left alone: no usable date, unsafe name, or a failed move                   |
+| `moves[]`                    | `{ file, from, to, folder, date, calendarDate, dateSource }` per file; `dateSource` = `exif`/`mtime` |
+| `noDateFiles[]`              | Files left in place because no usable date was found                              |
+| `structure`                  | Date folder label -> file names (same strings as `moves[].folder`)                |
+| `manifestId`                 | Rollback manifest for `undo_last_operation`; absent after a dry run               |
+| `undoAvailable`              | `false` unless this run's moves are recorded in a manifest                        |
+| `errors[]`                   | Per-file failures, sanitized                                                     |
+
+**Folder labels vs. paths.** `moves[].folder` and the `structure` keys are
+**logical labels in the documented `YYYY/MM` form**, always separated by `/` on
+every platform — `2024/05` means two levels on Windows exactly as it does on
+Linux, so agents and scripts can match on them. `moves[].from` and `moves[].to`
+are **real filesystem paths**, absolute and platform-native, and use the
+platform separator.
+
+**Which calendar a folder uses.** EXIF is camera wall-clock data that
+`exif-parser` anchors to UTC, so an EXIF folder is read in **UTC** — a photo
+stamped `00:30` on 1 January files under `2024/01` in every timezone. `mtime` is
+a true instant, so its folder is the user's **local** day.
+`moves[].calendarDate` (`YYYY-MM-DD`) is the date the label was cut from, so
+`folder` is always `calendarDate` truncated to the requested `date_format` and a
+caller never has to re-derive the timezone to predict the folder. `moves[].date`
+stays the exact instant.
+
+A destination whose parent resolves outside `target_dir` — a directory symlink
+inside the target pointing out of it — is refused before anything is written, and
+reported in `errors[]`. Nothing is moved and nothing is recorded as undoable.
+
+A destination name that is already taken is never overwritten: the file lands as `name (1).ext`. Both `dry_run` defaults to `true`, and every performed move is recorded in a rollback manifest.
+
+### Example
+
+```typescript
+file_organizer_organize_by_date({
+  source_dir: "/path/to/import",
+  target_dir: "/path/to/library",
+  date_format: "YYYY/MM",
+  date_source: "auto",
+  dry_run: true,
+});
+```
+
+---
 
 ## file_organizer_organize_by_project
 

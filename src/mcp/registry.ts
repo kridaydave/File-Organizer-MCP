@@ -114,6 +114,10 @@ import {
   organizeByProjectToolDefinition,
   handleOrganizeByProject,
 } from "../tools/project-organization.js";
+import {
+  organizeByDateToolDefinition,
+  handleOrganizeByDate,
+} from "../tools/date-organization.js";
 import { doctorToolDefinition, handleDoctor } from "../tools/doctor.js";
 import {
   findBrokenSymlinksToolDefinition,
@@ -162,6 +166,7 @@ const entries = [
   reg(getCategoriesToolDefinition, handleGetCategories),
   reg(inspectMetadataToolDefinition, handleInspectMetadata),
   reg(listFilesToolDefinition, handleListFiles),
+  reg(organizeByDateToolDefinition, handleOrganizeByDate),
   reg(organizeByProjectToolDefinition, handleOrganizeByProject),
   reg(organizeFilesToolDefinition, handleOrganizeFiles),
   reg(organizeMusicToolDefinition, handleOrganizeMusic),

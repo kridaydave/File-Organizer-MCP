@@ -77,6 +77,7 @@ You can ask the assistant things like:
 - Disk usage per category: which file types hold the space, in bytes and as a share.
 - Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
+- Date sorting into `YYYY/MM` folders from EXIF date taken (photos) or file mtime, reporting which date each file used.
 - Dry-run preview, atomic moves, and rollback.
 - Plan validation before you organize: name collisions, occupied destinations, cross-device moves, and files the sensitive-file gate blocks.
 - Path traversal protection, TOCTOU mitigation.
@@ -114,6 +115,7 @@ You can ask the assistant things like:
 - `file_organizer_get_categories`
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`
+- `file_organizer_organize_by_date`
 - `file_organizer_organize_by_project`
 - `file_organizer_organize_files`
 - `file_organizer_organize_music`
