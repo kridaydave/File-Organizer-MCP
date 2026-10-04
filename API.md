@@ -18,6 +18,7 @@
 - [file_organizer_delete_duplicates](#file_organizer_delete_duplicates)
 - [file_organizer_disk_usage_by_category](#file_organizer_disk_usage_by_category)
 - [file_organizer_doctor](#file_organizer_doctor)
+- [file_organizer_export_config](#file_organizer_export_config)
 - [file_organizer_find_broken_symlinks](#file_organizer_find_broken_symlinks)
 - [file_organizer_find_empty_directories](#file_organizer_find_empty_directories)
 - [file_organizer_find_duplicate_files](#file_organizer_find_duplicate_files)
@@ -1203,6 +1204,79 @@ the two problems read differently so they can be told apart.
 
 ```typescript
 file_organizer_doctor({
+  response_format: "json",
+});
+```
+
+---
+
+## file_organizer_export_config
+
+[⬆ Back to Top](#top)
+
+**Description:** Bundle the user config — allowed directories, categorization
+rules, conflict strategy, watch entries, auto-organize and history settings —
+into one JSON document for another machine. The directory paths are absolute and
+machine-specific, so the reply always states which fields must be edited on the
+target; pass `rebase_root` to emit `~/`-relative paths instead.
+
+Reads the config file and never writes it. With `output_path` it writes the
+bundle there, through the same path validation as every other tool, and the
+write refuses to overwrite an existing file.
+
+**Not read-only** (it can write the bundle file), **not destructive** (it never
+deletes or replaces anything), **not idempotent** (a second run against the same
+`output_path` fails on the existing file).
+
+### Parameters
+
+| Parameter          | Type   | Description                                                                          | Default    |
+| ------------------ | ------ | ------------------------------------------------------------------------------------ | ---------- |
+| `output_path`      | string | Where to write the bundle JSON. Omit to receive the bundle in the reply, no write.   | -          |
+| `rebase_root`      | string | Directory on this machine that the target's home occupies. Paths under it export as `~/relative`. | -          |
+| `response_format`  | string | 'json' or 'markdown'                                                                 | 'markdown' |
+
+### Returned fields
+
+| Field                 | Description                                                            |
+| --------------------- | ---------------------------------------------------------------------- |
+| `format_version`      | Bundle format version (`1`)                                            |
+| `mode`                | `absolute` (paths as configured) or `rebased` (`~/`-relative)          |
+| `rebase_root`         | The root used for rebasing, or null in absolute mode                   |
+| `output_path`         | Where the bundle was written, or null when nothing was written        |
+| `written`             | True when a bundle file was written                                   |
+| `bytes_written`       | Size of the written bundle                                            |
+| `config_file_present` | Whether a config.json was found behind this export                    |
+| `counts`              | Entry counts for allowed directories, custom rules, rules, watches    |
+| `requires_editing`    | Fields a user must edit by hand on the target machine                 |
+| `non_portable_paths`  | Paths that could not be rebased, with the field each came from        |
+| `notes`               | Human-readable statements about portability                          |
+| `config`              | The exported config subset — a superset-free copy of what the loader understands |
+
+### Portability
+
+`bundle.config` holds every config key the loader understands, so merging it
+into a target machine's `config.json` reproduces the source config's shape. The
+directory half does not travel on its own:
+
+- `absolute` mode exports `customAllowedDirectories` and
+  `watchList[].directory` verbatim and lists both in `requires_editing`, because
+  they are absolute paths of the exporting machine.
+- `rebased` mode rewrites each of those paths under `rebase_root` as
+  `~/relative` (forward slashes on every platform). A value already written as
+  `~/…` is left alone. Anything outside the root — an external volume, a system
+  path — has no portable spelling, so it is exported unchanged and named in
+  `non_portable_paths` with `reason: outside_rebase_root`.
+
+The bundle document on disk is `{ format_version, exported_by, exported_at,
+config, portability }`.
+
+### Example
+
+```typescript
+file_organizer_export_config({
+  output_path: "~/fom-config-bundle.json",
+  rebase_root: "~",
   response_format: "json",
 });
 ```
