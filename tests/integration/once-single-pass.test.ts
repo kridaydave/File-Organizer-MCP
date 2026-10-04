@@ -228,7 +228,11 @@ describe("once flag parsing and exit code", () => {
       json: false,
       help: false,
     });
-    expect(parseOnceFlags(["/tmp/x", "--json"]).json).toBe(true);
+    const parsed = parseOnceFlags(["/tmp/x", "--json"]);
+    if ("error" in parsed) {
+      throw new Error(`Expected parsed flags, got usage error: ${parsed.error}`);
+    }
+    expect(parsed.json).toBe(true);
   });
 
   it("refuses an unknown flag and a second directory", () => {
@@ -375,7 +379,8 @@ describe("once exit does not truncate a piped report", () => {
 
     await once(args);
     expect(trapped).toBe(false);
-    return process.exitCode ?? 0;
+    // process.exitCode is string | number | undefined in current @types/node.
+    return typeof process.exitCode === "number" ? process.exitCode : 0;
   }
 
   it("returns instead of exiting after a usage error", async () => {
@@ -447,7 +452,7 @@ describe("file-organizer-watch once (real CLI)", () => {
       .split("\n")
       .filter((l) => l.length > 0);
     expect(lines).toHaveLength(1);
-    return JSON.parse(lines[0]) as Record<string, unknown>;
+    return JSON.parse(first(lines)) as Record<string, unknown>;
   }
 
   async function seed(files: Record<string, string>): Promise<void> {

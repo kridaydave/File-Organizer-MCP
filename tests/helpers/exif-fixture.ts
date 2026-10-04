@@ -13,6 +13,20 @@ import piexifNamespace from "piexifjs";
 // piexifjs is CommonJS; under ESM the tag tables land on the default export.
 const piexif = piexifNamespace;
 
+/**
+ * The tag tables are declared as `Record<string, number>`, so under
+ * noUncheckedIndexedAccess every lookup is `number | undefined`. Writing that
+ * in as an object key would store the string "undefined" and drop the tag, so
+ * a wrong tag name has to fail loudly instead.
+ */
+function tagId(table: Record<string, number>, name: string): number {
+  const id = table[name];
+  if (id === undefined) {
+    throw new Error(`Unknown EXIF tag name: ${name}`);
+  }
+  return id;
+}
+
 /** Minutes/seconds as EXIF rationals, which piexif wants as nested pairs. */
 function degreesToRational(
   degrees: number,
@@ -84,7 +98,7 @@ export function jpegWithExif(fixture: ExifFixture = {}): Buffer {
     ["ImageDescription", fixture.imageDescription],
   ];
   for (const [tag, value] of zerothTags) {
-    if (value !== undefined) zeroth[piexif.ImageIFD[tag]] = value;
+    if (value !== undefined) zeroth[tagId(piexif.ImageIFD, tag)] = value;
   }
 
   const exifTags: Array<[keyof typeof piexif.ExifIFD, unknown]> = [
@@ -94,25 +108,25 @@ export function jpegWithExif(fixture: ExifFixture = {}): Buffer {
     ["UserComment", fixture.userComment],
   ];
   for (const [tag, value] of exifTags) {
-    if (value !== undefined) exifIfd[piexif.ExifIFD[tag]] = value;
+    if (value !== undefined) exifIfd[tagId(piexif.ExifIFD, tag)] = value;
   }
 
   if (fixture.latitude) {
     const [d, m, s, ref] = fixture.latitude;
-    gps[piexif.GPSIFD.GPSLatitudeRef] = ref;
-    gps[piexif.GPSIFD.GPSLatitude] = degreesToRational(d, m, s);
+    gps[tagId(piexif.GPSIFD, "GPSLatitudeRef")] = ref;
+    gps[tagId(piexif.GPSIFD, "GPSLatitude")] = degreesToRational(d, m, s);
   }
   if (fixture.longitude) {
     const [d, m, s, ref] = fixture.longitude;
-    gps[piexif.GPSIFD.GPSLongitudeRef] = ref;
-    gps[piexif.GPSIFD.GPSLongitude] = degreesToRational(d, m, s);
+    gps[tagId(piexif.GPSIFD, "GPSLongitudeRef")] = ref;
+    gps[tagId(piexif.GPSIFD, "GPSLongitude")] = degreesToRational(d, m, s);
   }
   if (fixture.altitude !== undefined) {
-    gps[piexif.GPSIFD.GPSAltitudeRef] = 0;
-    gps[piexif.GPSIFD.GPSAltitude] = [Math.round(fixture.altitude), 1];
+    gps[tagId(piexif.GPSIFD, "GPSAltitudeRef")] = 0;
+    gps[tagId(piexif.GPSIFD, "GPSAltitude")] = [Math.round(fixture.altitude), 1];
   }
   if (fixture.gpsDateStamp !== undefined) {
-    gps[piexif.GPSIFD.GPSDateStamp] = fixture.gpsDateStamp;
+    gps[tagId(piexif.GPSIFD, "GPSDateStamp")] = fixture.gpsDateStamp;
   }
 
   const exifBytes = piexif.dump({

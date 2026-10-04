@@ -339,8 +339,10 @@ npm run lint                               # eslint src + tests
 npm run lint:fix                           # auto-fix
 npm run format                             # prettier src/
 
-npm run docs:check                         # agent docs still point at real code
-npm run docs:check:fix                     # rewrite drifted file:line citations
+npm run docs:check                         # both: citations resolve + tool count in sync
+npm run docs:check:citations:fix           # rewrite drifted file:line citations
+npm run docs:check:tool-count              # tool count/list only, no citation check
+npm run docs:sync                          # regenerate the tool list/count from the registry
 
 npm run verify:all                         # build, lint, typecheck, docs, security, tests
 

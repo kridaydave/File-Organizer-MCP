@@ -31,11 +31,12 @@
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --no-warn-ignored",
     "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix --no-warn-ignored",
     "format": "prettier --write src/**/*.ts",
-    "docs:check": "node scripts/check-doc-citations.mjs",
-    "docs:check:fix": "node scripts/check-doc-citations.mjs --fix",
+    "docs:check:citations": "node scripts/check-doc-citations.mjs",
+    "docs:check:citations:fix": "node scripts/check-doc-citations.mjs --fix",
+    "docs:check:tool-count": "npm run build && node scripts/sync-tool-docs.mjs --check",
+    "docs:check": "npm run docs:check:citations && npm run docs:check:tool-count",
     "docs:generate": "node scripts/generate-docs.js",
     "docs:sync": "npm run build && node scripts/sync-tool-docs.mjs",
-    "docs:check": "npm run build && node scripts/sync-tool-docs.mjs --check",
     "clean": "rimraf dist"
   },
   "keywords": [

@@ -23,6 +23,7 @@ import {
 import { createRequestContext } from "../../../src/mcp/context.js";
 import type { ToolContext } from "../../../src/mcp/context.js";
 import type { UserConfig } from "../../../src/core/config/loader.js";
+import type { ToolResponse } from "../../../src/mcp/types.js";
 import { getUserConfigPath } from "../../../src/core/config/paths.js";
 import { loadConfigBundle } from "../../../src/core/config/portable-bundle.js";
 import { exportConfigOutputSchema } from "../../../src/schemas/output.js";
@@ -67,7 +68,8 @@ interface ExportReport {
   config: Record<string, unknown>;
 }
 
-function report(result: { structuredContent?: unknown }): ExportReport {
+function report(result: ToolResponse): ExportReport {
+  expect(result.structuredContent).toBeDefined();
   return result.structuredContent as ExportReport;
 }
 
