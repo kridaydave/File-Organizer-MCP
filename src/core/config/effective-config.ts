@@ -102,9 +102,12 @@ export function getEffectiveConfig(config: UserConfig): EffectiveConfig {
     autoOrganize: config.autoOrganize,
     defaultAllowed: [...CONFIG.paths.defaultAllowed],
     configuredAllowedDirs,
+    // The paths that actually take effect, so this agrees with what the gate
+    // was handed by loadCustomAllowedDirs(). A "~"-relative entry is reported
+    // expanded; reporting the raw string here made "effective" a lie.
     effectiveAllowedDirs: configuredAllowedDirs
       .filter((verdict) => verdict.accepted)
-      .map((verdict) => verdict.configured),
+      .map((verdict) => verdict.resolved),
     unknownConfigKeys: Object.keys(config).filter(
       (key) => !KNOWN_CONFIG_KEYS.has(key),
     ),
