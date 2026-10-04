@@ -57,7 +57,7 @@ export interface EffectiveConfig {
  * (watchFolders, debounceTime) that nothing reads, and package.json "files"
  * does not ship it, so it is not available at runtime.
  */
-const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set(
+export const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set(
   Object.keys({
     customAllowedDirectories: undefined,
     allowExternalVolumes: undefined,
