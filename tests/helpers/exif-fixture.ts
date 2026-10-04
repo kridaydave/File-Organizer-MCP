@@ -1,9 +1,10 @@
 /**
- * JPEG fixtures carrying real EXIF, for the sensitive scan tests.
+ * JPEG and TIFF fixtures carrying real EXIF, for the sensitive scan tests.
  *
- * The EXIF block is written with piexifjs over a structurally valid baseline
- * JPEG (SOI, JFIF APP0, SOF0, SOS, EOI), which is the only way to get a full
- * IFD0 + ExifIFD + GPS IFD without hand-assembling TIFF offsets in every test.
+ * The JPEG EXIF block is written with piexifjs over a structurally valid
+ * baseline JPEG (SOI, JFIF APP0, SOF0, SOS, EOI), which is the only way to get
+ * a full IFD0 + ExifIFD + GPS IFD without hand-assembling offsets. piexifjs
+ * inserts into JPEG only, so the TIFF fixtures write their IFD offsets here.
  * The parse side is deliberately the real exif-parser, so these fixtures fail
  * loudly if the libraries change shape rather than agreeing with a mock.
  */
@@ -128,4 +129,93 @@ export function jpegWithExif(fixture: ExifFixture = {}): Buffer {
 /** A JPEG with no EXIF APP1 segment at all. */
 export function jpegWithoutExif(): Buffer {
   return baselineJpeg();
+}
+
+/**
+ * A TIFF carrying the same EXIF IFDs `jpegWithExif` builds.
+ *
+ * piexifjs only inserts into JPEG, so the IFD offsets are written by hand here.
+ * The result is a real TIFF: II or MM byte-order mark, magic 42, one IFD0 with
+ * ASCII values, which is enough for a tag walker to resolve real values.
+ *
+ * This exists because the scan's TIFF claim cannot be tested with a JPEG. A
+ * JPEG-shaped buffer would pass the format sniff and never exercise the TIFF
+ * path at all, which is how a guaranteed-zero TIFF read stayed green.
+ */
+export function tiffWithExif(fixture: ExifFixture = {}): Buffer {
+  const u16 = (n: number): Buffer => {
+    const b = Buffer.alloc(2);
+    b.writeUInt16LE(n);
+    return b;
+  };
+  const u32 = (n: number): Buffer => {
+    const b = Buffer.alloc(4);
+    b.writeUInt32LE(n);
+    return b;
+  };
+  // EXIF ASCII is NUL-terminated and its count includes the terminator.
+  const ascii = (s: string): Buffer =>
+    Buffer.concat([Buffer.from(s, "ascii"), Buffer.from([0])]);
+
+  // Tag 0x010F Make, 0x0110 Model, 0x013B Artist, 0x0131 Software.
+  const wanted: Array<[number, string | undefined]> = [
+    [0x010f, fixture.make],
+    [0x0110, fixture.model],
+    [0x013b, fixture.artist],
+    [0x0131, fixture.software],
+  ];
+  const entries = wanted
+    .filter((e): e is [number, string] => e[1] !== undefined)
+    .map(([tag, value]) => ({ tag, value, bytes: ascii(value) }));
+
+  const ifdStart = 8;
+  const ifdSize = 2 + entries.length * 12 + 4;
+  let nextOffset = ifdStart + ifdSize;
+  const placed = entries.map((e) => {
+    const offset = nextOffset;
+    nextOffset += e.bytes.length;
+    return { ...e, offset };
+  });
+
+  const header = Buffer.concat([
+    Buffer.from([0x49, 0x49]), // "II", little-endian
+    u16(0x002a), // 42
+    u32(ifdStart),
+  ]);
+  const ifd = Buffer.concat([
+    u16(placed.length),
+    ...placed.map((e) =>
+      Buffer.concat([u16(e.tag), u16(2), u32(e.bytes.length), u32(e.offset)]),
+    ),
+    u32(0), // no IFD1
+  ]);
+
+  return Buffer.concat([header, ifd, ...placed.map((e) => e.bytes)]);
+}
+
+/** A TIFF with a valid header and an IFD0 holding no tags. */
+export function tiffWithoutTags(): Buffer {
+  return Buffer.concat([
+    Buffer.from([0x49, 0x49]),
+    (() => {
+      const b = Buffer.alloc(2);
+      b.writeUInt16LE(0x002a);
+      return b;
+    })(),
+    (() => {
+      const b = Buffer.alloc(4);
+      b.writeUInt32LE(8);
+      return b;
+    })(),
+    (() => {
+      const b = Buffer.alloc(2);
+      b.writeUInt16LE(0); // zero entries
+      return b;
+    })(),
+    (() => {
+      const b = Buffer.alloc(4);
+      b.writeUInt32LE(0); // no IFD1
+      return b;
+    })(),
+  ]);
 }
