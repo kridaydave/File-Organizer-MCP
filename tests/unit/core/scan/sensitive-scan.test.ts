@@ -40,6 +40,8 @@ import type {
 import {
   jpegWithExif,
   jpegWithoutExif,
+  tiffWithExif,
+  tiffWithoutTags,
 } from "../../../helpers/exif-fixture.js";
 
 // Symlink creation on Windows needs Administrator or Developer Mode, so the one
@@ -310,6 +312,36 @@ describe("assessExifBuffer", () => {
 
   it("treats a JPEG with no EXIF segment as clean rather than an error", () => {
     expect(assessExifBuffer(jpegWithoutExif())?.reasons).toEqual([]);
+  });
+
+  it("reads a TIFF's tags, not just its header", () => {
+    // A TIFF carries the same IFD a JPEG's APP1 segment carries. exif-parser's
+    // public entry point walks JPEG sections only, so before this the TIFF
+    // threw, fell into the corrupt-EXIF catch, and scored 0 while the report
+    // counted the file as analyzed. The format sniff passed the whole time,
+    // which is why a guaranteed-zero TIFF read stayed green.
+    const scored = assessExifBuffer(
+      tiffWithExif({ artist: "Jane Q Public", make: "ACME", model: "Z1" }),
+    );
+
+    expect(scored?.format).toBe("tiff");
+    expect(kinds(scored?.reasons ?? [])).toContain("owner_name");
+    expect(byKind(scored?.reasons ?? [], "owner_name")?.value).toBe(
+      "Jane Q Public",
+    );
+    expect(byKind(scored?.reasons ?? [], "camera_device")?.value).toBe("ACME");
+  });
+
+  it("scores a tagged TIFF above the no-risk band", () => {
+    // The point of the fix in score form: this file cannot read as clean.
+    const scored = assessExifBuffer(tiffWithExif({ artist: "Jane Q Public" }));
+
+    expect(riskScoreFor(scored?.reasons ?? [])).toBeGreaterThan(0);
+    expect(riskLevelFor(riskScoreFor(scored?.reasons ?? []))).not.toBe("none");
+  });
+
+  it("reports a tagless TIFF clean rather than an error", () => {
+    expect(assessExifBuffer(tiffWithoutTags())?.reasons).toEqual([]);
   });
 });
 
