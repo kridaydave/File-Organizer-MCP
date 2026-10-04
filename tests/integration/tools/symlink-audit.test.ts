@@ -25,6 +25,7 @@ import {
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
+import { first } from "../../helpers/safe-index.js";
 
 const { CONFIG } = await import("../../../src/config.js");
 const { handleFindBrokenSymlinks } =
@@ -279,7 +280,7 @@ describeSymlinks("find_broken_symlinks", () => {
       const out = await audit(alias);
 
       expect(out.findings).toHaveLength(1);
-      expect(out.findings[0].resolved_target).toBe(
+      expect(first(out.findings).resolved_target).toBe(
         path.join(await fs.realpath(nested), "missing"),
       );
     } finally {

@@ -38,6 +38,7 @@ import {
 import { CONFIG } from "../../src/core/config/defaults.js";
 import { HistoryLoggerService } from "../../src/services/history-logger.service.js";
 import type { UserConfig } from "../../src/config.js";
+import { first } from "../helpers/safe-index.js";
 
 const emptyConfig: UserConfig = { conflictStrategy: "rename" };
 
@@ -126,9 +127,10 @@ describe("single-pass organize (once)", () => {
       .map((l) => JSON.parse(l) as Record<string, unknown>);
 
     expect(lines).toHaveLength(1);
-    expect(lines[0].operation).toBe("file_organizer_organize_files");
-    expect(lines[0].filesProcessed).toBe(2);
-    expect(lines[0].status).toBe("success");
+    const entry = first(lines);
+    expect(entry.operation).toBe("file_organizer_organize_files");
+    expect(entry.filesProcessed).toBe(2);
+    expect(entry.status).toBe("success");
   });
 
   it("leaves subdirectories alone unless recursive is asked for", async () => {
@@ -226,7 +228,11 @@ describe("once flag parsing and exit code", () => {
       json: false,
       help: false,
     });
-    expect(parseOnceFlags(["/tmp/x", "--json"]).json).toBe(true);
+    const parsed = parseOnceFlags(["/tmp/x", "--json"]);
+    if ("error" in parsed) {
+      throw new Error(`Expected parsed flags, got usage error: ${parsed.error}`);
+    }
+    expect(parsed.json).toBe(true);
   });
 
   it("refuses an unknown flag and a second directory", () => {
@@ -373,7 +379,8 @@ describe("once exit does not truncate a piped report", () => {
 
     await once(args);
     expect(trapped).toBe(false);
-    return process.exitCode ?? 0;
+    // process.exitCode is string | number | undefined in current @types/node.
+    return typeof process.exitCode === "number" ? process.exitCode : 0;
   }
 
   it("returns instead of exiting after a usage error", async () => {
@@ -445,7 +452,7 @@ describe("file-organizer-watch once (real CLI)", () => {
       .split("\n")
       .filter((l) => l.length > 0);
     expect(lines).toHaveLength(1);
-    return JSON.parse(lines[0]) as Record<string, unknown>;
+    return JSON.parse(first(lines)) as Record<string, unknown>;
   }
 
   async function seed(files: Record<string, string>): Promise<void> {

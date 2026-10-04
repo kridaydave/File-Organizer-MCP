@@ -25,6 +25,7 @@ import {
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
+import type { ToolContext } from "../../../src/mcp/context.js";
 
 const { CONFIG } = await import("../../../src/core/config/defaults.js");
 const { quarantineFilesToolDefinition, restoreQuarantineToolDefinition } =
@@ -64,10 +65,7 @@ describe("quarantine tools", () => {
   let restoreCustomAllowed: string[] | undefined;
   let history: { log: (entry: Record<string, unknown>) => Promise<void> };
   let logged: Record<string, unknown>[];
-  let ctx: {
-    config: Record<string, never>;
-    history: { log: (entry: Record<string, unknown>) => Promise<void> };
-  };
+  let ctx: ToolContext;
 
   beforeEach(async () => {
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-quarantine-tool-"));
@@ -79,7 +77,10 @@ describe("quarantine tools", () => {
         logged.push(entry);
       },
     };
-    ctx = { config: {}, history };
+    // The handlers only ever call history.log, so the stub carries just that
+// method. The cast is here rather than at ten call sites, and it fails loudly
+// if a handler starts reaching for another method on the service.
+    ctx = { config: {}, history: history as unknown as ToolContext["history"] };
   });
 
   afterEach(async () => {

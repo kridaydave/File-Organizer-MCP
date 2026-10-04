@@ -4,16 +4,10 @@ The full tour of the system lives in [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 ## Path validation pipeline
 
-Every path goes through 8 layers before any `fs` call (`src/services/path-validator.service.ts`, `validateStrictPath`):
-
-1. Type validation (Zod schema)
-2. Null byte and basic sanitization
-3. Path normalization and Windows case adjustment
-4. Traversal sequence prevention (`../`)
-5. Absolute path resolution
-6. Security check (whitelist and blacklist)
-7. Symlink resolution and target validation
-8. Existence and access check
+Every path goes through `validatePathBase` before any `fs` call
+(`src/services/path-validator.service.ts`). See
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md#path-validation-pipeline) for the
+ordered list.
 
 ## Related docs
 
@@ -23,4 +17,23 @@ Every path goes through 8 layers before any `fs` call (`src/services/path-valida
 | `../API.md`          | MCP tool reference                  |
 | `../SECURITY.md`     | Security guidelines                 |
 | `../CONTRIBUTING.md` | Contribution workflow               |
-| `skills/SKILL.md`    | Repo dev skill                      |
+| `../AGENTS.md`       | Rules for agents and humans         |
+| `skills/SKILL.md`    | Long-form dev guide                 |
+
+## Proving a change
+
+`.opencode/skills/verify-file-organizer/` drives the real server over stdio in a
+throwaway sandbox. Unit tests call handlers directly and do not prove a tool is
+reachable by name or that a move lands on disk.
+
+```bash
+C=.opencode/skills/verify-file-organizer/scripts/control-file-organizer.mjs
+node $C doctor
+node $C call organize_files --directory /tmp/file-organizer-verify/default/data \
+  --dry_run false --conflict_strategy rename --json
+node $C call undo_last_operation --json
+node $C cleanup
+```
+
+`references/features/` inside that skill documents each capability and how to
+drive it.

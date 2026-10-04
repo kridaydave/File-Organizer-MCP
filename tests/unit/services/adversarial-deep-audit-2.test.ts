@@ -14,6 +14,7 @@ import { ManifestIntegrityService } from '../../../src/core/organize/manifest-in
 import { detectProjects } from '../../../src/core/detect/project.js';
 import { RollbackService } from '../../../src/core/organize/rollback.js';
 import { CONFIG } from '../../../src/core/config/defaults.js';
+import { first } from '../../helpers/safe-index.js';
 
 describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
   let tempDir: string;
@@ -72,6 +73,7 @@ describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
         id: crypto.randomUUID(),
         description: 'Test Operation',
         timestamp: Date.now(),
+        version: '1.0',
         actions: [
           {
             type: 'move',
@@ -91,7 +93,7 @@ describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
         ...manifest,
         actions: [
           {
-            ...manifest.actions[0]!,
+            ...first(manifest.actions),
             currentPath: path.join(tempDir, 'Documents', 'hacked.txt'),
           },
         ],

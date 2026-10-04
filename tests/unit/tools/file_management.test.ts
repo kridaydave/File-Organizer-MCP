@@ -13,7 +13,9 @@ import { jest, describe, it, expect, beforeEach, afterAll } from '@jest/globals'
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { CustomRule, UserConfig } from '../../../src/types.js';
+import type { CustomRule } from '../../../src/types.js';
+import type { UserConfig } from '../../../src/core/config/loader.js';
+import { first } from '../../helpers/safe-index.js';
 
 const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'test-custom-rules-'));
 const configPath = path.join(tempDir, 'config.json');
@@ -119,8 +121,9 @@ describe('File Management Tools', () => {
 
             const persisted = readPersistedConfig().customRules ?? [];
             expect(persisted).toHaveLength(1);
-            expect(persisted[0].filenamePattern).toBe('.*\\.config\\..*');
-            expect(persisted[0].filename_pattern).toBeUndefined();
+            const rule = first(persisted);
+            expect(rule.filenamePattern).toBe('.*\\.config\\..*');
+            expect((rule as unknown as Record<string, unknown>).filename_pattern).toBeUndefined();
         });
 
         it('should load the persisted rules on the next request', async () => {
@@ -132,9 +135,10 @@ describe('File Management Tools', () => {
             // is what survives a restart rather than in-memory state.
             const reloaded = loadUserConfig().customRules ?? [];
             expect(reloaded).toHaveLength(1);
-            expect(reloaded[0].category).toBe('Widgets');
-            expect(reloaded[0].filenamePattern).toBe('\\.widget$');
-            expect(reloaded[0].priority).toBe(100);
+            const rule = first(reloaded);
+            expect(rule.category).toBe('Widgets');
+            expect(rule.filenamePattern).toBe('\\.widget$');
+            expect(rule.priority).toBe(100);
         });
 
         it('should persist every valid rule in a multi-rule call', async () => {
@@ -161,7 +165,7 @@ describe('File Management Tools', () => {
             expect(result.content[0].text).toContain('1 custom organization rules');
             const persisted = readPersistedConfig().customRules ?? [];
             expect(persisted).toHaveLength(1);
-            expect(persisted[0].category).toBe('Widgets');
+            expect(first(persisted).category).toBe('Widgets');
         });
 
         it('should replace the rules saved by an earlier call', async () => {
@@ -174,7 +178,7 @@ describe('File Management Tools', () => {
 
             const persisted = readPersistedConfig().customRules ?? [];
             expect(persisted).toHaveLength(1);
-            expect(persisted[0].category).toBe('Gadgets');
+            expect(first(persisted).category).toBe('Gadgets');
         });
 
         it('should not claim success when the rules cannot be written', async () => {

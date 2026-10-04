@@ -5,11 +5,16 @@
 
 // ==================== Tool Types ====================
 
+/**
+ * The text block a tool returns. Every tool returns at least one, which the MCP
+ * spec requires and the handlers all honor, so `content` is a non-empty tuple
+ * rather than an array. Indexing [0] is then total, and callers stop guarding an
+ * emptiness that cannot occur.
+ */
+export type ToolContentBlock = { type: "text"; text: string };
+
 export interface ToolResponse {
-  content: Array<{
-    type: "text";
-    text: string;
-  }>;
+  content: [ToolContentBlock, ...ToolContentBlock[]];
   [key: string]: unknown; // Dynamic properties validated at runtime
 }
 

@@ -29,7 +29,7 @@ jest.unstable_mockModule('../../../src/core/organize/rollback', () => ({
 
 
 // Import after mocking
-const { RenamingService } = await import('../../../src/core/organize/rename');
+const { RenamingService } = await import('../../../src/core/organize/rename.js');
 const fs = (await import('fs/promises')).default;
 
 

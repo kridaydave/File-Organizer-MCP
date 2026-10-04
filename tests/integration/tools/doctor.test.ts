@@ -148,7 +148,7 @@ describe("file_organizer_doctor", () => {
     const report = result.structuredContent as {
       conflict_strategy: string;
       effective_allowed_dirs: string[];
-      configured_allowed_dirs: Array<{ accepted: boolean }>;
+      configured_allowed_dirs: ConfiguredDirEntry[];
     };
 
     // conflictStrategy is absent from the built-in defaults object and comes
