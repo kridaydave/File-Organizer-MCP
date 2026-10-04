@@ -97,7 +97,7 @@ You can ask the assistant things like:
 - `file_organizer_restore_quarantine` - Put quarantined files back where they came from.
 - `file_organizer_search_history` - Filter the history by path glob (`path_glob`), date range (`from`/`to`), or operation type. Every filter is optional and they combine, so a long history stays queryable instead of one flat list.
 
-### Full tool list (34 tools)
+### Full tool list (35 tools)
 <!-- BEGIN GENERATED TOOL LIST -->
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
@@ -127,6 +127,7 @@ You can ask the assistant things like:
 - `file_organizer_restore_quarantine`
 - `file_organizer_scan_directory`
 - `file_organizer_search_history`
+- `file_organizer_sensitive_scan`
 - `file_organizer_set_custom_rules`
 - `file_organizer_smart_suggest`
 - `file_organizer_system_organize`
@@ -372,7 +373,32 @@ Pictures/
 
 ### Security-screen a folder
 
-It extracts metadata and content signatures, then flags sensitive metadata, such as EXIF GPS coordinates in a PDF or personal identifiers in a resume, and suggests redaction or quarantine.
+`file_organizer_sensitive_scan` reads the metadata block of every JPEG and TIFF in a
+folder and scores each one 0-100 for the risk of sharing it. It flags EXIF GPS
+coordinates and altitude, GPS fix timestamps, owner and artist names, camera and
+lens serial numbers, camera or computer make and model, copyright lines,
+capture/editing software, and free-text notes. Each score arrives with the
+individual findings and the weight each one added, so the number is a sum of
+stated causes:
+
+```json
+{
+  "name": "IMG_4471.jpg",
+  "risk_score": 70,
+  "risk_level": "high",
+  "reasons": [
+    { "kind": "gps_coordinates", "weight": 40, "exif_tags": ["GPSLatitude", "GPSLongitude"], "value": "51.5073, -0.1277" },
+    { "kind": "owner_name", "weight": 30, "exif_tags": ["OwnerName"], "value": "Jane Q Public" }
+  ]
+}
+```
+
+**A score of 0 is not a clearance to share the file.** The detection is
+heuristic and the tool never modifies anything: it reports what it recognizes,
+and it does not look at PDF annotations, XMP, IPTC, embedded thumbnails, file
+names, or what is visible in the picture. Files outside JPEG and TIFF are listed
+under `skipped` with a reason. Treat the scan output itself as sensitive, since
+it echoes the values it found.
 
 ### Set up automatic organization
 

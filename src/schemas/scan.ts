@@ -5,7 +5,6 @@
 import { z } from "zod";
 import { CommonParamsSchema, PaginationSchema } from "./common.js";
 
-
 /**
  * Schema for list_files tool
  */
@@ -356,6 +355,29 @@ export const InspectMetadataInputSchema = z
   .merge(CommonParamsSchema);
 
 export type InspectMetadataInput = z.infer<typeof InspectMetadataInputSchema>;
+
+/**
+ * Schema for the sensitive_scan tool.
+ * Screens a directory for files carrying personal metadata. Heuristic and
+ * read-only: it reports what EXIF holds, it never removes anything.
+ */
+export const SensitiveScanInputSchema = z
+  .object({
+    directory: z
+      .string()
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to screen"),
+    include_subdirs: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Descend into real subdirectories. Symbolic links are never followed.",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type SensitiveScanInput = z.infer<typeof SensitiveScanInputSchema>;
 
 /**
  * Schema for analyzing duplicate files
