@@ -258,6 +258,23 @@ export type UndoLastOperationInput = z.infer<
   typeof UndoLastOperationInputSchema
 >;
 
+/**
+ * Schema for verify_integrity tool
+ * Rehashes the files a rollback manifest names and reports the drift
+ */
+export const VerifyIntegrityInputSchema = z
+  .object({
+    manifest_id: z
+      .string()
+      .optional()
+      .describe(
+        "ID of the operation to verify. If omitted, verifies the last operation.",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type VerifyIntegrityInput = z.infer<typeof VerifyIntegrityInputSchema>;
+
 // ==================== Music Organization Schema ====================
 
 export const OrganizeMusicInputSchema = z

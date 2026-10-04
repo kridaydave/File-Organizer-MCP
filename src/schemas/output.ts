@@ -329,6 +329,29 @@ export const undoOutputSchema = z.object({
   errors: z.array(z.string()),
 });
 
+export const verifyIntegrityOutputSchema = z.object({
+  manifest_id: z.string(),
+  description: z.string(),
+  recorded_at: z.number(),
+  total_files: z.number(),
+  checked: z.number(),
+  unchanged: z.number(),
+  modified: z.number(),
+  missing: z.number(),
+  unverifiable: z.number(),
+  drift_detected: z.boolean(),
+  verified: z.boolean(),
+  files: z.array(
+    z.object({
+      path: z.string(),
+      status: z.enum(["unchanged", "modified", "missing", "unverifiable"]),
+      reason: z.string().optional(),
+      expected_hash: z.string().optional(),
+      actual_hash: z.string().optional(),
+    }),
+  ),
+});
+
 export const doctorOutputSchema = z.object({
   version: z.string(),
   platform: z.string(),
@@ -464,6 +487,9 @@ export const validateOrganizationPlanOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const undoOutputJsonSchema = z.toJSONSchema(
   undoOutputSchema,
+) as JsonSchemaObject;
+export const verifyIntegrityOutputJsonSchema = z.toJSONSchema(
+  verifyIntegrityOutputSchema,
 ) as JsonSchemaObject;
 export const doctorOutputJsonSchema = z.toJSONSchema(
   doctorOutputSchema,

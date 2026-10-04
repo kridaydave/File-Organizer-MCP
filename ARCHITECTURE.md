@@ -1,6 +1,6 @@
 # Architecture
 
-File Organizer MCP is a stateless stdio MCP server. One Node process exposes 35 typed tools over JSON-RPC. There is no session state, no in-memory cache of your files, and no background work in the core server. The core loop is `scan → categorize → plan → move`, and every filesystem touch passes through one path validator.
+File Organizer MCP is a stateless stdio MCP server. One Node process exposes 36 typed tools over JSON-RPC. There is no session state, no in-memory cache of your files, and no background work in the core server. The core loop is `scan → categorize → plan → move`, and every filesystem touch passes through one path validator.
 
 ## Request lifecycle
 
@@ -57,6 +57,8 @@ Side effects live on disk in the platform config dir (`~/.config/file-organizer-
 | `rollbacks/*.json` | rollback manifests written by every organize run            |
 
 Nothing else survives a restart. Kill the process mid-run and the manifest tells you what happened; `undo` replays it.
+
+A manifest carries two different digests. `manifest.hash` and `manifest.signature` cover the manifest's own actions list, which is what makes a tampered manifest fail to verify. `action.contentHash` is the sha256 of a file's bytes at the path the action left it at, recorded within a 32 MB budget per manifest so `verify_integrity` can rehash later and report drift. Both fields on an action are optional, so a manifest written before content hashing existed still loads and still undoes.
 
 ## Security
 
