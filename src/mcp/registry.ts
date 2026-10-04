@@ -55,6 +55,8 @@ import {
   handleGetCategories,
   setCustomRulesToolDefinition,
   handleSetCustomRules,
+  exportConfigToolDefinition,
+  handleExportConfig,
 } from "../tools/file-management.js";
 import {
   analyzeDuplicatesToolDefinition,
@@ -148,6 +150,7 @@ const entries = [
   reg(deleteDuplicatesToolDefinition, handleDeleteDuplicates),
   reg(diskUsageByCategoryToolDefinition, handleDiskUsageByCategory),
   reg(doctorToolDefinition, handleDoctor),
+  reg(exportConfigToolDefinition, handleExportConfig),
   reg(fileReaderToolDefinition, handleReadFile),
   reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
   reg(findDuplicateFilesToolDefinition, handleFindDuplicateFiles),
