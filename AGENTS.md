@@ -48,6 +48,16 @@ Use this language so we stay on the same page:
 
 3. **Baking in paths.** Never hardcode `process.cwd()`, `os.homedir()`, or absolute test paths into schemas, tools, or snapshots. Allowed roots are platform-aware and user-configurable via `src/core/config/loader.ts:100` (`loadCustomAllowedDirs`). Tests that bake `/home/kriday` will fail on Windows/macOS and leak intent. Derive from `CONFIG.paths` or inject via `ValidatePathOptions`.
 
+   CI runs 6 legs (3 OS × Node 20/22) and a green Linux run proves nothing about the other five. Five ways a platform value leaks into a contract or an assertion. Check each before you push:
+
+   - **A raw absolute path in an assertion.** `/var` becomes `/private/var` on macOS; `RUNNER~1` becomes `runneradmin` under Windows 8.3. Either canonicalise the expectation with `fs.realpath`, or assert on `path.relative(root, actual)` or `path.basename`.
+   - **Unsorted `fs.readdir` compared with `toEqual`.** Directory order is filesystem-dependent and unspecified. `.sort()` both sides, always.
+   - **`path.sep` leaking into a logical string.** A folder label, plan id, or reported relative name is a contract value and must be `/`-separated on every OS. Build those with plain template literals, never `path.join`. See `dateFolder()` in `src/core/organize/date-organizer.ts:270`, which returns `` `${year}/${month}` `` and cannot drift by platform. A genuine filesystem path is fine as `path.join`; the difference is whether a human reads the value.
+   - **`path.relative()` across a realpath boundary.** Spell a path one way and resolve it another and the result collapses into a `../../../..` chain. Canonicalise once in `beforeEach`, not per assertion.
+   - **A test that cannot fail.** If the setup it depends on silently no-ops, the test is green for the wrong reason. Assert the setup fired: `expect(swapped).toBe(true)` at `tests/unit/core/scan/sensitive-scan.test.ts:539`. Then break the code under test and confirm the test goes red before you trust it.
+
+   Still unfixed, and the reason the rule above is not optional: `src/tools/metadata-inspection.ts:197` builds `organizationPath` with `path.join`, so on Windows the tool reports `Images\2024\05\IMG_0001.jpg` where the contract is `Images/2024/05/IMG_0001.jpg`.
+
 ## Hit every surface
 
 The most common defect here is a change that works for one tool and is missing everywhere else. Before calling work done, walk this list:
@@ -59,6 +69,32 @@ The most common defect here is a change that works for one tool and is missing e
 - **Reverse states.** If you added a way in, add the way out and the way to see it. Organize needs preview + undo + history. Watch needs unwatch + list.
 - **Contracts.** Anything crossing the wire is a `ToolDefinition` in `src/mcp/types.ts:16`. `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) must be honest or the client will make bad decisions.
 - **Docs.** Behavior a user notices → `README.md`; structural change → `ARCHITECTURE.md`; tool shape → `API.md` + `config.schema.json`; new vocabulary → `docs/FRAMEWORK.md`.
+
+## Merging and conflicts
+
+Every tool PR edits the same few coordinates: an import block and one `reg()` line in `src/mcp/registry.ts`, the README tool count, and ARCHITECTURE.md. That is the documented contract (`ARCHITECTURE.md:112`), so parallel tool PRs collide on every merge. `main` also runs `strict: true` with 9 required checks, no merge queue, and no auto-merge, so every merge makes every other open branch stale and merges are serial. Plan for that instead of discovering it halfway through a batch.
+
+Most of the damage is not the conflict, it is the resolution. Four rules:
+
+- **Never `git add -A` after resolving a conflict.** It stages every *other* conflicted file with its `<<<<<<<` still in it. `git add` only the paths you actually resolved.
+- **Check for markers before every commit that follows a resolution.** Two branches shipped committed `<<<<<<<`/`=======` and needed four cleanup commits on `main`:
+  ```bash
+  grep -rnE '^(<<<<<<<|=======|>>>>>>>)' --include='*.ts' --include='*.md' . && exit 1
+  ```
+- **Prove the tool set survived.** A rebase that resolves `registry.ts` by taking one side can silently delete tools that merged in between. This must be empty:
+  ```bash
+  comm -3 <(git show ORIG_HEAD:src/mcp/registry.ts | grep -oP '^\s+reg\(\K\w+' | sort) \
+          <(grep -oP '^\s+reg\(\K\w+' src/mcp/registry.ts | sort)
+  ```
+- **Run `npm run docs:check` after every resolution**, not once at the end. A squash merge truncated an ARCHITECTURE.md paragraph and the count test stayed green, because the count test does not read prose.
+
+Before you push a branch that adds a tool, check what it will collide with while you still have the context. Finding out during a batch merge means reading a transcript instead of the code:
+
+```bash
+git fetch -q origin main && git merge-tree --write-tree --name-only origin/main HEAD | grep "Merge conflict in"
+```
+
+Conflicts in README.md and ARCHITECTURE.md are decisions, not merges. Read both sides and keep both unless one is genuinely wrong. An automated union will duplicate whatever sits on both sides.
 
 ## Dev servers
 
@@ -180,7 +216,7 @@ npm run format                             # prettier src/
 npm run setup                              # TUI wizard
 
 npm run docs:sync                          # regenerate tool list/count in README + ARCHITECTURE
-npm run docs:check                         # fail if they drift from the registry (CI runs this)
+npm run docs:check                         # fail if they drift from the registry (not in CI yet, run it yourself)
 ```
 
 ## Quality gates
@@ -194,7 +230,22 @@ Before submitting changes:
 - [ ] New behavior has a test
 - [ ] Errors don't leak paths
 - [ ] Docs updated if you changed a tool shape or security rule
-- [ ] If you added or removed a tool: `npm run docs:sync`, and commit the result. Never hand-edit the tool count or the tool list in README.md / ARCHITECTURE.md — they are generated from the registry. CI runs `npm run docs:check`.
+- [ ] If you added or removed a tool: `npm run docs:sync`, and commit the result. Never hand-edit the tool count or the tool list in README.md / ARCHITECTURE.md — they are generated from the registry.
+- [ ] If you touched `path.join`, `path.sep`, or `path.relative`: you checked the value cannot reach a test assertion or a documented format string. See rule 3.
+- [ ] If you resolved a conflict: no markers in the diff, and the `comm -3` on the `reg()` set is empty if `registry.ts` was involved.
+
+## Not machine-checked yet
+
+Every rule above is a sentence in this file, so it holds exactly as well as the agent reading it. These gaps are why defects reached CI instead of your editor. None of them exist today:
+
+- No commit hooks. No husky, no lint-staged, no `pre-push`. The four conflict rules above are manual.
+- `npm run docs:check` is not in CI. `tests/unit/docs-tool-list.test.ts` guards the count from inside the 6-leg matrix, so one stale count reports as 2 failing tests × 6 legs = 12 red checks instead of 1.
+- No portability profile. Nothing runs the suite with `os.tmpdir`, `fs.readdir` order, or `fs.realpath` perturbed, so the five leak classes in rule 3 can only be found on macOS or Windows.
+- `main` has `strict: true`, no ruleset, no merge queue, `allow_auto_merge: false`. Merges serialise by hand.
+- The tool list and count are generated, but the hand-written tool bullets in README.md above the `<!-- BEGIN GENERATED TOOL LIST -->` marker, and the tool references in ARCHITECTURE.md, are not. Those are the two hottest conflict sites left.
+- `src/mcp/registry.ts` is a hand-maintained flat array of `reg()` lines. `ARCHITECTURE.md:112` records that auto-discovery was deliberately rejected in favour of a visible one-line edit. Under parallel tool PRs, that decision is what generates the conflicts.
+
+If you touch one of these, close it rather than working around it.
 
 ## Additional tips
 
