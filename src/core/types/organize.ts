@@ -75,6 +75,48 @@ export interface OrganizationPlan {
   warnings: string[];
 }
 
+// ==================== Plan Validation Types ====================
+
+export type PlanFindingKind =
+  /** Two or more sources resolved to one destination name. */
+  | "destination_name_collision"
+  /** A planned destination is already occupied on disk. */
+  | "destination_exists"
+  /** Source and destination sit on different devices. */
+  | "cross_device_move"
+  /** The sensitive-file gate would refuse this source. */
+  | "sensitive_source"
+  /** The planner gave up part-way, so this plan is not the whole run. */
+  | "incomplete_plan";
+
+export type PlanFindingSeverity = "error" | "warning";
+
+export interface PlanFinding {
+  kind: PlanFindingKind;
+  severity: PlanFindingSeverity;
+  /** Files involved, in plan order. */
+  sources: string[];
+  /** Destinations involved, in plan order. */
+  destinations: string[];
+  detail: string;
+}
+
+export interface PlanValidationResult {
+  directory: string;
+  /** False when any finding has severity `error`. */
+  ok: boolean;
+  moves_checked: number;
+  counts: {
+    error: number;
+    warning: number;
+  };
+  findings: PlanFinding[];
+  /** What this check actually looked at. */
+  checked: string[];
+  /** What it did not look at, so a clean run is not read as a guarantee. */
+  not_checked: string[];
+}
+
 export interface DuplicateResult extends PaginatedResult<DuplicateGroup> {
   directory: string;
   duplicate_groups: number;
@@ -106,6 +148,57 @@ export interface OrganizeResult {
   aborted: boolean;
 }
 
+// ==================== Quarantine Types ====================
+
+/**
+ * One file in a quarantine or restore report. `from` is where the file was
+ * read from, `to` is where it was (or would be) written, so the same shape
+ * describes both directions.
+ */
+export interface QuarantineItem {
+  file: string;
+  from: string;
+  to: string;
+}
+
+export interface QuarantineResult {
+  /** Validated directory the files were taken from. */
+  directory: string;
+  /** Validated directory the files were (or would be) moved into. */
+  quarantine_dir: string;
+  dry_run: boolean;
+  /** How many file paths the caller asked for. */
+  requested: number;
+  /** How many files have a destination. On a dry run this is the whole plan. */
+  planned: number;
+  /** Files actually moved. Always 0 on a dry run. */
+  quarantined: number;
+  /** The plan on a dry run, the moves that landed otherwise. */
+  items: QuarantineItem[];
+  skipped: { path: string; reason: string }[];
+  errors: string[];
+  /** Rollback manifest covering the moves, so undo_last_operation can reverse them. */
+  manifest_id?: string;
+  /** Caller-supplied note recorded in the manifest description. */
+  reason?: string;
+}
+
+export interface RestoreResult {
+  dry_run: boolean;
+  /** Quarantine manifest this restore reads. */
+  quarantine_id: string;
+  /** Moves recorded in that manifest. */
+  requested: number;
+  planned: number;
+  /** Files actually put back. Always 0 on a dry run. */
+  restored: number;
+  /** The plan on a dry run, the moves that landed otherwise. */
+  items: QuarantineItem[];
+  errors: string[];
+  /** Rollback manifest covering the restore, so the restore is itself undoable. */
+  manifest_id?: string;
+}
+
 // ==================== Analysis Types ====================
 
 export interface LargestFileInfo {
@@ -118,6 +211,28 @@ export interface LargestFileInfo {
 export interface LargestFilesResult {
   directory: string;
   largest_files: LargestFileInfo[];
+}
+
+export interface OldFileInfo {
+  name: string;
+  path: string;
+  size: number;
+  size_readable: string;
+  /** Whole days since the chosen timestamp (mtime by default, atime on request). */
+  age_days: number;
+  /** The timestamp the age was measured from. */
+  accessed_or_modified: string;
+}
+
+export interface OldFilesResult {
+  directory: string;
+  /** Which timestamp the ages were measured from. */
+  age_source: "mtime" | "atime";
+  older_than_days: number;
+  /** Files that matched, before top_n cut the list. */
+  total_count: number;
+  returned_count: number;
+  old_files: OldFileInfo[];
 }
 
 // ==================== System Organize Types ====================

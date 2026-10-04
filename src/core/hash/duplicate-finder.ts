@@ -53,6 +53,36 @@ export interface DuplicateAnalysis {
   skipped_bytes: number;
 }
 
+/**
+ * Which copy of a duplicate group survives a delete. Unlike
+ * `RecommendationStrategy`, these name the survivor outright rather than
+ * blending path depth and location quality into a score — a dry-run that says
+ * "newest survives" has to mean exactly that.
+ */
+export type KeepStrategy = "newest" | "oldest" | "keep_first";
+
+export interface DeletionPreviewGroup {
+  hash: string;
+  size_bytes: number;
+  file_count: number;
+  /** The single copy that would survive. */
+  keep: string;
+  /** Every other copy in the group, which a delete would remove. */
+  would_delete: string[];
+  wasted_space_bytes: number;
+}
+
+export interface DeletionPreview {
+  keep_strategy: KeepStrategy;
+  groups: DeletionPreviewGroup[];
+  /** Flat, de-duplicated list ready to hand straight to a delete call. */
+  files_to_delete: string[];
+  total_would_delete: number;
+  total_wasted_space_bytes: number;
+  skipped: SkippedFile[];
+  skipped_bytes: number;
+}
+
 export interface DeletionResult {
   deleted: string[];
   failed: { path: string; error: string }[];
@@ -137,6 +167,98 @@ export class DuplicateFinderService {
       skipped: scan.skipped,
       skipped_bytes: scan.skipped_bytes,
     };
+  }
+
+  /**
+   * Decide what a delete would remove, without touching anything.
+   *
+   * This is the dry-run twin of `deleteFiles`: it groups the scan the same way
+   * and passes the scan's `skipped` list through untouched, so a caller showing
+   * the user "nothing will be deleted" can still say which files the answer is
+   * blind to.
+   *
+   * @param files - Candidate files, typically from a recursive scan
+   * @param keepStrategy - Which copy of each group survives
+   * @param options - Forwarded scan options, e.g. the timeout budget
+   */
+  async previewDeletion(
+    files: FileWithSize[],
+    keepStrategy: KeepStrategy = "newest",
+    options: { timeoutMs?: number } = {},
+  ): Promise<DeletionPreview> {
+    const scan = await this.hashCalculator.findDuplicates(files, options);
+
+    const groups = scan.groups
+      .filter((group) => group.size_bytes > 0)
+      .map((group) => {
+        const keepIndex = this.pickSurvivor(group.files, keepStrategy);
+        return {
+          hash: group.hash,
+          size_bytes: group.size_bytes,
+          file_count: group.count,
+          keep: group.files[keepIndex]?.path ?? "",
+          would_delete: group.files
+            .filter((_, i) => i !== keepIndex)
+            .map((f) => f.path),
+          wasted_space_bytes: group.size_bytes * (group.count - 1),
+        };
+      });
+
+    return {
+      keep_strategy: keepStrategy,
+      groups,
+      files_to_delete: [...new Set(groups.flatMap((g) => g.would_delete))],
+      total_would_delete: groups.reduce(
+        (sum, g) => sum + g.would_delete.length,
+        0,
+      ),
+      total_wasted_space_bytes: groups.reduce(
+        (sum, g) => sum + g.wasted_space_bytes,
+        0,
+      ),
+      skipped: scan.skipped,
+      skipped_bytes: scan.skipped_bytes,
+    };
+  }
+
+  /**
+   * Index of the copy that survives. A tie keeps the earlier file, so the
+   * answer is stable for a given scan order instead of shuffling between runs.
+   */
+  private pickSurvivor(files: FileWithSize[], strategy: KeepStrategy): number {
+    let bestIndex = 0;
+    let best = files[0];
+    for (let i = 1; i < files.length; i++) {
+      const candidate = files[i];
+      if (!candidate || !best) continue;
+      if (this.outranks(candidate, best, strategy)) {
+        bestIndex = i;
+        best = candidate;
+      }
+    }
+    return bestIndex;
+  }
+
+  /** Whether `candidate` should survive over `incumbent` under `strategy`. */
+  private outranks(
+    candidate: FileWithSize,
+    incumbent: FileWithSize,
+    strategy: KeepStrategy,
+  ): boolean {
+    if (strategy === "keep_first") {
+      // Scan order is the whole rule, and the incumbent already won it.
+      return false;
+    }
+
+    const a = candidate.modified?.getTime();
+    const b = incumbent.modified?.getTime();
+    if (a === undefined || b === undefined) {
+      // A file with no timestamp cannot win a date comparison, so it survives
+      // only if nothing better is in the group.
+      return b === undefined;
+    }
+
+    return strategy === "newest" ? a > b : a < b;
   }
 
   /**

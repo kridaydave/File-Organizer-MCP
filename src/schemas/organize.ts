@@ -6,7 +6,6 @@ import { z } from "zod";
 import { CommonParamsSchema } from "./common.js";
 import { FolderNameSchema } from "./system.js";
 
-
 /**
  * Schema for organize_files tool
  */
@@ -64,6 +63,37 @@ export const PreviewOrganizationInputSchema = z
 
 export type PreviewOrganizationInput = z.infer<
   typeof PreviewOrganizationInputSchema
+>;
+
+/**
+ * Schema for validate_organization_plan tool
+ * Dry-run check of the plan organize would execute: name collisions, occupied
+ * destinations, cross-device moves, and files the sensitive-file gate refuses.
+ */
+export const ValidateOrganizationPlanInputSchema = z
+  .object({
+    directory: z
+      .string()
+      .min(1, "Directory path cannot be empty")
+      .describe("Full path to the directory to validate the plan for"),
+    include_subdirs: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Validate a plan built over subdirectories. Defaults to false, which is the depth organize_files itself scans",
+      ),
+    conflict_strategy: z
+      .enum(["rename", "skip", "overwrite"])
+      .optional()
+      .describe(
+        "How to handle file conflicts for the validated plan. Uses config default if not specified",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type ValidateOrganizationPlanInput = z.infer<
+  typeof ValidateOrganizationPlanInputSchema
 >;
 
 export const FindReplaceRuleSchema = z.object({
@@ -151,6 +181,66 @@ export const BatchRenameInputSchema = z
 export type BatchRenameInput = z.infer<typeof BatchRenameInputSchema>;
 
 /**
+ * Schema for quarantine_files tool
+ * Moves flagged files into a quarantine directory, reversibly
+ */
+export const QuarantineFilesInputSchema = z
+  .object({
+    directory: z
+      .string()
+      .min(1, "Directory path cannot be empty")
+      .describe("Directory the flagged files live in"),
+    files: z
+      .array(z.string().min(1))
+      .min(1, "At least one file is required")
+      .describe("Absolute paths of the flagged files, all inside directory"),
+    quarantine_dir: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Where to move them. Defaults to a hidden .file-organizer-quarantine directory inside `directory`",
+      ),
+    reason: z
+      .string()
+      .max(500)
+      .optional()
+      .describe("Note recorded in the manifest, e.g. why these were flagged"),
+    dry_run: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("If true, list what would be quarantined without moving anything"),
+  })
+  .merge(CommonParamsSchema);
+
+export type QuarantineFilesInput = z.infer<typeof QuarantineFilesInputSchema>;
+
+/**
+ * Schema for restore_quarantine tool
+ * Puts quarantined files back where they came from
+ */
+export const RestoreQuarantineInputSchema = z
+  .object({
+    quarantine_id: z
+      .string()
+      .optional()
+      .describe(
+        "Manifest id returned by quarantine_files. If omitted, restores the most recent quarantine.",
+      ),
+    dry_run: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe(
+        "If true, list what would be restored without moving anything",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type RestoreQuarantineInput = z.infer<typeof RestoreQuarantineInputSchema>;
+
+/**
  * Schema for undo_last_operation tool
  * Reverses file moves and renames from a previous organization task
  */
@@ -168,6 +258,23 @@ export const UndoLastOperationInputSchema = z
 export type UndoLastOperationInput = z.infer<
   typeof UndoLastOperationInputSchema
 >;
+
+/**
+ * Schema for verify_integrity tool
+ * Rehashes the files a rollback manifest names and reports the drift
+ */
+export const VerifyIntegrityInputSchema = z
+  .object({
+    manifest_id: z
+      .string()
+      .optional()
+      .describe(
+        "ID of the operation to verify. If omitted, verifies the last operation.",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type VerifyIntegrityInput = z.infer<typeof VerifyIntegrityInputSchema>;
 
 // ==================== Music Organization Schema ====================
 
@@ -261,6 +368,54 @@ export const OrganizePhotosInputSchema = z
   .merge(CommonParamsSchema);
 
 export type OrganizePhotosInput = z.infer<typeof OrganizePhotosInputSchema>;
+
+/**
+ * Schema for organize_by_date tool
+ * Sorts any file into YYYY/MM folders using EXIF date taken (photos) or mtime.
+ *
+ * date_source:
+ * - "auto"  EXIF DateTimeOriginal when a photo has one, otherwise mtime
+ * - "exif"  EXIF only; files without a usable EXIF date are left in place
+ * - "mtime" filesystem modification time only, never reads metadata
+ */
+export const OrganizeByDateInputSchema = z
+  .object({
+    source_dir: z
+      .string()
+      .min(1, "Source directory path cannot be empty")
+      .describe("Full path to the directory containing files to sort"),
+    target_dir: z
+      .string()
+      .min(1, "Target directory path cannot be empty")
+      .describe(
+        "Full path to the directory where the YYYY/MM folders will be created",
+      ),
+    date_format: z
+      .enum(["YYYY/MM", "YYYY/MM/DD", "YYYY"])
+      .optional()
+      .default("YYYY/MM")
+      .describe("Date folder structure"),
+    date_source: z
+      .enum(["auto", "exif", "mtime"])
+      .optional()
+      .default("auto")
+      .describe(
+        "Where the folder date comes from: EXIF date taken for photos, file mtime, or auto",
+      ),
+    recursive: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Scan subdirectories of source_dir"),
+    dry_run: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("If true, only preview the date folders without moving files"),
+  })
+  .merge(CommonParamsSchema);
+
+export type OrganizeByDateInput = z.infer<typeof OrganizeByDateInputSchema>;
 
 /**
  * Schema for system_organization tool
@@ -391,7 +546,9 @@ export const OrganizeByProjectInputSchema = z
       .boolean()
       .optional()
       .default(true)
-      .describe("If true, only preview the project grouping without moving files"),
+      .describe(
+        "If true, only preview the project grouping without moving files",
+      ),
     recursive: z
       .boolean()
       .optional()
@@ -400,4 +557,6 @@ export const OrganizeByProjectInputSchema = z
   })
   .merge(CommonParamsSchema);
 
-export type OrganizeByProjectInput = z.infer<typeof OrganizeByProjectInputSchema>;
+export type OrganizeByProjectInput = z.infer<
+  typeof OrganizeByProjectInputSchema
+>;

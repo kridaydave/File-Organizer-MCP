@@ -5,7 +5,6 @@
 import { z } from "zod";
 import { CommonParamsSchema } from "./common.js";
 
-
 /**
  * Schema for view_history tool
  * View the history of file organization operations
@@ -63,7 +62,7 @@ export const PathSchema = z
   });
 
 /**
- * Schema for a user-supplied FOLDER NAME — a single path segment, not a path.
+* Schema for a user-supplied FOLDER NAME — a single path segment, not a path.
  *
  * These values get joined onto an already-validated directory and then
  * mkdir'd, so anything that could walk out of that directory (separators,
@@ -87,6 +86,53 @@ export const FolderNameSchema = z
   .refine((name) => name.trim() !== "", {
     message: "Folder name cannot be blank",
   });
+
+/**
+ * Schema for search_history tool — the filtered read over the same history.
+ * Every filter is optional; supplied filters combine.
+ */
+export const SearchHistoryInputSchema = z
+  .object({
+    path_glob: PathSchema.optional().describe(
+      "Glob matched against the paths each entry recorded (full path, POSIX-style full path, or bare filename)",
+    ),
+    from: z
+      .string()
+      .optional()
+      .describe("ISO date string - return entries at or after this time"),
+    to: z
+      .string()
+      .optional()
+      .describe("ISO date string - return entries at or before this time"),
+    operation: z
+      .string()
+      .optional()
+      .describe("Filter by operation name"),
+    status: z
+      .enum(["success", "error", "partial"])
+      .optional()
+      .describe("Filter by operation status"),
+    source: z
+      .enum(["manual", "scheduled"])
+      .optional()
+      .describe("Filter by operation source"),
+    limit: z
+      .number()
+      .min(1)
+      .max(1000)
+      .optional()
+      .default(20)
+      .describe("Maximum number of entries to return"),
+    privacy_mode: z
+      .enum(["full", "redacted", "none"])
+      .optional()
+      .describe(
+        "Privacy mode for output: full (all details), redacted (paths hidden), none (minimal info)",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type SearchHistoryInput = z.infer<typeof SearchHistoryInputSchema>;
 
 /**
  * Schema for security mode configuration
@@ -119,3 +165,57 @@ export const SetCustomRulesInputSchema = z
     ),
   })
   .merge(CommonParamsSchema);
+
+/**
+ * Schema for export_config tool.
+ *
+ * output_path is optional: omit it and the bundle comes back in the response
+ * without anything being written. rebaseRoot turns the machine-specific
+ * directory paths into `~/relative` values that survive a different home.
+ */
+export const ExportConfigInputSchema = z
+  .object({
+    output_path: PathSchema.optional().describe(
+      "Where to write the bundle JSON. Must pass path validation. The write refuses to overwrite an existing file. Omit to receive the bundle in the response instead of writing one.",
+    ),
+    rebase_root: PathSchema.optional().describe(
+      "Directory on this machine that the target machine's home directory is expected to occupy, normally the home directory. Paths under it are exported as ~-relative instead of absolute.",
+    ),
+  })
+  .merge(CommonParamsSchema);
+
+export type ExportConfigInput = z.infer<typeof ExportConfigInputSchema>;
+
+/**
+ * The exported bundle document, as read back off disk.
+ *
+ * `config` is deliberately loose: it is the config.json subset, already shaped
+ * by UserConfig when it is built, and a bundle written by another version may
+ * carry keys this one does not know. The envelope is what must match, so the
+ * envelope is what is checked.
+ *
+ * format_version is a literal, not a range: loadConfigBundle names the version
+ * it supports when it rejects a file, and a bundle of some future format must
+ * fail here rather than load as this one.
+ */
+export const ConfigBundleSchema = z.object({
+  format_version: z.literal(1),
+  exported_by: z.string(),
+  exported_at: z.string(),
+  config: z.record(z.string(), z.unknown()),
+  portability: z.object({
+    mode: z.enum(["absolute", "rebased"]),
+    rebase_root: z.string().nullable(),
+    requires_editing: z.array(z.string()),
+    non_portable_paths: z.array(
+      z.object({
+        field: z.string(),
+        value: z.string(),
+        reason: z.literal("outside_rebase_root"),
+      }),
+    ),
+    notes: z.array(z.string()),
+  }),
+});
+
+export type ConfigBundle = z.infer<typeof ConfigBundleSchema>;

@@ -176,6 +176,23 @@ export function getRollbackDirectory(): string {
   return path.join(getHistoryDirectory(), "rollbacks");
 }
 
+/** Name of the quarantine area created inside a directory being quarantined. */
+export const QUARANTINE_DIR_NAME = ".file-organizer-quarantine";
+
+/**
+ * Quarantine root for a source directory: a hidden child of that directory.
+ *
+ * It lives inside the source on purpose. The source has already passed
+ * validateStrictPath, so the child inherits the same allowed-dir grant and the
+ * quarantine area needs no extra configuration from the user. A location under
+ * the OS config dir cannot serve here: that dir is outside the allowed dirs on
+ * Linux, and it is blocked outright on macOS (/Library/Application Support)
+ * and Windows (AppData\Roaming), so validateStrictPath would refuse it.
+ */
+export function getQuarantineDirectory(sourceDirectory: string): string {
+  return path.join(sourceDirectory, QUARANTINE_DIR_NAME);
+}
+
 /**
  * Directory holding pre-overwrite backups and duplicate trash.
  * Platform config dir — NOT process.cwd(), which breaks npx/global installs.

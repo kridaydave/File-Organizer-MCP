@@ -92,6 +92,31 @@ export const deleteDuplicatesOutputSchema = z.object({
   partially_verified_files: z.array(z.string()),
 });
 
+const previewDeleteGroupSchema = z.object({
+  hash: z.string(),
+  size_bytes: z.number(),
+  file_count: z.number(),
+  keep: z.string(),
+  would_delete: z.array(z.string()),
+  wasted_space_bytes: z.number(),
+});
+
+export const previewDeleteDuplicatesOutputSchema = z.object({
+  dry_run: z.boolean(),
+  keep_strategy: z.enum(["newest", "oldest", "keep_first"]),
+  summary: z.object({
+    total_duplicate_groups: z.number(),
+    total_files_to_delete: z.number(),
+    total_wasted_space_bytes: z.number(),
+    total_wasted_space_readable: z.string(),
+    not_analyzed_files: z.number(),
+    not_analyzed_bytes: z.number(),
+  }),
+  duplicate_groups: z.array(previewDeleteGroupSchema),
+  files_to_delete: z.array(z.string()),
+  skipped: z.array(skippedFileSchema),
+});
+
 export const organizeFilesOutputSchema = z.object({
   directory: z.string(),
   dry_run: z.boolean(),
@@ -134,6 +159,30 @@ export const previewOrganizationOutputSchema = z.object({
   skipped_files: z.array(z.object({ path: z.string(), reason: z.string() })),
 });
 
+export const validateOrganizationPlanOutputSchema = z.object({
+  directory: z.string(),
+  ok: z.boolean(),
+  moves_checked: z.number(),
+  counts: z.object({ error: z.number(), warning: z.number() }),
+  findings: z.array(
+    z.object({
+      kind: z.enum([
+        "destination_name_collision",
+        "destination_exists",
+        "cross_device_move",
+        "sensitive_source",
+        "incomplete_plan",
+      ]),
+      severity: z.enum(["error", "warning"]),
+      sources: z.array(z.string()),
+      destinations: z.array(z.string()),
+      detail: z.string(),
+    }),
+  ),
+  checked: z.array(z.string()),
+  not_checked: z.array(z.string()),
+});
+
 export const findBrokenSymlinksOutputSchema = z.object({
   directory: z.string(),
   scanned_count: z.number(),
@@ -153,10 +202,154 @@ export const findBrokenSymlinksOutputSchema = z.object({
   ),
 });
 
+const renameCollisionSchema = z.object({
+  kind: z.enum(["duplicate_target", "destination_exists"]),
+  destination: z.string(),
+  sources: z.array(z.string()),
+});
+
+const renamePreviewSchema = z.object({
+  original: z.string(),
+  new: z.string(),
+  willChange: z.boolean(),
+  conflict: z.boolean(),
+  error: z.string().optional(),
+});
+
+/**
+ * batch_rename reports collisions on every response, in both formats, so an
+ * agent can act on them without re-running in json. `rejected` is the field to
+ * branch on: it is true only when a real run was stopped before the first
+ * rename, which is the only case where nothing moved.
+ */
+export const findEmptyDirectoriesOutputSchema = z.object({
+  directory: z.string(),
+  scanned_count: z.number(),
+  depth_limited: z.boolean(),
+  result_limited: z.boolean(),
+  limit: z.number(),
+  total_count: z.number(),
+  empty_dirs: z.array(z.string()),
+});
+
+export const batchRenameOutputSchema = z.object({
+  dry_run: z.boolean(),
+  rejected: z.boolean(),
+  renamed: z.number(),
+  processed: z.number(),
+  rules: z.array(z.record(z.string(), z.unknown())),
+  conflicts: z.array(renameCollisionSchema),
+  previews: z.array(renamePreviewSchema).optional(),
+  result: z
+    .object({
+      statistics: z.object({
+        total: z.number(),
+        renamed: z.number(),
+        skipped: z.number(),
+        failed: z.number(),
+      }),
+      successes: z.array(
+        z.object({ original: z.string(), new: z.string() }),
+      ),
+      errors: z.array(z.string()),
+    })
+    .optional(),
+});
+
+export const diskUsageByCategoryOutputSchema = z.object({
+  directory: z.string(),
+  total_files: z.number(),
+  total_size: z.number(),
+  total_size_readable: z.string(),
+  categories: z.array(
+    z.object({
+      category: z.string(),
+      file_count: z.number(),
+      total_size: z.number(),
+      total_size_readable: z.string(),
+      percent_of_total: z.number(),
+    }),
+  ),
+});
+
+/**
+ * sensitive_scan. `limits` is part of the contract, not decoration: the risk
+ * score is a heuristic and a caller that drops the caveat reads a zero as a
+ * clearance the scan never gave.
+ */
+export const sensitiveScanOutputSchema = z.object({
+  directory: z.string(),
+  scanned_count: z.number(),
+  skipped_count: z.number(),
+  flagged_count: z.number(),
+  highest_risk_score: z.number(),
+  truncated: z.boolean(),
+  files: z.array(
+    z.object({
+      path: z.string(),
+      name: z.string(),
+      format: z.string(),
+      risk_score: z.number(),
+      risk_level: z.enum(["none", "low", "medium", "high"]),
+      reasons: z.array(
+        z.object({
+          kind: z.enum([
+            "gps_coordinates",
+            "gps_altitude",
+            "gps_timestamp",
+            "owner_name",
+            "serial_number",
+            "camera_device",
+            "copyright",
+            "software",
+            "notes_or_comment",
+          ]),
+          weight: z.number(),
+          detail: z.string(),
+          exif_tags: z.array(z.string()),
+          value: z.string().optional(),
+        }),
+      ),
+    }),
+  ),
+  skipped: z.array(
+    z.object({
+      path: z.string(),
+      name: z.string(),
+      reason: z.enum(["format_not_analyzed", "unreadable"]),
+      detail: z.string(),
+    }),
+  ),
+  limits: z.array(z.string()),
+});
+
 export const undoOutputSchema = z.object({
   success: z.number(),
   failed: z.number(),
   errors: z.array(z.string()),
+});
+
+export const verifyIntegrityOutputSchema = z.object({
+  manifest_id: z.string(),
+  description: z.string(),
+  recorded_at: z.number(),
+  total_files: z.number(),
+  checked: z.number(),
+  unchanged: z.number(),
+  modified: z.number(),
+  missing: z.number(),
+  unverifiable: z.number(),
+  drift_detected: z.boolean(),
+  verified: z.boolean(),
+  files: z.array(
+    z.object({
+      path: z.string(),
+      status: z.enum(["unchanged", "modified", "missing", "unverifiable"]),
+      reason: z.string().optional(),
+      expected_hash: z.string().optional(),
+      actual_hash: z.string().optional(),
+    }),
+  ),
 });
 
 export const doctorOutputSchema = z.object({
@@ -206,6 +399,63 @@ export const doctorOutputSchema = z.object({
   healthy: z.boolean(),
 });
 
+const quarantineItemSchema = z.object({
+  file: z.string(),
+  from: z.string(),
+  to: z.string(),
+});
+
+export const quarantineFilesOutputSchema = z.object({
+  directory: z.string(),
+  quarantine_dir: z.string(),
+  dry_run: z.boolean(),
+  requested: z.number(),
+  planned: z.number(),
+  quarantined: z.number(),
+  items: z.array(quarantineItemSchema),
+  skipped: z.array(z.object({ path: z.string(), reason: z.string() })),
+  errors: z.array(z.string()),
+  manifest_id: z.string().optional(),
+  reason: z.string().optional(),
+});
+
+export const restoreQuarantineOutputSchema = z.object({
+  dry_run: z.boolean(),
+  quarantine_id: z.string(),
+  requested: z.number(),
+  planned: z.number(),
+  restored: z.number(),
+  items: z.array(quarantineItemSchema),
+  errors: z.array(z.string()),
+  manifest_id: z.string().optional(),
+});
+
+export const exportConfigOutputSchema = z.object({
+  format_version: z.number(),
+  mode: z.enum(["absolute", "rebased"]),
+  rebase_root: z.string().nullable(),
+  output_path: z.string().nullable(),
+  written: z.boolean(),
+  bytes_written: z.number(),
+  config_file_present: z.boolean(),
+  counts: z.object({
+    custom_allowed_directories: z.number(),
+    custom_rules: z.number(),
+    rules: z.number(),
+    watch_entries: z.number(),
+  }),
+  requires_editing: z.array(z.string()),
+  non_portable_paths: z.array(
+    z.object({
+      field: z.string(),
+      value: z.string(),
+      reason: z.string(),
+    }),
+  ),
+  notes: z.array(z.string()),
+  config: z.record(z.string(), z.unknown()),
+});
+
 type JsonSchemaObject = {
   type: "object";
   properties: Record<string, unknown>;
@@ -223,18 +473,48 @@ export const analyzeDuplicatesOutputJsonSchema = z.toJSONSchema(
 export const deleteDuplicatesOutputJsonSchema = z.toJSONSchema(
   deleteDuplicatesOutputSchema,
 ) as JsonSchemaObject;
+export const previewDeleteDuplicatesOutputJsonSchema = z.toJSONSchema(
+  previewDeleteDuplicatesOutputSchema,
+) as JsonSchemaObject;
 export const organizeFilesOutputJsonSchema = z.toJSONSchema(
   organizeFilesOutputSchema,
 ) as JsonSchemaObject;
 export const previewOrganizationOutputJsonSchema = z.toJSONSchema(
   previewOrganizationOutputSchema,
 ) as JsonSchemaObject;
+export const validateOrganizationPlanOutputJsonSchema = z.toJSONSchema(
+  validateOrganizationPlanOutputSchema,
+) as JsonSchemaObject;
 export const undoOutputJsonSchema = z.toJSONSchema(
   undoOutputSchema,
+) as JsonSchemaObject;
+export const verifyIntegrityOutputJsonSchema = z.toJSONSchema(
+  verifyIntegrityOutputSchema,
 ) as JsonSchemaObject;
 export const doctorOutputJsonSchema = z.toJSONSchema(
   doctorOutputSchema,
 ) as JsonSchemaObject;
+export const findEmptyDirectoriesOutputJsonSchema = z.toJSONSchema(
+  findEmptyDirectoriesOutputSchema,
+) as JsonSchemaObject;
 export const findBrokenSymlinksOutputJsonSchema = z.toJSONSchema(
   findBrokenSymlinksOutputSchema,
+) as JsonSchemaObject;
+export const batchRenameOutputJsonSchema = z.toJSONSchema(
+  batchRenameOutputSchema,
+) as JsonSchemaObject;
+export const diskUsageByCategoryOutputJsonSchema = z.toJSONSchema(
+  diskUsageByCategoryOutputSchema,
+) as JsonSchemaObject;
+export const quarantineFilesOutputJsonSchema = z.toJSONSchema(
+  quarantineFilesOutputSchema,
+) as JsonSchemaObject;
+export const restoreQuarantineOutputJsonSchema = z.toJSONSchema(
+  restoreQuarantineOutputSchema,
+) as JsonSchemaObject;
+export const exportConfigOutputJsonSchema = z.toJSONSchema(
+  exportConfigOutputSchema,
+) as JsonSchemaObject;
+export const sensitiveScanOutputJsonSchema = z.toJSONSchema(
+  sensitiveScanOutputSchema,
 ) as JsonSchemaObject;

@@ -10,6 +10,7 @@
 
 import path from "path";
 import os from "os";
+import fsSync from "fs";
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { RollbackService } from "../core/organize/rollback.js";
@@ -37,6 +38,28 @@ function resolveSourceDir(sourceDir: string): string {
   return trimmed;
 }
 
+/**
+ * The canonical spelling of a path, so a directory is compared to the roots by
+ * what it actually is rather than by how it was typed.
+ *
+ * Two spellings of one directory otherwise look unrelated to a string prefix
+ * check: macOS `os.tmpdir()` is `/var/folders/...` while the realpath of the
+ * same place is `/private/var/folders/...`, and Windows short names spell a
+ * directory `RUNNER~1` where the long name is `runneradmin`. Comparing the
+ * unresolved forms rejected directories that really were inside Downloads.
+ * Falls back to the input when the path does not exist yet, which is what the
+ * prefix check below already tolerated.
+ */
+function canonicalizeForCompare(inputPath: string): string {
+  try {
+    return typeof fsSync.realpathSync?.native === "function"
+      ? fsSync.realpathSync.native(inputPath)
+      : fsSync.realpathSync(inputPath);
+  } catch {
+    return inputPath;
+  }
+}
+
 function isValidSourceDir(dirPath: string): boolean {
   const base = path.basename(dirPath).toLowerCase();
   if (VALID_SOURCE_NAMES.includes(base)) {
@@ -44,15 +67,29 @@ function isValidSourceDir(dirPath: string): boolean {
   }
   const homeDir = os.homedir();
   const allowed = [
-    path.join(homeDir, "Downloads").toLowerCase(),
-    path.join(homeDir, "Desktop").toLowerCase(),
-    os.tmpdir().toLowerCase(),
+    path.join(homeDir, "Downloads"),
+    path.join(homeDir, "Desktop"),
+    os.tmpdir(),
   ];
-  return allowed.some(
-    (a) =>
-      dirPath.toLowerCase() === a ||
-      dirPath.toLowerCase().startsWith(a + path.sep),
-  );
+
+  // A prefix match on the canonical form, with the typed form kept as a
+  // fallback so a not-yet-created directory is still judged the way it was
+  // before. Lowercased throughout: Windows drive letters and 8.3 short names
+  // differ in case alone.
+  const typed = dirPath.toLowerCase();
+  const canonical = canonicalizeForCompare(dirPath).toLowerCase();
+  return allowed.some((root) => {
+    const canonicalRoot = canonicalizeForCompare(root).toLowerCase();
+    const typedRoot = root.toLowerCase();
+    return [canonical, typed].some((candidate) =>
+      [canonicalRoot, typedRoot].some(
+        (r) =>
+          candidate === r ||
+          candidate.startsWith(r + path.sep) ||
+          candidate.startsWith(r + "/"),
+      ),
+    );
+  });
 }
 
 export type SystemOrganizationInput = z.infer<

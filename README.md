@@ -58,6 +58,7 @@ You can ask the assistant things like:
 - "Organize my Downloads folder"
 - "Find duplicate files in my Documents"
 - "Show me my largest files"
+- "Which categories take up the most space in my Downloads?"
 
 ### Install methods
 
@@ -73,9 +74,12 @@ You can ask the assistant things like:
 - Categorization into 12 or more file types.
 - Cron-based automatic organization and directory watch mode.
 - Duplicate detection by SHA-256 content hash.
+- Disk usage per category: which file types hold the space, in bytes and as a share.
 - Metadata extraction: EXIF for photos, ID3 for audio.
 - Smart organization that picks the right strategy per file type.
+- Date sorting into `YYYY/MM` folders from EXIF date taken (photos) or file mtime, reporting which date each file used.
 - Dry-run preview, atomic moves, and rollback.
+- Plan validation before you organize: name collisions, occupied destinations, cross-device moves, and files the sensitive-file gate blocks.
 - Path traversal protection, TOCTOU mitigation.
 - Windows, macOS, and Linux.
 
@@ -87,37 +91,98 @@ You can ask the assistant things like:
 
 - `file_organizer_scan_directory` - List a directory with detailed file info. `directory` is required; `include_subdirs` toggles recursion.
 - `file_organizer_read_file` - Read a file through the validated path pipeline. `path` is required; `encoding` is utf-8, base64, or binary.
-- `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering.
+- `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering. Checks the whole plan for name collisions first: if a real run would put two files on one name, or overwrite a name a different file already holds, the batch is rejected before anything moves and the conflicts come back as structured data.
 - `file_organizer_undo_last_operation` - Reverse the most recent organization.
+- `file_organizer_quarantine_files` - Set flagged files aside for review, reversibly. See below.
+- `file_organizer_restore_quarantine` - Put quarantined files back where they came from.
+- `file_organizer_search_history` - Filter the history by path glob (`path_glob`), date range (`from`/`to`), or operation type. Every filter is optional and they combine, so a long history stays queryable instead of one flat list.
 
-### Full tool list (24 tools)
-
+### Full tool list (36 tools)
+<!-- BEGIN GENERATED TOOL LIST -->
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
 - `file_organizer_batch_rename`
 - `file_organizer_categorize_by_type`
 - `file_organizer_delete_duplicates`
+- `file_organizer_disk_usage_by_category`
 - `file_organizer_doctor`
+- `file_organizer_export_config`
 - `file_organizer_find_broken_symlinks`
 - `file_organizer_find_duplicate_files`
+- `file_organizer_find_empty_directories`
 - `file_organizer_find_largest_files`
+- `file_organizer_find_old_files`
 - `file_organizer_get_categories`
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`
+- `file_organizer_organize_by_date`
+- `file_organizer_organize_by_project`
 - `file_organizer_organize_files`
 - `file_organizer_organize_music`
-- `file_organizer_organize_by_project`
 - `file_organizer_organize_photos`
+- `file_organizer_preview_delete_duplicates`
 - `file_organizer_preview_organization`
+- `file_organizer_quarantine_files`
 - `file_organizer_read_file`
+- `file_organizer_restore_quarantine`
 - `file_organizer_scan_directory`
+- `file_organizer_search_history`
+- `file_organizer_sensitive_scan`
 - `file_organizer_set_custom_rules`
 - `file_organizer_smart_suggest`
 - `file_organizer_system_organize`
 - `file_organizer_undo_last_operation`
+- `file_organizer_validate_organization_plan`
+- `file_organizer_verify_integrity`
 - `file_organizer_view_history`
+<!-- END GENERATED TOOL LIST -->
 
 For parameters and return shapes, see [API.md](API.md).
+
+### Quarantine: set files aside without losing them
+
+Scanning flags a suspicious file. Deleting it is not reversible. Quarantine is
+the middle option: the file is **moved** into a hidden quarantine directory
+inside the directory you named, and it stays readable on disk.
+
+```text
+file_organizer_quarantine_files({
+  directory: "~/Downloads",
+  files: ["~/Downloads/invoice.exe"],
+  reason: "flags as executable content",
+})
+```
+
+Reversibility is the whole point, so it comes back two ways:
+
+- `file_organizer_undo_last_operation` — the existing undo path. Quarantine
+  writes the same rollback manifest the organizer writes, so undo is the same
+  call you already use.
+- `file_organizer_restore_quarantine` — reads that manifest and puts every file
+  back at the exact path it was taken from. The restore writes a manifest of
+  its own, so the restore is reversible too.
+
+What to know before you move something:
+
+- **Dry run by default.** A bare call lists what *would* be quarantined and
+  moves nothing. Pass `dry_run: false` to apply it.
+- **Nothing is deleted.** No file is removed from disk by quarantine. Only its
+  location changes.
+- **The quarantine directory is derived, not hardcoded.** By default it is
+  `.file-organizer-quarantine` inside the `directory` you passed, which means it
+  inherits that directory's access grant. Set `quarantine_dir` to move it
+  elsewhere — it goes through the same path validation as any other directory,
+  so it cannot be pointed outside your allowed directories.
+- **Same names do not collide.** Two files called `notes.txt` become
+  `notes.txt` and `notes_1.txt`. Neither overwrites the other, and a restore
+  puts each back at its own original path.
+- **One batch at a time.** Every listed file must live inside `directory`. If any
+  path is outside it, nothing moves.
+- **Paths in the result are absolute**, like `organize_files`. They are
+  canonicalised, so they differ in spelling by platform — Windows expands 8.3
+  short names (`RUNNER~1` becomes `runneradmin`) and macOS rewrites `/var` to
+  `/private/var`. Compare basenames, or normalise both sides, instead of
+  comparing raw path strings.
 
 ### Scheduled organization (separate process)
 
@@ -132,6 +197,93 @@ file-organizer-watch                                # start the daemon
 
 Watches are stored in the shared user config, so `add`/`remove` work even
 while the daemon is running (restart it to pick up changes).
+
+#### Single pass from an OS timer
+
+`once` runs one organization pass and exits, holding no watcher, no timer, and
+no open handle. That is the mode cron, launchd, a systemd timer, or Task
+Scheduler drives:
+
+```bash
+file-organizer-watch once ~/Downloads              # dry run, writes nothing
+file-organizer-watch once ~/Downloads --apply      # move, then exit
+file-organizer-watch once . --apply --recursive --json
+```
+
+##### Exit codes
+
+| Code | Meaning                                                    |
+| ---- | ---------------------------------------------------------- |
+| `0`  | Pass finished, moved nothing — empty dir or dry run        |
+| `1`  | Failed: bad flags, refused path, per-file errors, or abort |
+| `2`  | Pass finished clean and moved at least one file            |
+
+`1` wins over `2` even when files moved, so a partial pass never looks like
+success.
+
+##### `--json`
+
+`--json` prints exactly one JSON object on stdout and nothing else. Logs,
+usage, and failure text go to stderr, so stdout stays parseable whether the
+run succeeded or not.
+
+```json
+{
+  "ok": true,
+  "exitCode": 2,
+  "directory": "/home/you/Downloads",
+  "dryRun": false,
+  "scanned": 12,
+  "planned": 8,
+  "moved": 8,
+  "skipped": 4,
+  "historyLogged": true,
+  "aborted": false,
+  "errors": []
+}
+```
+
+Every key is always present, including on failure — a refused path reports the
+same shape with `ok` false, `exitCode` 1, and the reason in `errors`. `ok` is
+true for exit codes 0 and 2. `historyLogged: false` on an applied pass means
+the moves have no undo record.
+
+On a pass that ran, `directory` is the **resolved** path, not the argument
+verbatim — the same convention every tool uses (`file_organizer_organize_files`
+reports the directory its path validator approved). It is the path the gate
+checked and the pass scanned, so symlinks are already followed and `~` is
+expanded. The two forms differ on macOS (`/var/folders/...` →
+`/private/var/folders/...`) and on Windows (an 8.3 short name like `RUNNER~1`
+expands to the long name), so a caller must not string-compare it against what
+it passed in.
+
+The one exception is a failure that never reached a scan — a path the gate
+refused, or a thrown error. There is no approved path to report, so `directory`
+carries the original argument exactly as typed. Key your reports on `exitCode`
+and `errors`, not on `directory`.
+
+When scripting a pipeline, keep the CLI's exit code — without `pipefail` the
+pipeline reports `jq`'s status, and a pass that moved files and then failed
+would look like success:
+
+```bash
+set -o pipefail
+
+# alert only when files moved AND the pass was clean.
+# .ok rejects a partial pass that moved files but then failed.
+file-organizer-watch once ~/Downloads --apply --json \
+  | jq -e '.ok and (.moved > 0)' >/dev/null && echo "organized"
+```
+
+For a read-only sweep — scan plus `preview_organization` on a timer, no moves —
+see [examples/scheduling](examples/scheduling/README.md). It has ready-to-copy
+recipes for three surfaces:
+
+| Surface        | Trigger                     | Config                                                                                           |
+| -------------- | --------------------------- | ------------------------------------------------------------------------------------------------ |
+| Claude Desktop | headless `claude -p`        | [claude-desktop.config.json](examples/scheduling/claude-desktop.config.json)                     |
+| Codex          | `codex exec`                | [codex.config.toml](examples/scheduling/codex.config.toml)                                       |
+| cron / systemd | `file-organizer-watch once` | [crontab.example](examples/scheduling/crontab.example), [systemd/](examples/scheduling/systemd/) |
 
 ---
 
@@ -222,7 +374,32 @@ Pictures/
 
 ### Security-screen a folder
 
-It extracts metadata and content signatures, then flags sensitive metadata, such as EXIF GPS coordinates in a PDF or personal identifiers in a resume, and suggests redaction or quarantine.
+`file_organizer_sensitive_scan` reads the metadata block of every JPEG and TIFF in a
+folder and scores each one 0-100 for the risk of sharing it. It flags EXIF GPS
+coordinates and altitude, GPS fix timestamps, owner and artist names, camera and
+lens serial numbers, camera or computer make and model, copyright lines,
+capture/editing software, and free-text notes. Each score arrives with the
+individual findings and the weight each one added, so the number is a sum of
+stated causes:
+
+```json
+{
+  "name": "IMG_4471.jpg",
+  "risk_score": 70,
+  "risk_level": "high",
+  "reasons": [
+    { "kind": "gps_coordinates", "weight": 40, "exif_tags": ["GPSLatitude", "GPSLongitude"], "value": "51.5073, -0.1277" },
+    { "kind": "owner_name", "weight": 30, "exif_tags": ["OwnerName"], "value": "Jane Q Public" }
+  ]
+}
+```
+
+**A score of 0 is not a clearance to share the file.** The detection is
+heuristic and the tool never modifies anything: it reports what it recognizes,
+and it does not look at PDF annotations, XMP, IPTC, embedded thumbnails, file
+names, or what is visible in the picture. Files outside JPEG and TIFF are listed
+under `skipped` with a reason. Treat the scan output itself as sensitive, since
+it echoes the values it found.
 
 ### Set up automatic organization
 
@@ -307,6 +484,43 @@ Windows drive letters like `D:\` work without this flag.
 
 Restart the client after editing the config.
 
+### Moving your config to another machine
+
+`file_organizer_export_config` bundles the whole user config — allowed
+directories, custom rules, conflict strategy, watch entries, auto-organize and
+history settings — into one JSON document you can copy to a laptop or a fresh
+install:
+
+```typescript
+// writes the bundle; refuses to overwrite an existing file
+file_organizer_export_config({ output_path: "~/fom-config-bundle.json" });
+// omit output_path to get the bundle in the reply without writing one
+```
+
+Rules, strategies and schedules mean the same thing anywhere. Directory paths
+do not: they are absolute paths of the machine that exported them, so they will
+not exist on the target and they do describe your directory layout. The reply
+always says so:
+
+- **absolute mode** (the default) exports the paths exactly as configured and
+  lists every field to edit by hand in `requires_editing`.
+- **rebased mode** takes a `rebase_root` — normally the home directory — and
+  rewrites each path under it as `~/relative`, which follows the target
+  machine's home. A path outside that root cannot be rebased; it is exported
+  unchanged and named in `non_portable_paths`.
+
+```typescript
+file_organizer_export_config({
+  rebase_root: "~",
+  response_format: "json",
+});
+// → requires_editing: [], directories exported as ["~/Documents", "~/Downloads"]
+```
+
+Copy the bundle to the other machine, apply the edits it names, and merge its
+`config` into that machine's `config.json`. The tool never writes the config
+file itself, and the bundle file is the only thing it writes.
+
 ### Conflict strategy
 
 ```json
@@ -367,6 +581,19 @@ For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
 3. Check for sufficient disk space.
 4. Read the operation summary for error messages.
 
+### Custom rules are missing after a restart
+
+`file_organizer_set_custom_rules` saves the accepted rules to `config.json` in your
+OS config directory and every later request reads them from there. Three things
+to know:
+
+- The call replaces the whole saved set, so it is not a per-rule merge.
+- Rules with an unknown category or a rejected pattern are skipped; the reply
+  says how many were applied.
+- If the write itself fails — read-only config directory, missing permissions —
+  the call returns an error instead of a success message, and the server log
+  holds the cause. Nothing is persisted in that case.
+
 ---
 
 ## Architecture
@@ -383,6 +610,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the diagram and design notes.
 
 - [API.md](API.md) - Complete tool reference
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Design and architecture
+- [examples/scheduling](examples/scheduling/README.md) - Scan + preview sweep recipes for Claude Desktop, Codex, cron, and systemd
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [MIGRATION.md](MIGRATION.md) - v2 to v3 upgrade guide
 - [CHANGELOG.md](CHANGELOG.md) - Version history

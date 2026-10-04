@@ -210,6 +210,7 @@ Before submitting changes:
 - [ ] Errors don't leak paths
 - [ ] Docs updated if you changed a tool shape or security rule
 - [ ] `npm run docs:check` passes if you edited a file whose `file:line` another doc cites
+- [ ] If you added or removed a tool: `npm run docs:sync`, and commit the result. Never hand-edit the tool count or the tool list in README.md / ARCHITECTURE.md — they are generated from the registry.
 - [ ] The behavior is proven on the real server via `verify-file-organizer`, not only by a unit test
 
 `npm run verify:all` runs the first four plus docs, security, and the full

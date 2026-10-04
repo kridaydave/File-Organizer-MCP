@@ -34,9 +34,28 @@
 
 ### Added
 
+- **`file_organizer_organize_by_date`** - sorts any file into `YYYY/MM` folders
+  (`YYYY/MM/DD` and `YYYY` too). Photos take their folder from EXIF
+  `DateTimeOriginal` (`CreateDate` when that is absent); every other file uses its
+  modification time. `date_source` selects `auto` (EXIF, else mtime), `exif`
+  (EXIF only), or `mtime`. Each moved file reports the source that chose its
+  folder, so an EXIF-to-mtime fallback is never silent, and files with no usable
+  date stay where they are and are listed instead of landing in an
+  "Unknown Date" bucket. `dry_run` defaults to `true`, an occupied destination is
+  de-duplicated as `name (1).ext` rather than overwritten, and every performed
+  move is recorded in a rollback manifest for `file_organizer_undo_last_operation`.
 - `file_organizer_delete_duplicates` accepts `verify_before_delete` (default
   `true`) and `candidate_directories`, for when a surviving copy lives outside
   the searched parent directories.
+- **`file_organizer_search_history`** — filter the operation history by path
+  glob (`path_glob`), date range (`from`/`to`), operation type, status, or
+  source. Every filter is optional and the ones supplied combine, so a long
+  history stays queryable. It reads the same history as
+  `file_organizer_view_history`, which is unchanged; both now go through one
+  `HistoryLoggerService.searchHistory()` read. Path-glob matching needs paths
+  on the entry, so history entries gained an optional `paths` array — recorded
+  for the directory a tool call touched and for the single organize pass — and
+  `privacy_mode` redacts or drops it like the rest of the path-bearing fields.
 
 ## [5.0.0] - 2026-08-22
 

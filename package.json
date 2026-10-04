@@ -34,6 +34,8 @@
     "docs:check": "node scripts/check-doc-citations.mjs",
     "docs:check:fix": "node scripts/check-doc-citations.mjs --fix",
     "docs:generate": "node scripts/generate-docs.js",
+    "docs:sync": "npm run build && node scripts/sync-tool-docs.mjs",
+    "docs:check": "npm run build && node scripts/sync-tool-docs.mjs --check",
     "clean": "rimraf dist"
   },
   "keywords": [
