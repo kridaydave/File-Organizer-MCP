@@ -125,7 +125,11 @@ export function loadCustomAllowedDirs(): string[] {
           );
           return false;
         })
-        .map((verdict) => verdict.configured);
+        // The gate compares these strings against resolved request paths, so it
+        // needs the expanded form. Returning `configured` handed it a raw
+        // "~/work/clientA", which matched nothing while the doctor — reading the
+        // same verdict's `resolved` — reported the directory as accepted.
+        .map((verdict) => verdict.resolved);
     }
   } catch (error) {
     logger.error("Error loading custom config:", (error as Error).message);
