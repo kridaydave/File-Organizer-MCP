@@ -106,6 +106,7 @@ You can ask the assistant things like:
 - `file_organizer_delete_duplicates`
 - `file_organizer_disk_usage_by_category`
 - `file_organizer_doctor`
+- `file_organizer_export_config`
 - `file_organizer_find_broken_symlinks`
 - `file_organizer_find_duplicate_files`
 - `file_organizer_find_empty_directories`
@@ -455,6 +456,43 @@ Paths outside your home directory are blocked unless you opt in. To allow an ext
 Windows drive letters like `D:\` work without this flag.
 
 Restart the client after editing the config.
+
+### Moving your config to another machine
+
+`file_organizer_export_config` bundles the whole user config — allowed
+directories, custom rules, conflict strategy, watch entries, auto-organize and
+history settings — into one JSON document you can copy to a laptop or a fresh
+install:
+
+```typescript
+// writes the bundle; refuses to overwrite an existing file
+file_organizer_export_config({ output_path: "~/fom-config-bundle.json" });
+// omit output_path to get the bundle in the reply without writing one
+```
+
+Rules, strategies and schedules mean the same thing anywhere. Directory paths
+do not: they are absolute paths of the machine that exported them, so they will
+not exist on the target and they do describe your directory layout. The reply
+always says so:
+
+- **absolute mode** (the default) exports the paths exactly as configured and
+  lists every field to edit by hand in `requires_editing`.
+- **rebased mode** takes a `rebase_root` — normally the home directory — and
+  rewrites each path under it as `~/relative`, which follows the target
+  machine's home. A path outside that root cannot be rebased; it is exported
+  unchanged and named in `non_portable_paths`.
+
+```typescript
+file_organizer_export_config({
+  rebase_root: "~",
+  response_format: "json",
+});
+// → requires_editing: [], directories exported as ["~/Documents", "~/Downloads"]
+```
+
+Copy the bundle to the other machine, apply the edits it names, and merge its
+`config` into that machine's `config.json`. The tool never writes the config
+file itself, and the bundle file is the only thing it writes.
 
 ### Conflict strategy
 
