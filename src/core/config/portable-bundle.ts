@@ -30,6 +30,7 @@
  */
 
 import fs from "fs";
+import os from "os";
 import path from "path";
 import type { UserConfig } from "./loader.js";
 import { KNOWN_CONFIG_KEYS } from "./effective-config.js";
@@ -112,17 +113,25 @@ function rebasePath(
   // working directory, so calling that portable would hand the target a path
   // that means nothing there.
   if (value === "~" || value.startsWith("~/") || value.startsWith("~\\")) {
-    return { value, portable: true };
+    // Spelling it with a tilde is not enough: `~/../..` leaves the home
+    // directory the moment the loader expands it, so the target would resolve it
+    // somewhere this bundle never pointed at.
+    return { value, portable: isSubPath(os.homedir(), expandHomePath(value)) };
   }
   if (rebaseRoot === null) return { value, portable: false };
 
   if (!isSubPath(rebaseRoot, value)) return { value, portable: false };
 
-  const relative = path
-    .relative(path.resolve(rebaseRoot), path.resolve(value))
-    .split(path.sep)
-    .join("/");
-  return { value: relative === "" ? "~" : `~/${relative}`, portable: true };
+  const relative = path.relative(path.resolve(rebaseRoot), path.resolve(value));
+  if (relative === "") return { value: "~", portable: true };
+  // The rewrite has to land under the root, not merely start there. isSubPath
+  // can accept a path that path.relative then walks out of — a Windows 8.3
+  // short name resolves differently from its long form — and `~/../x` is no
+  // more portable than the absolute path it replaced.
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    return { value, portable: false };
+  }
+  return { value: `~/${relative.split(path.sep).join("/")}`, portable: true };
 }
 
 function hasEntries(value: unknown): boolean {

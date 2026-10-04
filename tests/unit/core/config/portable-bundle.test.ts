@@ -178,7 +178,28 @@ describe("buildConfigBundle", () => {
     expect(bundle.config.customAllowedDirectories?.[1]).toBe("~/Documents");
   });
 
-  it("exports watch rules and schedule untouched while rebasing the directory", async () => {
+  it("reports a home-relative value that escapes the home directory", () => {
+    // `~/../..` leaves $HOME the moment the config loader expands it, so the
+    // tilde spelling alone does not make it portable.
+    const bundle = buildConfigBundle(
+      { customAllowedDirectories: ["~/../../etc", "~/Documents"] },
+      { rebaseRoot: path.join(sandbox, "home"), now: NOW },
+    );
+
+    expect(bundle.portability.non_portable_paths).toEqual([
+      {
+        field: "customAllowedDirectories[0]",
+        value: "~/../../etc",
+        reason: "outside_rebase_root",
+      },
+    ]);
+    expect(bundle.portability.requires_editing).toEqual([
+      "customAllowedDirectories",
+    ]);
+    expect(bundle.config.customAllowedDirectories?.[1]).toBe("~/Documents");
+  });
+
+it("exports watch rules and schedule untouched while rebasing the directory", async () => {
     const home = path.join(sandbox, "home");
     const bundle = buildConfigBundle(
       {

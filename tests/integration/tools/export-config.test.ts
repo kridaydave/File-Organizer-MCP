@@ -167,8 +167,16 @@ describe("file_organizer_export_config", () => {
     const before = await fs.readFile(configPath, "utf-8");
 
     const ctx = await contextFromDisk();
-    await handleExportConfig({ output_path: path.join(docs, "bundle.json") }, ctx);
+    const result = await handleExportConfig(
+      { output_path: path.join(docs, "bundle.json") },
+      ctx,
+    );
 
+    // Pin the export itself first: without it, a handler that returned early
+    // with an error would leave the config untouched and satisfy the byte
+    // comparison below for entirely the wrong reason.
+    expect(result.isError).toBeFalsy();
+    expect(report(result).written).toBe(true);
     expect(await fs.readFile(configPath, "utf-8")).toBe(before);
   });
 
@@ -270,6 +278,12 @@ describe("file_organizer_export_config", () => {
     const result = await handleExportConfig({ output_path: blocked }, ctx);
     const text = result.content.map((item) => item.text).join("\n");
 
+    // Pin the rejection as well as the absence of a leak: an ENOENT on the
+    // non-existent node_modules directory would also produce a path-free
+    // message, so without these two the test would still pass if the blocklist
+    // check stopped working.
+    expect(result.isError).toBe(true);
+    expect(text).toContain("Access denied");
     expect(text).not.toContain(sandboxHome);
   });
 
@@ -292,7 +306,14 @@ describe("file_organizer_export_config", () => {
     await writeConfig({ conflictStrategy: "rename" });
     // path.join normalizes the ".." away, so this is a plain sibling-of-home
     // path: the Zod schema accepts it and validateStrictPath is what refuses it.
-    const outside = path.join(sandboxHome, "..", "fom-escape-bundle.json");
+    // The name is unique per run on purpose — it lands in the shared temp root,
+    // outside the sandbox, so a leftover from another run or another jest
+    // worker would make this fail as EEXIST instead of as a refusal.
+    const outside = path.join(
+      sandboxHome,
+      "..",
+      `fom-escape-bundle-${process.pid}-${Date.now()}.json`,
+    );
 
     const ctx = await contextFromDisk();
     const result = await handleExportConfig({ output_path: outside }, ctx);
@@ -301,6 +322,9 @@ describe("file_organizer_export_config", () => {
     expect(result.content[0].text).toContain("Access denied");
     expect(result.content[0].text).not.toContain(outside);
     await expect(fs.stat(outside)).rejects.toThrow();
+    // Belt and braces: if the allow-list ever regressed, this test would have
+    // written a bundle into the shared temp root, which afterEach cannot reach.
+    await fs.rm(outside, { force: true });
   });
 
   it("structuredContent parses against the declared outputSchema in both formats", async () => {
