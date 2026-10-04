@@ -102,6 +102,64 @@ describe("System Organization Tool - Integration Tests", () => {
 
       expect(result.content[0].text).not.toContain("source_dir must be one of");
     });
+
+    it("accepts a subdirectory of Downloads reached through a second spelling", async () => {
+      // One directory can have two spellings: macOS os.tmpdir() is
+      // /var/folders/... while its realpath is /private/var/folders/..., and
+      // Windows short names spell a directory RUNNER~1 where the long name is
+      // runneradmin. Matching only the typed spelling turned a directory that
+      // really was inside Downloads into "source_dir must be one of".
+      //
+      // The gate reads os.homedir(), so the sandbox home has to be the home
+      // for this test — otherwise Downloads would not be one of the roots.
+      const sandboxHome = path.join(baseTempDir, "sandbox-home");
+      const downloads = path.join(sandboxHome, "Downloads");
+      await fs.mkdir(downloads, { recursive: true });
+      const viaLink = path.join(sandboxHome, "downloads-alias");
+      await fs.symlink(downloads, viaLink, "dir");
+      const q3 = path.join(downloads, "Q3");
+      await fs.mkdir(q3, { recursive: true });
+
+      const realHomedir = os.homedir;
+      os.homedir = () => sandboxHome;
+      try {
+        const result = await handleSystemOrganization({
+          source_dir: path.join(viaLink, "Q3"),
+          dry_run: true,
+        });
+
+        expect(result.content[0].text).not.toContain(
+          "source_dir must be one of",
+        );
+      } finally {
+        os.homedir = realHomedir;
+      }
+    });
+
+    it("still rejects a directory whose name merely starts with an allowed root", async () => {
+      // The canonical comparison must not become a substring match: a sibling
+      // directory spelled "...-decoy" stays rejected.
+      const sandboxHome = path.join(baseTempDir, "sandbox-home-2");
+      const downloads = path.join(sandboxHome, "Downloads");
+      await fs.mkdir(downloads, { recursive: true });
+      const decoy = `${downloads}-decoy`;
+      await fs.mkdir(decoy, { recursive: true });
+
+      const realHomedir = os.homedir;
+      os.homedir = () => sandboxHome;
+      try {
+        const result = await handleSystemOrganization({
+          source_dir: decoy,
+          dry_run: true,
+        });
+
+        expect(result.content[0].text).toContain(
+          "source_dir must be one of: Downloads, Desktop, Temp",
+        );
+      } finally {
+        os.homedir = realHomedir;
+      }
+    });
   });
 
   describe("Dry Run Mode", () => {
