@@ -97,7 +97,7 @@ You can ask the assistant things like:
 - `file_organizer_restore_quarantine` - Put quarantined files back where they came from.
 - `file_organizer_search_history` - Filter the history by path glob (`path_glob`), date range (`from`/`to`), or operation type. Every filter is optional and they combine, so a long history stays queryable instead of one flat list.
 
-### Full tool list (35 tools)
+### Full tool list (36 tools)
 <!-- BEGIN GENERATED TOOL LIST -->
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
