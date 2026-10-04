@@ -180,7 +180,7 @@ npm run format                             # prettier src/
 npm run setup                              # TUI wizard
 
 npm run docs:sync                          # regenerate tool list/count in README + ARCHITECTURE
-npm run docs:check                         # fail if they drift from the registry (CI runs this)
+npm run docs:check                         # fail if they drift from the registry (local one-shot; see note)
 ```
 
 ## Quality gates
@@ -194,7 +194,7 @@ Before submitting changes:
 - [ ] New behavior has a test
 - [ ] Errors don't leak paths
 - [ ] Docs updated if you changed a tool shape or security rule
-- [ ] If you added or removed a tool: `npm run docs:sync`, and commit the result. Never hand-edit the tool count or the tool list in README.md / ARCHITECTURE.md — they are generated from the registry. CI runs `npm run docs:check`.
+- [ ] If you added or removed a tool: `npm run docs:sync`, and commit the result. Never hand-edit the tool count or the tool list in README.md / ARCHITECTURE.md — they are generated from the registry. Your branch is expected to be **self-consistent**: the guard runs in CI as `tests/unit/docs-tool-list.test.ts`, under `npm test` — **not** as a separate `npm run docs:check` step. CI enforces, it does not repair. A branch that is stale on arrival goes red on every matrix leg and stalls the merge queue. Expect to re-run `docs:sync` when a sibling tool PR merges underneath you; that is the normal cost of a generated list, not a bug in your PR.
 
 ## Additional tips
 
