@@ -25,6 +25,8 @@ import type { ToolContext } from "../../../src/mcp/context.js";
 import type { UserConfig } from "../../../src/core/config/loader.js";
 import { doctorOutputSchema } from "../../../src/schemas/output.js";
 import { getUserConfigPath } from "../../../src/core/config/paths.js";
+import { loadCustomAllowedDirs } from "../../../src/core/config/loader.js";
+import { validateStrictPath } from "../../../src/services/path-validator.service.js";
 import { getAlwaysBlockedPatterns } from "../../../src/core/config/security.js";
 
 interface ConfiguredDirEntry {
@@ -106,7 +108,12 @@ async function contextFromDisk(): Promise<ToolContext> {
 
 beforeEach(async () => {
   sandboxBaseDir = sandboxBase();
-  sandboxHome = await fs.mkdtemp(path.join(sandboxBaseDir, "fom-doctor-"));
+  // Canonicalise: os.tmpdir() is spelled with the Windows 8.3 short name
+  // (RUNNER~1) while realpath expands it (runneradmin), so paths built from
+  // the raw value disagree with what the validator returns.
+  sandboxHome = await fs.realpath(
+    await fs.mkdtemp(path.join(sandboxBaseDir, "fom-doctor-")),
+  );
   os.homedir = () => sandboxHome;
   process.env.XDG_CONFIG_HOME = path.join(sandboxHome, ".config");
   process.env.APPDATA = path.join(sandboxHome, "AppData", "Roaming");
@@ -326,6 +333,39 @@ describe("file_organizer_doctor", () => {
     await handleDoctor({ response_format: "json" }, ctx);
 
     expect(await fs.readFile(configPath, "utf-8")).toBe(before);
+  });
+
+  it("grants access to a '~'-relative directory, the way config.schema.json says it does", async () => {
+    // config.schema.json documents customAllowedDirectories as "'~' is expanded
+    // to the user home". Before the fix the loader handed the gate the raw
+    // "~/..." string, so every tool call against the directory was denied while
+    // this report said accepted — and the denial told the user to add the
+    // directory that was already in their config.
+    //
+    // The directory name is deliberately outside the platform defaults, so the
+    // access can only have come from the custom entry.
+    const custom = path.join(sandboxHome, "client-work");
+    await fs.mkdir(custom, { recursive: true });
+    const target = path.join(custom, "report.txt");
+    await fs.writeFile(target, "contents", "utf-8");
+    await writeConfig({ customAllowedDirectories: ["~/client-work"] });
+
+    const ctx = await contextFromDisk();
+
+    // The report's verdict and the runtime gate must agree, which is the whole
+    // point of sharing inspectAllowedDir between them.
+    const result = await handleDoctor({ response_format: "json" }, ctx);
+    const report = result.structuredContent as {
+      configured_allowed_dirs: ConfiguredDirEntry[];
+      effective_allowed_dirs: string[];
+    };
+    expect(entryFor(report.configured_allowed_dirs, "~/client-work").accepted).toBe(
+      true,
+    );
+    expect(report.effective_allowed_dirs).toEqual([custom]);
+
+    expect(loadCustomAllowedDirs()).toEqual([custom]);
+    await expect(validateStrictPath(target)).resolves.toBe(target);
   });
 
   it("keeps getEffectiveConfig honest when no config.json exists", () => {
