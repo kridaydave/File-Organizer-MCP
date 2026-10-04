@@ -147,7 +147,7 @@ export async function handleOrganizeByDate(
     );
     const manifestLine = result.manifestId
       ? `- **Rollback Manifest ID:** \`${result.manifestId}\`\n`
-      : dry_run
+      : dry_run || result.organizedFiles === 0
         ? ""
         : "- **Rollback Manifest:** unavailable — files moved by this run are NOT undoable\n";
 
@@ -159,7 +159,7 @@ export async function handleOrganizeByDate(
           .sort((a, b) => path.basename(a.to).localeCompare(path.basename(b.to)))
           .map(
             (move) =>
-              `  - \`${escapeMarkdown(path.basename(move.to))}\` — ${move.dateSource} (${move.date})`,
+              `  - \`${escapeMarkdown(path.basename(move.to))}\` — ${move.dateSource} (${move.calendarDate})`,
           );
         return `- \`${escapeMarkdown(folder)}\`: ${result.structure[folder]!.length} file(s)\n${files.join("\n")}`;
       });

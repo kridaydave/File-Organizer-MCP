@@ -1285,11 +1285,11 @@ file_organizer_batch_read_files({
 | ---------------------------- | --------------------------------------------------------------------------------- |
 | `organizedFiles`             | Files moved (or that a dry run would move)                                         |
 | `skippedFiles`               | Files left alone: no usable date, unsafe name, or a failed move                   |
-| `moves[]`                    | `{ file, from, to, folder, date, dateSource }` per file, `dateSource` = `exif`/`mtime` |
+| `moves[]`                    | `{ file, from, to, folder, date, calendarDate, dateSource }` per file; `dateSource` = `exif`/`mtime` |
 | `noDateFiles[]`              | Files left in place because no usable date was found                              |
 | `structure`                  | Date folder label -> file names (same strings as `moves[].folder`)                |
 | `manifestId`                 | Rollback manifest for `undo_last_operation`; absent after a dry run               |
-| `undoAvailable`              | `false` when moves happened but the manifest could not be written                 |
+| `undoAvailable`              | `false` unless this run's moves are recorded in a manifest                        |
 | `errors[]`                   | Per-file failures, sanitized                                                     |
 
 **Folder labels vs. paths.** `moves[].folder` and the `structure` keys are
@@ -1298,6 +1298,19 @@ every platform — `2024/05` means two levels on Windows exactly as it does on
 Linux, so agents and scripts can match on them. `moves[].from` and `moves[].to`
 are **real filesystem paths**, absolute and platform-native, and use the
 platform separator.
+
+**Which calendar a folder uses.** EXIF is camera wall-clock data that
+`exif-parser` anchors to UTC, so an EXIF folder is read in **UTC** — a photo
+stamped `00:30` on 1 January files under `2024/01` in every timezone. `mtime` is
+a true instant, so its folder is the user's **local** day.
+`moves[].calendarDate` (`YYYY-MM-DD`) is the date the label was cut from, so
+`folder` is always `calendarDate` truncated to the requested `date_format` and a
+caller never has to re-derive the timezone to predict the folder. `moves[].date`
+stays the exact instant.
+
+A destination whose parent resolves outside `target_dir` — a directory symlink
+inside the target pointing out of it — is refused before anything is written, and
+reported in `errors[]`. Nothing is moved and nothing is recorded as undoable.
 
 A destination name that is already taken is never overwritten: the file lands as `name (1).ext`. Both `dry_run` defaults to `true`, and every performed move is recorded in a rollback manifest.
 

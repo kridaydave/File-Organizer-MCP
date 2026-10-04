@@ -18,6 +18,13 @@ const MAKE_TAG = 0x010f;
 const MODEL_TAG = 0x0110;
 const DATE_TIME_ORIGINAL_TAG = 0x9003;
 
+/**
+ * Creating a directory symlink on Windows needs Administrator or Developer Mode,
+ * so the escape test is skipped there rather than failing on EPERM — same
+ * convention and same reason as tests/integration/tools/symlink-audit.test.ts.
+ */
+const itSymlink = process.platform === "win32" ? it.skip : it;
+
 let root: string;
 let sourceDir: string;
 let targetDir: string;
@@ -155,7 +162,7 @@ describe("DateOrganizerService.organize", () => {
     });
   });
 
-  it("reports folder labels as forward-slashed YYYY/MM on every platform", async () => {
+  it("keeps the folder label, the reported date, and the real path in agreement", async () => {
     const when = new Date(2024, 4, 20, 11, 0);
     await writeWithMtime(sourceDir, "report.txt", when);
 
@@ -167,13 +174,47 @@ describe("DateOrganizerService.organize", () => {
       dryRun: true,
     });
 
-    // The label is a logical identifier, not a filesystem path: a Windows
-    // separator here would tell a caller the folder is one segment deep.
-    const label = result.moves[0]!.folder;
-    expect(label).toBe(`${expectedFolder(when)}/20`);
-    expect(label.includes("\\")).toBe(false);
-    expect(Object.keys(result.structure)).toEqual([label]);
-    expect(Object.keys(result.structure)[0]?.includes("\\")).toBe(false);
+    const move = result.moves[0]!;
+    // The label is a logical identifier and the path is platform-native: two
+    // different things, each of which has to be right on its own terms.
+    expect(move.folder).toBe(`${expectedFolder(when)}/20`);
+    expect(
+      move.calendarDate.startsWith(move.folder.split("/").join("-")),
+    ).toBe(true);
+    expect(Object.keys(result.structure)).toEqual([move.folder]);
+    expect(path.resolve(move.to).startsWith(path.resolve(targetDir))).toBe(
+      true,
+    );
+  });
+
+  itSymlink("refuses a destination parent that symlinks out of the target", async () => {
+    const when = new Date(2024, 2, 5, 9, 30);
+    const outside = path.join(root, "outside");
+    await fs.mkdir(outside, { recursive: true });
+    await writeWithMtime(sourceDir, "innocent.txt", when, "secret payload");
+    // A directory already inside the validated target that points out of it.
+    // A lexical containment check cannot see this; resolving the parent can.
+    await fs.symlink(
+      outside,
+      path.join(targetDir, expectedFolder(when, "YYYY")),
+      "dir",
+    );
+
+    const result = await service.organize({
+      sourceDir,
+      targetDir,
+      dateSource: "mtime",
+      dryRun: false,
+    });
+
+    expect(result.organizedFiles).toBe(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]?.error).toContain("outside the validated target");
+    // Nothing escaped, and nothing claims to be undoable.
+    expect(await fs.readdir(outside)).toEqual([]);
+    expect(await relativeFiles(sourceDir)).toEqual(["innocent.txt"]);
+    expect(result.manifestId).toBeUndefined();
+    expect(result.undoAvailable).toBe(false);
   });
 
   it("uses the EXIF date taken for photos and reports the source per file", async () => {
@@ -195,20 +236,40 @@ describe("DateOrganizerService.organize", () => {
     const photoMove = result.moves.find((move) => move.file === "beach.jpg");
     const textMove = result.moves.find((move) => move.file === "receipt.txt");
 
-    // EXIF wins for the photo even though its mtime says 2019-01.
+    // EXIF wins for the photo even though its mtime says 2019-01. The label is
+    // asserted as a literal rather than re-derived locally: exif-parser anchors
+    // the camera's wall clock to UTC, so "2021/07" has to hold in every zone.
     const exifInstant = new Date("2021-07-04T10:20:30Z");
     expect(photoMove?.dateSource).toBe("exif");
     expect(photoMove?.date).toBe(exifInstant.toISOString());
-    expect(photoMove?.folder).toBe(expectedFolder(exifInstant));
+    expect(photoMove?.calendarDate).toBe("2021-07-04");
+    expect(photoMove?.folder).toBe("2021/07");
     expect(textMove?.dateSource).toBe("mtime");
 
     // Each file landed in the folder matching the date it reported.
     expect(await relativeFiles(targetDir)).toEqual(
       [
-        `${expectedFolder(exifInstant)}/beach.jpg`,
+        "2021/07/beach.jpg",
         `${expectedFolder(receiptDate)}/receipt.txt`,
       ].sort(),
     );
+  });
+
+  it("files a photo taken just after midnight in the month the camera recorded", async () => {
+    // 00:30 on 1 January is the whole ballgame: read in local time it lands in
+    // the previous month in every negative-offset zone.
+    await writeExifJpeg(sourceDir, "newyear.jpg", "2024:01:01 00:30:00");
+
+    const result = await service.organize({
+      sourceDir,
+      targetDir,
+      dateSource: "exif",
+      dryRun: true,
+    });
+
+    expect(result.moves[0]?.dateSource).toBe("exif");
+    expect(result.moves[0]?.calendarDate).toBe("2024-01-01");
+    expect(result.moves[0]?.folder).toBe("2024/01");
   });
 
   it("falls back to mtime, and says so, when EXIF is malformed", async () => {
@@ -411,5 +472,16 @@ describe("DateOrganizerService.dateFolder", () => {
       expectedFolder(date, "YYYY/MM/DD"),
     );
     expect(service.dateFolder(date, "YYYY")).toBe(String(date.getFullYear()));
+  });
+
+  it("reads the calendar in UTC for EXIF and in local time otherwise", () => {
+    // 2024-01-01T00:30Z is 1 January in UTC and still 31 December in New York.
+    const instant = new Date("2024-01-01T00:30:00Z");
+    expect(service.dateFolder(instant, "YYYY/MM/DD", true)).toBe("2024/01/01");
+    expect(service.dateFolder(instant, "YYYY/MM", true)).toBe("2024/01");
+    // The local reading is the mtime contract and depends on the runner's zone,
+    // so pin only what holds everywhere: the same instant, same shape.
+    const local = service.dateFolder(instant, "YYYY/MM/DD", false);
+    expect(local).toMatch(/^\d{4}\/\d{2}\/\d{2}$/);
   });
 });

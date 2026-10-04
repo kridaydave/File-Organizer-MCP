@@ -111,23 +111,25 @@ describe("organize_by_date tool", () => {
     );
     expect(await relativeFiles(sourceDir)).toEqual([]);
 
-    // json and markdown must carry the same LOGICAL label: forward-slashed on
-    // every platform. Only `from`/`to` are filesystem paths.
+    // json and markdown carry the same LOGICAL label, and that label is the
+    // reported calendar date truncated to the requested granularity.
     expect(
       parsed.moves
         .map((move: { folder: string }) => move.folder)
         .sort(),
     ).toEqual([expectedFolder(january), expectedFolder(february)].sort());
     expect(
-      parsed.moves.every((move: { folder: string }) => !move.folder.includes("\\")),
+      parsed.moves.every((move: { folder: string; calendarDate: string }) =>
+        move.calendarDate.startsWith(move.folder.split("/").join("-")),
+      ),
     ).toBe(true);
     expect(Object.keys(parsed.structure).sort()).toEqual(
       [expectedFolder(january), expectedFolder(february)].sort(),
     );
     // ...while the paths themselves stay platform-native.
-    expect(parsed.moves.every((move: { to: string }) => move.to.includes(targetDir))).toBe(
-      true,
-    );
+    expect(
+      parsed.moves.every((move: { to: string }) => move.to.includes(targetDir)),
+    ).toBe(true);
   });
 
   it("refuses a target nested inside the source", async () => {
@@ -174,9 +176,11 @@ describe("organize_by_date tool", () => {
     expect(preview.content[0]!.text).toContain("Date Organization Result");
     expect(preview.content[0]!.text).toContain("Dry Run");
     expect(preview.content[0]!.text).toContain(`\`${expectedFolder(when)}\``);
-    // A Windows separator here would advertise one folder level instead of two.
-    expect(preview.content[0]!.text).not.toContain(`${expectedFolder(when).replace("/", "\\")}\``);
-    expect(preview.content[0]!.text).toContain("`report.txt` — mtime");
+    // The per-file line carries the calendar date the folder came from, not a
+    // second rendering of the instant that would disagree with the label.
+    expect(preview.content[0]!.text).toContain(
+      "`report.txt` — mtime (2024-05-20)",
+    );
 
     const moved = await handleOrganizeByDate({
       source_dir: sourceDir,
