@@ -246,7 +246,7 @@ Before submitting changes:
 - [ ] Errors don't leak paths
 - [ ] Docs updated if you changed a tool shape or security rule
 - [ ] `npm run docs:check` passes if you edited a file whose `file:line` another doc cites
-- [ ] If you added or removed a tool: `npm run docs:sync`, and commit the result. Never hand-edit the tool count or the tool list in README.md / ARCHITECTURE.md — they are generated from the registry.
+- [ ] If you added or removed a tool: `npm run docs:sync`, and commit the result. Never hand-edit the tool count or the tool list in README.md / ARCHITECTURE.md — they are generated from the registry. Your branch is expected to be **self-consistent**. CI enforces, it does not repair: a branch that is stale on arrival goes red on every matrix leg. Expect to re-run `docs:sync` when a sibling tool PR merges underneath you; that is the normal cost of a generated list, not a bug in your PR.
 - [ ] The behavior is proven on the real server via `verify-file-organizer`, not only by a unit test
 - [ ] If you touched `path.join`, `path.sep`, or `path.relative`: you checked the value cannot reach a test assertion or a documented format string. See rule 3.
 - [ ] If you resolved a conflict: no markers in the diff, and the `comm -3` on the `reg()` set is empty if `registry.ts` was involved.
@@ -306,7 +306,7 @@ capability does and how to drive it.
 Every rule above is a sentence in this file, so it holds exactly as well as the agent reading it. These gaps are why defects reached CI instead of your editor. None of them exist today:
 
 - No commit hooks. No husky, no lint-staged, no `pre-push`. The four conflict rules above are manual.
-- `npm run docs:check` is not in CI. `tests/unit/docs-tool-list.test.ts` guards the count from inside the 6-leg matrix, so one stale count reports as 2 failing tests × 6 legs = 12 red checks instead of 1.
+- `npm run docs:check` runs in CI but only on ubuntu and only after `typecheck:tests`. `tests/unit/docs-tool-list.test.ts` still guards the count from inside the 6-leg matrix, so one stale count reports as 2 failing tests × 6 legs = 12 red checks rather than 1.
 - No portability profile. Nothing runs the suite with `os.tmpdir`, `fs.readdir` order, or `fs.realpath` perturbed, so the five leak classes in rule 3 can only be found on macOS or Windows.
 - `main` has `strict: true`, no ruleset, no merge queue, `allow_auto_merge: false`. Merges serialise by hand.
 - The tool list and count are generated, but the hand-written tool bullets in README.md above the `<!-- BEGIN GENERATED TOOL LIST -->` marker, and the tool references in ARCHITECTURE.md, are not. Those are the two hottest conflict sites left.

@@ -37,6 +37,8 @@
     "docs:check": "npm run docs:check:citations && npm run docs:check:tool-count",
     "docs:generate": "node scripts/generate-docs.js",
     "docs:sync": "npm run build && node scripts/sync-tool-docs.mjs",
+"gc:worktrees": "node scripts/gc-worktrees.mjs",
+    "gc:worktrees:force": "node scripts/gc-worktrees.mjs --force",
     "clean": "rimraf dist"
   },
   "keywords": [
