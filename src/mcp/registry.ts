@@ -133,6 +133,10 @@ import {
   sensitiveScanToolDefinition,
   handleSensitiveScan,
 } from "../tools/sensitive-scan.js";
+import {
+  exportReportToolDefinition,
+  handleExportReport,
+} from "../tools/export-report.js";
 
 function reg(def: ToolDefinition, handler: ToolHandler) {
   return defineTool({
@@ -161,6 +165,7 @@ const entries = [
   reg(diskUsageByCategoryToolDefinition, handleDiskUsageByCategory),
   reg(doctorToolDefinition, handleDoctor),
   reg(exportConfigToolDefinition, handleExportConfig),
+  reg(exportReportToolDefinition, handleExportReport),
   reg(fileReaderToolDefinition, handleReadFile),
   reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
   reg(findDuplicateFilesToolDefinition, handleFindDuplicateFiles),

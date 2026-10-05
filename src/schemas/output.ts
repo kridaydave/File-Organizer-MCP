@@ -456,6 +456,80 @@ export const exportConfigOutputSchema = z.object({
   config: z.record(z.string(), z.unknown()),
 });
 
+/**
+ * export_report. The four sections are the point of the tool, so they are the
+ * shape:
+ *
+ * - `scan` totals and `categories` come from ONE directory walk. `categories`
+ *   is `summarizeDiskUsage` verbatim, so the breakdown here and the one
+ *   `disk_usage_by_category` reports cannot drift apart.
+ * - `duplicates` totals cover EVERY group found; `groups` is the bounded slice
+ *   `duplicate_limit` asked for. Reporting totals over a truncated list would
+ *   let a report say "3 duplicate groups" and then show none of them.
+ * - `top_files` is bounded by `top_n`, largest first.
+ * - `limits` states in prose whatever the numbers above under-report, so a
+ *   partial analysis is never read as a complete one.
+ *
+ * `written` is the field to branch on for "did this touch the disk": it is false
+ * exactly when no output_path was given, which is also the only case in which
+ * nothing was written.
+ *
+ * Every path here is a real filesystem path the scanner returned, not a value
+ * assembled from segments, so it carries the platform separator on purpose. A
+ * contract string such as a folder label must never be built this way.
+ */
+export const exportReportOutputSchema = z.object({
+  directory: z.string(),
+  include_subdirs: z.boolean(),
+  generated_at: z.string(),
+  output_path: z.string().nullable(),
+  written: z.boolean(),
+  // Absent from the file on disk, because the size of a write cannot be known
+  // before the bytes exist. The response always carries it.
+  bytes_written: z.number().optional(),
+  scan: z.object({
+    total_files: z.number(),
+    total_size: z.number(),
+    total_size_readable: z.string(),
+  }),
+  categories: z.array(
+    z.object({
+      category: z.string(),
+      file_count: z.number(),
+      total_size: z.number(),
+      total_size_readable: z.string(),
+      percent_of_total: z.number(),
+    }),
+  ),
+  duplicates: z.object({
+    total_groups: z.number(),
+    total_files: z.number(),
+    wasted_space: z.number(),
+    wasted_space_readable: z.string(),
+    groups_listed: z.number(),
+    groups: z.array(
+      z.object({
+        hash: z.string(),
+        count: z.number(),
+        size: z.string(),
+        size_bytes: z.number(),
+        files: z.array(z.string()),
+      }),
+    ),
+    skipped_count: z.number(),
+    skipped_bytes: z.number(),
+  }),
+  top_files: z.array(
+    z.object({
+      name: z.string(),
+      path: z.string(),
+      size: z.number(),
+      size_readable: z.string(),
+    }),
+  ),
+  limits: z.array(z.string()),
+});
+
 type JsonSchemaObject = {
   type: "object";
   properties: Record<string, unknown>;
@@ -514,6 +588,9 @@ export const restoreQuarantineOutputJsonSchema = z.toJSONSchema(
 ) as JsonSchemaObject;
 export const exportConfigOutputJsonSchema = z.toJSONSchema(
   exportConfigOutputSchema,
+) as JsonSchemaObject;
+export const exportReportOutputJsonSchema = z.toJSONSchema(
+  exportReportOutputSchema,
 ) as JsonSchemaObject;
 export const sensitiveScanOutputJsonSchema = z.toJSONSchema(
   sensitiveScanOutputSchema,
