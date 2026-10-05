@@ -2,12 +2,11 @@
  * preview_organization --since_last_run — tool wiring.
  *
  * The data sandbox lives under os.tmpdir() and is granted through
- * CONFIG.paths.customAllowed. The scheduler state file follows
- * getConfigDirectory(), so all three of its inputs are redirected at a second
- * sandbox: XDG_CONFIG_HOME and APPDATA for Linux and Windows, and os.homedir
- * for macOS, which ignores both of the others. Setting process.env.HOME is not
- * an option because a jest worker gets a copy of the environment, and patching
- * os.homedir works because getConfigDirectory() reads the property at call time.
+ * CONFIG.paths.customAllowed. The scheduler state file is handed an explicit
+ * sandbox path instead of being redirected through the environment, because
+ * getConfigDirectory() honours XDG_CONFIG_HOME and APPDATA on Linux and Windows
+ * but resolves to ~/Library/Application Support on macOS, so no env var moves it
+ * on all three platforms.
  *
  * Assertions compare basenames and counts, never a raw absolute path, because
  * macOS rewrites /var to /private/var and Windows expands 8.3 short names.
@@ -15,6 +14,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import fs from "fs/promises";
+import fsSync from "fs";
 import os from "os";
 import path from "path";
 
@@ -26,7 +26,7 @@ const { TOOLS } = await import("../../../src/mcp/registry.js");
 const { PreviewOrganizationInputSchema } = await import(
   "../../../src/schemas/organize.js"
 );
-const { resetSchedulerStateService, getSchedulerStateService } =
+const { setSchedulerStateServicePath, getSchedulerStateService } =
   await import("../../../src/extensions/scheduler/scheduler-state.service.js");
 
 const TOOL_NAME = "file_organizer_preview_organization";
@@ -46,7 +46,6 @@ describe("preview_organization since_last_run", () => {
   let restoreCustomAllowed: string[] | undefined;
   let restoreEnv: Record<string, string | undefined>;
   let stateFile: string;
-  const originalHomedir = os.homedir;
 
   beforeEach(async () => {
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), "preview-since-"));
@@ -58,25 +57,31 @@ describe("preview_organization since_last_run", () => {
       XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
       APPDATA: process.env.APPDATA,
     };
-    // macOS resolves its config directory to ~/Library/Application Support and
-    // ignores BOTH XDG_CONFIG_HOME and APPDATA, so the two redirects below are
-    // not enough there and the state file would land in the real home
-    // directory. Patching os.homedir covers the macOS branch; setting HOME
-    // would not, because a jest worker gets a copy of the environment.
-    os.homedir = () => stateDir;
-    // The singleton caches its resolved path on first use, so drop it before
-    // the redirect takes effect, not after.
-    resetSchedulerStateService();
+    // XDG_CONFIG_HOME and APPDATA cover Linux and Windows. They are kept because
+    // they are how the OTHER four state locations get redirected, and because
+    // getConfigDirectory() reads them before any override applies.
     process.env.XDG_CONFIG_HOME = path.join(stateDir, "config");
     process.env.APPDATA = path.join(stateDir, "AppData", "Roaming");
 
+    // Redirect the singleton rather than the environment, because
+    // getConfigDirectory() ignores BOTH vars on macOS and resolves to
+    // ~/Library/Application Support there. No env var relocates this file on all
+    // three platforms, and os.homedir cannot be patched reliably from a jest
+    // worker. The override is sticky so it survives the resetSchedulerStateService()
+    // calls that recordLastRun makes.
+    const override = path.join(stateDir, "scheduler-state.json");
+    setSchedulerStateServicePath(override);
     stateFile = (await getSchedulerStateService()).getStateFilePath();
 
-    // Assert the sandbox actually took. Without this the whole suite reads
-    // better than it is: every assertion would still pass on a machine where
-    // the redirect silently stopped working and the test was writing to the
-    // developer's real scheduler state.
-    expect(path.resolve(stateFile).startsWith(path.resolve(stateDir) + path.sep)).toBe(true);
+    // Assert the sandbox actually took, and do it before anything writes. On a
+    // platform where the override were ignored, every later assertion would
+    // still pass while the suite read and overwrote the developer's real
+    // scheduler state.
+    expect(stateFile).toBe(override);
+    expect(path.resolve(stateFile).startsWith(path.resolve(stateDir) + path.sep)).toBe(
+      true,
+    );
+    expect(fsSync.existsSync(stateFile)).toBe(false);
   });
 
   afterEach(async () => {
@@ -84,8 +89,7 @@ describe("preview_organization since_last_run", () => {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
-    resetSchedulerStateService();
-    os.homedir = originalHomedir;
+    setSchedulerStateServicePath(undefined);
     CONFIG.paths.customAllowed = restoreCustomAllowed;
     await new Promise((r) => setTimeout(r, 100));
     await fs.rm(testDir, { recursive: true, force: true });
@@ -124,7 +128,9 @@ describe("preview_organization since_last_run", () => {
         },
       }),
     );
-    resetSchedulerStateService();
+    // Drop the cached instance so the next read parses what was just written.
+    // The path override set in beforeEach survives this.
+    setSchedulerStateServicePath(stateFile);
   }
 
   /**
@@ -175,6 +181,42 @@ describe("preview_organization since_last_run", () => {
     expect(sources(out)).toEqual(["new-note.txt"]);
     // The count is derived from the same filtered plan, so it follows for free.
     expect(out.summary.total_files).toBe(1);
+  });
+
+  it("keeps a file whose mtime could not be read", async () => {
+    // getAllFiles always stats, so modified is set for everything it returns.
+    // The filter's contract is still that a missing timestamp is kept, because
+    // an absent stat is missing data rather than evidence of age. That branch is
+    // unreachable through the scanner, so drive buildPlan's filter directly
+    // instead of asserting a behaviour the tool cannot actually produce.
+    const { buildPlanForTest } = await import(
+      "../../../src/tools/organization-preview.js"
+    );
+    const since = new Date();
+    const undated = {
+      name: "undated.bin",
+      path: path.join(testDir, "undated.bin"),
+      size: 10,
+    };
+
+    const plan = await buildPlanForTest({
+      directory: testDir,
+      conflictStrategy: "rename",
+      includeSubdirs: false,
+      ctx: { config: {} } as never,
+      sinceLastRun: since,
+      // Stands in for the scanner output, including the undated entry.
+      files: [
+        { name: "old.bin", path: path.join(testDir, "old.bin"), size: 10, modified: new Date(since.getTime() - HOUR_MS) },
+        undated,
+        { name: "new.bin", path: path.join(testDir, "new.bin"), size: 10, modified: new Date(since.getTime() + HOUR_MS) },
+      ],
+    });
+
+    const kept = plan.moves.map((m) => path.basename(m.source)).sort();
+    // The undated file is retained alongside the fresh one, and the stale one is
+    // still dropped: the predicate excludes old files, it does not whitelist.
+    expect(kept).toEqual(["new.bin", "undated.bin"]);
   });
 
   it("reports the whole directory without since_last_run", async () => {

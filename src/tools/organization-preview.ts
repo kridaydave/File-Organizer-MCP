@@ -68,15 +68,53 @@ async function buildPlan(
     new CategorizerService(ctx.config.customRules ?? []),
   );
   const scanned = await scanner.getAllFiles(directory, includeSubdirs);
-  // A file the scanner could not stat carries no mtime. Keep it rather than drop
-  // it: a narrow window must not silently hide a file we merely could not date.
-  const files = sinceLastRun
-    ? scanned.filter(
-        (f: FileWithSize) =>
-          f.modified !== undefined && f.modified >= sinceLastRun,
-      )
-    : scanned;
-  return organizer.generateOrganizationPlan(directory, files, conflictStrategy);
+  return organizer.generateOrganizationPlan(
+    directory,
+    filterSince(scanned, sinceLastRun),
+    conflictStrategy,
+  );
+}
+
+/**
+ * Keep only the files a `sinceLastRun` window still cares about.
+ *
+ * A file whose mtime is absent is KEPT. The scanner always stats, so this does
+ * not arise through the tool today, but an absent stat is missing data rather
+ * than evidence of age, and a narrow window must not hide a file we merely could
+ * not date. `age-filter.ts` applies the same rule to find_old_files.
+ */
+function filterSince(
+  files: readonly FileWithSize[],
+  sinceLastRun?: Date,
+): FileWithSize[] {
+  if (!sinceLastRun) return [...files];
+  return files.filter(
+    (f) => f.modified === undefined || f.modified >= sinceLastRun,
+  );
+}
+
+/**
+ * buildPlan with the scanner step injectable, so the filter's undated-file
+ * branch is testable. getAllFiles always stats, so no tool call can produce a
+ * FileWithSize without `modified`, and asserting that branch through the handler
+ * would test a path that cannot execute.
+ */
+export async function buildPlanForTest(options: {
+  directory: string;
+  conflictStrategy: "rename" | "skip" | "overwrite";
+  includeSubdirs: boolean;
+  ctx: ToolContext;
+  sinceLastRun?: Date;
+  files: readonly FileWithSize[];
+}): Promise<OrganizationPlan> {
+  const organizer = new OrganizerService(
+    new CategorizerService(options.ctx.config.customRules ?? []),
+  );
+  return organizer.generateOrganizationPlan(
+    options.directory,
+    filterSince(options.files, options.sinceLastRun),
+    options.conflictStrategy,
+  );
 }
 
 export const previewOrganizationToolDefinition: ToolDefinition = {

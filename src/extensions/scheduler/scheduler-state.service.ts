@@ -376,15 +376,49 @@ export class SchedulerStateService {
 let globalSchedulerStateService: SchedulerStateService | null = null;
 
 /**
+ * Sticky default for the singleton, set by setSchedulerStateServicePath. Null
+ * in production, which is what makes getConfigDirectory() the default.
+ */
+let stateFilePathOverride: string | null = null;
+
+/**
  * Get or create the global scheduler state service instance
  * @returns The global SchedulerStateService instance
+ *
+ * Resolution order is explicit argument, then the override set by
+ * setSchedulerStateServicePath, then getConfigDirectory(). Production sets
+ * neither and always gets the config directory.
+ *
+ * The override exists because getConfigDirectory() honours XDG_CONFIG_HOME and
+ * APPDATA on Linux and Windows but resolves to ~/Library/Application Support on
+ * macOS, so no environment variable relocates this file on all three. It is
+ * sticky rather than an argument because callers reach this service through the
+ * singleton, and an argument would only apply to whichever call happened to
+ * build it first. A test that resets the singleton and then called
+ * getSchedulerStateService() with no argument would silently get the default
+ * path back, which is the developer's real state file.
  */
-export async function getSchedulerStateService(): Promise<SchedulerStateService> {
+export async function getSchedulerStateService(
+  stateFilePath?: string,
+): Promise<SchedulerStateService> {
   if (!globalSchedulerStateService) {
-    globalSchedulerStateService = new SchedulerStateService();
+    globalSchedulerStateService = new SchedulerStateService(
+      stateFilePath ?? stateFilePathOverride ?? undefined,
+    );
     await globalSchedulerStateService.initialize();
   }
   return globalSchedulerStateService;
+}
+
+/**
+ * Redirect the singleton to `stateFilePath`, or back to the default with
+ * `undefined`. Test-only: production resolves the config directory.
+ */
+export function setSchedulerStateServicePath(
+  stateFilePath: string | undefined,
+): void {
+  stateFilePathOverride = stateFilePath ?? null;
+  globalSchedulerStateService = null;
 }
 
 /**
