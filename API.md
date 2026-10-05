@@ -559,7 +559,7 @@ file_organizer_list_files({
 
 [⬆ Back to Top](#top)
 
-**Description:** Automatically organize files into categorized folders. Use dry_run=true to preview changes.
+**Description:** Automatically organize files into categorized folders. Use dry_run=true to preview changes. A completed organize returns `manifest_id`, the rollback manifest it wrote; pass it to file_organizer_undo_last_operation to undo that one operation, or read it from the Undo Manifest column of file_organizer_view_history. A dry run writes no manifest and returns none.
 
 ### Parameters
 
@@ -570,6 +570,33 @@ file_organizer_list_files({
 | `conflict_strategy`    | string  | How to handle file conflicts (rename/skip/overwrite). Uses config default if not specified | -          |
 | `use_content_analysis` | boolean | Enable magic-byte content inspection                                                       | false      |
 | `response_format`      | string  | Output format (markdown/json)                                                              | 'markdown' |
+
+### Output
+
+`manifest_id` is the rollback manifest this batch wrote, and is what
+`file_organizer_undo_last_operation` takes to undo this operation specifically.
+It is absent on a dry run and when no manifest could be written.
+
+```typescript
+{
+  directory: string;
+  dry_run: boolean;
+  total_files: number;
+  statistics: Record<string, number>;
+  actions: Array<{
+    file: string;
+    from: string;
+    to: string;
+    category: string;
+  }>;
+  errors: string[];
+  errorCount: number;
+  successCount: number;
+  aborted: boolean;
+  content_analysis_enabled?: boolean;
+  manifest_id?: string;
+}
+```
 
 ### Example
 
@@ -582,6 +609,10 @@ file_organizer_organize_files({
   response_format: "value",
 });
 ```
+
+### Output
+
+`manifest_id` (string, optional) is present only when files actually moved and a manifest was written.
 
 ---
 
@@ -1020,21 +1051,23 @@ file_organizer_system_organize({
 
 [⬆ Back to Top](#top)
 
-**Description:** Reverses file moves and renames from a previous organization task.
+**Description:** Reverses file moves and renames from a previous organization task. Pass manifest_id to undo one specific operation by the id that organize_files returned and file_organizer_view_history lists; omit it to undo the most recent operation. Undoing an operation that is not the newest is refused outright when a newer operation already moved any of the same paths, because undoing out of order would collide with it partway through. Undo the newer one first, then retry. The manifest is deleted only when the whole undo succeeds, so a refused or failed undo can be tried again.
 
 ### Parameters
 
-| Parameter         | Type   | Description | Default    |
-| ----------------- | ------ | ----------- | ---------- |
-| `manifest_id`     | string | -           | -          |
-| `response_format` | string | -           | 'markdown' |
+| Parameter         | Type   | Description                                                              | Default    |
+| ----------------- | ------ | ------------------------------------------------------------------------ | ---------- |
+| `manifest_id`     | string | ID of the operation to undo. Omit to undo the most recent operation.      | -          |
+| `response_format` | string | 'json' or 'markdown'                                                     | 'markdown' |
+
+A refusal returns `success: 0` and `failed: 1` with an error naming the conflicting manifest ids. No file is moved when that happens.
 
 ### Example
 
 ```typescript
 file_organizer_undo_last_operation({
-  manifest_id: "value",
-  response_format: "value",
+  manifest_id: "3f1c8b2e-9a4d-4e77-b0c5-1d2e3f4a5b6c",
+  response_format: "json",
 });
 ```
 
@@ -1164,6 +1197,13 @@ Entries may carry a `paths` array — the paths that operation touched, recorded
 when the tool call named a directory. `privacy_mode` treats it like the other
 path-bearing fields: redacted in `redacted`, absent in `none`.
 [`file_organizer_search_history`](#file_organizer_search_history) filters on it.
+
+Entries that wrote a rollback manifest also carry `manifestId`, shown in the
+`Undo Manifest` column. Pass it to
+[`file_organizer_undo_last_operation`](#file_organizer_undo_last_operation) to
+undo that specific operation rather than whatever ran last. It is an id, not a
+path, so `privacy_mode` leaves it as it is. Entries with no manifest report
+`-` in that column: undoing them is only possible as "the newest operation".
 
 ### Example
 
