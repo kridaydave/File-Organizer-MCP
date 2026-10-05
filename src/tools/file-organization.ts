@@ -121,12 +121,19 @@ export async function handleOrganizeFiles(
     // Full content analysis per-file would require modifying the organizer service
     // For now, we document that content analysis is available in categorize_by_type
 
-    const { statistics, actions, errors, errorCount, successCount, aborted } =
-      await organizer.organize(validatedPath, files, {
-        dryRun: dry_run,
-        conflictStrategy: effectiveConflictStrategy,
-        useContentAnalysis: use_content_analysis,
-      });
+    const {
+      statistics,
+      actions,
+      errors,
+      errorCount,
+      successCount,
+      aborted,
+      manifestId,
+    } = await organizer.organize(validatedPath, files, {
+      dryRun: dry_run,
+      conflictStrategy: effectiveConflictStrategy,
+      useContentAnalysis: use_content_analysis,
+    });
 
     const result: OrganizeResult & { content_analysis_enabled?: boolean } = {
       directory: validatedPath,
@@ -138,6 +145,10 @@ export async function handleOrganizeFiles(
       errorCount,
       successCount,
       aborted,
+      // The undo handle. Absent on a dry run, and the history entry the server
+      // writes for this call carries the same id, so a selective undo is
+      // reachable from view_history without re-reading this response.
+      ...(manifestId !== undefined && { manifest_id: manifestId }),
     };
 
     if (use_content_analysis) {
@@ -162,6 +173,11 @@ export async function handleOrganizeFiles(
 **Total Files Processed:** ${result.total_files}
 **Errors:** ${result.errors.length}
 **Conflict Strategy:** ${effectiveConflictStrategy}
+${
+  result.manifest_id
+    ? `**Rollback Manifest ID:** \`${result.manifest_id}\` (pass to \`undo_last_operation\` to undo this batch)\n`
+    : ""
+}
 
 **Statistics:**
 ${Object.entries(result.statistics)

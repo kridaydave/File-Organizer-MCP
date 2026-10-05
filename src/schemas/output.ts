@@ -135,6 +135,7 @@ export const organizeFilesOutputSchema = z.object({
   successCount: z.number(),
   aborted: z.boolean(),
   content_analysis_enabled: z.boolean().optional(),
+  manifest_id: z.string().optional(),
 });
 
 export const previewOrganizationOutputSchema = z.object({
