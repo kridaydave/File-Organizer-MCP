@@ -96,8 +96,9 @@ You can ask the assistant things like:
 - `file_organizer_quarantine_files` - Set flagged files aside for review, reversibly. See below.
 - `file_organizer_restore_quarantine` - Put quarantined files back where they came from.
 - `file_organizer_search_history` - Filter the history by path glob (`path_glob`), date range (`from`/`to`), or operation type. Every filter is optional and they combine, so a long history stays queryable instead of one flat list.
+- `file_organizer_export_report` - Write a health report for a directory in one call: totals, space per category, duplicate groups, largest files. Pass `output_path` to leave a file behind, or leave it out and nothing is written. See below.
 
-### Full tool list (36 tools)
+### Full tool list (37 tools)
 <!-- BEGIN GENERATED TOOL LIST -->
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
@@ -107,6 +108,7 @@ You can ask the assistant things like:
 - `file_organizer_disk_usage_by_category`
 - `file_organizer_doctor`
 - `file_organizer_export_config`
+- `file_organizer_export_report`
 - `file_organizer_find_broken_symlinks`
 - `file_organizer_find_duplicate_files`
 - `file_organizer_find_empty_directories`

@@ -77,7 +77,7 @@ The most common defect here is a change that works for one tool and is missing e
 drives the real built server over stdio inside a throwaway sandbox. Reach for it
 whenever you touch a tool handler, the organizer, rollback, config loading, or
 the path validator, and before claiming a change works. Its `references/features/`
-maps all 24 tools to how to drive them. See [Proving a change](#proving-a-change).
+maps each covered tool to how to drive it and names the ones it does not cover yet in its Coverage section, so read that before assuming a tool is provable. Run `node $C tools` for the live count rather than trusting a number in prose. See [Proving a change](#proving-a-change).
 
 **Global.** Your skill list is already in context with each skill's own trigger
 conditions, so read those rather than a table here. Two things worth knowing
@@ -291,7 +291,7 @@ throwaway sandbox, so your real config dir and history are never touched.
 ```bash
 C=.opencode/skills/verify-file-organizer/scripts/control-file-organizer.mjs
 node $C doctor      # build, handshake, tool count, one read-only call
-node $C tools       # all 24 tools
+node $C tools       # every registered tool, one line each
 node $C call organize_files --directory /tmp/file-organizer-verify/default/data \
   --dry_run false --conflict_strategy rename --json
 node $C call undo_last_operation --json
@@ -312,6 +312,9 @@ Every rule above is a sentence in this file, so it holds exactly as well as the 
 - `main` has `strict: true`, no ruleset, no merge queue, `allow_auto_merge: false`. Merges serialise by hand.
 - The tool list and count are generated, but the hand-written tool bullets in README.md above the `<!-- BEGIN GENERATED TOOL LIST -->` marker, and the tool references in ARCHITECTURE.md, are not. Those are the two hottest conflict sites left.
 - `src/mcp/registry.ts` is a hand-maintained flat array of `reg()` lines. `ARCHITECTURE.md:112` records that auto-discovery was deliberately rejected in favour of a visible one-line edit. Under parallel tool PRs, that decision is what generates the conflicts.
+- A tool that writes a report to a user-chosen path is a fresh place for all five rule 3 leak classes to surface, because a report is mostly file paths. `file_organizer_export_report` is the worked example: it returns real filesystem paths on purpose (success payloads carry paths by design), and its markdown prints a nested path that a `path.join` would have rendered with a backslash on Windows. What keeps it honest is the shape of the test, not the shape of the tool: `tests/integration/tools/export-report.test.ts` derives its sandbox base from `fs.realpathSync(os.tmpdir())` because `/var` is blocked while `/private/var` is not, sorts every `readdir` before comparing, canonicalises `beforeEach` once, and takes the config path from `getUserConfigPath()` instead of spelling out a platform directory.
+- Nothing checks that a tool's `outputSchema` matches what its handler returns. `export_report` declares `exportReportOutputJsonSchema` and also returns `structuredContent` on the markdown path, because the SDK rejects a result that carries a declared schema and no structured content. A test that runs `safeParse(handler(...).structuredContent)` against the declared schema is the only thing that catches a drift between the two, and `npm run typecheck:tests` will not, since both sides are typed.
+- Tool counts written in prose are not tied to the registry. This file and `verify-file-organizer` both said "24 tools" while the registry registered 36, and each was a true statement about something real: the verify skill's feature map really did name 24 tools, and someone wrote that coverage count as though it were the total. A generated count sitting next to a hand-written one is an invitation. The fix is to not write the count at all: run `node $C tools` for the live list and let `npm run docs:sync` own the numbers. A wrong count is cheap, but a coverage claim resting on one is not.
 
 If you touch one of these, close it rather than working around it.
 

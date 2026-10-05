@@ -19,6 +19,7 @@
 - [file_organizer_disk_usage_by_category](#file_organizer_disk_usage_by_category)
 - [file_organizer_doctor](#file_organizer_doctor)
 - [file_organizer_export_config](#file_organizer_export_config)
+- [file_organizer_export_report](#file_organizer_export_report)
 - [file_organizer_find_broken_symlinks](#file_organizer_find_broken_symlinks)
 - [file_organizer_find_empty_directories](#file_organizer_find_empty_directories)
 - [file_organizer_find_duplicate_files](#file_organizer_find_duplicate_files)
@@ -1349,6 +1350,98 @@ file_organizer_export_config({
   rebase_root: "~",
   response_format: "json",
 });
+```
+
+---
+
+## file_organizer_export_report
+
+[⬆ Back to Top](#top)
+
+**Description:** Write a health report for a directory — total files and bytes, the
+space each category holds, duplicate groups with the space they waste, and the
+largest files. One directory walk feeds all four sections, so they cannot
+describe different moments in time. Nothing is moved, renamed or deleted.
+
+There is no `dry_run` flag, and that is deliberate. `output_path` is optional, and
+omitting it is the only path that writes nothing: the tool reads, assembles, and
+returns. So "preview" cannot be forgotten, and a caller cannot reach the
+filesystem by accident.
+
+**Not read-only** (it can write the report file), **not destructive** (the write
+uses the exclusive `wx` flag and never replaces an existing file), **not
+idempotent** (a second run at the same `output_path` fails on the existing file,
+and `generated_at` moves even when the directory has not).
+
+### Parameters
+
+| Parameter         | Type    | Description                                                                    | Default    |
+| ----------------- | ------- | ------------------------------------------------------------------------------ | ---------- |
+| `directory`       | string  | Full path to the directory to report on. Required.                             | -          |
+| `include_subdirs` | boolean | Recurse into subdirectories                                                    | true       |
+| `top_n`           | number  | How many of the largest files to report (1-100)                                | 10         |
+| `duplicate_limit` | number  | How many duplicate groups to list (0-1000). Totals always cover every group.   | 10         |
+| `output_path`     | string  | Where to write the report. Omit to receive it in the reply, no write.           | -          |
+| `response_format` | string  | 'json' or 'markdown'                                                           | 'markdown' |
+
+`include_subdirs` defaults to true here, unlike `scan_directory` and
+`organize_files`, because the space a category holds usually sits below the
+directory you point at and a report that skipped it would understate both the
+totals and the duplicates.
+
+### Returned fields
+
+| Field              | Description                                                                       |
+| ------------------ | --------------------------------------------------------------------------------- |
+| `directory`        | The validated directory the report covers                                         |
+| `include_subdirs`  | Whether the walk recursed, echoed so the totals can be read correctly             |
+| `generated_at`     | ISO timestamp of the run                                                          |
+| `output_path`      | Where the report was written, or null when nothing was written                     |
+| `written`          | True when a report file was written                                                |
+| `bytes_written`    | Size of the written report                                                         |
+| `scan`             | `total_files`, `total_size`, `total_size_readable` over the whole walk            |
+| `categories`       | Per category: file count, bytes, readable size, percent of total. Same numbers as `disk_usage_by_category`. |
+| `duplicates`       | `total_groups`, `total_files`, `wasted_space` (+ readable), `groups_listed`, the listed `groups`, `skipped_count`, `skipped_bytes` |
+| `top_files`        | The `top_n` largest files, each with name, path, bytes, readable size             |
+| `limits`           | Prose statements about everything the numbers above under-report                  |
+
+### The `limits` field is part of the contract
+
+A health report gets filed and believed, so a number that means less than it
+looks has to say so in the same document. `limits` states, in prose:
+
+- how many duplicate groups were found but not listed (`duplicate_limit`);
+- how many files were not compared for duplicates, because empty files and files
+  over the hashing size cap cannot be compared. The duplicate totals are a lower
+  bound whenever this is non-empty;
+- how many files were left out of `top_files` (`top_n`);
+- that `include_subdirs` was false, so everything below the directory went uncounted.
+
+The totals themselves are never truncated. `duplicates.total_groups` and
+`wasted_space` always cover every group found; `duplicate_limit` only trims the
+list. A report that claimed twelve groups and then showed two would be
+misleading in the direction that matters.
+
+### Paths in the report
+
+Every path here is a real filesystem path the scanner returned, so it carries
+whatever separator the platform uses. A report is mostly file paths, which makes
+it a live surface for the portability leak classes in `AGENTS.md` rule 3: build a
+contract string such as a folder label with a template literal, never with
+`path.join`.
+
+### Example
+
+```typescript
+// Write the artifact.
+file_organizer_export_report({
+  directory: "~/Documents",
+  output_path: "~/Documents/health-report.json",
+  response_format: "json",
+});
+
+// Or just look, and write nothing.
+file_organizer_export_report({ directory: "~/Documents" });
 ```
 
 ---
