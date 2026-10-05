@@ -47,6 +47,12 @@ export interface OrganizeResult {
   aborted: boolean;
   skippedCount?: number;
   skippedFiles?: { path: string; reason: string }[];
+  /**
+   * The rollback manifest this batch wrote, or undefined on a dry run and when
+   * no manifest could be created. This is the id `undo_last_operation` takes,
+   * so a caller that drops it has no way to undo the batch selectively later.
+   */
+  manifestId?: string;
 }
 
 // BUG-003 FIX: Maximum consecutive errors before aborting to prevent endless processing
@@ -636,9 +642,10 @@ export class OrganizerService {
     }
 
     // Save rollback manifest once for the entire batch
+    let manifestId: string | undefined;
     if (rollbackActions.length > 0) {
       try {
-        await rollbackService.createManifest(
+        manifestId = await rollbackService.createManifest(
           `Organization of ${directory} (${rollbackActions.length} files)`,
           rollbackActions,
         );
@@ -673,6 +680,7 @@ export class OrganizerService {
       aborted,
       skippedCount: skippedFiles.length,
       skippedFiles,
+      manifestId,
     };
   }
 }

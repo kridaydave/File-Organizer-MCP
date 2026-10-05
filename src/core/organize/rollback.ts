@@ -40,6 +40,75 @@ import { HashCalculatorService } from "../hash/hasher.js";
  */
 const DEFAULT_HASH_BUDGET_BYTES = 32 * 1024 * 1024;
 
+/**
+ * Every path a manifest's undo will read, write, or delete.
+ *
+ * A move reads `currentPath` and writes `originalPath`, and may also move the
+ * overwritten file back from `overwrittenBackupPath`. A copy undo deletes
+ * `currentPath`, and a delete undo writes `originalPath` from `backupPath`.
+ * All of them count: a manifest sharing any one of them with a newer manifest
+ * can collide with that manifest's undo.
+ *
+ * This is a filesystem comparison, so `path` is the right tool here. The
+ * contract string in this file is the manifest id, never a normalized path.
+ */
+function rollbackTouchedPaths(manifest: RollbackManifest): Set<string> {
+  const touched = new Set<string>();
+  for (const action of manifest.actions) {
+    for (const candidate of [
+      action.originalPath,
+      action.currentPath,
+      action.backupPath,
+      action.overwrittenBackupPath,
+    ]) {
+      if (typeof candidate === "string" && candidate.length > 0) {
+        touched.add(normalizeForCompare(candidate));
+      }
+    }
+  }
+  return touched;
+}
+
+/**
+ * Normalize a path for equality. Case matters on a case-sensitive filesystem
+ * and does not on Windows or a default macOS volume, so folding unconditionally
+ * would refuse a legitimate undo on Linux while ignoring it would miss a real
+ * collision on Windows.
+ */
+function normalizeForCompare(candidate: string): string {
+  const normalized = path.resolve(candidate);
+  return process.platform === "win32" || process.platform === "darwin"
+    ? normalized.toLowerCase()
+    : normalized;
+}
+
+/**
+ * How many paths two manifests both touch.
+ *
+ * Exported so the overlap rule is testable on its own, without a rollback
+ * directory, and so a reader of the guard can see it is a pure comparison.
+ */
+/** One newer manifest that stands in the way of undoing a given one. */
+interface NewerConflict {
+  id: string;
+  /** How many paths the two manifests both touch. */
+  overlappingPaths: number;
+  /** False when the manifest's own signature did not verify. */
+  verified: boolean;
+}
+
+export function overlappingPathCount(
+  target: RollbackManifest,
+  newer: RollbackManifest,
+): number {
+  const newerPaths = rollbackTouchedPaths(newer);
+  let shared = 0;
+  for (const candidate of rollbackTouchedPaths(target)) {
+    if (newerPaths.has(candidate)) shared++;
+  }
+  return shared;
+}
+
 /** How much of a batch `createManifest` spends on content hashes. */
 export interface ManifestIntegrityOptions {
   /**
@@ -294,6 +363,74 @@ export class RollbackService {
   }
 
   /**
+   * Manifests newer than `target` that touch a path `target` also touches.
+   *
+   * Rolling back out of order is the one case the per-action guards cannot
+   * make safe: `safeAtomicMove` refuses EEXIST and delete-restore uses
+   * COPYFILE_EXCL, so the batch dies at the collision and the best-effort
+   * recovery is the only thing between the user and a half-undone tree. A newer
+   * manifest that moved the same path is exactly that collision, and it is
+   * knowable before anything is touched, so it is checked before anything is
+   * touched.
+   *
+   * A candidate whose signature does not verify counts as a conflict rather
+   * than being ignored. Ignoring it would let a forged manifest hide a real
+   * overlap, and the failure mode of not ignoring it is a refused undo, not a
+   * damaged one.
+   */
+  private async findNewerConflicts(
+    target: RollbackManifest,
+  ): Promise<NewerConflict[]> {
+    const candidates = (await this.listManifests()).filter(
+      (m) => m.id !== target.id && m.timestamp > target.timestamp,
+    );
+    if (candidates.length === 0) return [];
+
+    const conflicts: NewerConflict[] = [];
+    for (const manifest of candidates) {
+      const verified = manifestIntegrityService.verifyManifest(manifest).valid;
+      const overlappingPaths = overlappingPathCount(target, manifest);
+      if (!verified || overlappingPaths > 0) {
+        conflicts.push({ id: manifest.id, overlappingPaths, verified });
+      }
+    }
+    return conflicts;
+  }
+
+  /**
+   * The refusal a `rollback()` that would collide returns instead of starting.
+   *
+   * Refusing rather than warning is the deliberate choice. The alternative, a
+   * warning, leaves the user with exactly the mid-batch EEXIST throw that
+   * exists today: some files already moved, then a best-effort recovery that
+   * itself uses `overwrite: true`. A refusal costs the user one undo they could
+   * not have completed safely anyway, and it costs them zero files. The way
+   * through is to undo the newer operation first, which is the order the
+   * filesystem already implies.
+   */
+  private conflictRefusal(
+    manifestId: string,
+    conflicts: NewerConflict[],
+  ): { success: number; failed: number; errors: string[] } {
+    const details = conflicts
+      .map((c) =>
+        c.verified
+          ? `${c.id} (${c.overlappingPaths} shared path(s))`
+          : `${c.id} (integrity check failed, so its paths cannot be ruled out)`,
+      )
+      .join(", ");
+
+    return {
+      success: 0,
+      failed: 1,
+      errors: [
+        `Refused to undo manifest ${manifestId}: a newer operation already touched at least one of the same paths, so undoing this one out of order would collide with it partway through. Undo the newer operation first, then retry. Conflicting manifests: ${details}`,
+        `Manifest not deleted: ${manifestId} remains available for retry or manual recovery`,
+      ],
+    };
+  }
+
+  /**
    * Restore state from a manifest (Undo)
    * @param manifestId - UUID of the manifest to rollback
    * @returns Promise<{ success: number; failed: number; errors: string[] }> - Results object with success count, failed count, and error messages
@@ -317,6 +454,15 @@ export class RollbackService {
     // storage directory, so filePath is only built from an already-safe value.
     const manifest = await this.getManifest(manifestId);
     const filePath = path.join(this.storageDir, `${manifestId}.json`);
+
+    // Selective undo makes out-of-order rollback reachable, so the overlap that
+    // a later operation creates is checked here, before the first move. The
+    // newest manifest has nothing newer than it, so the common case is
+    // unaffected by this read.
+    const conflicts = await this.findNewerConflicts(manifest);
+    if (conflicts.length > 0) {
+      return this.conflictRefusal(manifestId, conflicts);
+    }
 
     const results = { success: 0, failed: 0, errors: [] as string[] };
 

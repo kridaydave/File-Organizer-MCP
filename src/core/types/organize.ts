@@ -146,6 +146,13 @@ export interface OrganizeResult {
   errorCount: number;
   successCount: number;
   aborted: boolean;
+  /**
+   * Rollback manifest id for this batch, as a wire field (`manifest_id`, not
+   * `manifestId`). Absent on a dry run and when no manifest could be written.
+   * It is the id `undo_last_operation` takes, so returning it is what makes a
+   * later selective undo reachable at all.
+   */
+  manifest_id?: string;
 }
 
 // ==================== Quarantine Types ====================

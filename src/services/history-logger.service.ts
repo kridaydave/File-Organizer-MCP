@@ -30,6 +30,13 @@ export interface HistoryEntry {
   /** Paths this operation touched, when the caller knows them. Path-glob
    *  filters match against these; entries without them never match a glob. */
   paths?: string[];
+  /**
+   * Rollback manifest this operation wrote, when it wrote one. It is the id
+   * `undo_last_operation` accepts, which is the only way to undo this entry
+   * specifically rather than whatever ran last. Not a path, so privacy_mode
+   * leaves it alone.
+   */
+  manifestId?: string;
 }
 
 export interface HistoryQuery {

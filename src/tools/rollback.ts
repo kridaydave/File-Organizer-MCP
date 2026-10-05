@@ -25,11 +25,15 @@ export const undoLastOperationToolDefinition: ToolDefinition = {
   name: "file_organizer_undo_last_operation",
   title: "Undo Last Organization Operation",
   description:
-    "Reverses file moves and renames from a previous organization task.",
+    "Reverses file moves and renames from a previous organization task. Pass manifest_id to undo one specific operation by the id that organize_files returned and file_organizer_view_history lists; omit it to undo the most recent operation. Undoing an operation that is not the newest is refused outright when a newer operation already moved any of the same paths, because undoing out of order would collide with it partway through. Undo the newer one first, then retry. The manifest is deleted only when the whole undo succeeds, so a refused or failed undo can be tried again.",
   inputSchema: {
     type: "object",
     properties: {
-      manifest_id: { type: "string" },
+      manifest_id: {
+        type: "string",
+        description:
+          "ID of the operation to undo. Omit to undo the most recent operation.",
+      },
       response_format: {
         type: "string",
         enum: ["json", "markdown"],
