@@ -6,7 +6,7 @@ Answer "is this server healthy and what can it do" without reading source.
 
 - `doctor`: effective configuration after defaults and `config.json` are layered,
   plus a flag on every allowed directory that is missing or blocked.
-- `tools/list`: the 24 advertised tools with schemas and annotations.
+- `tools/list`: every advertised tool with schemas and annotations.
 - `get_categories`: the category taxonomy the classifier uses.
 
 ## How to get to it (client POV)

@@ -1,7 +1,7 @@
 # Stay inside the sandbox
 
 The path validator runs on every tool call. This is the cross-cutting feature:
-it is not one tool but the guarantee under all 24. Prove it whenever you touch
+it is not one tool but the guarantee under every tool that touches a path. Prove it whenever you touch
 `path-validator.service.ts`, `path-security`, or config loading.
 
 ## Sub-features

@@ -187,6 +187,46 @@ export const ExportConfigInputSchema = z
 export type ExportConfigInput = z.infer<typeof ExportConfigInputSchema>;
 
 /**
+ * Schema for export_report tool.
+ *
+ * output_path is optional on the same terms as export_config: omit it and the
+ * report comes back in the response with nothing written, so there is no dry-run
+ * flag to enforce and no way to call this tool that writes by accident.
+ */
+export const ExportReportInputSchema = z
+  .object({
+    directory: PathSchema.describe("Full path to the directory to report on"),
+    include_subdirs: z
+      .boolean()
+      .default(true)
+      .describe(
+        "Recurse into subdirectories. Defaults to true because the files that matter for a health report usually sit below the directory you point at.",
+      ),
+    top_n: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .default(10)
+      .describe("How many of the largest files to report (1-100)"),
+    duplicate_limit: z
+      .number()
+      .int()
+      .min(0)
+      .max(1000)
+      .default(10)
+      .describe(
+        "How many duplicate groups to list (0-1000). The group and wasted-space totals always cover every group found, so 0 reports the totals without listing any.",
+      ),
+    output_path: PathSchema.optional().describe(
+      "Where to write the report. Must pass path validation. The write refuses to overwrite an existing file. Omit to receive the report in the response instead of writing one.",
+    ),
+  })
+  .merge(CommonParamsSchema);
+
+export type ExportReportInput = z.infer<typeof ExportReportInputSchema>;
+
+/**
  * The exported bundle document, as read back off disk.
  *
  * `config` is deliberately loose: it is the config.json subset, already shaped
