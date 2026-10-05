@@ -3,10 +3,11 @@
  *
  * The data sandbox lives under os.tmpdir() and is granted through
  * CONFIG.paths.customAllowed. The scheduler state file follows
- * getConfigDirectory(), so XDG_CONFIG_HOME and APPDATA are pointed at a second
- * sandbox too: without that the test would read the developer's real
- * scheduler-state.json, and os.homedir() is not redirectable from inside a
- * jest worker (HOME is a copy there, not the process environment).
+ * getConfigDirectory(), so all three of its inputs are redirected at a second
+ * sandbox: XDG_CONFIG_HOME and APPDATA for Linux and Windows, and os.homedir
+ * for macOS, which ignores both of the others. Setting process.env.HOME is not
+ * an option because a jest worker gets a copy of the environment, and patching
+ * os.homedir works because getConfigDirectory() reads the property at call time.
  *
  * Assertions compare basenames and counts, never a raw absolute path, because
  * macOS rewrites /var to /private/var and Windows expands 8.3 short names.
@@ -45,6 +46,7 @@ describe("preview_organization since_last_run", () => {
   let restoreCustomAllowed: string[] | undefined;
   let restoreEnv: Record<string, string | undefined>;
   let stateFile: string;
+  const originalHomedir = os.homedir;
 
   beforeEach(async () => {
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), "preview-since-"));
@@ -56,6 +58,12 @@ describe("preview_organization since_last_run", () => {
       XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
       APPDATA: process.env.APPDATA,
     };
+    // macOS resolves its config directory to ~/Library/Application Support and
+    // ignores BOTH XDG_CONFIG_HOME and APPDATA, so the two redirects below are
+    // not enough there and the state file would land in the real home
+    // directory. Patching os.homedir covers the macOS branch; setting HOME
+    // would not, because a jest worker gets a copy of the environment.
+    os.homedir = () => stateDir;
     // The singleton caches its resolved path on first use, so drop it before
     // the redirect takes effect, not after.
     resetSchedulerStateService();
@@ -63,6 +71,12 @@ describe("preview_organization since_last_run", () => {
     process.env.APPDATA = path.join(stateDir, "AppData", "Roaming");
 
     stateFile = (await getSchedulerStateService()).getStateFilePath();
+
+    // Assert the sandbox actually took. Without this the whole suite reads
+    // better than it is: every assertion would still pass on a machine where
+    // the redirect silently stopped working and the test was writing to the
+    // developer's real scheduler state.
+    expect(path.resolve(stateFile).startsWith(path.resolve(stateDir) + path.sep)).toBe(true);
   });
 
   afterEach(async () => {
@@ -71,6 +85,7 @@ describe("preview_organization since_last_run", () => {
       else process.env[key] = value;
     }
     resetSchedulerStateService();
+    os.homedir = originalHomedir;
     CONFIG.paths.customAllowed = restoreCustomAllowed;
     await new Promise((r) => setTimeout(r, 100));
     await fs.rm(testDir, { recursive: true, force: true });
