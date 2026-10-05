@@ -194,6 +194,17 @@ function historyPathsFromArgs(
   return [directory];
 }
 
+/** A non-empty string, or undefined. The only narrowing this file needs of `unknown`. */
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/** Read one property off an `unknown` that may not be an object at all. */
+function propertyOf(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null) return undefined;
+  return (value as Record<string, unknown>)[key];
+}
+
 /**
  * The rollback manifest a tool response reports, when it reports one.
  *
@@ -203,19 +214,10 @@ function historyPathsFromArgs(
  * variant organizers) is what makes its own entry undoable by id.
  */
 export function historyManifestId(result: unknown): string | undefined {
-  if (typeof result !== "object" || result === null) return undefined;
-  const structured = (result as { structuredContent?: unknown })
-    .structuredContent;
-  if (typeof structured !== "object" || structured === null) return undefined;
-
-  const record = structured as Record<string, unknown>;
-  const direct = record.manifest_id ?? record.manifestId;
-  if (typeof direct === "string" && direct.length > 0) return direct;
-
-  const nested = record.undoManifest;
-  if (typeof nested === "object" && nested !== null) {
-    const nestedId = (nested as Record<string, unknown>).manifestId;
-    if (typeof nestedId === "string" && nestedId.length > 0) return nestedId;
-  }
-  return undefined;
+  const structured = propertyOf(result, "structuredContent");
+  return (
+    nonEmptyString(propertyOf(structured, "manifest_id")) ??
+    nonEmptyString(propertyOf(structured, "manifestId")) ??
+    nonEmptyString(propertyOf(propertyOf(structured, "undoManifest"), "manifestId"))
+  );
 }
