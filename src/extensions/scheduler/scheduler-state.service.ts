@@ -9,7 +9,7 @@
 import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
-import os from "os";
+import { getConfigDirectory } from "../../core/config/paths.js";
 import { logger } from "../../utils/logger.js";
 
 const STATE_FILE_VERSION = 1;
@@ -52,36 +52,16 @@ export class SchedulerStateService {
   }
 
   /**
-   * Get the default path for the state file
-   * Uses the same directory as user config
+   * Get the default path for the state file.
+   *
+   * Derived from getConfigDirectory() rather than resolved here. This used to
+   * hardcode `~/.config` on Linux, so XDG_CONFIG_HOME moved config.json,
+   * history and backups while leaving this file behind in the real home
+   * directory: the exact split getConfigDirectory() was introduced to close.
+   * Every default install resolves to the same path it did before.
    */
   private getDefaultStateFilePath(): string {
-    const platform = os.platform();
-    const home = os.homedir();
-
-    if (platform === "win32") {
-      // Windows: %APPDATA%\file-organizer-mcp\scheduler-state.json
-      const appData =
-        process.env.APPDATA || path.join(home, "AppData", "Roaming");
-      return path.join(appData, "file-organizer-mcp", "scheduler-state.json");
-    } else if (platform === "darwin") {
-      // macOS: ~/Library/Application Support/file-organizer-mcp/scheduler-state.json
-      return path.join(
-        home,
-        "Library",
-        "Application Support",
-        "file-organizer-mcp",
-        "scheduler-state.json",
-      );
-    } else {
-      // Linux: ~/.config/file-organizer-mcp/scheduler-state.json
-      return path.join(
-        home,
-        ".config",
-        "file-organizer-mcp",
-        "scheduler-state.json",
-      );
-    }
+    return path.join(getConfigDirectory(), "scheduler-state.json");
   }
 
   /**
