@@ -14,9 +14,11 @@ import type {
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
+import type { FileWithSize } from "../core/types/files.js";
 import { OrganizerService } from "../core/organize/organizer.js";
 import { validateOrganizationPlan } from "../core/organize/plan-validation.js";
 import { CategorizerService } from "../services/categorizer.service.js";
+import { getSchedulerStateService } from "../extensions/scheduler/scheduler-state.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { PreviewOrganizationInputSchema } from "../schemas/organize.js";
 import { ValidateOrganizationPlanInputSchema } from "../schemas/organize.js";
@@ -48,19 +50,32 @@ export type { ValidateOrganizationPlanInput } from "../schemas/organize.js";
  * The plan both preview_organization and validate_organization_plan report on.
  * One builder, so the dry-run check is a check on the plan organize would run
  * rather than a second, drifting plan path.
+ *
+ * `sinceLastRun` narrows the scan to files touched at or after that instant.
+ * Omit it for the whole directory. Filtering the scanned array before the plan
+ * is built means every count in the response follows for free.
  */
 async function buildPlan(
   directory: string,
   conflictStrategy: "rename" | "skip" | "overwrite",
   includeSubdirs: boolean,
   ctx: ToolContext,
+  sinceLastRun?: Date,
 ): Promise<OrganizationPlan> {
   // Services are stateless — build them per request from the request's config.
   const scanner = new FileScannerService();
   const organizer = new OrganizerService(
     new CategorizerService(ctx.config.customRules ?? []),
   );
-  const files = await scanner.getAllFiles(directory, includeSubdirs);
+  const scanned = await scanner.getAllFiles(directory, includeSubdirs);
+  // A file the scanner could not stat carries no mtime. Keep it rather than drop
+  // it: a narrow window must not silently hide a file we merely could not date.
+  const files = sinceLastRun
+    ? scanned.filter(
+        (f: FileWithSize) =>
+          f.modified !== undefined && f.modified >= sinceLastRun,
+      )
+    : scanned;
   return organizer.generateOrganizationPlan(directory, files, conflictStrategy);
 }
 
@@ -68,7 +83,7 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
   name: "file_organizer_preview_organization",
   title: "Preview File Organization Plan",
   description:
-    "Shows what would happen if files were organized, WITHOUT making any changes. Shows moves, conflicts, and skip reasons.",
+    "Shows what would happen if files were organized, WITHOUT making any changes. Shows moves, conflicts, and skip reasons. Pass since_last_run=true to report only the files touched at or after the scheduler's last successful run of this directory, so 'what is left to do' does not require reading the whole directory. A directory the scheduler has never run is not filtered, so the whole directory is reported.",
   inputSchema: {
     type: "object",
     properties: {
@@ -84,6 +99,12 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
         enum: ["rename", "skip", "overwrite"],
         description:
           "How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified",
+      },
+      since_last_run: {
+        type: "boolean",
+        default: false,
+        description:
+          "Only include files modified at or after the last successful scheduler run of this directory. A directory with no recorded run is not filtered",
       },
     },
     required: ["directory"],
@@ -120,6 +141,7 @@ export async function handlePreviewOrganization(
       show_conflicts_only,
       response_format,
       conflict_strategy,
+      since_last_run,
     } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
 
@@ -127,11 +149,23 @@ export async function handlePreviewOrganization(
     const effectiveConflictStrategy =
       conflict_strategy ?? ctx.config.conflictStrategy ?? "rename";
 
+    // Read the scheduler state only when the caller asked for it, so a plain
+    // preview never opens the state file at all.
+    //
+    // A null lastRunTime means the scheduler has never had a successful run of
+    // this directory. That is the beginning of time, not nothing: narrowing to
+    // an empty plan there would report a clean directory where the truth is an
+    // untracked one, and would make the flag useless on a first run.
+    const lastRun = since_last_run
+      ? (await getSchedulerStateService()).getLastRunTime(validatedPath)
+      : null;
+
     const plan = await buildPlan(
       validatedPath,
       effectiveConflictStrategy,
       false,
       ctx,
+      lastRun ?? undefined,
     );
 
     const output = {

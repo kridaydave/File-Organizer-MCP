@@ -644,7 +644,7 @@ file_organizer_delete_duplicates({
 
 [⬆ Back to Top](#top)
 
-**Description:** Shows what would happen if files were organized, WITHOUT making any changes. Shows moves, conflicts, and skip reasons.
+**Description:** Shows what would happen if files were organized, WITHOUT making any changes. Shows moves, conflicts, and skip reasons. Pass `since_last_run=true` to report only the files touched at or after the scheduler's last successful run of this directory, so "what is left to do" does not require reading the whole directory. The window comes from `scheduler-state`, which `file-organizer-watch` writes after each successful run. A directory the scheduler has never run is not filtered, so the whole directory is reported. Files whose mtime the scanner could not read are always included: a narrow window never hides a file merely because it could not be dated.
 
 ### Parameters
 
@@ -654,6 +654,7 @@ file_organizer_delete_duplicates({
 | `show_conflicts_only` | boolean | -                                                                                                      | false      |
 | `response_format`     | string  | -                                                                                                      | 'markdown' |
 | `conflict_strategy`   | string  | How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified | -          |
+| `since_last_run`      | boolean | Only include files modified at or after the last successful scheduler run of this directory. A directory with no recorded run is not filtered | false |
 
 ### Example
 
@@ -663,6 +664,7 @@ file_organizer_preview_organization({
   show_conflicts_only: true,
   response_format: "value",
   conflict_strategy: "value",
+  since_last_run: true,
 });
 ```
 
