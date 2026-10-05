@@ -41,6 +41,10 @@ export type OrganizeFilesInput = z.infer<typeof OrganizeFilesInputSchema>;
 /**
  * Schema for preview_organization tool
  * Shows what would happen if files were organized, WITHOUT making any changes
+ *
+ * since_last_run narrows the plan to files touched at or after the scheduler's
+ * last successful run of that directory, so the caller can ask "what is left to
+ * do" instead of re-reading the whole directory.
  */
 export const PreviewOrganizationInputSchema = z
   .object({
@@ -57,6 +61,12 @@ export const PreviewOrganizationInputSchema = z
       .optional()
       .describe(
         "How to handle file conflicts for preview. Uses config default if not specified",
+      ),
+    since_last_run: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Only include files modified at or after the last successful scheduler run of this directory, per scheduler-state. A directory with no recorded run is not filtered",
       ),
   })
   .merge(CommonParamsSchema);
