@@ -12,7 +12,10 @@ import {
   ViewHistoryInputSchema,
 } from "../schemas/system.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import type { HistoryResult } from "../services/history-logger.service.js";
+import type {
+  HistoryEntry,
+  HistoryResult,
+} from "../services/history-logger.service.js";
 import {
   createRequestContext,
   type ToolContext,
@@ -296,18 +299,7 @@ function renderHistoryResult(
 }
 
 function formatHistoryAsMarkdown(
-  entries: Array<{
-    id: string;
-    timestamp: string;
-    operation: string;
-    source: "manual" | "scheduled";
-    status: "success" | "error" | "partial";
-    durationMs: number;
-    filesProcessed?: number;
-    filesSkipped?: number;
-    details?: string;
-    error?: { message: string; code?: string };
-  }>,
+  entries: HistoryEntry[],
   total: number,
   hasMore: boolean,
   limit: number,
@@ -321,9 +313,9 @@ function formatHistoryAsMarkdown(
   markdown += "\n\n";
 
   markdown +=
-    "| Timestamp | Operation | Source | Status | Duration | Files |\n";
+    "| Timestamp | Operation | Source | Status | Duration | Files | Undo Manifest |\n";
   markdown +=
-    "|-----------|-----------|--------|--------|----------|-------|\n";
+    "|---|---|---|---|---|---|---|\n";
 
   for (const entry of entries) {
     const timestamp = new Date(entry.timestamp).toLocaleString();
@@ -334,11 +326,20 @@ function formatHistoryAsMarkdown(
     const files = entry.filesProcessed ?? "-";
     const statusEmoji =
       entry.status === "success" ? "✓" : entry.status === "error" ? "✗" : "⚠";
+    // The undo handle, rendered as the bare contract string. An entry without
+    // one can only be undone as "whatever ran last".
+    const manifest = entry.manifestId ? `\`${entry.manifestId}\`` : "-";
 
-    markdown += `| ${timestamp} | ${entry.operation} | ${entry.source} | ${statusEmoji} ${entry.status} | ${duration} | ${files} |\n`;
+    markdown += `| ${timestamp} | ${entry.operation} | ${entry.source} | ${statusEmoji} ${entry.status} | ${duration} | ${files} | ${manifest} |\n`;
   }
 
   markdown += "\n";
+
+  const undoable = entries.filter((e) => e.manifestId !== undefined);
+  if (undoable.length > 0) {
+    markdown +=
+      "Pass an id from the Undo Manifest column to `undo_last_operation` to undo that specific operation.\n\n";
+  }
 
   const errorEntries = entries.filter(
     (e) => e.status === "error" || e.status === "partial",
