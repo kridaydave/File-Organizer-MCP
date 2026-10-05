@@ -54,9 +54,31 @@ These hold for every feature and are the most common source of a wrong turn.
 
 ## Coverage
 
-The map covers 8 of the 8 user-facing capability groups and names all 24 tools.
-A tool that exists but appears in no file above is a tool no agent knows how to
-prove. After adding or renaming a tool, update this index and the matching file.
+The map covers 8 of the 8 user-facing capability groups. It does **not** yet name
+every registered tool. Run `node $C tools` for the live list and treat anything
+missing from the files above as a gap to close, not as a tool that needs no proof.
+
+Tools with no entry here yet:
+
+- `disk_usage_by_category`
+- `export_config`
+- `find_empty_directories`
+- `find_old_files`
+- `organize_by_date`
+- `preview_delete_duplicates`
+- `quarantine_files`
+- `restore_quarantine`
+- `search_history`
+- `sensitive_scan`
+- `validate_organization_plan`
+- `verify_integrity`
+
+`export_report` is covered by `inspect.md`. A tool that exists but appears in no
+file above is a tool no agent knows how to prove. `sensitive_scan` and
+`verify_integrity` are the sharpest gaps, because AGENTS.md sends you here
+whenever you touch the validator or manifest integrity and there was no entry to
+land on. After adding or renaming a tool, update this index and the matching
+file, and drop the name from the list above in the same commit.
 
 `scripts/control-file-organizer.mjs doctor` confirms the advertised tool count,
 which is the cheapest way to catch a registry change that was never documented.

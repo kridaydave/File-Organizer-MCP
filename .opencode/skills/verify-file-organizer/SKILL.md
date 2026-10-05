@@ -1,6 +1,6 @@
 ---
 name: verify-file-organizer
-description: Drive the real File Organizer MCP server over stdio and prove what it did, hermetically. Use when changing a tool, service, path validator, organizer, or rollback path in File-Organizer-MCP and you must confirm real behavior rather than infer it from a passing unit test. Also use to enumerate the 24 tools, read a tool's schema, and check which directories a given config actually permits.
+description: Drive the real File Organizer MCP server over stdio and prove what it did, hermetically. Use when changing a tool, service, path validator, organizer, or rollback path in File-Organizer-MCP and you must confirm real behavior rather than infer it from a passing unit test. Also use to enumerate every registered tool, read a tool's schema, and check which directories a given config actually permits.
 ---
 
 # Verify File Organizer
@@ -23,7 +23,7 @@ Every subcommand prints JSON on stdout and keeps stdout free of diagnostics.
 C=.opencode/skills/verify-file-organizer/scripts/control-file-organizer.mjs
 
 node $C doctor          # is this instance worth driving?
-node $C tools           # all 24 tools, one line each
+node $C tools           # every registered tool, one line each
 node $C tools --filter organize
 node $C schema organize_files   # input schema plus honest annotations
 node $C sandbox --fresh # recreate fixtures, print the paths

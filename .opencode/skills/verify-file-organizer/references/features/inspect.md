@@ -10,11 +10,14 @@ Read-only. Nothing here mutates the filesystem.
 - `batch_read_files`: several files in one round trip.
 - `inspect_metadata`: EXIF for images, ID3 for audio.
 - `find_largest_files`: the space hogs.
+- `export_report`: all of the above as one durable document, written only when
+  you pass `output_path`.
 
 ## How to get to it (client POV)
 
 Any of these with a `directory` or `path` argument. All are
-`readOnlyHint: true`, so a client may auto-approve them.
+`readOnlyHint: true` except `export_report`, which writes when given an
+`output_path`, so a client may auto-approve the rest but not that one blindly.
 
 ## Driving it
 
@@ -43,6 +46,12 @@ a checksum.
 
 ## Gotchas
 
+- **`export_report` never overwrites.** The write uses `wx`, so a second call at
+  the same `output_path` fails with "already exists" and leaves the first file
+  byte-for-byte intact. Delete it or choose another path to retry.
+- **`export_report` writes nothing without `output_path`.** Omit it and the report
+  comes back in the response, so a proof that "produced a report" must check
+  `written: false` rather than looking for a file on disk.
 - **`include_subdirs` defaults to false.** A scan of the fixture root without it
   reports 3 of 11 files. This is the single most common way to think the scanner
   is broken. Eleven is the expected recursive count; if you change the fixture
