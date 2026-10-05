@@ -439,13 +439,16 @@ describe("file_organizer_export_report", () => {
 
   it("structuredContent parses against the declared outputSchema in both formats", async () => {
     const ctx = await contextFromDisk();
+    // Resolved once, not per iteration: the loop is over response formats, and
+    // realpath does not depend on the format.
+    const expectedDirectory = await fs.realpath(dataDir);
     for (const response_format of ["json", "markdown"] as const) {
       const result = await handleExportReport({ directory: dataDir, response_format }, ctx);
       const parsed = exportReportOutputSchema.safeParse(result.structuredContent);
       expect(parsed.success).toBe(true);
       if (!parsed.success) continue;
       // Non-default values in every section, so an empty report cannot pass.
-      expect(parsed.data.directory).toBe(await fs.realpath(dataDir));
+      expect(parsed.data.directory).toBe(expectedDirectory);
       expect(parsed.data.scan.total_files).toBe(SEEDED_FILES);
       expect(parsed.data.categories).toHaveLength(3);
       expect(parsed.data.duplicates.total_groups).toBe(2);
