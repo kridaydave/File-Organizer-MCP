@@ -197,7 +197,7 @@ export class RenamingService {
                 break;
 
               case "case":
-                const casingType = ((rule as any).casing ?? rule.conversion ?? "").toLowerCase();
+                const casingType = rule.conversion.toLowerCase();
                 switch (casingType) {
                   case "lower":
                   case "lowercase":
