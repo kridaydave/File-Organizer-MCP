@@ -575,7 +575,8 @@ file_organizer_list_files({
 
 `manifest_id` is the rollback manifest this batch wrote, and is what
 `file_organizer_undo_last_operation` takes to undo this operation specifically.
-It is absent on a dry run and when no manifest could be written.
+It is present only when files actually moved and a manifest was written, so it is
+absent on a dry run and when no manifest could be written.
 
 ```typescript
 {
@@ -609,10 +610,6 @@ file_organizer_organize_files({
   response_format: "value",
 });
 ```
-
-### Output
-
-`manifest_id` (string, optional) is present only when files actually moved and a manifest was written.
 
 ---
 
