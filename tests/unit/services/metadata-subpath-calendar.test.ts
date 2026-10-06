@@ -20,6 +20,7 @@ import { execFileSync } from "node:child_process";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
+import { pathToFileURL } from "node:url";
 import piexifNamespace from "piexifjs";
 import { MetadataService } from "../../../src/services/metadata/service.js";
 import { required } from "../../helpers/safe-index.js";
@@ -76,7 +77,7 @@ function subpathUnderTz(photoPath: string, tz: string): {
 } {
   const script = `
     const { MetadataService } = await import(${JSON.stringify(
-      path.resolve("dist/src/services/metadata/service.js"),
+      pathToFileURL(path.resolve("dist/src/services/metadata/service.js")).href,
     )});
     const service = new MetadataService();
     const subpath = await service.getMetadataSubpath(process.argv[1], "Images");
@@ -91,6 +92,17 @@ function subpathUnderTz(photoPath: string, tz: string): {
     encoding: "utf8",
   });
   return JSON.parse(out) as { subpath: string; offsetMinutes: number };
+}
+
+/**
+ * The subpath's components, whatever separator the platform joined them with.
+ *
+ * `getMetadataSubpath` builds its answer with `path.join`, so the string is
+ * `2024/05` on Linux and `2024\05` on Windows. The calendar is the thing under
+ * test, not the separator, so assert on the parts.
+ */
+function asParts(subpath: string): string[] {
+  return subpath.split(/[\\/]/);
 }
 
 describe("MetadataService.getMetadataSubpath EXIF calendar", () => {
@@ -119,28 +131,40 @@ describe("MetadataService.getMetadataSubpath EXIF calendar", () => {
     const photo = path.join(testDir, "photo.jpg");
     await fs.writeFile(photo, jpegTakenAt("2024:05:01 00:30:00"));
 
-    expect(subpathUnderTz(photo, PINNED_TZ).subpath).toBe("2024/05");
+    expect(asParts(subpathUnderTz(photo, PINNED_TZ).subpath)).toEqual([
+      "2024",
+      "05",
+    ]);
   });
 
   it("reads the EXIF calendar in UTC across a year boundary", async () => {
     const photo = path.join(testDir, "photo.jpg");
     await fs.writeFile(photo, jpegTakenAt("2024:01:01 00:30:00"));
 
-    expect(subpathUnderTz(photo, PINNED_TZ).subpath).toBe("2024/01");
+    expect(asParts(subpathUnderTz(photo, PINNED_TZ).subpath)).toEqual([
+      "2024",
+      "01",
+    ]);
   });
 
   it("agrees with the date organizer on an afternoon timestamp", async () => {
     const photo = path.join(testDir, "photo.jpg");
     await fs.writeFile(photo, jpegTakenAt("2024:05:15 12:00:00"));
 
-    expect(subpathUnderTz(photo, PINNED_TZ).subpath).toBe("2024/05");
+    expect(asParts(subpathUnderTz(photo, PINNED_TZ).subpath)).toEqual([
+      "2024",
+      "05",
+    ]);
   });
 
   it("agrees with the date organizer under a zone east of Greenwich", async () => {
     const photo = path.join(testDir, "photo.jpg");
     await fs.writeFile(photo, jpegTakenAt("2024:05:01 23:30:00"));
 
-    expect(subpathUnderTz(photo, "Pacific/Kiritimati").subpath).toBe("2024/05");
+    expect(asParts(subpathUnderTz(photo, "Pacific/Kiritimati").subpath)).toEqual([
+      "2024",
+      "05",
+    ]);
   });
 
   it("still reads an EXIF-less photo as undated rather than inventing a folder", async () => {
