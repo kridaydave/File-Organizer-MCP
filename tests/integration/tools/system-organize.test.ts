@@ -204,6 +204,36 @@ describe("System Organization Tool - Integration Tests", () => {
       expect(result.content[0].text).toContain("No files were actually moved");
     });
 
+    it("should not name a manifest id that no run wrote", async () => {
+      // A dry run moves nothing, so it writes no manifest, yet it used to mint
+      // a random UUID and print it as an undo handle. An agent that pasted that
+      // id into undo_last_operation got manifest-not-found for an operation
+      // that had never run.
+      const sandboxHome = path.join(baseTempDir, "dry-run-home");
+      const downloads = path.join(sandboxHome, "Downloads");
+      await fs.mkdir(downloads, { recursive: true });
+      await fs.writeFile(path.join(downloads, "song.mp3"), "audio");
+
+      const realHomedir = os.homedir;
+      os.homedir = () => sandboxHome;
+      try {
+        const result = await handleSystemOrganization({
+          source_dir: "Downloads",
+          dry_run: true,
+          use_system_dirs: false,
+          response_format: "json",
+        });
+
+        const structured = result.structuredContent as
+          | { undoManifest?: { manifestId?: string; operations?: unknown[] } }
+          | undefined;
+        expect(structured?.undoManifest?.operations).toHaveLength(1);
+        expect(structured?.undoManifest?.manifestId).toBeUndefined();
+      } finally {
+        os.homedir = realHomedir;
+      }
+    });
+
     it("should include file categorization in dry run output", async () => {
       await fs.writeFile(path.join(testDownloadsDir, "song.mp3"), "audio");
       await fs.writeFile(path.join(testDownloadsDir, "photo.jpg"), "image");
@@ -537,7 +567,7 @@ describe("System Organization Tool - Integration Tests", () => {
   });
 
   describe("Undo Manifest", () => {
-    it("should create undo manifest for operations", async () => {
+    it("should return the planned operations for a real run", async () => {
       await fs.writeFile(path.join(testDownloadsDir, "file.mp3"), "audio");
 
       const service = new SystemOrganizeService();
@@ -547,9 +577,12 @@ describe("System Organization Tool - Integration Tests", () => {
         useSystemDirs: false,
       });
 
-      expect(result.undoManifest).toBeDefined();
+      // The service plans the operations; it does not write the manifest. The
+      // id belongs to the handler, which is the only layer that creates one, so
+      // asserting it here would pin the placeholder this call no longer makes.
+      // tests/unit/services/v5-regressions.test.ts proves the handler's id
+      // resolves to a manifest on disk.
       expect(result.undoManifest?.operations).toHaveLength(1);
-      expect(result.undoManifest?.manifestId).toBeDefined();
     });
 
     it("should include undo manifest even in dry run mode", async () => {

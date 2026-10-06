@@ -330,7 +330,7 @@ export async function handleSystemOrganization(
       );
     }
 
-    if (result.undoManifest && result.undoManifest.operations.length > 0) {
+    if (result.undoManifest?.manifestId) {
       lines.push("## Undo Information");
       lines.push(`- **Manifest ID:** ${result.undoManifest.manifestId}`);
       lines.push(`- **Operations:** ${result.undoManifest.operations.length}`);

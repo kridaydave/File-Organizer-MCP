@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- **A dry run reported an undo handle for work it never did** — the system
+  organizer minted a random manifest id whether or not anything ran, so a
+  `dry_run: true` response (and its markdown) named an "Undo Information /
+  Manifest ID" that pointed at no manifest on disk. Pasting that id into
+  `undo_last_operation` returned "Manifest not found" for an operation that had
+  never run. The service now plans operations without minting an id, and the id
+  is reported only once the handler has written the manifest that owns it.
 - **Duplicate detection no longer hides the files it skipped** — files over the
   100MB hashing cap were dropped with a bare `continue` and no record, so the
   largest and most expensive-to-miss files (videos, ISOs) were the ones silently

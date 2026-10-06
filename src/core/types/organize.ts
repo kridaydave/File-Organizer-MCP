@@ -276,7 +276,7 @@ export interface SystemOrganizeResult {
     category: string;
   }>;
   undoManifest?: {
-    manifestId: string;
+    manifestId?: string;
     operations: Array<{ from: string; to: string; timestamp: string }>;
   };
 }
