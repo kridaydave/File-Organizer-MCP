@@ -353,7 +353,7 @@ export class RollbackService {
             "utf-8",
           );
           const parsed: unknown = JSON.parse(content);
-          if (typeof parsed !== "object" || parsed === null) {
+          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
             logger.error(
               `Skipping rollback manifest ${file}: not a manifest object`,
             );

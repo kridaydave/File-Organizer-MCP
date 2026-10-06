@@ -108,4 +108,21 @@ describe('Rollback Service', () => {
 
         expect(manifests.map((m) => m.id)).toEqual([manifestId]);
     });
+
+    it('should skip a manifest file whose JSON is an array', async () => {
+        const src = path.join(testDir, 'kept.txt');
+        const dest = path.join(testDir, 'kept-moved.txt');
+        await fs.writeFile(src, 'content');
+
+        const manifestId = await rollbackService.createManifest('valid manifest', [
+            { type: 'move', originalPath: src, currentPath: dest, timestamp: Date.now() }
+        ]);
+
+        await fs.writeFile(path.join(testDir, 'not-a-manifest.json'), '[{"id":"nope"}]');
+
+        const manifests = await rollbackService.listManifests();
+
+        expect(manifests.length).toBe(1);
+        expect(manifests.map((m) => m.id)).toStrictEqual([manifestId]);
+    });
 });
