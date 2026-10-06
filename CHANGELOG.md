@@ -4,17 +4,19 @@
 
 ### Fixed
 
-- **The photo organizer filed a just-after-midnight shot under the previous
-  month** — `getDateFolderName` read the EXIF calendar in local time, but
-  exif-parser anchors EXIF timestamps to UTC because a camera records wall-clock
-  time with no offset. On any machine behind UTC, `file_organizer_organize_photos`
-  moved a photo taken at 00:30 on 1 May into April, and a New Year's Eve photo
-  into the previous year, while the date organizer read the same value in UTC
-  and filed it correctly. The folder is now derived from the source of the date:
-  EXIF is read in UTC, and the `birthtime` fallback stays in local time because
-  a filesystem timestamp is a true instant rather than a camera wall clock.
-  `getDateFolderName` takes the date paired with its source (`PhotoDate`) so the
-  two cannot be passed apart, which is the shape `dateFolder()` already uses.
+- **A photo taken just after midnight was filed under the previous month** —
+  two readers of the EXIF date disagreed about the calendar.
+  `MetadataService.getMetadataSubpath` read it in the local calendar while
+  `getDateFolderName` and `dateFolder()` read it in UTC, so on any machine behind
+  UTC a photo taken in the first hours of a day was filed under the previous
+  month, and a New Year's Eve photo under the previous year.
+  `file_organizer_inspect_metadata` reported `Images/2024/04/midnight.jpg` for a
+  photo whose EXIF reads `2024:05:01 00:30`. Both readers now use UTC. The
+  folder is derived from the source of the date: EXIF is read in UTC, and the
+  `birthtime` fallback stays in local time because a filesystem timestamp is a
+  true instant rather than a camera wall clock. `getDateFolderName` takes the
+  date paired with its source (`PhotoDate`) so the two cannot be passed apart,
+  which is the shape `dateFolder()` already uses.
 
 - **A dry run reported an undo handle for work it never did** — the system
   organizer minted a random manifest id whether or not anything ran, so a

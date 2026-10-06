@@ -76,8 +76,11 @@ export class MetadataService {
 
     if (category === "Images" || category === "Videos") {
       if (metadata.date && !isNaN(metadata.date.getTime())) {
-        const year = metadata.date.getFullYear().toString();
-        const month = (metadata.date.getMonth() + 1)
+        // exif-parser anchors EXIF dates to UTC because a camera records
+        // wall-clock time with no offset, so read the calendar in UTC to get the
+        // day it recorded. Same rule as dateFolder(), which organizes photos.
+        const year = metadata.date.getUTCFullYear().toString();
+        const month = (metadata.date.getUTCMonth() + 1)
           .toString()
           .padStart(2, "0");
         subpath = path.join(year, month);
