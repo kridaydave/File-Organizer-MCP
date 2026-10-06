@@ -352,7 +352,14 @@ export class RollbackService {
             path.join(this.storageDir, file),
             "utf-8",
           );
-          manifests.push(JSON.parse(content));
+          const parsed: unknown = JSON.parse(content);
+          if (typeof parsed !== "object" || parsed === null) {
+            logger.error(
+              `Skipping rollback manifest ${file}: not a manifest object`,
+            );
+            continue;
+          }
+          manifests.push(parsed as RollbackManifest);
         } catch (e) {
           logger.error(`Failed to parse rollback manifest ${file}: ${e}`);
         }
