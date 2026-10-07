@@ -1,11 +1,63 @@
 name: CI/CD Pipeline
 
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
+# A push to a PR branch fires both `push` and `pull_request`, so one commit used
+# to run the whole pipeline twice. PR runs cancel their predecessor; main never
+# cancels, so a merge to main always gets a full run.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
+  # lint, build and typecheck are platform-independent, so they belong here
+  # rather than in all six matrix lanes below, where each repeated them.
+  # `test:security:static` reads dist/, so it follows the build.
+  static:
+    name: Static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Proves the merge gate still asks about every job below, and that each
+      # one has a timeout rather than sitting on the runner for six hours.
+      - name: Check workflow invariants
+        run: npm run check:ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Typecheck src and tests
+        run: npm run typecheck:tests
+
+      - name: Check agent docs still point at real code
+        run: npm run docs:check
+
+      - name: Run static security analysis
+        run: npm run test:security:static
+
   test:
     name: Test on ${{ matrix.os }} with Node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
@@ -16,6 +68,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node: [20, 22]
 
+    timeout-minutes: 25
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,6 +79,9 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: "npm"
 
+      # tests/setup.ts points jest at .jest-cache. Left in place it shortens
+      # every run after the first; the old workflow restored it and then
+      # deleted it, so it never paid for itself.
       - name: Cache Jest
         uses: actions/cache@v4
         with:
@@ -37,34 +93,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # tests/temp is created by tests/setup.ts, which runs before any suite.
-      # test-fixtures and test-fixtures-e2e were referenced by no test.
-
-      - name: Run linter
-        run: npm run lint
-
+      # The integration suites spawn the real CLI, which is dist/src/index.js,
+      # so a missing build fails them with empty output rather than a clear error.
       - name: Build project
         run: npm run build
-
-      - name: Typecheck src and tests
-        run: npm run typecheck:tests
-
-      - name: Check agent docs still point at real code
-        run: npm run docs:check
-
-      - name: Clean Jest cache (if exists)
-        shell: bash
-        run: |
-          if [ -d ".jest-cache" ]; then
-            echo "Clearing existing Jest cache..."
-            npx jest --clearCache || rm -rf .jest-cache
-          else
-            echo "Jest cache directory not found, skipping clear..."
-          fi
-        continue-on-error: true
-
-      - name: Run security tests & static analysis
-        run: npm run test:security
 
       - name: Run security fuzzing & TOCTOU suite (Ubuntu only)
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
@@ -85,9 +117,14 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
+  # This job used to carry `continue-on-error: true`, so a high severity
+  # advisory could sit open forever and the check stayed green. It now gates.
+  # Level is `high`, not `moderate`: sprintf-js is still vulnerable and fixing
+  # it means a breaking ts-jest bump, which is its own change.
   security:
     name: Security Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -103,16 +140,12 @@ jobs:
         run: npm ci
 
       - name: Run npm audit
-        run: npm audit --audit-level=moderate
-        continue-on-error: true
-
-      - name: Check for outdated dependencies
-        run: npm outdated || true
+        run: npm audit --audit-level=high
 
   build:
     name: Build and Package
     runs-on: ubuntu-latest
-    needs: [test, security]
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -152,6 +185,7 @@ jobs:
   lint-docs:
     name: Lint Documentation
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout code
@@ -170,3 +204,20 @@ jobs:
             CONTRIBUTING.md
             MIGRATION.md
             SECURITY.md
+
+  # One required check, so adding or renaming a job never needs a branch
+  # protection edit. `always()` keeps it reporting when a job below failed or
+  # was cancelled instead of vanishing, which would block forever.
+  check:
+    name: Check
+    if: ${{ always() }}
+    needs: [static, test, security, build, lint-docs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTS" | jq -e 'all(to_entries[]; .value.result == "success")' > /dev/null

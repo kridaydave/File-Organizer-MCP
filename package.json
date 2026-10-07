@@ -23,6 +23,7 @@
     "test:security:gates": "node dist/scripts/security-gates/run-all.js",
     "test:security": "npm run test:security:static && node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit/security_suite.test.ts tests/unit/security_repro.test.ts tests/unit/category_security.test.ts tests/unit/services/v5-regressions.test.ts tests/unit/services/adversarial-deep-audit.test.ts tests/unit/services/adversarial-deep-audit-2.test.ts tests/unit/services/adversarial-tool-gates.test.ts",
     "verify:all": "npm run build && npm run lint && npm run typecheck:tests && npm run docs:check && npm run test:security && npm test",
+    "check:ci": "node .github/scripts/check-ci.mjs",
     "setup": "node dist/src/tui/index.js",
     "postinstall": "node scripts/postinstall.cjs",
     "prepare": "node scripts/prepare.cjs",
@@ -37,7 +38,7 @@
     "docs:check": "npm run docs:check:citations && npm run docs:check:tool-count",
     "docs:generate": "node scripts/generate-docs.js",
     "docs:sync": "npm run build && node scripts/sync-tool-docs.mjs",
-"gc:worktrees": "node scripts/gc-worktrees.mjs",
+    "gc:worktrees": "node scripts/gc-worktrees.mjs",
     "gc:worktrees:force": "node scripts/gc-worktrees.mjs --force",
     "clean": "rimraf dist"
   },
@@ -89,7 +90,8 @@
     "rimraf": "^6.1.3",
     "ts-jest": "^29.4.12",
     "typescript": "^5.3.2",
-    "typescript-eslint": "^8.67.0"
+    "typescript-eslint": "^8.67.0",
+    "yaml": "^2.9.1"
   },
   "engines": {
     "node": ">=20.0.0"
