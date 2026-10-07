@@ -332,9 +332,10 @@ export class RollbackService {
    * List available rollbacks
    *
    * Every parse here is unverified. A manifest file is only proven to be this
-   * machine's own record by `getManifest`, which checks its HMAC, so a caller
-   * that acts on a path inside a listed manifest has to route it back through
-   * that method.
+   * machine's own record when its HMAC is checked, so a caller that acts on a
+   * path inside a listed manifest has to verify it first. `getManifest` does
+   * that in one step, and `manifestIntegrityService.verifyManifest` does it for
+   * a manifest already in hand.
    *
    * The security gate this file is exempt from is SEC-001, the direct
    * fs.readFile rule. `getRollbackDirectory()` takes no argument, so the
