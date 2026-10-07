@@ -331,13 +331,17 @@ export class RollbackService {
   /**
    * List available rollbacks
    *
-   * SECURITY JUSTIFICATION (SEC-001):
-   * - storageDir is an internal path constructed in the constructor from process.cwd()
-   *   (line 33: path.join(process.cwd(), ".file-organizer-rollbacks"))
-   * - Files read are NOT user-provided - they're internal manifest files created by this service
-   *   (createManifest method writes JSON files with validated UUID names)
-   * - Path validation happens at other layers: storageDir is hardcoded, filenames are filtered
-   *   for ".json" extension, and rollback() validates UUID format before reading
+   * Every parse here is unverified. A manifest file is only proven to be this
+   * machine's own record when its HMAC is checked, so a caller that acts on a
+   * path inside a listed manifest has to verify it first. `getManifest` does
+   * that in one step, and `manifestIntegrityService.verifyManifest` does it for
+   * a manifest already in hand.
+   *
+   * The security gate this file is exempt from is SEC-001, the direct
+   * fs.readFile rule. `getRollbackDirectory()` takes no argument, so the
+   * directory is the config dir's rollbacks folder, except under jest where it
+   * falls back to the cwd. A test or an embedding caller may still pass its own
+   * storageDir to the constructor.
    */
   async listManifests(): Promise<RollbackManifest[]> {
     if (!(await fileExists(this.storageDir))) return [];
@@ -446,12 +450,9 @@ export class RollbackService {
    * @throws {Error} When manifest JSON parsing fails
    * @throws {Error} When file path validation fails for security reasons
    *
-   * SECURITY JUSTIFICATION (SEC-001):
-   * - storageDir is an internal path constructed in the constructor from process.cwd()
-   *   (line 33: path.join(process.cwd(), ".file-organizer-rollbacks"))
-   * - File read is NOT user-provided - it's an internal manifest file created by this service
-   * - Path validation happens at other layers: storageDir is hardcoded, manifestId is validated
-   *   as UUID format (line 105-111) before being used to construct the file path
+   * This file is exempt from SEC-001, the direct fs.readFile gate. `getManifest`
+   * validates the id as a UUID before joining it onto the storage directory, so
+   * the path handed to fs is built only from an already-safe value.
    */
   async rollback(
     manifestId: string,
