@@ -158,28 +158,28 @@ describe("PhotoOrganizerService", () => {
     });
 
     it("formats a date as YYYY/MM/DD", () => {
-      const date = new Date(2020, 4, 10);
+      const date = { instant: new Date(2020, 4, 10), source: "mtime" as const };
       expect(service.getDateFolderName(date, "YYYY/MM/DD", "Unknown Date")).toBe(
         path.join("2020", "05", "10"),
       );
     });
 
     it("formats a date as YYYY-MM-DD", () => {
-      const date = new Date(2020, 4, 10);
+      const date = { instant: new Date(2020, 4, 10), source: "mtime" as const };
       expect(
         service.getDateFolderName(date, "YYYY-MM-DD", "Unknown Date"),
       ).toBe("2020-05-10");
     });
 
     it("formats a date as YYYY/MM", () => {
-      const date = new Date(2020, 4, 10);
+      const date = { instant: new Date(2020, 4, 10), source: "mtime" as const };
       expect(service.getDateFolderName(date, "YYYY/MM", "Unknown Date")).toBe(
         path.join("2020", "05"),
       );
     });
 
     it("formats a date as YYYY", () => {
-      const date = new Date(2020, 4, 10);
+      const date = { instant: new Date(2020, 4, 10), source: "mtime" as const };
       expect(service.getDateFolderName(date, "YYYY", "Unknown Date")).toBe(
         "2020",
       );

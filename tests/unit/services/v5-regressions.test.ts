@@ -307,7 +307,7 @@ describe('v5 Critical Regressions Gate', () => {
 
     it('handles invalid EXIF dates gracefully without producing "NaN/NaN"', () => {
       const photoService = new PhotoOrganizerService();
-      const invalidDate = new Date(NaN);
+      const invalidDate = { instant: new Date(NaN), source: 'exif' as const };
 
       const folderNameYMD = photoService.getDateFolderName(invalidDate, 'YYYY/MM/DD', 'Unknown Date');
       expect(folderNameYMD).toBe('Unknown Date');
