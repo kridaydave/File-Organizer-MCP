@@ -14,6 +14,7 @@ import { sanitizeErrorMessage } from "../../utils/error-handler.js";
 import { loadUserConfig } from "../../config.js";
 import { historyLogger } from "../../services/history-logger.service.js";
 import { runOrganizePass, type OrganizePassResult } from "./organize-pass.js";
+import { OnceSourceSchema, type OnceSource } from "./watch.schemas.js";
 
 export interface OnceFlags {
   directory: string | undefined;
@@ -21,11 +22,17 @@ export interface OnceFlags {
   recursive: boolean;
   json: boolean;
   help: boolean;
+  /** What the pass records on its history row. Defaults to "manual". */
+  source: OnceSource;
 }
 
 /**
  * Parse the flags after `once`. Unknown flags are a usage error rather than a
  * silent no-op, so a typo in a cron line fails loudly.
+ *
+ * Indexed rather than iterated because `--source` consumes the argument after
+ * it. A plain `for...of` would treat that value as a second directory and
+ * reject a perfectly good command line.
  */
 export function parseOnceFlags(args: string[]): OnceFlags | { error: string } {
   const flags: OnceFlags = {
@@ -34,9 +41,11 @@ export function parseOnceFlags(args: string[]): OnceFlags | { error: string } {
     recursive: false,
     json: false,
     help: false,
+    source: "manual",
   };
 
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] as string;
     switch (arg) {
       case "--apply":
         flags.apply = true;
@@ -50,6 +59,19 @@ export function parseOnceFlags(args: string[]): OnceFlags | { error: string } {
       case "--json":
         flags.json = true;
         break;
+      case "--source": {
+        const value = args[++i];
+        const parsed = OnceSourceSchema.safeParse(value);
+        if (!parsed.success) {
+          return {
+            error: value
+              ? `--source must be manual or scheduled, got: ${value}`
+              : "--source needs a value",
+          };
+        }
+        flags.source = parsed.data;
+        break;
+      }
       case "--help":
       case "-h":
         flags.help = true;
@@ -80,6 +102,10 @@ Options:
   --dry-run       Plan only. This is the default. The flag is accepted so the
                   mode can be spelled out in a scheduler config.
   --recursive     Include subdirectories. Default is the top directory only.
+  --source VALUE  Label the pass record manual or scheduled. Default manual.
+                  A process cannot tell that cron started it, so a crontab
+                  line has to say so itself: --source scheduled is what makes
+                  file_organizer_search_history source=scheduled match.
   --json          Print one machine-readable JSON object on stdout and nothing
                   else. Human output (logs, usage, this message) goes to
                   stderr, so stdout stays parseable.
@@ -93,6 +119,8 @@ Examples:
   file-organizer-watch once ~/Downloads --apply      # organize, then exit
   file-organizer-watch once . --apply --recursive
   file-organizer-watch once ~/Downloads --apply --json
+  # from a crontab line, so the history row is labelled scheduled
+  file-organizer-watch once ~/Downloads --apply --source scheduled
 
 Exit codes:
   0  the pass finished and moved nothing (empty directory, nothing to
@@ -282,6 +310,7 @@ export async function once(args: string[]): Promise<void> {
         directory: flags.directory,
         dryRun: !flags.apply,
         includeSubdirs: flags.recursive,
+        source: flags.source,
       },
       { config: loadUserConfig(), history: historyLogger },
     );

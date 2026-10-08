@@ -17,6 +17,7 @@ import { validateStrictPath } from "../../services/path-validator.service.js";
 import type { ConflictStrategy } from "../../core/organize/organizer.js";
 import type { UserConfig } from "../../config.js";
 import type { HistoryLoggerService } from "../../services/history-logger.service.js";
+import type { OnceSource } from "./watch.schemas.js";
 
 export interface OrganizePassOptions {
   /** Directory to organize. Validated through the same path gate the tools use. */
@@ -30,6 +31,13 @@ export interface OrganizePassOptions {
   includeSubdirs?: boolean;
   /** Overrides config.conflictStrategy for this pass. */
   conflictStrategy?: ConflictStrategy;
+  /**
+   * What started this pass, recorded on the history row. Defaults to "manual",
+   * which is true for every caller that is not an OS timer. A process cannot
+   * detect that cron launched it, so the timer has to say so via the
+   * `--source` flag; see OnceSourceSchema for the accepted values.
+   */
+  source?: OnceSource;
 }
 
 export interface OrganizePassContext {
@@ -70,6 +78,7 @@ export async function runOrganizePass(
     dryRun = true,
     includeSubdirs = false,
     conflictStrategy,
+    source = "manual",
   } = options;
 
   const startedAt = Date.now();
@@ -110,7 +119,7 @@ export async function runOrganizePass(
   try {
     await ctx.history.log({
       operation: "file_organizer_organize_files",
-      source: "manual",
+      source,
       status: result.errors.length > 0 ? "partial" : "success",
       durationMs: Date.now() - startedAt,
       filesProcessed: result.moved,

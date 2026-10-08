@@ -57,3 +57,16 @@ export type UnwatchDirectoryInput = z.infer<typeof UnwatchDirectoryInputSchema>;
 export const ListWatchesInputSchema = z.object({}).merge(CommonParamsSchema);
 
 export type ListWatchesInput = z.infer<typeof ListWatchesInputSchema>;
+
+/**
+ * The `trigger` a pass records on its history row, as the `once` CLI accepts it.
+ *
+ * A process cannot detect that cron started it, so the caller asserts it and
+ * this schema is where the assertion is checked. Same two values as
+ * HistoryEntry.source (`src/services/history-logger.service.ts:23`), reused
+ * deliberately: a third value would have to be threaded through both history
+ * filter schemas and every consumer that reads the field.
+ */
+export const OnceSourceSchema = z.enum(["manual", "scheduled"]);
+
+export type OnceSource = z.infer<typeof OnceSourceSchema>;
