@@ -279,6 +279,35 @@ describe("single-pass organize (once)", () => {
     expect(entry.manifestId).toBeUndefined();
   });
 
+  it("leaves no handle on a row whose manifest write failed", async () => {
+    // The moves and the row both land, the id does not: the organizer reports
+    // the failure in its errors and leaves it undefined. A row that carried an
+    // id here would point undo at a manifest nobody wrote, and the pass would
+    // claim partial rather than success because of it.
+    const writeManifest = jest
+      .spyOn(RollbackService.prototype, "createManifest")
+      .mockRejectedValue(new Error("rollback directory refused the write"));
+
+    try {
+      const result = await runOrganizePass(
+        { directory: workDir, dryRun: false },
+        { config: emptyConfig, history },
+      );
+
+      expect(result.moved).toBe(2);
+      expect(result.errors.join("\n")).toContain(
+        "Failed to create rollback manifest",
+      );
+      expect(result.historyLogged).toBe(true);
+
+      const entry = first(await historyRows());
+      expect(entry.manifestId).toBeUndefined();
+      expect(entry.status).toBe("partial");
+    } finally {
+      writeManifest.mockRestore();
+    }
+  });
+
   it("leaves subdirectories alone unless recursive is asked for", async () => {
     const result = await runOrganizePass(
       { directory: workDir, dryRun: false, includeSubdirs: true },
