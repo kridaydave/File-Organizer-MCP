@@ -27,6 +27,7 @@ import {
 } from "./manifest-integrity.js";
 import { safeAtomicMove } from "../io/atomic-move.js";
 import { HashCalculatorService } from "../hash/hasher.js";
+import { ManifestLockService } from "./manifest-lock.js";
 
 /**
  * How much file content one manifest may re-read to fill in per-file hashes.
@@ -109,6 +110,26 @@ export function overlappingPathCount(
   return shared;
 }
 
+/**
+ * A manifest as `listManifests` reports it: the parsed file, plus whether it
+ * verified.
+ *
+ * The file is listed whether it verified or not, and the flag is what lets a
+ * caller tell the difference. A manifest whose signature or hash does not
+ * check out is kept in the list rather than filtered out, because a file that
+ * appears from nowhere in the rollback directory is evidence about the
+ * install, and hiding it would destroy the only trace. `getManifest` is still
+ * the only thing that may hand a manifest to code that reads paths from it.
+ */
+export type ListedManifest = RollbackManifest & {
+  /**
+   * True when `verifyManifest` accepted this file's version, content hash and
+   * HMAC. False means the file is not this machine's record: treat it as a
+   * foreign object, never as an undo target.
+   */
+  verified: boolean;
+};
+
 /** How much of a batch `createManifest` spends on content hashes. */
 export interface ManifestIntegrityOptions {
   /**
@@ -121,14 +142,21 @@ export interface ManifestIntegrityOptions {
 export class RollbackService {
   private storageDir: string;
   private pathValidator: PathValidatorService;
+  private manifestLock: ManifestLockService;
 
-  constructor(storageDir: string = getRollbackDirectory()) {
+  constructor(
+    storageDir: string = getRollbackDirectory(),
+    lockTimeoutMs?: number,
+  ) {
     this.storageDir = storageDir;
     // Do not restrict rollback paths to CWD. Manifests may reference any
     // directory that was permitted at organize-time (e.g. Downloads, Desktop).
     // Security is enforced by manifest HMAC integrity and the global
     // path-security whitelist (Layer 4.5) inside PathValidatorService.
     this.pathValidator = new PathValidatorService();
+    // Its own lock for its own directory, not the history lock: that one
+    // serializes writers to operations.jsonl, a different resource.
+    this.manifestLock = new ManifestLockService(storageDir, lockTimeoutMs);
   }
 
   private async ensureStorage(): Promise<void> {
@@ -311,13 +339,18 @@ export class RollbackService {
    * Delete a spent manifest. Quarantine calls this once a restore has landed,
    * so a finished quarantine no longer offers itself as a restore target the
    * same way rollback() retires the manifest it just applied.
+   *
+   * Locked because deleting a manifest another process is mid-undo on is how
+   * two undoers end up acting on the same batch.
    */
   async removeManifest(manifestId: string): Promise<void> {
     if (!MANIFEST_ID_PATTERN.test(manifestId)) {
       throw new ValidationError(`Invalid manifest ID format: ${manifestId}`);
     }
 
-    await this.unlinkManifestFile(manifestId);
+    await this.manifestLock.runExclusive(async () => {
+      await this.unlinkManifestFile(manifestId);
+    });
   }
 
   /**
@@ -329,13 +362,15 @@ export class RollbackService {
   }
 
   /**
-   * List available rollbacks
+   * List the manifests on disk, newest first, each with the verdict on its own
+   * integrity.
    *
-   * Every parse here is unverified. A manifest file is only proven to be this
-   * machine's own record when its HMAC is checked, so a caller that acts on a
-   * path inside a listed manifest has to verify it first. `getManifest` does
-   * that in one step, and `manifestIntegrityService.verifyManifest` does it for
-   * a manifest already in hand.
+   * Every file is listed, verified or not, and the `verified` flag is what a
+   * caller reads before it acts on an id. Filtering the unverified ones out
+   * instead would make a tampered file disappear, and a file that appears from
+   * nowhere in the rollback directory is evidence about the install worth
+   * keeping. `getManifest` is still the only thing that may hand paths to a
+   * caller, and it re-verifies rather than trusting this flag.
    *
    * The security gate this file is exempt from is SEC-001, the direct
    * fs.readFile rule. `getRollbackDirectory()` takes no argument, so the
@@ -343,11 +378,11 @@ export class RollbackService {
    * falls back to the cwd. A test or an embedding caller may still pass its own
    * storageDir to the constructor.
    */
-  async listManifests(): Promise<RollbackManifest[]> {
+  async listManifests(): Promise<ListedManifest[]> {
     if (!(await fileExists(this.storageDir))) return [];
 
     const files = await fs.readdir(this.storageDir);
-    const manifests: RollbackManifest[] = [];
+    const manifests: ListedManifest[] = [];
 
     for (const file of files) {
       if (file.endsWith(".json")) {
@@ -363,7 +398,11 @@ export class RollbackService {
             );
             continue;
           }
-          manifests.push(parsed as RollbackManifest);
+          const manifest = parsed as RollbackManifest;
+          manifests.push({
+            ...manifest,
+            verified: manifestIntegrityService.verifyManifest(manifest).valid,
+          });
         } catch (e) {
           logger.error(`Failed to parse rollback manifest ${file}: ${e}`);
         }
@@ -399,7 +438,9 @@ export class RollbackService {
 
     const conflicts: NewerConflict[] = [];
     for (const manifest of candidates) {
-      const verified = manifestIntegrityService.verifyManifest(manifest).valid;
+      // The flag is the same verification this loop used to perform itself,
+      // computed once by the list that already read every file.
+      const verified = manifest.verified;
       const overlappingPaths = overlappingPathCount(target, manifest);
       if (!verified || overlappingPaths > 0) {
         conflicts.push({ id: manifest.id, overlappingPaths, verified });
@@ -458,6 +499,18 @@ export class RollbackService {
     manifestId: string,
   ): Promise<{ success: number; failed: number; errors: string[] }> {
     await this.ensureStorage();
+
+    // The whole read-check-apply-delete cycle is one critical section. Without
+    // it, two undoes racing the same manifest both pass getManifest, both apply
+    // their actions, and both unlink, so one batch of moves is spent twice. A
+    // loser that finds the manifest already gone fails cleanly inside
+    // getManifest instead of tearing a half-applied batch.
+    return this.manifestLock.runExclusive(() => this.applyRollback(manifestId));
+  }
+
+  private async applyRollback(
+    manifestId: string,
+  ): Promise<{ success: number; failed: number; errors: string[] }> {
     // getManifest validates the id as a UUID before it is joined onto the
     // storage directory, so filePath is only built from an already-safe value.
     const manifest = await this.getManifest(manifestId);

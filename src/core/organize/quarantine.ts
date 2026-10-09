@@ -385,7 +385,8 @@ export class QuarantineService {
 
   /**
    * Load one manifest by id and check its integrity before any path in it is
-   * trusted. listManifests returns newest first.
+   * trusted. listManifests returns newest first, and the flag it reports is the
+   * verdict this used to compute for itself.
    */
   private async readManifest(manifestId: string): Promise<RollbackManifest> {
     if (!MANIFEST_ID_PATTERN.test(manifestId)) {
@@ -400,8 +401,7 @@ export class QuarantineService {
       );
     }
 
-    const verification = manifestIntegrityService.verifyManifest(manifest);
-    if (!verification.valid) {
+    if (!manifest.verified) {
       throw new ValidationError(
         "Quarantine manifest failed its integrity check",
       );

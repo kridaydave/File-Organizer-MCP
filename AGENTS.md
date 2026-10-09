@@ -277,23 +277,25 @@ so read this before assuming a tool is safe because it calls `validateStrictPath
 - **Six reserved-name implementations disagree** on Windows edge cases, and
   `src/core/detect/tokens.ts` is the most correct. Prefer it if you touch that
   logic. Seven is worse than two.
-- **`RollbackService` takes no lock at all.** `HistoryLoggerService` serializes
-  every `operations.jsonl` writer through an `operations.lock` file
-  (`src/services/history-logger.service.ts:84`), and that is the only lock in
-  the server. `RollbackService.listManifests` (`src/core/organize/rollback.ts`)
-  and `rollback` read and delete manifest files unguarded, so two processes
-  undoing at once can race on the same manifest file. This was theoretical
-  while only the newest manifest was reachable by id. It is reachable now that
-  ids are listed to users, so treat a missing rollback lock as a real gap
-  rather than a stylistic one. Do not bolt the history lock onto
-  `RollbackService` to close it: that would serialize two different resources
-  and make the two files contend. Separate the shared state first.
-- **`listManifests` parses every manifest without verifying signatures**, unlike
-  `getManifest`, which checks the HMAC and the content hash. That was fine
-  while the list only chose a default target. Now that the ids are shown to a
-  user, a manifest file nobody signed is a value a user can paste back in, so
-  every caller that acts on a listed id has to route through `getManifest`.
-  Anything that acts on a listed manifest's *contents* without that is the hole.
+- **The rollback directory has its own lock, and it is not the history one.**
+  `ManifestLockService` (`src/core/organize/manifest-lock.ts`) holds a
+  `manifests.lock` in the rollback directory, copied from the token-and-staleness
+  protocol in `HistoryLoggerService`. `rollback` and `removeManifest` run inside
+  `runExclusive`, so the read-check-apply-delete cycle is one critical section.
+  Do not fold this into `operations.lock`: that serializes a different resource,
+  and the two files would contend for a reason no reader could name. Its own
+  file is named `manifests.lock` on purpose, so `listManifests` (which reads
+  `.json` only) does not pick it up.
+- **`listManifests` reports integrity instead of staying silent about it.** It
+  still lists every file, verified or not, but each entry now carries a
+  `verified` flag from `manifestIntegrityService.verifyManifest`. Kriday chose
+  flagging over filtering: hiding an unverified file destroys the only trace
+  that something appeared in the rollback directory, and an agent cannot warn a
+  user about a manifest it cannot see. The flag is not a substitute for
+  `getManifest`, which re-verifies and is still the only thing that may hand
+  paths to a caller. `findNewerConflicts` reads the flag and treats an
+  unverified candidate as a conflict, since ignoring it would let a forged
+  manifest hide a real overlap.
 
 ## Proving a change
 

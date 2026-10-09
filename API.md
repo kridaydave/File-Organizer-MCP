@@ -1057,10 +1057,12 @@ file_organizer_system_organize({
 
 | Parameter         | Type   | Description                                                              | Default    |
 | ----------------- | ------ | ------------------------------------------------------------------------ | ---------- |
-| `manifest_id`     | string | ID of the operation to undo. Omit to undo the most recent operation.      | -          |
+| `manifest_id`     | string | ID of the operation to undo, a UUID in 8-4-4-4-12 form. Omit to undo the most recent operation. | -          |
 | `response_format` | string | 'json' or 'markdown'                                                     | 'markdown' |
 
-A refusal returns `success: 0` and `failed: 1` with an error naming the conflicting manifest ids. No file is moved when that happens.
+A malformed `manifest_id` is a validation error rather than a lookup miss, so a typo is reported as a typo instead of arriving back as "manifest not found".
+
+A refusal returns `success: 0` and `failed: 1` with an error naming the conflicting manifest ids. No file is moved when that happens. The read-apply-delete cycle runs under a lock on the rollback directory, so two concurrent undoes of the same id cannot both succeed: one wins, and the other is told the manifest is already spent.
 
 ### Example
 

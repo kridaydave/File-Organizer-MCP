@@ -4,6 +4,28 @@
 
 ### Fixed
 
+- **An unsigned manifest could be listed as an undo target.** `listManifests`
+  parsed every file in the rollback directory with no signature check, so once
+  manifest ids were shown to a user, a manifest file nobody signed became a
+  value they could paste back into `undo_last_operation`. The list now carries a
+  `verified` flag per entry and keeps unverified files visible rather than
+  hiding them, so tampering stays evidence instead of becoming a silent gap.
+  `getManifest` remains the only path that hands manifest paths to a caller, and
+  a newer unverified manifest still blocks an out-of-order undo rather than
+  being ignored.
+- **Two undoes of the same manifest could both succeed.** `RollbackService`
+  read a manifest, acted on every path in it, and deleted the file with nothing
+  holding other processes off, so two undoes racing the same manifest both
+  passed the read and both unlinked. The read-apply-delete cycle now runs under
+  a `manifests.lock` in the rollback directory, a lock of its own rather than a
+  share of the history lock, so exactly one undo wins and the loser is told the
+  manifest is spent.
+- **A malformed `manifest_id` read as a lookup failure.** The field was a bare
+  `z.string()`, so a typo travelled to the filesystem and came back as "manifest
+  not found", which reads like a real undo-history problem. It is validated as a
+  UUID at the schema layer and in the tool's hand-written JSON schema, in both
+  `undo_last_operation` and `verify_integrity`.
+
 - **A photo taken just after midnight was filed under the previous month** —
   two readers of the EXIF date disagreed about the calendar.
   `MetadataService.getMetadataSubpath` read it in the local calendar while

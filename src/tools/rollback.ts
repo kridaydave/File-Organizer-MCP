@@ -19,6 +19,16 @@ import {
   verifyIntegrityOutputJsonSchema,
 } from "../schemas/output.js";
 
+/**
+ * The manifest id format as JSON Schema spells a regex.
+ *
+ * The Zod schemas use `MANIFEST_ID_PATTERN` directly, but this file's
+ * hand-written `inputSchema` is what an MCP client reads off the wire. Without
+ * the same pattern here, the client is told it may send an id the server will
+ * reject, which is the drift the repo rules out.
+ */
+const MANIFEST_ID_JSON_PATTERN = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+
 export { UndoLastOperationInputSchema } from "../schemas/organize.js";
 export type { UndoLastOperationInput } from "../schemas/organize.js";
 export const undoLastOperationToolDefinition: ToolDefinition = {
@@ -31,6 +41,7 @@ export const undoLastOperationToolDefinition: ToolDefinition = {
     properties: {
       manifest_id: {
         type: "string",
+        pattern: MANIFEST_ID_JSON_PATTERN,
         description:
           "ID of the operation to undo. Omit to undo the most recent operation.",
       },
@@ -135,6 +146,7 @@ export const verifyIntegrityToolDefinition: ToolDefinition = {
     properties: {
       manifest_id: {
         type: "string",
+        pattern: MANIFEST_ID_JSON_PATTERN,
         description:
           "ID of the operation to verify. If omitted, verifies the last operation.",
       },
