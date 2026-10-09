@@ -27,6 +27,8 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { runOrganizePass } from "../../src/extensions/scheduler/organize-pass.js";
+import { RollbackService } from "../../src/core/organize/rollback.js";
+import { handleUndoLastOperation } from "../../src/tools/rollback.js";
 import {
   ONCE_EXIT,
   failureReport,
@@ -81,6 +83,16 @@ describe("single-pass organize (once)", () => {
 
   async function topLevelFiles(): Promise<string[]> {
     return (await fs.readdir(workDir)).sort();
+  }
+
+  /** Every history row the pass appended, in order. */
+  async function historyRows(): Promise<Record<string, unknown>[]> {
+    return (
+      await fs.readFile(path.join(historyDir, "operations.jsonl"), "utf-8")
+    )
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
   }
 
   it("writes nothing on a dry run and still reports the plan", async () => {
@@ -180,6 +192,86 @@ describe("single-pass organize (once)", () => {
     await expect(
       fs.access(path.join(historyDir, "operations.jsonl")),
     ).rejects.toThrow();
+  });
+
+  it("carries the undo handle on the row of a pass that moved files", async () => {
+    // A scheduled pass was permanently unundoable: the organizer wrote a
+    // manifest, the pass never asked for its id, so the row offered no handle.
+    // Assert the id resolves through getManifest, not just that it exists,
+    // because an id that does not round-trip is not a handle undo can use.
+    await fs.writeFile(path.join(workDir, "song.mp3"), "audio");
+
+    const result = await runOrganizePass(
+      { directory: workDir, dryRun: false },
+      { config: emptyConfig, history },
+    );
+
+    expect(result.moved).toBe(3);
+    expect(result.errors).toEqual([]);
+
+    const manifestId = first(await historyRows()).manifestId;
+    expect(typeof manifestId).toBe("string");
+
+    const manifest = await new RollbackService().getManifest(
+      manifestId as string,
+    );
+    expect(manifest.actions).toHaveLength(3);
+    expect(manifest.actions.map((a) => path.basename(a.originalPath)).sort())
+      .toEqual(["notes.txt", "photo.jpg", "song.mp3"]);
+  });
+
+  it("undo puts every file the pass moved back where it found it", async () => {
+    // The handle is only worth writing into the row if the tool a user would
+    // paste it into actually restores the pass. Drive that tool, on the real
+    // manifest directory the organizer wrote to.
+    await fs.writeFile(path.join(workDir, "song.mp3"), "audio");
+    await runOrganizePass(
+      { directory: workDir, dryRun: false },
+      { config: emptyConfig, history },
+    );
+    const manifestId = first(await historyRows()).manifestId as string;
+
+    const undo = await handleUndoLastOperation({
+      manifest_id: manifestId,
+      response_format: "json",
+    });
+
+    expect(undo.isError).toBeUndefined();
+    const parsed = JSON.parse(undo.content[0].text) as {
+      success: number;
+      failed: number;
+    };
+    expect(parsed.failed).toBe(0);
+    expect(parsed.success).toBe(3);
+    const restored = await topLevelFiles();
+    expect(restored).toContain("notes.txt");
+    expect(restored).toContain("photo.jpg");
+    expect(restored).toContain("song.mp3");
+    // Undo moves the files back and leaves the now-empty category folders
+    // (Audio, Documents, Images) standing; it does not clean up the tree.
+    expect(restored).toContain("Audio");
+    expect(restored).toContain("Documents");
+  });
+
+  it("writes no undo handle for a pass that moved nothing", async () => {
+    // Both destinations already taken and the strategy is skip, so the scanner
+    // finds the files and the organizer skips every one. A row that claimed a
+    // manifest here would be a handle to an undo that does nothing.
+    await fs.mkdir(path.join(workDir, "Documents"));
+    await fs.mkdir(path.join(workDir, "Images"));
+    await fs.writeFile(path.join(workDir, "Documents", "notes.txt"), "taken");
+    await fs.writeFile(path.join(workDir, "Images", "photo.jpg"), "taken");
+
+    const result = await runOrganizePass(
+      { directory: workDir, dryRun: false, conflictStrategy: "skip" },
+      { config: emptyConfig, history },
+    );
+
+    expect(result.scanned).toBe(2);
+    expect(result.moved).toBe(0);
+    const entry = first(await historyRows());
+    expect(entry.filesProcessed).toBe(0);
+    expect(entry.manifestId).toBeUndefined();
   });
 
   it("leaves subdirectories alone unless recursive is asked for", async () => {
