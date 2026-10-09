@@ -248,9 +248,12 @@ run succeeded or not.
 Every key is always present, including on failure — a refused path reports the
 same shape with `ok` false, `exitCode` 1, and the reason in `errors`. `ok` is
 true for exit codes 0 and 2. `historyLogged: false` on an applied pass means
-the moves have no undo record. When it is `true`, the history row also carries
-the rollback manifest id, so `file_organizer_undo_last_operation` can reverse
-the pass file by file.
+no history row was written for the moves: nothing names that pass in history
+and there is no id to undo it by, though the manifest may still be on disk.
+When it is `true`, the row carries the rollback manifest id whenever the pass
+managed to write one, so `file_organizer_undo_last_operation` can reverse the
+pass file by file. A pass whose manifest write failed has a row with no id:
+the pass is in history, but it cannot be undone by handle.
 
 On a pass that ran, `directory` is the **resolved** path, not the argument
 verbatim — the same convention every tool uses (`file_organizer_organize_files`

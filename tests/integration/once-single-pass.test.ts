@@ -229,7 +229,12 @@ describe("single-pass organize (once)", () => {
       { directory: workDir, dryRun: false },
       { config: emptyConfig, history },
     );
-    const manifestId = first(await historyRows()).manifestId as string;
+    const manifestId = first(await historyRows()).manifestId;
+    // Without this assertion the test passes with the fix reverted:
+    // handleUndoLastOperation falls back to the newest manifest, which is the
+    // one this pass just wrote, so undo restores the files even when the row
+    // carries no id at all. The cast would hide that from typecheck.
+    expect(typeof manifestId).toBe("string");
 
     const undo = await handleUndoLastOperation({
       manifest_id: manifestId,
