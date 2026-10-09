@@ -131,6 +131,55 @@ describe("single-pass organize (once)", () => {
     expect(entry.operation).toBe("file_organizer_organize_files");
     expect(entry.filesProcessed).toBe(2);
     expect(entry.status).toBe("success");
+    // No --source on this call, so the row reads as a human-triggered pass.
+    expect(entry.source).toBe("manual");
+  });
+
+  it("records source scheduled when the caller says a timer started it", async () => {
+    // Assert on the row, not on a spy: the consumer of this value is
+    // file_organizer_search_history filtering source=scheduled, which reads
+    // the file. A spy would pass while the field stayed unreachable.
+    const result = await runOrganizePass(
+      { directory: workDir, dryRun: false, source: "scheduled" },
+      { config: emptyConfig, history },
+    );
+
+    expect(result.historyLogged).toBe(true);
+
+    const lines = (
+      await fs.readFile(path.join(historyDir, "operations.jsonl"), "utf-8")
+    )
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    const entry = first(lines);
+    expect(entry.source).toBe("scheduled");
+
+    // And the row is actually filterable, which was the whole point: the
+    // history query filters on exactly this field.
+    const scheduled = await history.searchHistory({ source: "scheduled" });
+    expect(scheduled.total).toBe(1);
+    expect(first(scheduled.entries).operation).toBe(
+      "file_organizer_organize_files",
+    );
+    const manual = await history.searchHistory({ source: "manual" });
+    expect(manual.total).toBe(0);
+  });
+
+  it("writes no row for a scheduled dry run", async () => {
+    // The dry-run early return has to stay ahead of the history write, or a
+    // timer that previews every 15 minutes fills the history with rows for
+    // passes that moved nothing.
+    const result = await runOrganizePass(
+      { directory: workDir, source: "scheduled" },
+      { config: emptyConfig, history },
+    );
+
+    expect(result.dryRun).toBe(true);
+    expect(result.historyLogged).toBe(false);
+    await expect(
+      fs.access(path.join(historyDir, "operations.jsonl")),
+    ).rejects.toThrow();
   });
 
   it("leaves subdirectories alone unless recursive is asked for", async () => {
@@ -220,6 +269,7 @@ describe("once flag parsing and exit code", () => {
       recursive: false,
       json: false,
       help: false,
+      source: "manual",
     });
     expect(parseOnceFlags(["/tmp/x", "--apply", "--recursive"])).toEqual({
       directory: "/tmp/x",
@@ -227,6 +277,7 @@ describe("once flag parsing and exit code", () => {
       recursive: true,
       json: false,
       help: false,
+      source: "manual",
     });
     const parsed = parseOnceFlags(["/tmp/x", "--json"]);
     if ("error" in parsed) {
@@ -241,6 +292,37 @@ describe("once flag parsing and exit code", () => {
     });
     expect(parseOnceFlags(["/tmp/a", "/tmp/b"])).toEqual({
       error: "once takes exactly one directory",
+    });
+  });
+
+  it("labels the pass source and defaults to manual", () => {
+    // --source consumes the next argument. A parser that did not know it took a
+    // value would read "scheduled" as a second directory and refuse the line.
+    expect(parseOnceFlags(["/tmp/x", "--apply", "--source", "scheduled"])).toEqual(
+      {
+        directory: "/tmp/x",
+        apply: true,
+        recursive: false,
+        json: false,
+        help: false,
+        source: "scheduled",
+      },
+    );
+    const parsed = parseOnceFlags(["/tmp/x", "--source", "manual"]);
+    if ("error" in parsed) {
+      throw new Error(`Expected parsed flags, got usage error: ${parsed.error}`);
+    }
+    expect(parsed.source).toBe("manual");
+  });
+
+  it("refuses a source value that is not one of the two", () => {
+    expect(parseOnceFlags(["/tmp/x", "--source", "bogus"])).toEqual({
+      error: "--source must be manual or scheduled, got: bogus",
+    });
+    // A crontab line that lost the value must fail, not silently fall back to
+    // manual and report a timer run as a human one.
+    expect(parseOnceFlags(["/tmp/x", "--source"])).toEqual({
+      error: "--source needs a value",
     });
   });
 
@@ -528,6 +610,53 @@ describe("file-organizer-watch once (real CLI)", () => {
       .trim()
       .split("\n");
     expect(entries).toHaveLength(1);
+  }, 30000);
+
+  it("records source scheduled in the history row when the flag is passed", async () => {
+    await seed({ "notes.txt": "hello" });
+
+    const { code } = await runCli([
+      "once",
+      workDir,
+      "--apply",
+      "--source",
+      "scheduled",
+    ]);
+
+    expect(code).toBe(ONCE_EXIT.moved);
+    const entries = (
+      await fs.readFile(path.join(configDir, "operations.jsonl"), "utf-8")
+    )
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(entries).toHaveLength(1);
+    expect(first(entries).source).toBe("scheduled");
+  }, 30000);
+
+  it("defaults the history row to manual and refuses a bogus --source", async () => {
+    await seed({ "notes.txt": "hello" });
+    expect((await runCli(["once", workDir, "--apply"])).code).toBe(
+      ONCE_EXIT.moved,
+    );
+    const entries = (
+      await fs.readFile(path.join(configDir, "operations.jsonl"), "utf-8")
+    )
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(first(entries).source).toBe("manual");
+
+    // A typo in a crontab line must not silently become a manual pass.
+    const { code, err } = await runCli([
+      "once",
+      workDir,
+      "--apply",
+      "--source",
+      "cron",
+    ]);
+    expect(err).toContain("--source must be manual or scheduled, got: cron");
+    expect(code).toBe(ONCE_EXIT.error);
   }, 30000);
 
   it("exits 0 on a dry run, which moved nothing and is not a failure", async () => {
