@@ -120,6 +120,12 @@ export async function runOrganizePass(
     await ctx.history.log({
       operation: "file_organizer_organize_files",
       source,
+      // The organizer wrote a rollback manifest for the moves it executed, so
+      // the row can carry the handle undo needs. Absent on a pass that moved
+      // nothing and on one whose manifest write failed, both of which are
+      // honest: the organizer reports the failure in errors and leaves the id
+      // undefined rather than inventing a handle nobody can act on.
+      manifestId: organizeResult.manifestId,
       status: result.errors.length > 0 ? "partial" : "success",
       durationMs: Date.now() - startedAt,
       filesProcessed: result.moved,
