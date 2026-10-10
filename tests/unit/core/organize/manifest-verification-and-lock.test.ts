@@ -481,6 +481,42 @@ describe("manifest lock holds for the whole critical section", () => {
 
     await holding;
   });
+
+  it("hands the directory to a waiter parked through a holder's throw", async () => {
+    // The release path has to run when the critical section fails, not only
+    // when it returns. One bad manifest that leaves the lock behind locks the
+    // directory out until the staleness window passes, and every waiter parks
+    // on it in the meantime.
+    const holder = lockService(60_000);
+    const waiter = lockService(1000);
+
+    const events: string[] = [];
+    let markStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+
+    const failing = holder.runExclusive(async () => {
+      events.push("holder");
+      markStarted();
+      await tick(50);
+      throw new Error("boom");
+    });
+
+    // The holder's callback is running, so the lock exists and the waiter's
+    // first poll fails. It parks in the retry loop until the throw releases.
+    await started;
+    const waiting = waiter.runExclusive(async () => {
+      events.push("waiter");
+      return "got in";
+    });
+
+    await expect(failing).rejects.toThrow("boom");
+    await expect(waiting).resolves.toBe("got in");
+
+    // The waiter entered after the throw, so the throw is what released.
+    expect(events).toEqual(["holder", "waiter"]);
+  });
 });
 
 /**
