@@ -20,10 +20,24 @@ import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
+import type {
+  RollbackManifest,
+  RollbackAction,
+} from "../../../../src/core/types/system.js";
+import type {
+  ManifestLockService,
+  ManifestLockLease,
+} from "../../../../src/core/organize/manifest-lock.js";
 
 const { CONFIG } = await import("../../../../src/config.js");
 const { RollbackService } = await import(
   "../../../../src/core/organize/rollback.js"
+);
+const { ManifestLockService: LockService } = await import(
+  "../../../../src/core/organize/manifest-lock.js"
+);
+const { manifestIntegrityService } = await import(
+  "../../../../src/core/organize/manifest-integrity.js"
 );
 const { handleUndoLastOperation } = await import(
   "../../../../src/tools/rollback.js"
@@ -97,6 +111,26 @@ describe("manifest listing reports integrity", () => {
     await fs.writeFile(filePath, JSON.stringify(manifest, null, 2));
   }
 
+  /**
+   * Rewrite a manifest so it was recorded `backMs` ago.
+   *
+   * Manifest ordering comes from the manifest's own timestamp, and two
+   * manifests written in the same millisecond are ordered by nothing. The hash
+   * and the signature both cover that timestamp, so they are recomputed here
+   * rather than left to the hope that the clock moved on between two writes.
+   */
+  async function ageManifest(manifestId: string, backMs: number): Promise<void> {
+    const filePath = path.join(storageDir, `${manifestId}.json`);
+    const manifest = JSON.parse(await fs.readFile(filePath, "utf-8")) as RollbackManifest;
+    manifest.timestamp = Date.now() - backMs;
+    manifest.hash = manifestIntegrityService.computeHash(
+      manifest.actions,
+      manifest.timestamp,
+    );
+    manifest.signature = manifestIntegrityService.computeSignature(manifest);
+    await fs.writeFile(filePath, JSON.stringify(manifest, null, 2));
+  }
+
   it("marks a manifest this machine wrote as verified", async () => {
     const { manifestId } = await organizeOneFile();
 
@@ -104,7 +138,7 @@ describe("manifest listing reports integrity", () => {
 
     expect(listed).toHaveLength(1);
     expect(listed[0]?.id).toBe(manifestId);
-    expect(listed[0]?.verified).toBe(true);
+    expect(listed[0]?.signatureValid).toBe(true);
   });
 
   it("lists a corrupted manifest and reports it as unverified", async () => {
@@ -119,7 +153,7 @@ describe("manifest listing reports integrity", () => {
 
     expect(listed).toHaveLength(1);
     expect(listed[0]?.id).toBe(manifestId);
-    expect(listed[0]?.verified).toBe(false);
+    expect(listed[0]?.signatureValid).toBe(false);
   });
 
   it("refuses to undo a manifest that does not verify, and moves nothing", async () => {
@@ -156,6 +190,10 @@ describe("manifest listing reports integrity", () => {
         timestamp: Date.now() - 60_000,
       },
     ]);
+    // A createManifest writes the clock's current millisecond, so the older
+    // manifest has to be dated back by hand or the two can share a timestamp
+    // and neither is newer than the other.
+    await ageManifest(olderId, 60_000);
 
     const newer = path.join(dataDir, "newer.txt");
     const newerTo = path.join(dataDir, "Documents", "newer.txt");
@@ -259,9 +297,6 @@ describe("manifest listing reports integrity", () => {
     const manifest = JSON.parse(await fs.readFile(filePath, "utf-8")) as {
       signature: string;
     };
-    const { manifestIntegrityService } = await import(
-      "../../../../src/core/organize/manifest-integrity.js"
-    );
     manifest.signature = manifestIntegrityService.computeSignature(
       manifest as never,
     );
@@ -284,5 +319,270 @@ describe("manifest_id is validated at the schema layer", () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("manifest_id must be a UUID");
+  });
+});
+
+/**
+ * The lock protocol on its own: what makes the directory exclusive for the
+ * whole of a critical section rather than for the first few milliseconds of it.
+ *
+ * Two services over one directory is two processes as far as the lock is
+ * concerned, so the contention cases here use two instances the same way the
+ * rollback tests do. Nothing is mocked: a lock that only held against a fake
+ * filesystem would be a lock that held against nothing.
+ */
+describe("manifest lock holds for the whole critical section", () => {
+  let lockDir: string;
+
+  beforeEach(async () => {
+    lockDir = await fs.mkdtemp(path.join(os.tmpdir(), "manifest-lock-"));
+  });
+
+  afterEach(async () => {
+    await new Promise((r) => setTimeout(r, 100));
+    await fs.rm(lockDir, { recursive: true, force: true });
+  });
+
+  /** Where a service over `lockDir` keeps its lock file. */
+  function lockFilePath(): string {
+    return path.join(lockDir, "manifests.lock");
+  }
+
+  /** A service whose wait window is `timeoutMs` wide. */
+  function lockService(timeoutMs: number): ManifestLockService {
+    return new LockService(lockDir, timeoutMs);
+  }
+
+  /** Stand in for work a critical section does between files. */
+  async function tick(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  it("renews the lock so an operation that outlives the window keeps it", async () => {
+    // An undo is unbounded in time, so a holder that stops refreshing looks dead
+    // and a second caller joins it on the same manifest. Renewal is what keeps
+    // the directory exclusive for the whole batch.
+    //
+    // The timings are the whole test, so they are spelled out rather than tuned
+    // until it passed. A contender judges staleness against its OWN window, so
+    // its stale line sits at 2x400=800 ms and it gives up at 700+400=1100 ms.
+    // That ordering is what makes this case reachable: the contender starts
+    // after its stale line has passed but before it runs out of patience, so
+    // without renewal it takes the lock at ~900 ms while the holder is still
+    // working, and with renewal it waits out the full window and gives up.
+    // Start the contender earlier or give it a wider window than the holder and
+    // it times out for an unrelated reason, which is a test that cannot fail.
+    const holder = lockService(200);
+    const contender = lockService(400);
+
+    const holding = holder.runExclusive(async () => {
+      // Past the contender's stale line, so a holder that stopped refreshing
+      // would be reclaimed from under it.
+      await tick(1400);
+    });
+    await tick(700);
+
+    await expect(contender.runExclusive(async () => "got in")).rejects.toThrow(
+      /lock timeout/i,
+    );
+
+    // Nothing took the directory, so the holder was free to finish in it.
+    await holding;
+  });
+
+  it("stops a critical section that lost the lock to another process", async () => {
+    // A holder that stops refreshing is indistinguishable from a dead one, so
+    // the next caller rightly reclaims. What must not happen is the first one
+    // carrying on to the next file: it checks and stops where it stands.
+    const holder = lockService(60_000);
+    const reclaiming = lockService(100);
+
+    let steps = 0;
+    const work = holder.runExclusive(async (lease: ManifestLockLease) => {
+      steps++;
+      await lease.assertStillOwns();
+
+      // Age the lock past any window, the way a process that stopped renewing
+      // would leave it, and let the other caller take over.
+      const old = new Date(Date.now() - 60_000);
+      await fs.utimes(lockFilePath(), old, old);
+      await reclaiming.runExclusive(async () => {});
+
+      steps++;
+      await lease.assertStillOwns();
+
+      steps++;
+    });
+
+    await expect(work).rejects.toThrow(/lost the manifest lock/i);
+    expect(steps).toBe(2);
+  });
+
+  it("lets exactly one of several waiters take over a dead lock", async () => {
+    // Two callers that both judge the same dead lock must not both be able to
+    // remove it: the second one's unlink would delete the replacement the first
+    // one created, and both would hold the directory at once.
+    await fs.writeFile(lockFilePath(), "a-token-from-a-dead-holder");
+    const old = new Date(Date.now() - 60_000);
+    await fs.utimes(lockFilePath(), old, old);
+
+    const entered: string[] = [];
+    let running = 0;
+    let mostConcurrent = 0;
+
+    const attempts = ["one", "two", "three", "four"].map((name) =>
+      lockService(120).runExclusive(async () => {
+        entered.push(name);
+        running++;
+        mostConcurrent = Math.max(mostConcurrent, running);
+        await tick(10);
+        running--;
+      }),
+    );
+
+    const outcomes = await Promise.allSettled(attempts);
+
+    // Every caller goes through the directory, but never two at once: the batch
+    // of waiters serializes instead of several of them holding at the same time.
+    expect(entered).toHaveLength(4);
+    expect(mostConcurrent).toBe(1);
+    expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(4);
+
+    // Reclamation moves the lock aside under a name only it uses, so nothing is
+    // left behind for the next caller to trip over.
+    const left = await fs.readdir(lockDir);
+    expect(left.filter((f) => f.includes(".stale."))).toEqual([]);
+  });
+
+  it("reports a directory it cannot write to instead of timing out", async () => {
+    // EACCES, ENOENT and ENOSPC used to surface after the whole wait window as
+    // "another undo is stuck", which sends the caller looking for a process
+    // that does not exist.
+    const absent = path.join(lockDir, "no-such-directory");
+
+    await expect(
+      new LockService(absent, 40).runExclusive(async () => "never runs"),
+    ).rejects.toThrow(/ENOENT/);
+  });
+
+  it("times a waiter out against a lock that is still being used", async () => {
+    // The other half of the contract: a live lock is waited for, not stolen
+    // from, and a caller gives up with a timeout rather than assuming.
+    const holder = lockService(100);
+    const waiter = lockService(60);
+
+    const holding = holder.runExclusive(async () => {
+      await tick(120);
+    });
+
+    await expect(waiter.runExclusive(async () => "got in")).rejects.toThrow(
+      /lock timeout/i,
+    );
+
+    await holding;
+  });
+});
+
+/**
+ * The same guarantee as observed from the undo itself.
+ *
+ * The lock-level cases above pin the protocol. This one pins what a caller
+ * sees: an undo that is still running keeps the directory, so a second undo of
+ * the same id cannot start applying its own moves while the first is mid-batch.
+ */
+describe("an undo holds the directory for as long as it runs", () => {
+  let dataDir: string;
+  let storageDir: string;
+
+  beforeEach(async () => {
+    dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "manifest-hold-"));
+    storageDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "manifest-hold-store-"),
+    );
+    CONFIG.paths.customAllowed = [dataDir];
+  });
+
+  afterEach(async () => {
+    await new Promise((r) => setTimeout(r, 100));
+    await fs.rm(dataDir, { recursive: true, force: true });
+    await fs.rm(storageDir, { recursive: true, force: true });
+  });
+
+  /**
+   * A manifest that moves `count` files, with the files already moved, so an
+   * undo has one real move to reverse per action.
+   */
+  async function moveManifest(
+    service: RollbackServiceInstance,
+    count: number,
+  ): Promise<{ manifestId: string; inPlace: string; moved: string }> {
+    const docs = path.join(dataDir, "Documents");
+    await fs.mkdir(docs, { recursive: true });
+
+    const actions: RollbackAction[] = [];
+    for (let i = 0; i < count; i++) {
+      const source = path.join(dataDir, `file-${i}.txt`);
+      const target = path.join(docs, `file-${i}.txt`);
+      await fs.writeFile(source, `contents ${i}`);
+      await fs.rename(source, target);
+      actions.push({
+        type: "move" as const,
+        originalPath: source,
+        currentPath: target,
+        timestamp: Date.now(),
+      });
+    }
+
+    const manifestId = await service.createManifest("A batch of moves", actions);
+    return { manifestId, inPlace: dataDir, moved: docs };
+  }
+
+  it("keeps a second undo out while the first is still applying", async () => {
+    // Enough actions that the undo outlives the lock's window, which is the
+    // case where an un-renewed lock would be reclaimed mid-batch.
+    const first = new RollbackService(storageDir, 10);
+    const { manifestId, inPlace, moved } = await moveManifest(first, 60);
+    const second = new RollbackService(storageDir, 10);
+
+    const running = first.rollback(manifestId);
+    // Let the first caller take the lock before the second one asks for it, so
+    // the two are a holder and a waiter rather than a coin toss.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const outcomes = await Promise.allSettled([
+      running,
+      second.rollback(manifestId),
+    ]);
+
+    const winners = outcomes.filter((o) => o.status === "fulfilled");
+    const losers = outcomes.filter((o) => o.status === "rejected");
+
+    // One undo runs the batch; the other is refused, by lock timeout or by the
+    // manifest already being spent. What must not happen is both of them
+    // applying the batch, which is what an unrenewed lock allowed.
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+
+    const won = winners[0];
+    if (won?.status === "fulfilled") {
+      expect(won.value.success).toBe(60);
+      expect(won.value.failed).toBe(0);
+    }
+    const lost = losers[0];
+    if (lost?.status === "rejected") {
+      expect(String((lost.reason as Error).message)).toMatch(
+        /timeout|not found/i,
+      );
+    }
+
+    // The batch was undone once, and the manifest is gone.
+    const restored = (
+      await fs.readdir(inPlace, { withFileTypes: true })
+    ).filter((entry) => entry.isFile());
+    expect(restored).toHaveLength(60);
+    expect(await fs.readdir(moved)).toHaveLength(0);
+    await expect(
+      fs.access(path.join(storageDir, `${manifestId}.json`)),
+    ).rejects.toThrow();
   });
 });

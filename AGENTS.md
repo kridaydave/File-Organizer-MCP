@@ -288,14 +288,29 @@ so read this before assuming a tool is safe because it calls `validateStrictPath
   `.json` only) does not pick it up.
 - **`listManifests` reports integrity instead of staying silent about it.** It
   still lists every file, verified or not, but each entry now carries a
-  `verified` flag from `manifestIntegrityService.verifyManifest`. Kriday chose
-  flagging over filtering: hiding an unverified file destroys the only trace
-  that something appeared in the rollback directory, and an agent cannot warn a
-  user about a manifest it cannot see. The flag is not a substitute for
+  `signatureValid` flag from `manifestIntegrityService.verifyManifest`. Kriday
+  chose flagging over filtering: hiding an unverified file destroys the only
+  trace that something appeared in the rollback directory, and an agent cannot
+  warn a user about a manifest it cannot see. The flag is not a substitute for
   `getManifest`, which re-verifies and is still the only thing that may hand
   paths to a caller. `findNewerConflicts` reads the flag and treats an
   unverified candidate as a conflict, since ignoring it would let a forged
-  manifest hide a real overlap.
+  manifest hide a real overlap. The name is `signatureValid` rather than
+  `verified` because `IntegrityReport.verified`, built in the same module, means
+  the opposite thing: whether the files are still where the manifest put them,
+  not whether the manifest is this machine's record.
+- **The lock is renewed, because an undo is not a bounded critical section.**
+  `HistoryLoggerService` uses the same token-and-staleness protocol safely
+  because its critical section is one `appendFile`. `applyRollback` moves every
+  file a manifest names and takes as long as that takes, so a holder that stops
+  refreshing looks abandoned: a second undo of the same id reclaims the
+  directory and both spend the batch twice. A holder therefore renews on a timer
+  and gets a `ManifestLockLease` to check between files, so one that is reclaimed
+  anyway stops before it touches the next file instead of at the end. Renewal
+  goes through the `FileHandle` the lock was created with, so it touches an inode
+  and never refreshes a replacement that took the path. Reclaiming is a rename
+  to a private tombstone rather than an unlink, so two waiters that both judge
+  the same dead lock cannot both delete it and both acquire.
 
 ## Proving a change
 

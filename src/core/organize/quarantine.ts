@@ -401,7 +401,7 @@ export class QuarantineService {
       );
     }
 
-    if (!manifest.verified) {
+    if (!manifest.signatureValid) {
       throw new ValidationError(
         "Quarantine manifest failed its integrity check",
       );

@@ -27,7 +27,10 @@ import {
 } from "./manifest-integrity.js";
 import { safeAtomicMove } from "../io/atomic-move.js";
 import { HashCalculatorService } from "../hash/hasher.js";
-import { ManifestLockService } from "./manifest-lock.js";
+import {
+  ManifestLockService,
+  type ManifestLockLease,
+} from "./manifest-lock.js";
 
 /**
  * How much file content one manifest may re-read to fill in per-file hashes.
@@ -95,7 +98,7 @@ interface NewerConflict {
   /** How many paths the two manifests both touch. */
   overlappingPaths: number;
   /** False when the manifest's own signature did not verify. */
-  verified: boolean;
+  signatureValid: boolean;
 }
 
 export function overlappingPathCount(
@@ -120,6 +123,12 @@ export function overlappingPathCount(
  * appears from nowhere in the rollback directory is evidence about the
  * install, and hiding it would destroy the only trace. `getManifest` is still
  * the only thing that may hand a manifest to code that reads paths from it.
+ *
+ * The flag is `signatureValid` rather than `verified` because this module also
+ * builds `IntegrityReport`, whose `verified` is the opposite question: that one
+ * is about whether the files are still where the manifest left them, this one is
+ * about whether the manifest itself is this machine's record. Two fields of the
+ * same name meaning opposite things in one file is a trap.
  */
 export type ListedManifest = RollbackManifest & {
   /**
@@ -127,7 +136,7 @@ export type ListedManifest = RollbackManifest & {
    * HMAC. False means the file is not this machine's record: treat it as a
    * foreign object, never as an undo target.
    */
-  verified: boolean;
+  signatureValid: boolean;
 };
 
 /** How much of a batch `createManifest` spends on content hashes. */
@@ -348,7 +357,13 @@ export class RollbackService {
       throw new ValidationError(`Invalid manifest ID format: ${manifestId}`);
     }
 
-    await this.manifestLock.runExclusive(async () => {
+    // rollback() creates the storage directory on its way in, and a caller that
+    // reaches this on a fresh install would otherwise wait out the whole lock
+    // timeout before finding the directory missing.
+    await this.ensureStorage();
+
+    await this.manifestLock.runExclusive(async (lease) => {
+      await lease.assertStillOwns();
       await this.unlinkManifestFile(manifestId);
     });
   }
@@ -365,8 +380,8 @@ export class RollbackService {
    * List the manifests on disk, newest first, each with the verdict on its own
    * integrity.
    *
-   * Every file is listed, verified or not, and the `verified` flag is what a
-   * caller reads before it acts on an id. Filtering the unverified ones out
+   * Every file is listed, verified or not, and the `signatureValid` flag is what
+   * a caller reads before it acts on an id. Filtering the unverified ones out
    * instead would make a tampered file disappear, and a file that appears from
    * nowhere in the rollback directory is evidence about the install worth
    * keeping. `getManifest` is still the only thing that may hand paths to a
@@ -401,7 +416,8 @@ export class RollbackService {
           const manifest = parsed as RollbackManifest;
           manifests.push({
             ...manifest,
-            verified: manifestIntegrityService.verifyManifest(manifest).valid,
+            signatureValid:
+              manifestIntegrityService.verifyManifest(manifest).valid,
           });
         } catch (e) {
           logger.error(`Failed to parse rollback manifest ${file}: ${e}`);
@@ -440,10 +456,10 @@ export class RollbackService {
     for (const manifest of candidates) {
       // The flag is the same verification this loop used to perform itself,
       // computed once by the list that already read every file.
-      const verified = manifest.verified;
+      const signatureValid = manifest.signatureValid;
       const overlappingPaths = overlappingPathCount(target, manifest);
-      if (!verified || overlappingPaths > 0) {
-        conflicts.push({ id: manifest.id, overlappingPaths, verified });
+      if (!signatureValid || overlappingPaths > 0) {
+        conflicts.push({ id: manifest.id, overlappingPaths, signatureValid });
       }
     }
     return conflicts;
@@ -466,7 +482,7 @@ export class RollbackService {
   ): { success: number; failed: number; errors: string[] } {
     const details = conflicts
       .map((c) =>
-        c.verified
+        c.signatureValid
           ? `${c.id} (${c.overlappingPaths} shared path(s))`
           : `${c.id} (integrity check failed, so its paths cannot be ruled out)`,
       )
@@ -504,12 +520,16 @@ export class RollbackService {
     // it, two undoes racing the same manifest both pass getManifest, both apply
     // their actions, and both unlink, so one batch of moves is spent twice. A
     // loser that finds the manifest already gone fails cleanly inside
-    // getManifest instead of tearing a half-applied batch.
-    return this.manifestLock.runExclusive(() => this.applyRollback(manifestId));
+    // getManifest instead of tearing a half-applied batch. The lease is handed
+    // down so the loop can check it still owns the directory between files.
+    return this.manifestLock.runExclusive((lease) =>
+      this.applyRollback(manifestId, lease),
+    );
   }
 
   private async applyRollback(
     manifestId: string,
+    lease: ManifestLockLease,
   ): Promise<{ success: number; failed: number; errors: string[] }> {
     // getManifest validates the id as a UUID before it is joined onto the
     // storage directory, so filePath is only built from an already-safe value.
@@ -539,6 +559,13 @@ export class RollbackService {
 
     try {
       for (const action of reverseActions) {
+        // The lock is renewed while this undo runs, so a batch that takes longer
+        // than the wait window cannot have its directory reclaimed out from
+        // under it. If it is lost anyway, stopping here leaves the manifest in
+        // place and the files already moved where this action left them, which
+        // is a state an undo can be retried from.
+        await lease.assertStillOwns();
+
         // Validate paths before operations
         if (
           action.originalPath &&
@@ -779,6 +806,10 @@ export class RollbackService {
         }
       }
       try {
+        // The manifest file is the resource the lock exists for, so ownership is
+        // confirmed before it is deleted rather than assumed from the moves that
+        // just landed.
+        await lease.assertStillOwns();
         await fs.unlink(filePath);
       } catch (e) {
         throw new Error(

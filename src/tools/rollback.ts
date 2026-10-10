@@ -26,8 +26,13 @@ import {
  * hand-written `inputSchema` is what an MCP client reads off the wire. Without
  * the same pattern here, the client is told it may send an id the server will
  * reject, which is the drift the repo rules out.
+ *
+ * Case is spelled out on both sides because JSON Schema regexes have no `i`
+ * flag: `MANIFEST_ID_PATTERN` matches uppercase through its `/i`, so a
+ * lowercase-only pattern here would refuse an id the server accepts.
  */
-const MANIFEST_ID_JSON_PATTERN = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+const MANIFEST_ID_JSON_PATTERN =
+  "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
 
 export { UndoLastOperationInputSchema } from "../schemas/organize.js";
 export type { UndoLastOperationInput } from "../schemas/organize.js";

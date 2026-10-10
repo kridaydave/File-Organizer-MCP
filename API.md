@@ -1142,7 +1142,7 @@ file_organizer_validate_organization_plan({
 
 | Parameter         | Type   | Description                                                             | Default    |
 | ----------------- | ------ | ----------------------------------------------------------------------- | ---------- |
-| `manifest_id`     | string | ID of the operation to verify. If omitted, verifies the last operation. | -          |
+| `manifest_id`     | string | ID of the operation to verify, a UUID in 8-4-4-4-12 form. If omitted, verifies the last operation. | -          |
 | `response_format` | string | 'json' or 'markdown'                                                     | 'markdown' |
 
 ### Response fields
