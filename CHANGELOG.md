@@ -4,6 +4,48 @@
 
 ### Fixed
 
+- **An unsigned manifest could be listed as an undo target.** `listManifests`
+  parsed every file in the rollback directory with no signature check, so once
+  manifest ids were shown to a user, a manifest file nobody signed became a
+  value they could paste back into `undo_last_operation`. The list now carries a
+  `signatureValid` flag per entry and keeps unverified files visible rather than
+  hiding them, so tampering stays evidence instead of becoming a silent gap.
+  `getManifest` remains the only path that hands manifest paths to a caller, and
+  a newer unverified manifest still blocks an out-of-order undo rather than
+  being ignored.
+- **Two undoes of the same manifest could both succeed.** `RollbackService`
+  read a manifest, acted on every path in it, and deleted the file with nothing
+  holding other processes off, so two undoes racing the same manifest both
+  passed the read and both unlinked. The read-apply-delete cycle now runs under
+  a `manifests.lock` in the rollback directory, a lock of its own rather than a
+  share of the history lock, so exactly one undo wins and the loser is told the
+  manifest is spent.
+- **That lock gave up halfway through a long undo.** A lock older than twice the
+  wait window is treated as abandoned, which is right for the history lock
+  because its critical section is a single `appendFile`, and wrong here: an undo
+  moves every file a manifest names and takes as long as that takes. Past the
+  window a second undo would reclaim the directory and both would spend the same
+  batch of moves. A holder now renews its lock while it works and checks it
+  between files, so an operation that outlives the window keeps the directory and
+  one that is reclaimed anyway stops before it touches the next file.
+- **A lock failure was reported as "another undo is stuck".** Every filesystem
+  error while taking the lock read as contention, so a read-only config
+  directory, a missing one, or a full disk surfaced after the full wait window as
+  a message about a process that did not exist. Those errors now report their
+  own cause, and `removeManifest` creates the rollback directory before locking
+  so a fresh install fails with the real error.
+- **Two waiters could both take over one dead lock.** Reclaiming a stale lock
+  read its age and then unlinked it, and a waiter that lost the create race would
+  delete the replacement the winner had just written. Reclaiming is now a rename
+  to a private name and the moved file is read back before it is dropped, so only
+  one waiter reaches the create and a lock that was not the one judged stale is
+  put back rather than dropped.
+- **A malformed `manifest_id` read as a lookup failure.** The field was a bare
+  `z.string()`, so a typo travelled to the filesystem and came back as "manifest
+  not found", which reads like a real undo-history problem. It is validated as a
+  UUID at the schema layer and in the tool's hand-written JSON schema, in both
+  `undo_last_operation` and `verify_integrity`.
+
 - **A photo taken just after midnight was filed under the previous month** —
   two readers of the EXIF date disagreed about the calendar.
   `MetadataService.getMetadataSubpath` read it in the local calendar while
