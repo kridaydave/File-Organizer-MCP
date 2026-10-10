@@ -418,6 +418,25 @@ describe("manifest lock holds for the whole critical section", () => {
     expect(steps).toBe(2);
   });
 
+  it("does not call the lock lost while a reclaimer is putting it back", async () => {
+    // A reclaimer that stole the wrong lock moves it aside, reads the
+    // tombstone, and puts it back. The path is empty for that whole window, so
+    // a holder checking ownership in it must wait the window out instead of
+    // aborting a healthy undo as lost.
+    const service = lockService(60_000);
+
+    await service.runExclusive(async (lease: ManifestLockLease) => {
+      const aside = `${lockFilePath()}.stale.probe`;
+      await fs.rename(lockFilePath(), aside);
+      // Restore after the holder's first absent read has landed, but inside
+      // the window its second read waits out.
+      const putBack = tick(5).then(() => fs.rename(aside, lockFilePath()));
+
+      await expect(lease.assertStillOwns()).resolves.toBeUndefined();
+      await putBack;
+    });
+  });
+
   it("lets exactly one of several waiters take over a dead lock", async () => {
     // Two callers that both judge the same dead lock must not both be able to
     // remove it: the second one's unlink would delete the replacement the first
@@ -452,6 +471,27 @@ describe("manifest lock holds for the whole critical section", () => {
     // left behind for the next caller to trip over.
     const left = await fs.readdir(lockDir);
     expect(left.filter((f) => f.includes(".stale."))).toEqual([]);
+  });
+
+  it("does not report the lock lost while a reclaimer has it moved aside", async () => {
+    // Reclamation moves the lock aside, reads what it stole, and puts a live
+    // lock straight back. A holder that checks inside that window sees the
+    // path empty twice in a row, and used to conclude the lock was gone and
+    // abort an undo that had lost nothing.
+    const service = lockService(60_000);
+
+    await service.runExclusive(async (lease: ManifestLockLease) => {
+      const tombstone = `${lockFilePath()}.stale.test`;
+      await fs.rename(lockFilePath(), tombstone);
+
+      // The check reads the path, finds nothing, and waits before concluding.
+      // The lock comes back inside that wait, the way a put-back would.
+      const checking = lease.assertStillOwns();
+      await tick(5);
+      await fs.rename(tombstone, lockFilePath());
+
+      await expect(checking).resolves.toBeUndefined();
+    });
   });
 
   it("reports a directory it cannot write to instead of timing out", async () => {

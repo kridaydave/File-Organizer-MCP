@@ -222,18 +222,14 @@ export class ManifestLockService {
     }
 
     if ((await this.readToken(tombstone)) !== staleToken) {
-      // A live lock sits at the path now. Putting it back is the only way to
-      // leave its owner holding it; if another replacement is already in place,
-      // the copy we hold is a duplicate of nothing and has to go instead.
-      const vacant = await fs
-        .stat(this.lockFilePath)
-        .then(() => false)
-        .catch(() => true);
-      if (vacant) {
-        await fs.rename(tombstone, this.lockFilePath).catch(() => null);
-      } else {
-        await fs.unlink(tombstone).catch(() => null);
-      }
+      // A live lock sits at the path now, or a newer one is about to. Putting
+      // the moved lock back is the only way to leave its owner holding it, but
+      // a vacancy check and a rename are two calls, and a waiter that wins the
+      // create between them gets its lock overwritten. `link` is one call and
+      // refuses to replace: EEXIST means someone already holds the path and
+      // this copy is a duplicate of nothing, so it goes instead.
+      await fs.link(tombstone, this.lockFilePath).catch(() => null);
+      await fs.unlink(tombstone).catch(() => null);
       return false;
     }
 
@@ -255,8 +251,12 @@ export class ManifestLockService {
     let present = await this.readToken(this.lockFilePath);
 
     // Reclamation moves the lock aside for as long as it takes to prove what it
-    // stole, so a single absent read is not proof the lock is gone.
+    // stole, so a single absent read is not proof the lock is gone. The second
+    // read waits a beat to straddle that window rather than race it: put-back
+    // lasts two syscalls, and two back-to-back reads can both land inside it
+    // and report a lock that is perfectly healthy as lost.
     if (present === null) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
       present = await this.readToken(this.lockFilePath);
     }
 
