@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { CommonParamsSchema } from "./common.js";
 import { FolderNameSchema } from "./system.js";
+import { MANIFEST_ID_PATTERN } from "../core/organize/manifest-integrity.js";
 
 /**
  * Schema for organize_files tool
@@ -258,6 +259,10 @@ export const UndoLastOperationInputSchema = z
   .object({
     manifest_id: z
       .string()
+      .regex(
+        MANIFEST_ID_PATTERN,
+        "manifest_id must be a UUID in the form 8-4-4-4-12",
+      )
       .optional()
       .describe(
         "ID of the operation to undo. if omitted, undoes the last operation.",
@@ -277,6 +282,10 @@ export const VerifyIntegrityInputSchema = z
   .object({
     manifest_id: z
       .string()
+      .regex(
+        MANIFEST_ID_PATTERN,
+        "manifest_id must be a UUID in the form 8-4-4-4-12",
+      )
       .optional()
       .describe(
         "ID of the operation to verify. If omitted, verifies the last operation.",

@@ -61,6 +61,7 @@ const EXCLUDED_FILES = [".d.ts", ".test.ts", ".spec.ts"];
 // Matched by basename; keep in sync with the src/ layout when files move.
 const EXCLUDED_FILES_FROM_SECURITY_CHECKS = [
   "rollback.ts", // core/organize: manifestId is UUID-checked before join
+  "manifest-lock.ts", // core/organize: reads only storageDir/manifests.lock, a fixed basename with no caller input
   "loader.ts", // core/config: startup read of the platform config file
   "scheduler-state.service.ts",
   "config.ts",
