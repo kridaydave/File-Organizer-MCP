@@ -95,14 +95,14 @@ function subpathUnderTz(photoPath: string, tz: string): {
 }
 
 /**
- * The subpath's components, whatever separator the platform joined them with.
+ * The subpath's components.
  *
- * `getMetadataSubpath` builds its answer with `path.join`, so the string is
- * `2024/05` on Linux and `2024\05` on Windows. The calendar is the thing under
- * test, not the separator, so assert on the parts.
+ * `getMetadataSubpath` returns a "/"-separated folder label on every OS, so
+ * these are plain splits. Splitting on either separator would hide a Windows
+ * regression, which is the bug this file's callers are protected from.
  */
 function asParts(subpath: string): string[] {
-  return subpath.split(/[\\/]/);
+  return subpath.split("/");
 }
 
 describe("MetadataService.getMetadataSubpath EXIF calendar", () => {
@@ -172,5 +172,19 @@ describe("MetadataService.getMetadataSubpath EXIF calendar", () => {
     await fs.writeFile(photo, baselineJpeg());
 
     expect(await service.getMetadataSubpath(photo, "Images")).toBe("");
+  });
+
+  it("reports a forward-slashed label, because a caller on Windows reads it too", async () => {
+    const photo = path.join(testDir, "photo.jpg");
+    await fs.writeFile(photo, jpegTakenAt("2024:05:01 00:30:00"));
+
+    // Asserted on the whole string, not the parts. On Linux "2024\\05" would
+    // never be produced, so this leg cannot go red there; on Windows it does,
+    // which is the leg that had the bug. `path.sep` is the platform separator,
+    // so a runner whose separator is not "\\" still holds the line honest.
+    const subpath = await service.getMetadataSubpath(photo, "Images");
+
+    expect(subpath).toBe("2024/05");
+    expect(subpath).not.toContain(path.sep === "/" ? "\\" : path.sep);
   });
 });
