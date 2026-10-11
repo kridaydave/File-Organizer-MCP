@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **An integration test no longer undoes another worker's batch.**
+  `full_organization_flow` organized with `dry_run: false` and then called
+  `undo_last_operation` with no `manifest_id`, which takes the globally newest
+  manifest. Under jest every worker writes manifests into one shared directory,
+  so the undo restored whichever batch another test file finished last and the
+  assertions against its own directory saw an empty tree. The test now owns its
+  rollback and config storage and names the manifest its own organize returned.
+  No user-facing behavior changed; the bug was in the test.
+
 ### Changed
 
 - **The watch daemon runs the same pass as `once`.** The daemon had its own

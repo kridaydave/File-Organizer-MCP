@@ -155,6 +155,8 @@ An empty directory is a bad test. Seed with real shapes, but keep them in the sa
   });
   ```
 
+- **Integration tests that move files own their rollback storage.** `getRollbackDirectory()` returns one directory shared by every jest worker, and a no-id `undo_last_operation` takes whichever manifest is globally newest. An integration test that organizes with `dry_run: false` and then undoes therefore restores whichever batch some other worker finished last, and the assertions against its own directory see an empty tree. That was #108, and it was intermittent by nature: three full-suite runs were green and the branch failed one of three. Two things close it, and a test should have both. Redirect `src/core/config/paths.js` to a per-file temp root with `jest.unstable_mockModule` plus `...actualPaths`, following `tests/integration/tools/output-schema.test.ts`. And pass the `manifest_id` the organize returned to the undo, read from `structuredContent` rather than parsed out of the markdown. The regression guard in `tests/integration/full_organization_flow.test.ts` writes a newer foreign manifest after its own organize, so it is deterministic and fails with the same signature the race produced.
+
 ## Verifying
 
 - Smallest proof that the change works. `npm test tests/unit/services/your-service.test.ts` for the files you touched, targeted lint/typecheck for the scope you changed.
