@@ -562,9 +562,11 @@ describe("manifest lock holds for the whole critical section", () => {
 /**
  * The same guarantee as observed from the undo itself.
  *
- * The lock-level cases above pin the protocol. This one pins what a caller
- * sees: an undo that is still running keeps the directory, so a second undo of
- * the same id cannot start applying its own moves while the first is mid-batch.
+ * The lock-level cases above pin the protocol. These pin what a caller sees:
+ * an undo that is still running keeps the directory, so a second undo of the
+ * same id cannot start applying its own moves while the first is mid-batch,
+ * and an undo that loses the directory stops between files instead of
+ * finishing the batch it no longer owns.
  */
 describe("an undo holds the directory for as long as it runs", () => {
   let dataDir: string;
@@ -660,5 +662,60 @@ describe("an undo holds the directory for as long as it runs", () => {
     await expect(
       fs.access(path.join(storageDir, `${manifestId}.json`)),
     ).rejects.toThrow();
+  });
+
+  it("stops the undo when another process takes the lock mid-batch", async () => {
+    // The lease is advertised as what stops an undo between files, and until
+    // now only the lock-level test exercised it: neutering both
+    // assertStillOwns() calls inside applyRollback left every test green.
+    // This plants a foreign token where the holder's should be, which is what
+    // a reclaimed lock looks like to the holder, and asserts the undo refuses
+    // to go on.
+    const service = new RollbackService(storageDir, 10);
+    const { manifestId } = await moveManifest(service, 60);
+    const manifestPath = path.join(storageDir, `${manifestId}.json`);
+    const lockPath = path.join(storageDir, "manifests.lock");
+
+    const running = service.rollback(manifestId);
+
+    // Poll the lock file itself instead of sleeping: the file exists before
+    // the holder's token is written into it, so the loop waits for a non-empty
+    // read — the holder's write is its only one, and after it nothing replaces
+    // the content until release. Only then is the token swapped, and the
+    // read-back confirms the swap stuck.
+    const foreign = "a-token-from-another-process";
+    let planted = false;
+    for (let attempt = 0; attempt < 2000 && !planted; attempt++) {
+      const current = await fs.readFile(lockPath, "utf-8").catch(() => "");
+      if (current === "") {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        continue;
+      }
+      await fs.writeFile(lockPath, foreign);
+      planted = (await fs.readFile(lockPath, "utf-8").catch(() => "")) === foreign;
+    }
+    expect(planted).toBe(true);
+
+    // The undo stops instead of finishing the batch, and the manifest is
+    // still on disk: stopping mid-batch has to leave a retryable state behind.
+    // The stop surfaces as a failed result rather than a rejection — the
+    // loop's catch turns the throw at the top of an action into a reported
+    // failure — so the message is asserted wherever it arrives. Neutering both
+    // assertStillOwns() calls inside applyRollback makes the undo resolve clean
+    // with success: 60 and no such message, which is the mutation this test
+    // exists to catch.
+    const outcome = await running.then(
+      (value) => ({ ok: true as const, value }),
+      (error) => ({ ok: false as const, error }),
+    );
+    const reported = outcome.ok
+      ? outcome.value.errors.join("\n")
+      : String((outcome.error as Error).message);
+    expect(reported).toMatch(/lost the manifest lock/i);
+    if (outcome.ok) {
+      expect(outcome.value.failed).toBeGreaterThan(0);
+      expect(outcome.value.success).toBeLessThan(60);
+    }
+    expect(await exists(manifestPath)).toBe(true);
   });
 });

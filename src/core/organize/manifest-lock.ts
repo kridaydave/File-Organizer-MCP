@@ -176,15 +176,27 @@ export class ManifestLockService {
     if (present && !(await this.stealStaleLock(present.token))) return null;
 
     const token = this.newToken();
+    // Hoisted so the catch can clean up after a token write that failed: the
+    // file exists the moment `open` returns, before a single token byte does.
+    let handle: fs.FileHandle | undefined;
     try {
       // `wx` fails when the file exists, which is what makes this the winner
       // rather than the last writer. Every path that reaches this point has
       // left the lock file absent, so this create is the only place the lock
       // changes hands.
-      const handle = await fs.open(this.lockFilePath, "wx");
+      handle = await fs.open(this.lockFilePath, "wx");
       await handle.writeFile(token);
       return { token, handle };
     } catch (error) {
+      // The create landed but the token did not (ENOSPC is the realistic one).
+      // An empty file at the path reads as a live lock to every waiter, so it
+      // is closed and removed here, while this caller still knows it is its
+      // own. Nothing else can have replaced it: the path exists, so no other
+      // `wx` create can have won, and a fresh file is nowhere near stale.
+      if (handle) {
+        await handle.close().catch(() => null);
+        await fs.unlink(this.lockFilePath).catch(() => null);
+      }
       // Losing the create race is contention and is retried. Anything else —
       // EACCES on a read-only config directory, ENOENT on a missing one,
       // ENOSPC — is a broken environment: reporting it as a timeout sends the
