@@ -190,12 +190,28 @@ export class ManifestLockService {
     } catch (error) {
       // The create landed but the token did not (ENOSPC is the realistic one).
       // An empty file at the path reads as a live lock to every waiter, so it
-      // is closed and removed here, while this caller still knows it is its
-      // own. Nothing else can have replaced it: the path exists, so no other
-      // `wx` create can have won, and a fresh file is nowhere near stale.
+      // is closed and removed here — but only while it is provably this
+      // attempt's own file. A steal needs the file past the staleness line, so
+      // inside 2x the window the path can only hold what this call created and
+      // the unlink is safe with nothing else to check. Past that line the file
+      // may have been reclaimed already and a live lock put in its place, so
+      // the inode has to prove it before anything is removed.
       if (handle) {
+        const own = await handle.stat().catch(() => null);
         await handle.close().catch(() => null);
-        await fs.unlink(this.lockFilePath).catch(() => null);
+        const young =
+          own !== null && Date.now() - own.mtimeMs <= this.lockTimeoutMs * 2;
+        if (young) {
+          await fs.unlink(this.lockFilePath).catch(() => null);
+        } else if (own !== null && own.ino !== 0) {
+          const atPath = await fs.stat(this.lockFilePath).catch(() => null);
+          if (atPath && atPath.ino === own.ino && atPath.dev === own.dev) {
+            await fs.unlink(this.lockFilePath).catch(() => null);
+          }
+        }
+        // Unprovable means untouched: a leftover empty file ages out and
+        // waiters retry, while another holder's live lock deleted by mistake
+        // cannot be put back.
       }
       // Losing the create race is contention and is retried. Anything else —
       // EACCES on a read-only config directory, ENOENT on a missing one,
