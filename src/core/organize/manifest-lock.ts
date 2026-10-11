@@ -176,8 +176,8 @@ export class ManifestLockService {
     if (present && !(await this.stealStaleLock(present.token))) return null;
 
     const token = this.newToken();
-    // Hoisted so the catch can clean up after a token write that failed: the
-    // file exists the moment `open` returns, before a single token byte does.
+    // Hoisted so the catch can close it: the file exists the moment `open`
+    // returns, even when the token never makes it in.
     let handle: fs.FileHandle | undefined;
     try {
       // `wx` fails when the file exists, which is what makes this the winner
@@ -188,42 +188,30 @@ export class ManifestLockService {
       await handle.writeFile(token);
       return { token, handle };
     } catch (error) {
-      // The create landed but the token did not (ENOSPC is the realistic one).
-      // An empty file at the path reads as a live lock to every waiter, so it
-      // is closed and removed here — but only while it is provably this
-      // attempt's own file. A steal needs the file past the staleness line, so
-      // inside 2x the window the path can only hold what this call created and
-      // the unlink is safe with nothing else to check. Past that line the file
-      // may have been reclaimed already and a live lock put in its place, so
-      // the inode has to prove it before anything is removed.
+      const code = (error as NodeJS.ErrnoException).code ?? "unknown error";
+      // A token write that failed (ENOSPC is the realistic one) leaves an
+      // empty file at the path, and the file is deliberately left there. No
+      // path-based unlink can prove, at the moment it runs, that the file is
+      // still this attempt's own rather than a replacement some waiter put in
+      // its place after reclaiming it, and a pause between the proof and the
+      // call reopens exactly that gap. The empty file is the smaller harm:
+      // waiters read it as a live lock until the staleness threshold
+      // reclaims it, while a live lock deleted by mistake cannot be put back.
       if (handle) {
-        const own = await handle.stat().catch(() => null);
         await handle.close().catch(() => null);
-        const young =
-          own !== null && Date.now() - own.mtimeMs <= this.lockTimeoutMs * 2;
-        if (young) {
-          await fs.unlink(this.lockFilePath).catch(() => null);
-        } else if (own !== null && own.ino !== 0) {
-          const atPath = await fs.stat(this.lockFilePath).catch(() => null);
-          if (atPath && atPath.ino === own.ino && atPath.dev === own.dev) {
-            await fs.unlink(this.lockFilePath).catch(() => null);
-          }
-        }
-        // Unprovable means untouched: a leftover empty file ages out and
-        // waiters retry, while another holder's live lock deleted by mistake
-        // cannot be put back.
+        throw new Error(
+          `Manifest lock file was created but its token could not be written (${code})`,
+          { cause: error },
+        );
       }
       // Losing the create race is contention and is retried. Anything else —
-      // EACCES on a read-only config directory, ENOENT on a missing one,
-      // ENOSPC — is a broken environment: reporting it as a timeout sends the
-      // caller looking for a stuck process that does not exist.
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") return null;
-      throw new Error(
-        `Manifest lock could not be created (${
-          (error as NodeJS.ErrnoException).code ?? "unknown error"
-        })`,
-        { cause: error },
-      );
+      // EACCES on a read-only config directory, ENOENT on a missing one —
+      // is a broken environment: reporting it as a timeout sends the caller
+      // looking for a stuck process that does not exist.
+      if (code === "EEXIST") return null;
+      throw new Error(`Manifest lock could not be created (${code})`, {
+        cause: error,
+      });
     }
   }
 
