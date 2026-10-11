@@ -65,7 +65,6 @@ const EXCLUDED_FILES_FROM_SECURITY_CHECKS = [
   "loader.ts", // core/config: startup read of the platform config file
   "scheduler-state.service.ts",
   "config.ts",
-  "diagnostics.ts",
   "client-detector.ts",
   "setup-wizard.ts",
   "history-logger.service.ts",

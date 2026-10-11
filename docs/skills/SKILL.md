@@ -245,9 +245,9 @@ path aliases.
 ## Available utilities
 
 Verify a helper exists before using it. `src/utils/formatters.ts` exports
-`formatBytes` and `formatDate`; `src/utils/file-utils.ts` exports `fileExists`,
-`ensureDir`, `expandHomePath`, `expandEnvVars`, `normalizePath` and `isSubPath`.
-There is no `pluralize` helper.
+`formatBytes`, `formatDuration` and `renderSkippedNotice`; `src/utils/file-utils.ts`
+exports `fileExists`, `expandHomePath`, `expandEnvVars`, `normalizePath` and
+`isSubPath`. There is no `pluralize` helper.
 
 ```typescript
 import { fileExists } from "../utils/file-utils.js";

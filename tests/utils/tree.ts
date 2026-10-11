@@ -30,24 +30,6 @@ export async function relativeFiles(root: string): Promise<string[]> {
   return found.sort();
 }
 
-/** Relative, sorted, "/"-separated paths of every DIRECTORY under `root`. */
-export async function relativeDirs(root: string): Promise<string[]> {
-  const found: string[] = [];
-
-  const walk = async (dir: string): Promise<void> => {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const full = path.join(dir, entry.name);
-      found.push(toPosixRelative(root, full));
-      await walk(full);
-    }
-  };
-
-  await walk(root);
-  return found.sort();
-}
-
 function toPosixRelative(root: string, full: string): string {
   return path.relative(root, full).split(path.sep).join("/");
 }

@@ -24,16 +24,6 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
- * Format date to ISO string
- * @param date - Date to format
- * @returns ISO date string
- * @throws Error if date is not a valid Date object
- */
-export function formatDate(date: Date): string {
-  return date.toISOString();
-}
-
-/**
  * Format duration in milliseconds to human-readable
  * @param ms - Duration in milliseconds
  * @returns Formatted duration string

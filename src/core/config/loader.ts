@@ -82,8 +82,6 @@ Your file organization settings will be reset, but your actual files are safe.
     return {};
   }
 }
-/** @deprecated Use updateUserConfig instead */
-export function saveConfig(config: Partial<UserConfig>): void { updateUserConfig(config); }
 export function updateUserConfig(updates: Partial<UserConfig>): boolean {
   const configPath = getUserConfigPath();
   const configDir = path.dirname(configPath);
@@ -135,23 +133,4 @@ export function loadCustomAllowedDirs(): string[] {
     logger.error("Error loading custom config:", (error as Error).message);
   }
   return [];
-}
-export function initializeUserConfig(): void {
-  try {
-    const configPath = getUserConfigPath();
-    const configDir = path.dirname(configPath);
-    if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
-    if (!fs.existsSync(configPath)) {
-      const defaultConfig: UserConfig = {
-        customAllowedDirectories: [],
-        conflictStrategy: "rename",
-        autoOrganize: { enabled: false },
-        settings: { maxScanDepth: 10, logAccess: true },
-      };
-      fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
-      logger.info(`Created default config file at: ${configPath}`);
-    }
-  } catch (error) {
-    logger.error("Error initializing user config:", (error as Error).message);
-  }
 }

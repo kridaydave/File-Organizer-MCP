@@ -1020,25 +1020,3 @@ export function detectExtensionMismatch(
 
   return null;
 }
-
-/**
- * Get all signatures for a specific category
- * @param category - The category to filter by
- * @returns Array of FileSignature definitions in that category
- */
-export function getSignaturesByCategory(
-  category: FileSignature["category"],
-): FileSignature[] {
-  return FILE_SIGNATURES.filter((sig) => sig.category === category);
-}
-
-/**
- * Check if a buffer contains executable content
- * Convenience function for security checks
- * @param buffer - The buffer to analyze
- * @returns True if the buffer matches an executable signature
- */
-export function isExecutableContent(buffer: Buffer): boolean {
-  const match = matchSignature(buffer);
-  return match !== null && isExecutableSignature(match.type);
-}
