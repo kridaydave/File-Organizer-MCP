@@ -45,6 +45,17 @@
   not found", which reads like a real undo-history problem. It is validated as a
   UUID at the schema layer and in the tool's hand-written JSON schema, in both
   `undo_last_operation` and `verify_integrity`.
+- **A pass that moved files had no undo handle in history.** `runOrganizePass`
+  logged the moves and then wrote a history row with no `manifestId`, so a
+  scheduled pass offered no id to hand
+  `file_organizer_undo_last_operation`, and `view_history`'s Undo Manifest
+  column was a dash. The organizer was already writing the manifest for the
+  moves it executed, so the pass now asks for that id and puts it on the row.
+  A pass that moved nothing still writes no id, and a manifest write that
+  fails is reported in the pass's `errors` instead of silently dropping the
+  handle. The files themselves were never beyond recovery, because the undo
+  tool falls back to the newest manifest on disk; what was missing was a row
+  that named the pass.
 
 - **A photo taken just after midnight was filed under the previous month** —
   two readers of the EXIF date disagreed about the calendar.
