@@ -272,6 +272,13 @@ export class HistoryLoggerService {
 
       logger.info("Rotating history file", { currentSize: stat.size });
 
+      if (this.maxBackupFiles <= 0) {
+        // Nothing to retain: truncate in place instead of leaving an
+        // operations.1.jsonl that no search will ever read.
+        await fs.truncate(this.historyFilePath, 0);
+        return;
+      }
+
       for (let i = this.maxBackupFiles - 1; i >= 1; i--) {
         const rotatedPath = (n: number) =>
           path.join(this.config.dataDir, `operations.${n}.jsonl`);

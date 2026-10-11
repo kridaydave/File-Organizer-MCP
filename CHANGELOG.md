@@ -35,15 +35,16 @@
   Set either rule explicitly on a watch to keep the old behavior; `0` disables
   the filter.
 
-### Fixed
-
 - **Two ticks of the same watch could run on top of each other.** The daemon
   refused a second pass over a directory already being processed, which meant an
   overlap was silently skipped rather than prevented. The guard now sits on the
   cron task itself, so a tick that fires while the previous one is still moving
   files is dropped by the scheduler instead of racing it. Different directories
-  still sweep in parallel, and a manual `triggerNow` or a startup catchup is no
-  longer blocked by a sweep already in flight.
+  still sweep in parallel.
+- **A manual or catchup pass can race a cron tick over the same directory.** The
+  in-flight guard used to only stop overlapping cron ticks; now `triggerNow` and
+  `runMissedSchedules` also check it, so any concurrent entry point is skipped
+  instead of racing the same sources and destinations.
 - **An unsigned manifest could be listed as an undo target.** `listManifests`
   parsed every file in the rollback directory with no signature check, so once
   manifest ids were shown to a user, a manifest file nobody signed became a

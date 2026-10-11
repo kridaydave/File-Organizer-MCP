@@ -47,7 +47,8 @@ export class AutoOrganizeService {
    * under-report: two passes over one directory collapse to a single entry, and
    * the second one's `finally` would clear the flag while the first is still
    * moving files. Purely a report — `getStatus` surfaces it so a caller can see
-   * that a tick is still running. It does not gate anything.
+   * that a tick is still running, and `runOrganization` skips a pass when one
+   * is already in flight for the same directory.
    */
   private inFlight: Map<string, number> = new Map();
   private stateService: SchedulerStateService | null = null;
@@ -295,12 +296,18 @@ export class AutoOrganizeService {
 
     // Validate directory path before scanning and organizing
     const validatedDirectory = await validateStrictPath(directory);
+
+    // Serialize every entry point per directory: cron ticks, manual
+    // triggers, and catchup all route through here, so a per-directory
+    // guard keeps them from racing on the same sources/destinations.
+    if (this.inFlight.has(validatedDirectory)) {
+      logger.debug(`[${validatedDirectory}] Pass already in flight, skipping`);
+      return;
+    }
+
     logger.info(`[${validatedDirectory}] Starting scheduled organization`);
 
-    this.inFlight.set(
-      validatedDirectory,
-      (this.inFlight.get(validatedDirectory) ?? 0) + 1,
-    );
+    this.inFlight.set(validatedDirectory, 1);
     try {
       const result = await this.pass(
         {
@@ -361,12 +368,7 @@ export class AutoOrganizeService {
       logger.error(`[${validatedDirectory}] Organization failed:`, error);
       throw error;
     } finally {
-      const remaining = (this.inFlight.get(validatedDirectory) ?? 1) - 1;
-      if (remaining > 0) {
-        this.inFlight.set(validatedDirectory, remaining);
-      } else {
-        this.inFlight.delete(validatedDirectory);
-      }
+      this.inFlight.delete(validatedDirectory);
     }
   }
 
