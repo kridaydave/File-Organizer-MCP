@@ -91,6 +91,53 @@ describe("documentation matches the tool registry", () => {
   });
 });
 
+/**
+ * The verify skill's feature map rots the same way the README did, and for the
+ * same reason: a tool is added to the registry, the map is not touched, and a
+ * tool exists that no agent knows how to prove. That gap once covered twelve
+ * tools. Nothing caught it.
+ *
+ * This reads the map's own files rather than a count written in prose, so a tool
+ * dropped from the map fails as loudly as one never added.
+ */
+describe("the verification skill's feature map covers the registry", () => {
+  const FEATURE_DIR = path.join(
+    REPO_ROOT,
+    ".opencode/skills/verify-file-organizer/references/features",
+  );
+
+  function featureFiles(): string[] {
+    return fs
+      .readdirSync(FEATURE_DIR)
+      .filter((f) => f.endsWith(".md") && f !== "README.md");
+  }
+
+  it("still has the feature files the index links to", () => {
+    const index = fs.readFileSync(path.join(FEATURE_DIR, "README.md"), "utf-8");
+    const linked = [...index.matchAll(/\]\(([a-z-]+\.md)\)/g)].map((m) => m[1]!);
+
+    expect(linked.length).toBeGreaterThan(0);
+    const onDisk = new Set(fs.readdirSync(FEATURE_DIR));
+    const broken = linked.filter((f) => !onDisk.has(f));
+    expect(broken).toEqual([]);
+  });
+
+  it("gives every registered tool a feature entry", () => {
+    const documented = new Set<string>();
+    for (const file of featureFiles()) {
+      const body = fs.readFileSync(path.join(FEATURE_DIR, file), "utf-8");
+      for (const [, name] of body.matchAll(/`([a-z0-9_]+)`/g)) {
+        documented.add(name!);
+      }
+    }
+
+    const missing = TOOLS.map((t) => t.name.replace("file_organizer_", ""))
+      .filter((name) => !documented.has(name));
+
+    expect(missing).toEqual([]);
+  });
+});
+
 describe("documented Node version matches package.json engines", () => {
   const MIN_NODE_MAJOR = 20;
 

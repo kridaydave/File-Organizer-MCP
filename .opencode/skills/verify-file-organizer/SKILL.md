@@ -165,9 +165,20 @@ These are properties of the current code. Each one cost a wrong turn.
 - **`file_organizer_doctor` is the first call for any "why is this path
   rejected" question.** It reports the effective config and flags which allowed
   directory is missing or blocked, which beats guessing from the error text.
+- **Folder labels in a response are `/`-separated on every OS, and `from`/`to`
+  paths are not.** `inspect_metadata` reports `organizationPath:
+  "Images/2024/05/photo.jpg"` and `organize_by_date` reports `folder: "2026/10"`,
+  both with forward slashes, while `actions[].from` and `.to` carry real
+  filesystem paths that use the platform separator. Assert on the label with `/`
+  and on the path with `path.sep`, never the other way round.
 
 ## Maintaining this skill
 
 After adding, removing, or renaming a tool, run `node $C doctor` and update
 `references/features/`. A tool that exists but is not in the map is a tool no
 agent knows how to prove.
+
+`tests/unit/docs-tool-list.test.ts` enforces this. It reads the feature files and
+fails when a registered tool has no entry, and when the index links a file that
+is not on disk. So a new tool without a map entry goes red in CI rather than
+drifting.

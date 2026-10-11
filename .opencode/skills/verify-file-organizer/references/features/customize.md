@@ -5,6 +5,7 @@
 - `set_custom_rules`: persist categorization rules that later calls obey.
 - `smart_suggest`: recommend rules, duplicates and large files for a directory.
 - `find_broken_symlinks`: audit dangling links.
+- `export_config`: bundle the config to carry to another machine.
 - `view_history`: filter the operation log by operation, status or date.
 
 ## How to get to it (client POV)
@@ -30,6 +31,9 @@ node $C call categorize_by_type --directory $D --json
 
 node $C call find_broken_symlinks --directory $D --json
 node $C call view_history --limit 5 --json
+
+# the whole config, without writing anything
+node $C call export_config --json
 ```
 
 ## Observable end state
@@ -37,6 +41,12 @@ node $C call view_history --limit 5 --json
 `set_custom_rules` returns success and the sandbox `config.json` gains a
 `customRules` array. A following `categorize_by_type` reflects the rule. History
 entries appear in `view_history` with the filters applied.
+
+`export_config` with no arguments returns the bundle in the response and writes
+nothing: `written: false`, `output_path: null`, `bytes_written: 0`. It reports
+`format_version: 1`, `mode: "absolute"`, a `counts` object naming what it
+carried, a `requires_editing` list naming the fields that are machine-specific,
+and `non_portable_paths` giving the offending value.
 
 ## Gotchas
 
@@ -51,3 +61,10 @@ entries appear in `view_history` with the filters applied.
 - **`view_history` filters are all optional** and it is one of the two tools with
   an empty `required` array. It reads the config-dir history, which under the
   harness is the sandbox's, so it shows only this sandbox's operations.
+- **`export_config` never touches the config file.** It reads it and optionally
+  writes a bundle somewhere else. Passing `output_path` is the only way anything
+  lands on disk, and the tool says so in `written`.
+- **`export_config` marks the paths you will have to edit.** The bundle is
+  machine-specific by construction, so `requires_editing` and `non_portable_paths`
+  are part of the contract, not warnings. Pass `rebase_root` (normally the home
+  directory) to emit `~`-relative paths instead of absolute ones.
