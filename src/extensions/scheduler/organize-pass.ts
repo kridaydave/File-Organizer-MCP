@@ -18,6 +18,7 @@ import type { ConflictStrategy } from "../../core/organize/organizer.js";
 import type { UserConfig } from "../../config.js";
 import type { HistoryLoggerService } from "../../services/history-logger.service.js";
 import type { OnceSource } from "./watch.schemas.js";
+import { logger } from "../../utils/logger.js";
 
 export interface OrganizePassOptions {
   /** Directory to organize. Validated through the same path gate the tools use. */
@@ -38,6 +39,19 @@ export interface OrganizePassOptions {
    * `--source` flag; see OnceSourceSchema for the accepted values.
    */
   source?: OnceSource;
+  /**
+   * Skip files younger than this many minutes. No default: a caller that omits
+   * it gets every file, which is what a person running `--once` by hand wants.
+   * The watch daemon supplies its own default, because a folder swept on a
+   * timer should not touch a file that is still being written to.
+   */
+  minFileAgeMinutes?: number;
+  /**
+   * Move at most this many files, leaving the rest for the next pass. No
+   * default, same reason as minFileAgeMinutes: a cap is per-directory tuning
+   * that belongs to whoever configured the directory, not to the pass.
+   */
+  maxFiles?: number;
 }
 
 export interface OrganizePassContext {
@@ -52,6 +66,13 @@ export interface OrganizePassResult {
   scanned: number;
   /** Files the organizer turned into moves in the plan. */
   planned: number;
+  /**
+   * Planned moves per category. Plan-level counts, not a per-file tally, so a
+   * recursive pass reports its top-level plan. Present because the daemon used
+   * to log this breakdown and a user debugging "why did that file land there"
+   * needs it; without it the only way to get it is a dry run by hand.
+   */
+  statistics: Record<string, number>;
   /** Files actually moved. Always 0 on a dry run. */
   moved: number;
   skipped: number;
@@ -79,6 +100,8 @@ export async function runOrganizePass(
     includeSubdirs = false,
     conflictStrategy,
     source = "manual",
+    minFileAgeMinutes,
+    maxFiles,
   } = options;
 
   const startedAt = Date.now();
@@ -88,7 +111,21 @@ export async function runOrganizePass(
     new CategorizerService(ctx.config.customRules ?? []),
   );
 
-  const files = await scanner.getAllFiles(validatedPath, includeSubdirs);
+  const scannedFiles = await scanner.getAllFiles(
+    validatedPath,
+    includeSubdirs,
+  );
+
+  // Age before size, so a directory full of fresh files spends the cap on
+  // nothing rather than on files that are about to be skipped anyway.
+  let files = scannedFiles;
+  if (minFileAgeMinutes !== undefined && minFileAgeMinutes > 0) {
+    files = filterByAge(files, minFileAgeMinutes);
+  }
+
+  if (maxFiles !== undefined && maxFiles > 0 && files.length > maxFiles) {
+    files = files.slice(0, maxFiles);
+  }
 
   const organizeResult = await organizer.organize(validatedPath, files, {
     dryRun,
@@ -99,8 +136,12 @@ export async function runOrganizePass(
   const result: OrganizePassResult = {
     directory: validatedPath,
     dryRun,
-    scanned: files.length,
+    // What the scanner found, before any filter. Reporting the filtered count
+    // here would make a daemon pass that skipped everything look like a pass
+    // over an empty directory, which is a different problem with the same number.
+    scanned: scannedFiles.length,
     planned: organizeResult.actions.length,
+    statistics: organizeResult.statistics,
     // successCount counts executed moves on the apply path and planned moves
     // on the dry-run path. statistics cannot be summed for "moved": the
     // organizer keeps plan-level category counts there, so a recursive pass
@@ -148,4 +189,37 @@ export async function runOrganizePass(
   }
 
   return result;
+}
+
+/**
+ * Keep only files whose mtime is at least `minAgeMinutes` old.
+ *
+ * Uses the timestamp the scanner already collected, so this costs no extra
+ * stat per file. A file the scanner could not date is kept: the alternative is
+ * to drop it, which means a permission blip protects it from every future pass,
+ * because it never becomes old enough to be examined again. Keeping it means one
+ * failed stat is a single bad organize rather than a permanent exemption.
+ */
+function filterByAge<T extends { path: string; modified?: Date }>(
+  files: readonly T[],
+  minFileAgeMinutes: number,
+): T[] {
+  const cutoff = Date.now() - minFileAgeMinutes * 60_000;
+  const kept: T[] = [];
+  let undated = 0;
+
+  for (const file of files) {
+    if (!file.modified || file.modified.getTime() <= cutoff) {
+      if (!file.modified) undated++;
+      kept.push(file);
+    }
+  }
+
+  if (undated > 0) {
+    logger.warn(
+      `${undated} file(s) had no readable mtime and were kept rather than skipped`,
+    );
+  }
+
+  return kept;
 }

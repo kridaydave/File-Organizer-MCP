@@ -2,8 +2,37 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The watch daemon runs the same pass as `once`.** The daemon had its own
+  copy of a sweep, so a scheduled directory was organized by different code from
+  the cron path, and the daemon wrote no history and no rollback handle. There is
+  now one pass: a daemon tick and `file-organizer-watch once --apply` produce
+  the same history row, carry the same manifest id, and honour the same
+  conflict strategy. A scheduled pass is now undoable by id.
+- **Custom categorization rules now reach the daemon.** The daemon built its
+  organizer without the configured `customRules`, so a scheduled directory was
+  categorized by the built-in extension map alone while a manual organize of the
+  same directory used the user's rules.
+- **A scheduled sweep waits for the file to settle.** The daemon now defaults to
+  `min_file_age_minutes: 60` and `max_files_per_run: 300` when a watch does not
+  set them. Previously a watch with neither rule swept every file on the next
+  tick and with no cap, so a folder that accumulated files overnight could move
+  all of them in one pass. **This changes behavior for existing watch configs
+  that never set either rule:** a newly downloaded file is now left alone for an
+  hour, and a backlog larger than 300 files is worked through over several ticks.
+  Set either rule explicitly on a watch to keep the old behavior; `0` disables
+  the filter.
+
 ### Fixed
 
+- **Two ticks of the same watch could run on top of each other.** The daemon
+  refused a second pass over a directory already being processed, which meant an
+  overlap was silently skipped rather than prevented. The guard now sits on the
+  cron task itself, so a tick that fires while the previous one is still moving
+  files is dropped by the scheduler instead of racing it. Different directories
+  still sweep in parallel, and a manual `triggerNow` or a startup catchup is no
+  longer blocked by a sweep already in flight.
 - **An unsigned manifest could be listed as an undo target.** `listManifests`
   parsed every file in the rollback directory with no signature check, so once
   manifest ids were shown to a user, a manifest file nobody signed became a

@@ -8,6 +8,10 @@ import path from 'path';
 import os from 'os';
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import type { WatchConfig } from '../../../src/config.js';
+import type {
+  OrganizePassOptions,
+  OrganizePassResult,
+} from '../../../src/extensions/scheduler/organize-pass.js';
 
 describe('AutoOrganizeService', () => {
   afterEach(() => {
@@ -18,13 +22,9 @@ describe('AutoOrganizeService', () => {
     it('should start with no tasks initially', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       expect(service.isActive()).toBe(false);
@@ -35,13 +35,9 @@ describe('AutoOrganizeService', () => {
     it('should be inactive before start', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       expect(service.isActive()).toBe(false);
@@ -51,13 +47,9 @@ describe('AutoOrganizeService', () => {
     it('should return empty watched directories initially', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       expect(service.getWatchedDirectories()).toEqual([]);
@@ -69,13 +61,9 @@ describe('AutoOrganizeService', () => {
     it('should convert hourly to correct cron', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       const hourlyCron = (service as any).legacyScheduleToCron('hourly');
@@ -86,13 +74,9 @@ describe('AutoOrganizeService', () => {
     it('should convert daily to correct cron', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       const dailyCron = (service as any).legacyScheduleToCron('daily');
@@ -103,13 +87,9 @@ describe('AutoOrganizeService', () => {
     it('should convert weekly to correct cron', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       const weeklyCron = (service as any).legacyScheduleToCron('weekly');
@@ -120,13 +100,9 @@ describe('AutoOrganizeService', () => {
     it('should default to daily for unknown schedules', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       const defaultCron = (service as any).legacyScheduleToCron('unknown');
@@ -139,13 +115,9 @@ describe('AutoOrganizeService', () => {
     it('should return correct initial status', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       const status = service.getStatus();
@@ -161,13 +133,9 @@ describe('AutoOrganizeService', () => {
     it('should return true when auto_organize is enabled', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       const watch: WatchConfig = {
@@ -182,13 +150,9 @@ describe('AutoOrganizeService', () => {
     it('should return false when auto_organize is disabled', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       const watch: WatchConfig = {
@@ -203,12 +167,26 @@ describe('AutoOrganizeService', () => {
 
   describe('runMissedSchedules', () => {
     let tempDir: string;
+    let originalCustomAllowed: string[];
 
     beforeEach(async () => {
-      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-'));
+      // Canonicalise once. validateStrictPath resolves through realpath, so on
+      // macOS os.tmpdir() (/var/...) and the path the code compares against
+      // (/private/var/...) differ, and an assertion on the raw string fails
+      // there while passing in CI. Assert the canonical value throughout.
+      tempDir = await fs.realpath(
+        await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-')),
+      );
+      // The tests below reach runOrganization, which validates the directory
+      // against the allow-list. os.tmpdir() is outside the default roots.
+      const { CONFIG } = await import('../../../src/core/config/defaults.js');
+      originalCustomAllowed = CONFIG.paths.customAllowed;
+      CONFIG.paths.customAllowed = [...originalCustomAllowed, tempDir];
     });
 
     afterEach(async () => {
+      const { CONFIG } = await import('../../../src/core/config/defaults.js');
+      CONFIG.paths.customAllowed = originalCustomAllowed;
       try {
         await fs.rm(tempDir, { recursive: true, force: true });
       } catch {
@@ -219,24 +197,84 @@ describe('AutoOrganizeService', () => {
     it('should not throw when watchList is empty', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
       await expect(service.runMissedSchedules()).resolves.not.toThrow();
       service.stop();
     });
 
-    it('should skip directories already in runningDirectories', async () => {
+    it('moves files on a scheduled sweep instead of planning only', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
+      await fs.writeFile(path.join(tempDir, 'invoice.txt'), 'hello');
+
+      const watches: WatchConfig[] = [
+        { directory: tempDir, schedule: '0 9 * * *', rules: { auto_organize: true } },
+      ];
+
+      // Asserted on the options the daemon hands the shared pass, not on the
+      // file outcome. The pass default is dry run, so a daemon that dropped the
+      // explicit false would plan every move and move nothing, and every other
+      // test here stubs the pass and would stay green through that regression.
+      const calls: OrganizePassOptions[] = [];
+      const service = new AutoOrganizeService(
+        () => ({ watchList: watches }),
+        undefined,
+        async (options: OrganizePassOptions): Promise<OrganizePassResult> => {
+          calls.push(options);
+          return {
+            directory: tempDir, dryRun: false, scanned: 1, planned: 1, moved: 1,
+            skipped: 0, statistics: {}, errors: [], aborted: false, historyLogged: true,
+          };
+        },
+      );
+
+      await service.triggerNow(tempDir);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({
+        directory: tempDir,
+        dryRun: false,
+        source: 'scheduled',
+      });
+
+      service.stop();
+    });
+
+    it('supplies the daemon age and size defaults to the shared pass', async () => {
+      const { AutoOrganizeService } =
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+
+      const watches: WatchConfig[] = [
+        { directory: tempDir, schedule: '0 9 * * *', rules: { auto_organize: true } },
+      ];
+      const calls: OrganizePassOptions[] = [];
+      const service = new AutoOrganizeService(
+        () => ({ watchList: watches }),
+        undefined,
+        async (options: OrganizePassOptions): Promise<OrganizePassResult> => {
+          calls.push(options);
+          return {
+            directory: tempDir, dryRun: false, scanned: 0, planned: 0, moved: 0,
+            skipped: 0, statistics: {}, errors: [], aborted: false, historyLogged: false,
+          };
+        },
+      );
+
+      await service.triggerNow(tempDir);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({ minFileAgeMinutes: 60, maxFiles: 300 });
+
+      service.stop();
+    });
+
+    it('does not skip a directory that is already in flight', async () => {
+      const { AutoOrganizeService } =
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
 
       const watches: WatchConfig[] = [
         {
@@ -247,20 +285,22 @@ describe('AutoOrganizeService', () => {
       ];
       const mockConfig = { watchList: watches };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
 
-      (service as any).runningDirectories = new Set([tempDir]);
+      // One daemon runs every watch concurrently, so an overlap is a normal
+      // pass and not something to refuse. Pinning the opposite of the old
+      // guard: this is the behavior change, so it needs a test that fails if
+      // the gate comes back.
+      (service as any).inFlight = new Map([[tempDir, 1]]);
 
       const runOrgSpy = jest.spyOn(service as any, 'runOrganization').mockResolvedValue(undefined);
 
       await service.runMissedSchedules();
 
-      expect(runOrgSpy).not.toHaveBeenCalled();
+      expect(runOrgSpy).toHaveBeenCalledTimes(1);
 
-      (service as any).runningDirectories = new Set();
+      (service as any).inFlight = new Map();
       runOrgSpy.mockRestore();
       service.stop();
     });
@@ -268,8 +308,6 @@ describe('AutoOrganizeService', () => {
     it('should allow processing different directories even when one is running', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const dir1 = tempDir;
       const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-2-'));
@@ -296,13 +334,11 @@ describe('AutoOrganizeService', () => {
         };
 
         const service = new AutoOrganizeService(
-          new FileScannerService(),
-          new OrganizerService(),
           () => mockConfig,
           mockStateService
         );
 
-        (service as any).runningDirectories = new Set([dir1]);
+        (service as any).inFlight = new Map([[dir1, 1]]);
 
         const runOrgSpy = jest
           .spyOn(service as any, 'runOrganization')
@@ -310,10 +346,12 @@ describe('AutoOrganizeService', () => {
 
         await service.runMissedSchedules();
 
-        expect(runOrgSpy).toHaveBeenCalledTimes(1);
+        // Both directories run. dir1 is already in flight, and nothing skips it.
+        expect(runOrgSpy).toHaveBeenCalledTimes(2);
+        expect(runOrgSpy).toHaveBeenCalledWith(watches[0]);
         expect(runOrgSpy).toHaveBeenCalledWith(watches[1]);
 
-        (service as any).runningDirectories = new Set();
+        (service as any).inFlight = new Map();
         runOrgSpy.mockRestore();
         service.stop();
       } finally {
@@ -321,11 +359,36 @@ describe('AutoOrganizeService', () => {
       }
     });
 
+    it('schedules each watch with noOverlap so a tick cannot race its own predecessor', async () => {
+      const cron = (await import('node-cron')).default;
+      const { AutoOrganizeService } =
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+
+      const watches: WatchConfig[] = [
+        { directory: tempDir, schedule: '*/5 * * * *', rules: { auto_organize: true } },
+      ];
+      const service = new AutoOrganizeService(() => ({ watchList: watches }));
+
+      // The old code refused a second pass over one directory with an in-memory
+      // Set. The gate moved into the scheduler, where node-cron can hold it per
+      // task instead of per daemon. Pinned here because dropping the option
+      // would let two ticks plan the same moves with nothing left to stop them.
+      const scheduleSpy = jest.spyOn(cron, 'schedule');
+
+      try {
+        service.reloadTasks();
+
+        expect(scheduleSpy).toHaveBeenCalledTimes(1);
+        expect(scheduleSpy.mock.calls[0]?.[2]).toEqual({ noOverlap: true });
+      } finally {
+        scheduleSpy.mockRestore();
+        service.stop();
+      }
+    });
+
     it('should handle errors when catch-up fails for a directory without throwing', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const dir1 = tempDir;
       const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-2-'));
@@ -352,8 +415,6 @@ describe('AutoOrganizeService', () => {
         };
 
         const service = new AutoOrganizeService(
-          new FileScannerService(),
-          new OrganizerService(),
           () => mockConfig,
           mockStateService
         );
@@ -398,13 +459,9 @@ describe('AutoOrganizeService', () => {
     it('should return false when directory is not in watch list', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const mockConfig = { watchList: [] };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
 
@@ -416,8 +473,6 @@ describe('AutoOrganizeService', () => {
     it('should return true and run organization when directory is in watch list', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const watches: WatchConfig[] = [
         {
@@ -428,8 +483,6 @@ describe('AutoOrganizeService', () => {
       ];
       const mockConfig = { watchList: watches };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
 
@@ -444,11 +497,9 @@ describe('AutoOrganizeService', () => {
       service.stop();
     });
 
-    it('should not run if already running for directory', async () => {
+    it('should trigger even if the directory is already in flight', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
-      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
-      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const watches: WatchConfig[] = [
         {
@@ -459,21 +510,19 @@ describe('AutoOrganizeService', () => {
       ];
       const mockConfig = { watchList: watches };
       const service = new AutoOrganizeService(
-        new FileScannerService(),
-        new OrganizerService(),
         () => mockConfig
       );
 
-      (service as any).runningDirectories = new Set([tempDir]);
+      (service as any).inFlight = new Map([[tempDir, 1]]);
 
       const runOrgSpy = jest.spyOn(service as any, 'runOrganization').mockResolvedValue(undefined);
 
       const result = await service.triggerNow(tempDir);
 
-      expect(result).toBe(false);
-      expect(runOrgSpy).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(runOrgSpy).toHaveBeenCalledTimes(1);
 
-      (service as any).runningDirectories = new Set();
+      (service as any).inFlight = new Map();
       runOrgSpy.mockRestore();
       service.stop();
     });

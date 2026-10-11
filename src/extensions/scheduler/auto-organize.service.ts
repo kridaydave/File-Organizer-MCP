@@ -3,16 +3,13 @@
  * Auto-Organize Scheduler Service
  *
  * Smart scheduling with cron-based per-directory configuration.
- * Supports min_file_age filtering and batch limits.
+ * The sweep itself is the shared pass in organize-pass.ts; this file owns the
+ * timer, the catchup decision, and the per-directory tuning it supplies.
  * Includes smart catchup for missed schedules.
  */
 
 import cron, { type ScheduledTask } from "node-cron";
-import fs, { existsSync } from "fs";
-import fsPromises from "fs/promises";
-import path from "path";
-import { FileScannerService } from "../../core/scan/scanner.js";
-import { OrganizerService } from "../../core/organize/organizer.js";
+import { existsSync } from "fs";
 import {
   loadUserConfig,
   type UserConfig,
@@ -22,8 +19,22 @@ import { logger } from "../../utils/logger.js";
 import { SchedulerStateService } from "./scheduler-state.service.js";
 import { shouldCatchup } from "../../utils/cron-utils.js";
 import { validateStrictPath } from "../../services/path-validator.service.js";
+import { runOrganizePass } from "./organize-pass.js";
+import { historyLogger } from "../../services/history-logger.service.js";
 
 export type ConfigLoader = () => UserConfig;
+
+/**
+ * How long a file must have sat still before a sweep will touch it. A file
+ * still being written to is half a file, and organizing it moves the half.
+ */
+const DEFAULT_MIN_FILE_AGE_MINUTES = 60;
+
+/**
+ * Ceiling on one pass, so a folder that accumulated a thousand files overnight
+ * does not turn one tick into a thousand moves. The rest wait for the next one.
+ */
+const DEFAULT_MAX_FILES_PER_RUN = 300;
 
 /**
  * Auto-Organize Scheduler Service
@@ -31,15 +42,25 @@ export type ConfigLoader = () => UserConfig;
  */
 export class AutoOrganizeService {
   private tasks: Map<string, ScheduledTask> = new Map();
-  private runningDirectories: Set<string> = new Set();
+  /**
+   * Directories with a pass in flight, counted rather than flagged. A Set would
+   * under-report: two passes over one directory collapse to a single entry, and
+   * the second one's `finally` would clear the flag while the first is still
+   * moving files. Purely a report — `getStatus` surfaces it so a caller can see
+   * that a tick is still running. It does not gate anything.
+   */
+  private inFlight: Map<string, number> = new Map();
   private stateService: SchedulerStateService | null = null;
   private missedSchedulesLock: Promise<void> | null = null;
 
   constructor(
-    private scanner = new FileScannerService(),
-    private organizer = new OrganizerService(),
     private configLoader: () => UserConfig = () => loadUserConfig(),
     stateService?: SchedulerStateService,
+    /**
+     * The sweep. Injectable so a test can assert the options the daemon hands
+     * it without standing up a filesystem; defaults to the real pass.
+     */
+    private pass: typeof runOrganizePass = runOrganizePass,
   ) {
     this.stateService = stateService || null;
   }
@@ -116,7 +137,11 @@ export class AutoOrganizeService {
       logger.error("Error stopping auto-organize tasks:", error);
     } finally {
       this.tasks.clear();
-      this.runningDirectories.clear();
+      // Cleared because stop() means "nothing is running here now". A pass
+      // already in flight finishes on its own and decrements the counter, so
+      // this only stops getStatus from reporting a directory that the daemon
+      // has already shut down.
+      this.inFlight.clear();
       logger.info("Auto-organize scheduler stopped");
     }
   }
@@ -186,30 +211,38 @@ export class AutoOrganizeService {
       }
 
       try {
-        const task = cron.schedule(watch.schedule, async () => {
-          const maxRetries = 3;
-          let attempt = 0;
-          while (attempt < maxRetries) {
-            try {
-              await this.runOrganization(watch);
-              break;
-            } catch (error) {
-              attempt++;
-              if (attempt >= maxRetries) {
-                logger.error(
-                  `Cron job failed for ${watch.directory} after ${maxRetries} attempts: ${error}`,
-                );
-              } else {
-                logger.warn(
-                  `Cron job failed for ${watch.directory}, retrying (attempt ${attempt}/${maxRetries}): ${error}`,
-                );
-                await new Promise((resolve) =>
-                  setTimeout(resolve, 1000 * attempt),
-                );
+        // A tick that fires while the previous one is still moving files would
+        // have both passes plan the same sources and race on the same
+        // destinations. Different directories still run in parallel; this only
+        // stops one watch from overlapping itself.
+        const task = cron.schedule(
+          watch.schedule,
+          async () => {
+            const maxRetries = 3;
+            let attempt = 0;
+            while (attempt < maxRetries) {
+              try {
+                await this.runOrganization(watch);
+                break;
+              } catch (error) {
+                attempt++;
+                if (attempt >= maxRetries) {
+                  logger.error(
+                    `Cron job failed for ${watch.directory} after ${maxRetries} attempts: ${error}`,
+                  );
+                } else {
+                  logger.warn(
+                    `Cron job failed for ${watch.directory}, retrying (attempt ${attempt}/${maxRetries}): ${error}`,
+                  );
+                  await new Promise((resolve) =>
+                    setTimeout(resolve, 1000 * attempt),
+                  );
+                }
               }
             }
-          }
-        });
+          },
+          { noOverlap: true },
+        );
 
         this.tasks.set(watch.directory, task);
         logger.info(
@@ -247,12 +280,14 @@ export class AutoOrganizeService {
   }
 
   /**
-   * Run organization for a specific watch config
-   * Manages runningDirectories Set to prevent concurrent execution for same directory
+   * Run one scheduled pass over a watched directory.
+   *
+   * Delegates to the shared pass, so a daemon sweep and a cron `--once` run the
+   * same code, write the same history row, and leave the same rollback handle.
    * @param watch - Watch configuration containing directory and rules
    * @see startAutoOrganizeScheduler() - For starting all scheduled tasks
    * @see triggerNow() - For manually triggering a single directory
-   * @see getStatus() - For checking runningDirectories state
+   * @see getStatus() - For checking which directories are mid-pass
    * @returns Promise<void>
    */
   private async runOrganization(watch: WatchConfig): Promise<void> {
@@ -260,72 +295,45 @@ export class AutoOrganizeService {
 
     // Validate directory path before scanning and organizing
     const validatedDirectory = await validateStrictPath(directory);
-
-    // Check-and-set to prevent concurrent runs for the same directory
-    if (this.runningDirectories.has(validatedDirectory)) {
-      logger.warn(
-        `Previous run still active for ${validatedDirectory}, skipping this cycle`,
-      );
-      return;
-    }
-    this.runningDirectories.add(validatedDirectory);
     logger.info(`[${validatedDirectory}] Starting scheduled organization`);
 
+    this.inFlight.set(
+      validatedDirectory,
+      (this.inFlight.get(validatedDirectory) ?? 0) + 1,
+    );
     try {
-      // Get all files
-      let files = await this.scanner.getAllFiles(validatedDirectory, false);
-
-      if (files.length === 0) {
-        logger.debug(`[${validatedDirectory}] No files to organize`);
-        return;
-      }
-
-      logger.info(`[${validatedDirectory}] Found ${files.length} files`);
-
-      // Apply min_file_age filter if configured
-      if (rules.min_file_age_minutes && rules.min_file_age_minutes > 0) {
-        files = await this.filterByAge(files, rules.min_file_age_minutes);
-        logger.info(
-          `[${validatedDirectory}] ${files.length} files meet age requirement (${rules.min_file_age_minutes} min)`,
-        );
-      }
-
-      if (files.length === 0) {
-        logger.debug(`[${validatedDirectory}] No files meet criteria after filtering`);
-        return;
-      }
-
-      // Apply max_files_per_run limit if configured
-      const originalCount = files.length;
-      if (
-        rules.max_files_per_run &&
-        rules.max_files_per_run > 0 &&
-        files.length > rules.max_files_per_run
-      ) {
-        files = files.slice(0, rules.max_files_per_run);
-        logger.info(
-          `[${validatedDirectory}] Limited to ${files.length} files (from ${originalCount}) due to max_files_per_run`,
-        );
-      }
-
-      // Get conflict strategy from config
-      const userConfig = this.configLoader();
-      const conflictStrategy = userConfig.conflictStrategy ?? "rename";
-
-      // Run organization
-      const result = await this.organizer.organize(validatedDirectory, files, {
-        dryRun: false,
-        conflictStrategy,
-      });
-
-      const totalMoved = Object.values(result.statistics).reduce(
-        (a, b) => a + b,
-        0,
+      const result = await this.pass(
+        {
+          directory: validatedDirectory,
+          // A scheduled pass exists to move files. The pass default is dry run
+          // so a bare `--once` writes nothing; the daemon is the one caller
+          // that always means apply.
+          dryRun: false,
+          // A cron tick, a catchup, and a manual trigger are all a schedule
+          // being honoured rather than a person asking, and a process cannot
+          // detect which one it is.
+          source: "scheduled",
+          minFileAgeMinutes: rules.min_file_age_minutes ?? DEFAULT_MIN_FILE_AGE_MINUTES,
+          maxFiles: rules.max_files_per_run ?? DEFAULT_MAX_FILES_PER_RUN,
+        },
+        { config: this.configLoader(), history: historyLogger },
       );
-      logger.info(`[${validatedDirectory}] Organized ${totalMoved} files`, {
-        statistics: result.statistics,
-        errors: result.errors.length,
-      });
+
+      if (result.moved > 0) {
+        logger.info(`[${validatedDirectory}] Moved ${result.moved} files`, {
+          // scanned is pre-filter, so it stays visible here: without it a
+          // sweep that held every file as too fresh is indistinguishable from
+          // a sweep over an empty folder.
+          scanned: result.scanned,
+          planned: result.planned,
+          skipped: result.skipped,
+          statistics: result.statistics,
+        });
+      } else {
+        logger.debug(
+          `[${validatedDirectory}] Nothing to move (${result.scanned} scanned)`,
+        );
+      }
 
       if (result.errors.length > 0) {
         logger.warn(
@@ -353,39 +361,13 @@ export class AutoOrganizeService {
       logger.error(`[${validatedDirectory}] Organization failed:`, error);
       throw error;
     } finally {
-      this.runningDirectories.delete(validatedDirectory);
-    }
-  }
-
-  /**
-   * Filter files by minimum age
-   */
-  private async filterByAge(
-    files: Array<{ path: string; name: string; size: number }>,
-    minAgeMinutes: number,
-  ): Promise<Array<{ path: string; name: string; size: number }>> {
-    const now = Date.now();
-    const minAgeMs = minAgeMinutes * 60 * 1000;
-    const filtered: Array<{ path: string; name: string; size: number }> = [];
-
-    for (const file of files) {
-      try {
-        const stats = await fsPromises.stat(file.path);
-        const fileAge = now - stats.mtime.getTime();
-
-        if (fileAge >= minAgeMs) {
-          filtered.push(file);
-        }
-      } catch (error) {
-        logger.warn(`Could not stat file ${file.path}`, {
-          error: String(error),
-        });
-        // Include file if we can't determine age (safer to process it)
-        filtered.push(file);
+      const remaining = (this.inFlight.get(validatedDirectory) ?? 1) - 1;
+      if (remaining > 0) {
+        this.inFlight.set(validatedDirectory, remaining);
+      } else {
+        this.inFlight.delete(validatedDirectory);
       }
     }
-
-    return filtered;
   }
 
   /**
@@ -419,7 +401,7 @@ export class AutoOrganizeService {
       active: this.isActive(),
       taskCount: this.getTaskCount(),
       watchedDirectories: this.getWatchedDirectories(),
-      runningDirectories: Array.from(this.runningDirectories),
+      runningDirectories: Array.from(this.inFlight.keys()),
     };
   }
 
@@ -432,14 +414,6 @@ export class AutoOrganizeService {
 
     if (!watch) {
       logger.error(`Directory not in watch list: ${directory}`);
-      return false;
-    }
-
-    // Prevent concurrent runs
-    if (this.runningDirectories.has(directory)) {
-      logger.warn(
-        `Previous run still active for ${directory}, skipping triggerNow`,
-      );
       return false;
     }
 
@@ -590,12 +564,6 @@ export class AutoOrganizeService {
 
     for (const watch of watchesToRun) {
       const directory = watch.directory;
-
-      // Skip if directory is already being processed
-      if (this.runningDirectories.has(directory)) {
-        logger.debug(`[${directory}] Already running, skipping catchup`);
-        continue;
-      }
 
       try {
         logger.info(`[${directory}] Running missed schedule catch-up`);
