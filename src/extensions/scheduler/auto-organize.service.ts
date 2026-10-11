@@ -635,19 +635,3 @@ export function stopAutoOrganizeScheduler(): void {
     globalScheduler.stop();
   }
 }
-
-/**
- * Reload the global scheduler tasks
- */
-export function reloadAutoOrganizeScheduler(): void {
-  if (globalScheduler) {
-    globalScheduler.reloadTasks();
-  }
-}
-
-/**
- * Get the global scheduler instance
- */
-export function getAutoOrganizeScheduler(): AutoOrganizeService | null {
-  return globalScheduler;
-}

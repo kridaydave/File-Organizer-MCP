@@ -5,7 +5,6 @@
  */
 
 import fs from "fs/promises";
-import path from "path";
 import { CategoryName } from "../../types.js";
 import { logger } from "../../utils/logger.js";
 import { AudioMetadataService } from "./audio.js";
@@ -66,6 +65,11 @@ export class MetadataService {
    * Get a relative subpath based on file metadata.
    * e.g. "2024/01" for images, "Artist/Album" for audio.
    * Returns empty string if no relevant metadata found.
+   *
+   * Always "/"-separated, on every OS. This is a folder label that tools
+   * report back to a caller, not a filesystem path, so a Windows agent has to
+   * read the same string a Linux one does. The organizer turns it into a real
+   * path with path.join, which normalizes the separator for us.
    */
   async getMetadataSubpath(
     filePath: string,
@@ -83,14 +87,14 @@ export class MetadataService {
         const month = (metadata.date.getUTCMonth() + 1)
           .toString()
           .padStart(2, "0");
-        subpath = path.join(year, month);
+        subpath = `${year}/${month}`;
       }
     } else if (category === "Audio") {
       const artist = sanitizeMetadataValue(metadata.artist);
       const album = sanitizeMetadataValue(metadata.album);
 
       if (artist) {
-        subpath = album ? path.join(artist, album) : artist;
+        subpath = album ? `${artist}/${album}` : artist;
       }
     }
 

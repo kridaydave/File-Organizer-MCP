@@ -291,13 +291,6 @@ export async function isPathAllowed(
 }
 
 /**
- * Get list of all allowed directories (for user info)
- */
-export function getAllowedDirectories(): string[] {
-  return [...CONFIG.paths.defaultAllowed, ...CONFIG.paths.customAllowed];
-}
-
-/**
  * Format a helpful access denied message with actionable information
  */
 export function formatAccessDeniedMessage(
