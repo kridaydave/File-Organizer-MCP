@@ -110,6 +110,9 @@ export class HistoryLoggerService {
    * explicit constructor value wins, so a caller with its own storage is not
    * affected by what the machine's config happens to say.
    *
+   * Each caller reads it once per operation and reuses the number, so one
+   * rotation or one search is one config parse rather than one per file.
+   *
    * A value that is not a finite number is ignored rather than coerced, so a
    * typo (`"five"`, `null`) falls back to the default instead of producing a
    * read loop that never runs or one that scans forever.
@@ -272,14 +275,19 @@ export class HistoryLoggerService {
 
       logger.info("Rotating history file", { currentSize: stat.size });
 
-      if (this.maxBackupFiles <= 0) {
+      // Read once. The getter parses the user config, and this critical section
+      // holds the history lock, so a second read per shifted file is time spent
+      // holding the lock for nothing.
+      const keep = this.maxBackupFiles;
+
+      if (keep <= 0) {
         // Nothing to retain: truncate in place instead of leaving an
         // operations.1.jsonl that no search will ever read.
         await fs.truncate(this.historyFilePath, 0);
         return;
       }
 
-      for (let i = this.maxBackupFiles - 1; i >= 1; i--) {
+      for (let i = keep - 1; i >= 1; i--) {
         const rotatedPath = (n: number) =>
           path.join(this.config.dataDir, `operations.${n}.jsonl`);
         try {
@@ -335,8 +343,11 @@ export class HistoryLoggerService {
     const lockAcquired = await this.tryAcquireLock();
 
     try {
+      // Read once, not once per candidate file. With a large configured count
+      // the getter's config parse would come to dominate the read it bounds.
+      const maxBackupFiles = this.maxBackupFiles;
       const filesToRead = [this.historyFilePath];
-      for (let i = 1; i <= this.maxBackupFiles; i++) {
+      for (let i = 1; i <= maxBackupFiles; i++) {
         filesToRead.push(
           path.join(this.config.dataDir, `operations.${i}.jsonl`),
         );

@@ -31,6 +31,7 @@ describe("History Logger Edge Cases", () => {
     testDir = path.resolve("./test-history-edge-cases");
     historyLogger = new HistoryLoggerService({
       dataDir: testDir,
+      maxBackupFiles: 0,
     });
     await fs.rm(testDir, { recursive: true, force: true });
     await fs.mkdir(testDir, { recursive: true });
@@ -129,12 +130,15 @@ describe("History Logger Edge Cases", () => {
     it("should handle concurrent log entries with lock mechanism", async () => {
       const logger1 = new HistoryLoggerService({
         dataDir: testDir,
+        maxBackupFiles: 0,
       });
       const logger2 = new HistoryLoggerService({
         dataDir: testDir,
+        maxBackupFiles: 0,
       });
       const logger3 = new HistoryLoggerService({
         dataDir: testDir,
+        maxBackupFiles: 0,
       });
 
       await Promise.all([

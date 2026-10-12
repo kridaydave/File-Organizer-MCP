@@ -13,18 +13,17 @@
  */
 
 import fs from "fs/promises";
+import os from "os";
 import path from "path";
+import crypto from "crypto";
 import { jest } from "@jest/globals";
 import type { ToolResponse } from "../../src/mcp/types.js";
+import type { RollbackAction } from "../../src/core/types/system.js";
+import { CONFIG } from "../../src/core/config/defaults.js";
 
 // Private config, history, rollback and backup roots. Without these the test
 // reads and writes the developer's real `~/.config/file-organizer-mcp`.
-const tempRoot = path.join(
-  process.cwd(),
-  "tests",
-  "temp",
-  `full-flow-${process.pid}`,
-);
+const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "fom-full-flow-"));
 const tempConfigDir = path.join(tempRoot, "config");
 
 const actualPaths = await import("../../src/core/config/paths.js");
@@ -87,18 +86,58 @@ function manifestIdOf(result: ToolResponse): string {
   return manifest_id;
 }
 
+/**
+ * Write a signed manifest by hand, so the caller picks its timestamp.
+ *
+ * `createManifest` stamps `Date.now()` and takes no override, while
+ * `listManifests` sorts by exactly that field, so a manifest that has to sort
+ * after another one cannot be built through it without a clock to control.
+ */
+async function writeManifest(
+  description: string,
+  timestamp: number,
+  actions: RollbackAction[],
+): Promise<string> {
+  const { manifestIntegrityService } = await import(
+    "../../src/core/organize/manifest-integrity.js"
+  );
+  const id = crypto.randomUUID();
+  const manifest = manifestIntegrityService.signManifest({
+    id,
+    timestamp,
+    description,
+    actions,
+    version: "1.0",
+  });
+
+  await fs.mkdir(rollbackDir, { recursive: true });
+  await fs.writeFile(
+    path.join(rollbackDir, `${id}.json`),
+    JSON.stringify(manifest, null, 2),
+  );
+  return id;
+}
+
 describe("Integration: Full Organization Flow", () => {
   let testDir: string;
-  let baseTempDir: string;
+  /** The whitelist before this file widens it, restored after every test. */
+  let originalCustomAllowed: string[];
 
   beforeEach(async () => {
     await fs.mkdir(path.join(tempConfigDir, "rollback"), { recursive: true });
-    baseTempDir = path.join(process.cwd(), "tests", "temp");
-    await fs.mkdir(baseTempDir, { recursive: true });
-    testDir = await fs.mkdtemp(path.join(baseTempDir, "int-org-"));
+    testDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-int-org-"));
+    // `os.tmpdir()` is not among the default allowed roots — the test-mode
+    // bypass in paths.ts lists it but never adds it — so the organize would be
+    // refused. Whitelist this run's own dirs, the way the security suites do.
+    if (!originalCustomAllowed) {
+      originalCustomAllowed = CONFIG.paths.customAllowed;
+    }
+    CONFIG.paths.customAllowed = [...originalCustomAllowed, tempRoot, testDir];
   });
 
   afterEach(async () => {
+    CONFIG.paths.customAllowed = originalCustomAllowed;
+
     // Give time for any pending IO to settle
     await new Promise((resolve) => setTimeout(resolve, 500));
     // Drain any pending microtasks
@@ -216,19 +255,26 @@ describe("Integration: Full Organization Flow", () => {
     });
     const manifestId = manifestIdOf(orgResult);
 
-    // A batch from "another worker", newer than this one by construction: it
-    // is written after the organize above, so its timestamp always sorts first.
+    // A batch from "another worker". It is newer than this test's own by
+    // construction: its stamp is set past the organize's, which is what makes
+    // the assertion below a guarantee rather than a race.
     await fs.mkdir(foreignSrc, { recursive: true });
     const stray = path.join(foreignSrc, "stray.txt");
     await fs.writeFile(stray, "not this test's file");
-    const foreignId = await new RollbackService(rollbackDir).createManifest(
+    // A full second past the organize's stamp. `createManifest` takes
+    // `Date.now()` and no override, and `listManifests` orders by that field,
+    // so two manifests written in the same millisecond have no defined order
+    // and the assertion below would be a coin flip.
+    const foreignStamp = Date.now() + 1000;
+    const foreignId = await writeManifest(
       "a batch from another worker",
+      foreignStamp,
       [
         {
           type: "move",
           originalPath: stray,
           currentPath: stray,
-          timestamp: Date.now(),
+          timestamp: foreignStamp,
         },
       ],
     );

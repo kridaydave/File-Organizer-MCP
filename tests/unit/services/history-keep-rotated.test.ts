@@ -89,7 +89,11 @@ describe("keepRotatedFiles decides the rotations a search reads", () => {
 
   afterEach(async () => {
     keepRotatedFiles = undefined;
-    await new Promise((r) => setTimeout(r, 100));
+    // Windows holds the file briefly after the last write and the rm flakes
+    // without it. Nothing here needs the wait on the other platforms.
+    if (process.platform === "win32") {
+      await new Promise((r) => setTimeout(r, 100));
+    }
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
@@ -113,6 +117,14 @@ describe("keepRotatedFiles decides the rotations a search reads", () => {
   async function filesRead(): Promise<number[]> {
     const result = await service.searchHistory({ limit: 1000 });
     return result.entries.map(rotationOf);
+  }
+
+  /** Whether `operations.N.jsonl` is on disk. */
+  async function exists(n: number): Promise<boolean> {
+    return fs
+      .access(path.join(dataDir, `operations.${n}.jsonl`))
+      .then(() => true)
+      .catch(() => false);
   }
 
   it("reads exactly the rotations the config asks for", async () => {
@@ -162,5 +174,58 @@ describe("keepRotatedFiles decides the rotations a search reads", () => {
 
     const result = await pinned.searchHistory({ limit: 1000 });
     expect(result.entries.map(rotationOf)).toEqual([0, 1, 2]);
+  });
+
+  it("leaves on disk exactly the rotations the config asks for", async () => {
+    keepRotatedFiles = 3;
+    // One byte per rotation trigger, so every append past the first rotates:
+    // ten appends produce ten rounds of shifting, which is what decides how
+    // many `operations.N.jsonl` survive. Reading rotations back proves the
+    // search honours the count; only a real write proves rotation does.
+    const rotating = new HistoryLoggerService({
+      dataDir,
+      maxFileSizeBytes: 1,
+    });
+    await rotating.init();
+
+    for (let i = 0; i < 10; i++) {
+      await rotating.log({
+        operation: "organize_files",
+        source: "manual",
+        status: "success",
+        durationMs: 1,
+        filesProcessed: i,
+      });
+    }
+
+    await expect(exists(3)).resolves.toBe(true);
+    // The cut. A rotation loop that kept five would have written this one.
+    await expect(exists(4)).resolves.toBe(false);
+  });
+
+  it("truncates the live file at 0 instead of hiding a backup", async () => {
+    keepRotatedFiles = 0;
+    const rotating = new HistoryLoggerService({
+      dataDir,
+      maxFileSizeBytes: 1,
+    });
+    await rotating.init();
+
+    for (let i = 0; i < 5; i++) {
+      await rotating.log({
+        operation: "organize_files",
+        source: "manual",
+        status: "success",
+        durationMs: 1,
+        filesProcessed: i,
+      });
+    }
+
+    // The rename path leaves operations.1.jsonl behind with four of the five
+    // entries in it, and at 0 no read opens it: history the user still has,
+    // invisible everywhere. Nothing is hidden, so the live file is the whole
+    // story and the search reads exactly what survived.
+    await expect(exists(1)).resolves.toBe(false);
+    await expect(filesRead()).resolves.toEqual([4]);
   });
 });

@@ -432,6 +432,7 @@ describe("HistoryLoggerService", () => {
     it("should not throw when file does not exist", async () => {
       const newService = new HistoryLoggerService({
         dataDir: path.join(dataDir, "nonexistent"),
+        maxBackupFiles: 0,
       });
       await newService.init();
 
@@ -568,7 +569,10 @@ also invalid
   describe("init()", () => {
     it("should create data directory on init", async () => {
       const newDir = path.join(dataDir, "nested", "directory");
-      const newService = new HistoryLoggerService({ dataDir: newDir });
+      const newService = new HistoryLoggerService({
+        dataDir: newDir,
+        maxBackupFiles: 0,
+      });
 
       await newService.init();
 

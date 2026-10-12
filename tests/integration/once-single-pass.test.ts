@@ -60,7 +60,10 @@ describe("single-pass organize (once)", () => {
   beforeEach(async () => {
     workDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-once-"));
     historyDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-once-hist-"));
-    history = new HistoryLoggerService({ dataDir: historyDir });
+    history = new HistoryLoggerService({
+      dataDir: historyDir,
+      maxBackupFiles: 0,
+    });
     // os.tmpdir() is outside the default allowed roots, so the pass would be
     // refused. Whitelist this run's own dir through the same setter the
     // security suites use.
@@ -457,6 +460,7 @@ describe("single-pass organize (once)", () => {
     const blocked = new HistoryLoggerService({
       dataDir: historyDir,
       lockTimeoutMs: 100,
+      maxBackupFiles: 0,
     });
     await fs.writeFile(path.join(historyDir, "operations.lock"), "held");
 

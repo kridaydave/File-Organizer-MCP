@@ -63,7 +63,11 @@ describe("search history tool", () => {
     dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-search-tool-"));
     ctx = {
       config: { conflictStrategy: "rename" } as UserConfig,
-      history: new HistoryLoggerService({ dataDir, lockTimeoutMs: 1000 }),
+      history: new HistoryLoggerService({
+        dataDir,
+        lockTimeoutMs: 1000,
+        maxBackupFiles: 0,
+      }),
     };
     await ctx.history.init();
   });
