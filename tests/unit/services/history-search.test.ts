@@ -50,7 +50,13 @@ describe("HistoryLoggerService.searchHistory", () => {
   beforeEach(async () => {
     setupLoggerMocks();
     dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-history-search-"));
-    service = new HistoryLoggerService({ dataDir, lockTimeoutMs: 1000 });
+    // Pinned so the search never reads the rotation count off whatever config
+    // the machine running this suite happens to have.
+    service = new HistoryLoggerService({
+      dataDir,
+      maxBackupFiles: 0,
+      lockTimeoutMs: 1000,
+    });
     await service.init();
   });
 

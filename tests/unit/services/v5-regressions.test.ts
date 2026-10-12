@@ -428,7 +428,13 @@ describe('v5 Critical Regressions Gate', () => {
 
   describe('14. Rotated History Reading in HistoryLoggerService', () => {
     it('reads entries from both operations.jsonl and rotated operations.1.jsonl', async () => {
-      const historyLogger = new HistoryLoggerService({ dataDir: tempDir });
+      // Pinned. Unset, the count is read off the machine's config, and this
+      // test reads operations.1.jsonl, so a `keepRotatedFiles: 0` machine
+      // would turn it red for a reason that has nothing to do with the code.
+      const historyLogger = new HistoryLoggerService({
+        dataDir: tempDir,
+        maxBackupFiles: 1,
+      });
       await historyLogger.init();
 
       const entry1 = {

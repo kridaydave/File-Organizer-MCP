@@ -14,6 +14,7 @@ import crypto from "crypto";
 import { minimatch } from "minimatch";
 import { logger } from "../utils/logger.js";
 import { getHistoryDirectory } from "../core/config/paths.js";
+import { loadUserConfig } from "../core/config/loader.js";
 import { ValidationError } from "../types.js";
 
 export interface HistoryEntry {
@@ -64,14 +65,21 @@ export interface HistoryResult {
 interface HistoryLoggerConfig {
   dataDir: string;
   maxFileSizeBytes: number;
-  maxBackupFiles: number;
+  /**
+   * Omitted means "read `historyLogging.keepRotatedFiles` from the user
+   * config". Set it to pin the number, as a caller that owns its own
+   * storage does, so the value cannot be read off the machine's config.
+   */
+  maxBackupFiles?: number;
   lockTimeoutMs: number;
 }
+
+/** Rotations kept and read back when the config sets no preference. */
+const DEFAULT_KEEP_ROTATED_FILES = 5;
 
 const DEFAULT_CONFIG: HistoryLoggerConfig = {
   dataDir: getHistoryDirectory(),
   maxFileSizeBytes: 10 * 1024 * 1024,
-  maxBackupFiles: 5,
   lockTimeoutMs: 5000,
 };
 
@@ -90,6 +98,34 @@ export class HistoryLoggerService {
     this.historyFilePath = path.join(this.config.dataDir, "operations.jsonl");
     this.lockFilePath = path.join(this.config.dataDir, "operations.lock");
     this.writeQueue = Promise.resolve();
+  }
+
+  /**
+   * How many `operations.N.jsonl` files survive a rotation, and how many a
+   * search reads back.
+   *
+   * Read from the user config on every use rather than frozen at construction,
+   * because the module-level `historyLogger` is built before any config is
+   * loaded and `createRequestContext` already re-reads config per request. An
+   * explicit constructor value wins, so a caller with its own storage is not
+   * affected by what the machine's config happens to say.
+   *
+   * Each caller reads it once per operation and reuses the number, so one
+   * rotation or one search is one config parse rather than one per file.
+   *
+   * A value that is not a finite number is ignored rather than coerced, so a
+   * typo (`"five"`, `null`) falls back to the default instead of producing a
+   * read loop that never runs or one that scans forever.
+   */
+  private get maxBackupFiles(): number {
+    if (this.config.maxBackupFiles !== undefined) {
+      return this.config.maxBackupFiles;
+    }
+    const configured = loadUserConfig().historyLogging?.keepRotatedFiles;
+    if (typeof configured !== "number" || !Number.isFinite(configured)) {
+      return DEFAULT_KEEP_ROTATED_FILES;
+    }
+    return Math.max(0, Math.floor(configured));
   }
 
   async init(): Promise<void> {
@@ -239,7 +275,19 @@ export class HistoryLoggerService {
 
       logger.info("Rotating history file", { currentSize: stat.size });
 
-      for (let i = this.config.maxBackupFiles - 1; i >= 1; i--) {
+      // Read once. The getter parses the user config, and this critical section
+      // holds the history lock, so a second read per shifted file is time spent
+      // holding the lock for nothing.
+      const keep = this.maxBackupFiles;
+
+      if (keep <= 0) {
+        // Nothing to retain: truncate in place instead of leaving an
+        // operations.1.jsonl that no search will ever read.
+        await fs.truncate(this.historyFilePath, 0);
+        return;
+      }
+
+      for (let i = keep - 1; i >= 1; i--) {
         const rotatedPath = (n: number) =>
           path.join(this.config.dataDir, `operations.${n}.jsonl`);
         try {
@@ -295,8 +343,11 @@ export class HistoryLoggerService {
     const lockAcquired = await this.tryAcquireLock();
 
     try {
+      // Read once, not once per candidate file. With a large configured count
+      // the getter's config parse would come to dominate the read it bounds.
+      const maxBackupFiles = this.maxBackupFiles;
       const filesToRead = [this.historyFilePath];
-      for (let i = 1; i <= this.config.maxBackupFiles; i++) {
+      for (let i = 1; i <= maxBackupFiles; i++) {
         filesToRead.push(
           path.join(this.config.dataDir, `operations.${i}.jsonl`),
         );

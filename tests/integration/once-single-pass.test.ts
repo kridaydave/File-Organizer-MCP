@@ -60,7 +60,10 @@ describe("single-pass organize (once)", () => {
   beforeEach(async () => {
     workDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-once-"));
     historyDir = await fs.mkdtemp(path.join(os.tmpdir(), "fom-once-hist-"));
-    history = new HistoryLoggerService({ dataDir: historyDir });
+    history = new HistoryLoggerService({
+      dataDir: historyDir,
+      maxBackupFiles: 0,
+    });
     // os.tmpdir() is outside the default allowed roots, so the pass would be
     // refused. Whitelist this run's own dir through the same setter the
     // security suites use.
@@ -77,6 +80,34 @@ describe("single-pass organize (once)", () => {
       await new Promise((r) => setTimeout(r, 100));
     }
     CONFIG.paths.customAllowed = originalCustomAllowed;
+
+    // Every applied pass writes a rollback manifest, and under jest those land
+    // in one directory shared by the whole suite. Left behind, they change
+    // which manifest is globally newest, which is exactly what a no-id
+    // undo_last_operation picks up, so a pass test can decide which manifest
+    // some other test file undoes. historyDir is private to this run, so its
+    // rows name exactly the manifests this run created.
+    const { getRollbackDirectory } = await import(
+      "../../src/core/config/paths.js"
+    );
+    const rollbackDir = getRollbackDirectory();
+    const rows = (
+      await fs
+        .readFile(path.join(historyDir, "operations.jsonl"), "utf-8")
+        .catch(() => "")
+    )
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { manifestId?: string });
+
+    for (const row of rows) {
+      if (!row.manifestId) continue;
+      await fs
+        .rm(path.join(rollbackDir, `${row.manifestId}.json`), { force: true })
+        .catch(() => {});
+    }
+
     await fs.rm(workDir, { recursive: true, force: true });
     await fs.rm(historyDir, { recursive: true, force: true });
   });
@@ -111,6 +142,72 @@ describe("single-pass organize (once)", () => {
     await expect(
       fs.access(path.join(historyDir, "operations.jsonl")),
     ).rejects.toThrow();
+  });
+
+  describe("per-pass limits", () => {
+    /** Backdate a file's mtime so the age filter treats it as settled. */
+    async function age(paths: string[], minutes: number): Promise<void> {
+      const when = new Date(Date.now() - minutes * 60_000);
+      for (const p of paths) await fs.utimes(p, when, when);
+    }
+
+    it("skips files younger than minFileAgeMinutes", async () => {
+      await fs.writeFile(path.join(workDir, "old.txt"), "old");
+      await age([path.join(workDir, "old.txt")], 120);
+
+      const result = await runOrganizePass(
+        { directory: workDir, dryRun: false, minFileAgeMinutes: 60 },
+        { config: emptyConfig, history },
+      );
+
+      // old.txt moved; the two fresh files in beforeEach stayed put.
+      expect(result.moved).toBe(1);
+      expect(await topLevelFiles()).toContain("notes.txt");
+      expect(await topLevelFiles()).toContain("photo.jpg");
+      expect(await topLevelFiles()).toContain("Documents");
+    });
+
+    it("reports scanned as what the scanner found, not what survived the filter", async () => {
+      const result = await runOrganizePass(
+        { directory: workDir, dryRun: false, minFileAgeMinutes: 60 },
+        { config: emptyConfig, history },
+      );
+
+      // Nothing in beforeEach is an hour old yet, so the pass moved nothing.
+      // A filtered count would report 0 here and read as an empty directory.
+      expect(result.moved).toBe(0);
+      expect(result.scanned).toBe(2);
+      expect(result.planned).toBe(0);
+    });
+
+    it("moves at most maxFiles and leaves the rest for the next pass", async () => {
+      await fs.writeFile(path.join(workDir, "a.txt"), "a");
+      await fs.writeFile(path.join(workDir, "b.txt"), "b");
+      await fs.writeFile(path.join(workDir, "c.txt"), "c");
+      await age(
+        [path.join(workDir, "notes.txt"), path.join(workDir, "a.txt")],
+        120,
+      );
+
+      const result = await runOrganizePass(
+        { directory: workDir, dryRun: false, maxFiles: 2 },
+        { config: emptyConfig, history },
+      );
+
+      expect(result.moved).toBe(2);
+      expect(result.scanned).toBe(5);
+    });
+
+    it("applies no limit when neither option is passed", async () => {
+      // The whole point of the options being optional: `--once` moves everything
+      // a person asked it to move.
+      const result = await runOrganizePass(
+        { directory: workDir, dryRun: false },
+        { config: emptyConfig, history },
+      );
+
+      expect(result.moved).toBe(2);
+    });
   });
 
   it("moves files into category folders and appends one history entry", async () => {
@@ -363,6 +460,7 @@ describe("single-pass organize (once)", () => {
     const blocked = new HistoryLoggerService({
       dataDir: historyDir,
       lockTimeoutMs: 100,
+      maxBackupFiles: 0,
     });
     await fs.writeFile(path.join(historyDir, "operations.lock"), "held");
 

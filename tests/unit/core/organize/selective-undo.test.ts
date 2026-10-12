@@ -102,9 +102,13 @@ describe("selective undo by manifest id", () => {
   }
 
   describe("the manifest id is discoverable", () => {
+    // Pinned so a test never reads the rotation count off the machine's
+    // config: an unset maxBackupFiles follows whatever `keepRotatedFiles`
+    // the developer has, which turns these green for the wrong reason.
     it("organize_files returns the manifest id it wrote", async () => {
       const history = new HistoryLoggerService({
         dataDir: path.join(testDir, "history"),
+        maxBackupFiles: 0,
       });
       await history.init();
       const ctx = { config: CONFIG, history };
@@ -154,6 +158,7 @@ describe("selective undo by manifest id", () => {
     it("the audit logger picks the manifest id off the organize response", async () => {
       const history = new HistoryLoggerService({
         dataDir: path.join(testDir, "history"),
+        maxBackupFiles: 0,
       });
       await history.init();
       const ctx = { config: CONFIG, history };
@@ -187,6 +192,7 @@ describe("selective undo by manifest id", () => {
     it("view_history returns and renders the manifest id an entry carries", async () => {
       const history = new HistoryLoggerService({
         dataDir: path.join(testDir, "history"),
+        maxBackupFiles: 0,
       });
       await history.init();
       const ctx = { config: CONFIG, history };
@@ -226,6 +232,7 @@ describe("selective undo by manifest id", () => {
     it("organize_files returns no manifest_id on a dry run, and moves nothing", async () => {
       const history = new HistoryLoggerService({
         dataDir: path.join(testDir, "history"),
+        maxBackupFiles: 0,
       });
       await history.init();
       const ctx = { config: CONFIG, history };
@@ -253,6 +260,7 @@ describe("selective undo by manifest id", () => {
     it("the organize_files markdown names the manifest id so it can be copied", async () => {
       const history = new HistoryLoggerService({
         dataDir: path.join(testDir, "history"),
+        maxBackupFiles: 0,
       });
       await history.init();
       const ctx = { config: CONFIG, history };
