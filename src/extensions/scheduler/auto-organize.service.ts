@@ -25,6 +25,28 @@ import { historyLogger } from "../../services/history-logger.service.js";
 export type ConfigLoader = () => UserConfig;
 
 /**
+ * Why an entry point did not start a pass over a directory.
+ *
+ * A pass can be refused because nothing schedules that directory, or because
+ * one is already running over it. Those are different answers to "why did
+ * nothing happen", so a caller is told which one it got.
+ */
+export type PassSkipReason = "not-watched" | "in-flight";
+
+/**
+ * What one request to organize a directory actually did.
+ *
+ * A boolean carried two of the three outcomes and reported a refused pass as a
+ * success, so a caller asking "did it work?" was told yes when the in-flight
+ * guard had dropped the pass. `directory` is the path the outcome refers to:
+ * validated on the two paths that reach the filesystem, and echoed back
+ * verbatim when the directory was never watched.
+ */
+export type PassOutcome =
+  | { status: "ran"; directory: string }
+  | { status: "skipped"; directory: string; reason: PassSkipReason };
+
+/**
  * How long a file must have sat still before a sweep will touch it. A file
  * still being written to is half a file, and organizing it moves the half.
  */
@@ -223,6 +245,10 @@ export class AutoOrganizeService {
             let attempt = 0;
             while (attempt < maxRetries) {
               try {
+                // Only a thrown pass retries. A pass the in-flight guard
+                // refused is a tick that lost the directory to a manual
+                // trigger or a catchup, and retrying it would just re-check
+                // the same busy directory until the attempt budget ran out.
                 await this.runOrganization(watch);
                 break;
               } catch (error) {
@@ -289,9 +315,10 @@ export class AutoOrganizeService {
    * @see startAutoOrganizeScheduler() - For starting all scheduled tasks
    * @see triggerNow() - For manually triggering a single directory
    * @see getStatus() - For checking which directories are mid-pass
-   * @returns Promise<void>
+   * @returns Whether a pass ran, or was skipped because one was already in
+   *   flight for that directory. Throws when the pass itself fails.
    */
-  private async runOrganization(watch: WatchConfig): Promise<void> {
+  private async runOrganization(watch: WatchConfig): Promise<PassOutcome> {
     const { directory, rules } = watch;
 
     // Validate directory path before scanning and organizing
@@ -302,7 +329,11 @@ export class AutoOrganizeService {
     // guard keeps them from racing on the same sources/destinations.
     if (this.inFlight.has(validatedDirectory)) {
       logger.debug(`[${validatedDirectory}] Pass already in flight, skipping`);
-      return;
+      return {
+        status: "skipped",
+        directory: validatedDirectory,
+        reason: "in-flight",
+      };
     }
 
     logger.info(`[${validatedDirectory}] Starting scheduled organization`);
@@ -370,6 +401,8 @@ export class AutoOrganizeService {
     } finally {
       this.inFlight.delete(validatedDirectory);
     }
+
+    return { status: "ran", directory: validatedDirectory };
   }
 
   /**
@@ -409,18 +442,22 @@ export class AutoOrganizeService {
 
   /**
    * Manually trigger organization for a directory
+   *
+   * Three outcomes, because "did it work?" has three honest answers here: the
+   * directory is not watched, a pass is already in flight, or a pass ran. The
+   * old `boolean` collapsed the last two, which told a caller its request had
+   * been honoured when the in-flight guard had dropped it.
    */
-  async triggerNow(directory: string): Promise<boolean> {
+  async triggerNow(directory: string): Promise<PassOutcome> {
     const userConfig = this.configLoader();
     const watch = userConfig.watchList?.find((w) => w.directory === directory);
 
     if (!watch) {
       logger.error(`Directory not in watch list: ${directory}`);
-      return false;
+      return { status: "skipped", directory, reason: "not-watched" };
     }
 
-    await this.runOrganization(watch);
-    return true;
+    return await this.runOrganization(watch);
   }
 
   /**

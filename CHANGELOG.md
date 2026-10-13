@@ -146,6 +146,14 @@
   (21 listed against 22 registered). A new `docs-tool-list.test.ts` guard reads
   the real registry and fails when the README list, the headline tool counts, or
   the documented Node version disagree with the code.
+- **`triggerNow` now reports what actually happened.** It returned a `boolean`
+  that was `false` only when the directory was not in the watch list, and `true`
+  for both "a pass ran" and "a pass was skipped because one was already in
+  flight", so a caller asking whether the request was honoured was told yes
+  when the in-flight guard had dropped the pass. `runOrganization` and
+  `triggerNow` return a `PassOutcome` instead: `ran`, or `skipped` with a
+  `not-watched` or `in-flight` reason and the directory it refers to. The
+  serialization guard itself is unchanged; only what gets reported about it is.
 
 ### Added
 
