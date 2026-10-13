@@ -29,16 +29,28 @@ const MARKER = ".file-organizer-verify-sandbox";
 const argv = process.argv.slice(2);
 const flags = new Map();
 const positional = [];
+// `--arg key=value` is repeatable, so it cannot live in the flags Map: a second
+// occurrence of the same key would overwrite the first. Collected in order and
+// applied after the flags, so an explicit pair always wins over a bare flag.
+const toolArgs = [];
 for (let i = 0; i < argv.length; i++) {
   const token = argv[i];
   if (token.startsWith("--")) {
     const eq = token.indexOf("=");
-    if (eq !== -1) {
-      flags.set(token.slice(2, eq), token.slice(eq + 1));
-    } else if (argv[i + 1] && !argv[i + 1].startsWith("--")) {
-      flags.set(token.slice(2), argv[++i]);
+    const key = eq !== -1 ? token.slice(2, eq) : token.slice(2);
+    const value =
+      eq !== -1
+        ? token.slice(eq + 1)
+        : argv[i + 1] && !argv[i + 1].startsWith("--")
+          ? argv[++i]
+          : "true";
+    if (key === "arg") {
+      if (value === "true") {
+        fail("--arg needs key=value");
+      }
+      toolArgs.push(value);
     } else {
-      flags.set(token.slice(2), "true");
+      flags.set(key, value);
     }
   } else {
     positional.push(token);
@@ -427,6 +439,11 @@ async function cmdCall(name) {
   for (const [key, value] of flags) {
     if (["sandbox", "fresh", "out", "verbose", "json", "log-level"].includes(key)) continue;
     args[key] = coerce(value);
+  }
+  for (const pair of toolArgs) {
+    const eq = pair.indexOf("=");
+    if (eq === -1) fail(`--arg needs key=value, got "${pair}"`);
+    args[pair.slice(0, eq)] = coerce(pair.slice(eq + 1));
   }
   if (flags.get("json") === "true" && !args.response_format) args.response_format = "json";
 

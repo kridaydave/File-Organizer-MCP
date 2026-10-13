@@ -70,6 +70,24 @@
   `runMissedSchedules` also check it, so any concurrent entry point is skipped
   instead of racing the same sources and destinations.
 
+
+- **The verify harness wrote the sandbox allow-list into the real user config.**
+  `ensureSandbox` resolved the config directory from the ambient
+  `XDG_CONFIG_HOME` while the server it spawns resolves it from the sandbox root,
+  so on a machine where that variable is set the two disagreed. The harness
+  created and rewrote `~/.config/file-organizer-mcp/config.json`, which is the one
+  thing the skill promises never to touch, and every `--sandbox` call failed with
+  "outside allowed directories" because the server looked for a config.json that
+  was never written. The default sandbox only worked because it was reading the
+  real home's allow-list back. Config resolution now derives from the sandbox
+  root alone, mirroring the environment handed to the server.
+- **The verify harness silently dropped every `--arg key=value`.** Arguments were
+  collected into a map keyed by the literal string `arg`, so `--arg
+  files=[...]` reached the tool as `{arg: "files=[...]"}` and the tool answered
+  with a missing-field error that read like a product bug. Being a map, a repeated
+  key also overwrote the earlier value despite the docs calling it repeatable.
+  Pairs are now collected in order and applied after the plain flags, so `--arg`
+  wins over a bare `--key value` for the same name.
 - **The legacy rollback migration copied in manifests it had not verified.** On
   first run in a new config dir, `RollbackService` copied every `.json` out of
   `.file-organizer-rollbacks` in the directory the server was launched from. That
