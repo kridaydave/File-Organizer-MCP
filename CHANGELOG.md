@@ -12,6 +12,19 @@
   assertions against its own directory saw an empty tree. The test now owns its
   rollback and config storage and names the manifest its own organize returned.
   No user-facing behavior changed; the bug was in the test.
+- **Every test that moves files owns its rollback storage.** The fix above was
+  per-file, which stops one suite perturbing another and leaves the shared
+  directory itself in place. Under jest `getRollbackDirectory()` returns
+  `<cwd>/.file-organizer-rollbacks` for every worker, so two suites rolling back
+  still serialized against each other on `manifests.lock` for no reason, and any
+  test that undoes without naming a `manifest_id` is still one interleaving away
+  from restoring a stranger's batch. `tests/helpers/rollback-storage.ts` redirects
+  config, history, rollback and backup storage at a per-suite temp root, and the
+  nine suites that write manifests now use it. A new
+  `rollback-storage-isolation.test.ts` reads `getRollbackDirectory()` at runtime
+  and fails if the redirect does not hold, including when a newer foreign
+  manifest sits in the shared directory. Mutation-checked by turning the helper
+  into a pass-through: all three go red.
 
 ### Changed
 

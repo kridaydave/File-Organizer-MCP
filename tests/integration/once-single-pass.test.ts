@@ -26,23 +26,48 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
-import { runOrganizePass } from "../../src/extensions/scheduler/organize-pass.js";
-import { RollbackService } from "../../src/core/organize/rollback.js";
-import { handleUndoLastOperation } from "../../src/tools/rollback.js";
-import {
+import { isolateRollbackStorage } from "../helpers/rollback-storage.js";
+import type { UserConfig } from "../../src/config.js";
+
+const emptyConfig: UserConfig = { conflictStrategy: "rename" };
+
+/**
+ * Private rollback storage for this file.
+ *
+ * Every applied pass writes a manifest through the default directory, and under
+ * jest that directory is one directory shared by every worker. Left behind,
+ * those manifests decide which manifest is globally newest, which is exactly
+ * what a no-id `undo_last_operation` picks up, so one file's pass can choose
+ * what another file's undo restores. This also removes the shared-write
+ * contention on `manifests.lock` between `createManifest` and `rollback`.
+ *
+ * Registered before the modules under test are imported, so the mock is the one
+ * they resolve `getRollbackDirectory` through.
+ */
+const storage = await isolateRollbackStorage("fom-once-");
+
+// Imported after the redirect above, so every default `RollbackService` these
+// modules build reads and writes this file's private directory.
+const { runOrganizePass } = await import(
+  "../../src/extensions/scheduler/organize-pass.js"
+);
+const { RollbackService } = await import("../../src/core/organize/rollback.js");
+const { handleUndoLastOperation } = await import(
+  "../../src/tools/rollback.js"
+);
+const {
   ONCE_EXIT,
   failureReport,
   once,
   onceReport,
   parseOnceFlags,
   passExitCode,
-} from "../../src/extensions/scheduler/once-cli.js";
-import { CONFIG } from "../../src/core/config/defaults.js";
-import { HistoryLoggerService } from "../../src/services/history-logger.service.js";
-import type { UserConfig } from "../../src/config.js";
-import { first } from "../helpers/safe-index.js";
-
-const emptyConfig: UserConfig = { conflictStrategy: "rename" };
+} = await import("../../src/extensions/scheduler/once-cli.js");
+const { CONFIG } = await import("../../src/core/config/defaults.js");
+const { HistoryLoggerService } = await import(
+  "../../src/services/history-logger.service.js"
+);
+const { first } = await import("../helpers/safe-index.js");
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -54,7 +79,7 @@ const CLI_BIN = path.join(REPO_ROOT, "bin", "file-organizer-watch.mjs");
 describe("single-pass organize (once)", () => {
   let workDir: string;
   let historyDir: string;
-  let history: HistoryLoggerService;
+  let history: InstanceType<typeof HistoryLoggerService>;
   let originalCustomAllowed: string[];
 
   beforeEach(async () => {
@@ -80,33 +105,6 @@ describe("single-pass organize (once)", () => {
       await new Promise((r) => setTimeout(r, 100));
     }
     CONFIG.paths.customAllowed = originalCustomAllowed;
-
-    // Every applied pass writes a rollback manifest, and under jest those land
-    // in one directory shared by the whole suite. Left behind, they change
-    // which manifest is globally newest, which is exactly what a no-id
-    // undo_last_operation picks up, so a pass test can decide which manifest
-    // some other test file undoes. historyDir is private to this run, so its
-    // rows name exactly the manifests this run created.
-    const { getRollbackDirectory } = await import(
-      "../../src/core/config/paths.js"
-    );
-    const rollbackDir = getRollbackDirectory();
-    const rows = (
-      await fs
-        .readFile(path.join(historyDir, "operations.jsonl"), "utf-8")
-        .catch(() => "")
-    )
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as { manifestId?: string });
-
-    for (const row of rows) {
-      if (!row.manifestId) continue;
-      await fs
-        .rm(path.join(rollbackDir, `${row.manifestId}.json`), { force: true })
-        .catch(() => {});
-    }
 
     await fs.rm(workDir, { recursive: true, force: true });
     await fs.rm(historyDir, { recursive: true, force: true });
@@ -309,7 +307,7 @@ describe("single-pass organize (once)", () => {
     const manifestId = first(await historyRows()).manifestId;
     expect(typeof manifestId).toBe("string");
 
-    const manifest = await new RollbackService().getManifest(
+    const manifest = await new RollbackService(storage.rollbackDir).getManifest(
       manifestId as string,
     );
     expect(manifest.actions).toHaveLength(3);
@@ -795,7 +793,12 @@ describe("file-organizer-watch once (real CLI)", () => {
       USERPROFILE: home,
       APPDATA: appData,
       XDG_CONFIG_HOME: path.join(home, ".config"),
-      NODE_ENV: "test",
+      // Deliberately NOT "test". Under jest `getRollbackDirectory()` falls back
+      // to `process.cwd()/.file-organizer-rollbacks`, which for this child is
+      // the shared repo directory every other worker's no-id undo reads. With
+      // NODE_ENV unset the child takes the production path and resolves
+      // rollbacks under XDG_CONFIG_HOME, which this run already points at a
+      // private temp home. That is also what a real user gets.
     };
 
     configDir = path.join(configBase, "file-organizer-mcp");

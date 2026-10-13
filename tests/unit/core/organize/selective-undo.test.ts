@@ -16,11 +16,35 @@
  * a passing test means the tool works, not that a helper was called.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, afterAll } from "@jest/globals";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
 import crypto from "crypto";
+
+import { isolateRollbackStorage } from "../../../helpers/rollback-storage.js";
+
+/**
+ * Private rollback storage.
+ *
+ * The tool handlers build their own `RollbackService` off
+ * `getRollbackDirectory()`, which under jest is one directory shared by every
+ * worker. Writing a manifest there lets this file decide what some other
+ * file's no-id undo restores, and holding `manifests.lock` there serializes
+ * this undo against every other suite's. Registering the redirect before the
+ * modules below are imported is what makes the handlers read it.
+ */
+/**
+ * Private rollback storage.
+ *
+ * The tool handlers build their own `RollbackService` off
+ * `getRollbackDirectory()`, which under jest is one directory shared by every
+ * worker. Writing a manifest there lets this file decide what some other
+ * file's no-id undo restores, and holding `manifests.lock` there serializes
+ * this undo against every other suite's. Registering the redirect before the
+ * modules below are imported is what makes the handlers read it.
+ */
+const storage = await isolateRollbackStorage("fom-selective-undo-");
 
 const { CONFIG } = await import("../../../../src/config.js");
 const { RollbackService, overlappingPathCount } =
@@ -34,6 +58,8 @@ const { handleUndoLastOperation } =
 const { historyManifestId } = await import("../../../../src/server.js");
 const { HistoryLoggerService } =
   await import("../../../../src/services/history-logger.service.js");
+const { manifestIntegrityService } =
+  await import("../../../../src/core/organize/manifest-integrity.js");
 
 type RollbackAction = import("../../../../src/types.js").RollbackAction;
 
@@ -56,7 +82,14 @@ describe("selective undo by manifest id", () => {
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), "selective-undo-"));
     // Manifests live outside testDir so a tree() listing of the data the undo
     // acts on never shows this test's own bookkeeping.
-    storageDir = await fs.mkdtemp(path.join(os.tmpdir(), "selective-undo-man-"));
+    //
+    // It is the directory the tool handlers write to as well. The organizers
+    // under test build their RollbackService off the redirected
+    // getRollbackDirectory(), so pointing this service anywhere else would put
+    // the manifest where no undo can find it.
+    storageDir = storage.rollbackDir;
+    await fs.rm(storageDir, { recursive: true, force: true });
+    await fs.mkdir(storageDir, { recursive: true });
     rollbackService = new RollbackService(storageDir);
     restoreCustomAllowed = CONFIG.paths._overrideCustomAllowed;
     CONFIG.paths.customAllowed = [testDir];
@@ -66,7 +99,10 @@ describe("selective undo by manifest id", () => {
     CONFIG.paths.customAllowed = restoreCustomAllowed;
     await new Promise((r) => setTimeout(r, 100));
     await fs.rm(testDir, { recursive: true, force: true });
-    await fs.rm(storageDir, { recursive: true, force: true });
+  });
+
+  afterAll(async () => {
+    await storage.remove();
   });
 
   /** Create a source file the categorizer will pick up as a document. */
@@ -139,10 +175,9 @@ describe("selective undo by manifest id", () => {
 
       // And it is a real id, not a made-up one: the id the tool hands back is
       // the one undo accepts. The organizer writes manifests to the default
-      // storage dir, so undo reads from there. Under jest that is inside the
-      // worktree (see getRollbackDirectory), and this undo consumes the
-      // manifest rather than leaving it behind.
-      const undone = await new RollbackService().rollback(
+      // storage dir, which this file has redirected to its own temp root, and
+      // this undo consumes the manifest rather than leaving it behind.
+      const undone = await rollbackService.rollback(
         payload.manifest_id as string,
       );
       expect(undone.failed).toBe(0);
@@ -624,13 +659,10 @@ describe("selective undo by manifest id", () => {
   describe("the undo tool surfaces the refusal to the caller", () => {
     it("reports the refusal in both json and markdown, with no internal path", async () => {
       // The tool builds its own RollbackService, so this test writes into the
-      // storage dir the tool reads and removes only what it wrote.
-      const { getRollbackDirectory } =
-        await import("../../../../src/core/config/paths.js");
-      const { manifestIntegrityService } =
-        await import("../../../../src/core/organize/manifest-integrity.js");
-
-      const toolStorage = getRollbackDirectory();
+      // storage dir the tool reads. That directory is this file's private temp
+      // root (see the redirect at the top), not the shared one every other
+      // worker writes manifests into.
+      const toolStorage = storage.rollbackDir;
       const original = path.join(testDir, "collide.txt");
       const destination = path.join(testDir, "Documents", "collide.txt");
       const intruder = path.join(testDir, "Documents", "collide_1.txt");

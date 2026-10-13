@@ -2,12 +2,44 @@ import fs from "fs/promises";
 
 import path from "path";
 import os from "os";
-import { OrganizerService } from "../../../src/core/organize/organizer.js";
-import { CategorizerService } from "../../../src/services/categorizer.service.js";
-import { FileWithSize } from "../../../src/types.js";
+import { fileURLToPath } from "url";
+
+import { isolateRollbackStorage } from "../../helpers/rollback-storage.js";
+
+/**
+ * Private rollback and backup storage.
+ *
+ * `executeOrganization` builds a `RollbackService` off the default
+ * `getRollbackDirectory()` and writes pre-overwrite backups to the default
+ * `getBackupDirectory()`. Under jest both are one directory shared by every
+ * worker, so this suite's backups land where every other suite looks and the
+ * manifests it writes decide which manifest is globally newest. The redirect is
+ * registered before the modules under test are imported, which is why they are
+ * dynamic below.
+ */
+const storage = await isolateRollbackStorage("fom-organizer-");
+
+const { OrganizerService } = await import(
+  "../../../src/core/organize/organizer.js"
+);
+const { CategorizerService } = await import(
+  "../../../src/services/categorizer.service.js"
+);
+const { getBackupDirectory } = await import(
+  "../../../src/core/config/paths.js"
+);
+import type { FileWithSize } from "../../../src/types.js";
+
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+);
 
 describe("OrganizerService", () => {
-  let organizer: OrganizerService;
+  // Dynamic import above, so the binding is a value, not a type name.
+  let organizer: InstanceType<typeof OrganizerService>;
   let testDir: string;
 
   beforeEach(async () => {
@@ -21,6 +53,10 @@ describe("OrganizerService", () => {
     } catch (error) {
       console.error("Cleanup error:", error);
     }
+  });
+
+  afterAll(async () => {
+    await storage.remove();
   });
 
   describe("generateOrganizationPlan", () => {
@@ -170,8 +206,11 @@ describe("OrganizerService", () => {
       const finalContent = await fs.readFile(destFile, "utf-8");
       expect(finalContent).toBe("new-content");
 
-      // Verify backup directory contains the old file
-      const backupDir = path.join(process.cwd(), ".file-organizer-backups");
+      // Verify backup directory contains the old file. Read the directory the
+      // redirected module reports rather than a hardcoded one, so this assertion
+      // stays true wherever the suite's private storage lives.
+      expect(getBackupDirectory()).not.toContain(repoRoot);
+      const backupDir = getBackupDirectory();
       const backupFiles = await fs.readdir(backupDir);
       const overwriteBackup = backupFiles.find((f) => f.includes("overwrite_report.pdf"));
       expect(overwriteBackup).toBeDefined();
