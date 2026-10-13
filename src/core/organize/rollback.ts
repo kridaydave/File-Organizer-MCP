@@ -179,25 +179,70 @@ export class RollbackService {
    * One-time carry-over of manifests from the legacy cwd-based location.
    * Without it, undo silently loses history after this change (or whenever
    * the server's launch directory differs from the last run).
+   *
+   * Only manifests whose signature verifies are carried over. The legacy
+   * directory sits in whatever directory the server was launched from, so it
+   * belongs to no particular install: it can hold another installation's
+   * history, a test run's leftovers, or a file anyone with write access to the
+   * launch directory chose to put there. Copying those in unverified is the
+   * exact thing the signature exists to prevent, and it breaks two other
+   * things as well. A sandbox started from a directory that happens to hold a
+   * `.file-organizer-rollbacks` inherits someone else's manifests, so it stops
+   * being hermetic, and `undo_last_operation` with no id picks the newest one
+   * and reports "possible tampering detected" instead of undoing anything.
+   *
+   * A manifest that does not verify stays where it is. It is not this
+   * installation's history, and the count is logged so the loss is visible.
    */
   private async migrateLegacyStorage(): Promise<void> {
     if (process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID) return;
 
     const legacyDir = path.join(process.cwd(), ".file-organizer-rollbacks");
+    let copied = 0;
+    let skipped = 0;
     try {
       const entries = await fs.readdir(legacyDir);
       await fs.mkdir(this.storageDir, { recursive: true });
       for (const entry of entries.filter((f) => f.endsWith(".json"))) {
         const target = path.join(this.storageDir, entry);
-        if (!(await fileExists(target))) {
-          await fs.copyFile(path.join(legacyDir, entry), target);
+        if (await fileExists(target)) continue;
+
+        const carried = await this.carriesVerifiableManifest(
+          path.join(legacyDir, entry),
+        );
+        if (!carried) {
+          skipped += 1;
+          continue;
         }
+        await fs.copyFile(path.join(legacyDir, entry), target);
+        copied += 1;
       }
-      if (entries.length > 0) {
-        logger.info(`Migrated rollback manifests from ${legacyDir}`);
+      if (copied > 0 || skipped > 0) {
+        logger.info(
+          `Migrated ${copied} rollback manifest(s) from ${legacyDir}` +
+            (skipped > 0
+              ? `; left ${skipped} in place because their signature did not verify`
+              : ""),
+        );
       }
     } catch {
       // No legacy storage — nothing to migrate.
+    }
+  }
+
+  /**
+   * Whether a legacy manifest carries a signature this install can verify.
+   *
+   * A file that will not parse is not this install's history either, so it is
+   * reported as unverifiable rather than allowed to abort the whole migration.
+   */
+  private async carriesVerifiableManifest(file: string): Promise<boolean> {
+    try {
+      const parsed = JSON.parse(await fs.readFile(file, "utf-8")) as
+        RollbackManifest;
+      return manifestIntegrityService.verifyManifest(parsed).valid;
+    } catch {
+      return false;
     }
   }
 

@@ -69,6 +69,21 @@
   in-flight guard used to only stop overlapping cron ticks; now `triggerNow` and
   `runMissedSchedules` also check it, so any concurrent entry point is skipped
   instead of racing the same sources and destinations.
+
+- **The legacy rollback migration copied in manifests it had not verified.** On
+  first run in a new config dir, `RollbackService` copied every `.json` out of
+  `.file-organizer-rollbacks` in the directory the server was launched from. That
+  directory belongs to no particular install, so anything in it became undo
+  history: another install's manifests, a test run's leftovers, or a file anyone
+  with write access to the launch directory chose to drop there. Copying
+  unsigned manifests in is the thing the manifest signature exists to prevent.
+  Two other symptoms came from the same cause. A sandbox started from a
+  directory holding a `.file-organizer-rollbacks` inherited manifests it never
+  wrote, so it stopped being hermetic, and `undo_last_operation` with no id
+  picked the newest of those and answered "possible tampering detected" instead
+  of undoing anything. Migration now verifies each manifest's signature first and
+  leaves the rest where they are rather than deleting someone else's file. The
+  count skipped is logged.
 - **An unsigned manifest could be listed as an undo target.** `listManifests`
   parsed every file in the rollback directory with no signature check, so once
   manifest ids were shown to a user, a manifest file nobody signed became a
