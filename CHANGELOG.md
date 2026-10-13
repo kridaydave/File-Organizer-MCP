@@ -70,7 +70,6 @@
   `runMissedSchedules` also check it, so any concurrent entry point is skipped
   instead of racing the same sources and destinations.
 
-
 - **The verify harness wrote the sandbox allow-list into the real user config.**
   `ensureSandbox` resolved the config directory from the ambient
   `XDG_CONFIG_HOME` while the server it spawns resolves it from the sandbox root,
