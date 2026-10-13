@@ -70,26 +70,81 @@ async function exists(target) {
 
 // ── sandbox ────────────────────────────────────────────────────────────────
 
-/** Where this platform reads config.json from. Mirrors src/core/config/paths.ts. */
+/**
+ * XDG_CONFIG_HOME for a sandbox root. Defined once and shared by
+ * configRootFor() and sandboxEnv(): the harness has to write config.json into
+ * the directory the child server reads it from, and two copies of that path are
+ * two ways for them to drift apart.
+ */
+function sandboxConfigHome(root) {
+  return path.join(root, ".config");
+}
+
 /**
  * The config directory, mirroring getConfigDirectory() in src/core/config/paths.ts.
- * macOS keeps its own convention rather than honoring XDG_CONFIG_HOME, matching
- * the server.
+ *
+ * `root` is the *sandbox* root, never the real home. The Linux branch derives
+ * the answer from `root` alone. It used to read `process.env.XDG_CONFIG_HOME`
+ * from the harness's own environment, so on any machine with that variable set
+ * it resolved to the developer's real `~/.config/file-organizer-mcp`: the
+ * harness wrote the sandbox's config.json into the real config dir while the
+ * child, spawned with XDG_CONFIG_HOME=<root>/.config, read a directory that
+ * never received it. Every tool call then failed with "Access Denied: Path is
+ * outside allowed directories" and doctor's read-only check went red.
+ *
+ * LINUX ONLY. The Windows branch still reads the harness's own APPDATA and the
+ * macOS branch still trusts the child to honor HOME, so neither is made correct
+ * here. That is a decision, not an oversight: assertSandboxConfigDir() below
+ * turns a wrong answer into a hard error on every platform, so the unfixed
+ * branches fail loudly instead of writing into the developer's config dir.
  */
-function configRootFor(home) {
+function configRootFor(root) {
   if (process.platform === "win32") {
-    return path.join(process.env.APPDATA || path.join(home, "AppData", "Roaming"), "file-organizer-mcp");
+    return path.join(process.env.APPDATA || path.join(root, "AppData", "Roaming"), "file-organizer-mcp");
   }
   if (process.platform === "darwin") {
-    return path.join(home, "Library", "Application Support", "file-organizer-mcp");
+    return path.join(root, "Library", "Application Support", "file-organizer-mcp");
   }
-  return path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "file-organizer-mcp");
+  return path.join(sandboxConfigHome(root), "file-organizer-mcp");
+}
+
+/**
+ * True when target sits strictly inside parent. A separator-anchored prefix
+ * check, like isOurSandbox(): `/sandbox-other` is not inside `/sandbox`, and a
+ * config dir equal to the sandbox root is not a config dir.
+ */
+function isInside(parent, target) {
+  return target !== parent && target.startsWith(parent + path.sep);
+}
+
+/**
+ * The only place a write can leave the sandbox. configRootFor() consults the
+ * platform environment, so a host APPDATA or XDG_CONFIG_HOME it fails to ignore
+ * resolves config.json into the developer's real config dir, and every write in
+ * ensureSandbox() then lands there quietly.
+ *
+ * Refuse, in the same shape as the --fresh guard: a helper that names what it
+ * will not touch is worth more than a directory that merely looks right.
+ */
+function assertSandboxConfigDir(root, configDir) {
+  if (isInside(root, configDir)) return;
+  fail(
+    `refusing to use ${configDir} as the sandbox config directory.\n` +
+      `It is outside the sandbox root ${root}, so this is the developer's real config directory, not the sandbox's.\n` +
+      `Linux derives that path from the sandbox root alone. Windows and macOS still read the host\n` +
+      `environment, and that unfixed case is exactly what this error reports.`
+  );
 }
 
 /**
  * HOME moves every state location. APPDATA or XDG_CONFIG_HOME alone would move
  * the history, rollback and backup dirs but leave config.json in the real home,
  * so the sandbox would still load the developer's allow-list.
+ *
+ * The non-Windows branch is what makes the sandbox hermetic, and the Linux
+ * config path is the one the harness writes to: sandboxConfigHome() keeps the
+ * two in step. Only APPDATA and USERPROFILE are set on Windows, which is why the
+ * Windows branch of configRootFor() is still wrong there.
  */
 function sandboxEnv(root) {
   const env = { ...process.env, LOG_LEVEL: flags.get("log-level") || "error" };
@@ -98,7 +153,7 @@ function sandboxEnv(root) {
     env.APPDATA = path.join(root, "AppData", "Roaming");
   } else {
     env.HOME = root;
-    env.XDG_CONFIG_HOME = path.join(root, ".config");
+    env.XDG_CONFIG_HOME = sandboxConfigHome(root);
   }
   return env;
 }
@@ -140,8 +195,13 @@ async function ensureSandbox(name, { fresh = false } = {}) {
   if (fresh && !(await isOurSandbox(root))) {
     fail(`refusing to --fresh ${root}. It carries no ${MARKER}, so it is not a sandbox this helper created.`);
   }
-  if (fresh) await fs.rm(root, { recursive: true, force: true });
+  // Resolve the config dir and prove it before anything touches the disk. It
+  // sits here, after the --fresh guard and before fs.rm, so no write happens
+  // while the answer is still unknown.
   const configDir = configRootFor(root);
+  assertSandboxConfigDir(root, configDir);
+
+  if (fresh) await fs.rm(root, { recursive: true, force: true });
   await fs.mkdir(configDir, { recursive: true });
   await fs.mkdir(path.join(root, "data"), { recursive: true });
   await fs.writeFile(path.join(root, MARKER), "created by control-file-organizer\n");
@@ -400,6 +460,9 @@ async function cmdCall(name) {
 async function cmdHistory() {
   const root = path.resolve(flags.get("sandbox") || path.join(SANDBOX_ROOT, "default"));
   const configDir = configRootFor(root);
+  // Read-only, but the same escape would print the developer's real
+  // operations.jsonl, so it gets the same refusal.
+  assertSandboxConfigDir(root, configDir);
   const file = path.join(configDir, "operations.jsonl");
   const raw = await fs.readFile(file, "utf8").catch(() => null);
   if (raw === null) {
