@@ -4,6 +4,17 @@
 
 ### Fixed
 
+- **The temp directory was never allowed under jest, and the code said it was.**
+  `getDefaultAllowedDirs` carries a bypass for directories that may be absent on
+  a CI runner, and `os.tmpdir()` was listed in it. A bypass only spares a
+  directory the existence filter would drop; it cannot add one that was never a
+  candidate. `os.tmpdir()` was not a candidate, so it was never in the allow-list
+  on any machine while reading as always-allowed. Every test needing a `mkdtemp`
+  fixture has been widening `CONFIG.paths.customAllowed` by hand to compensate.
+  The dead entry is gone and the comment now states what a bypass can and cannot
+  do, so the next reader does not repeat it. **No behavior change:** the
+  allow-list under test mode is exactly what it was. Tests that need a temp
+  directory must keep whitelisting their own root.
 - **An integration test no longer undoes another worker's batch.**
   `full_organization_flow` organized with `dry_run: false` and then called
   `undo_last_operation` with no `manifest_id`, which takes the globally newest

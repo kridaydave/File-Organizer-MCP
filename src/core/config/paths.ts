@@ -75,14 +75,14 @@ export function getDefaultAllowedDirs(): string[] {
     }
   }
 
-  // In test mode, always allow the three system-organize source dirs
-  // even if they don't exist on CI (e.g. ~/Downloads on ubuntu runner)
+  // In test mode, always allow the system-organize source dirs even if they
+  // don't exist on CI (e.g. ~/Downloads on ubuntu runner). A bypass only
+  // spares a directory the existence filter would drop, so anything meant to
+  // be allowed has to already be a candidate above: an entry here that is not
+  // a candidate is inert, and it reads as allowed when it is not. That is how
+  // os.tmpdir() came to be listed here while never being allowed.
   const alwaysAllowedInTest = isTestMode
-    ? [
-        path.join(home, "Downloads"),
-        path.join(home, "Desktop"),
-        os.tmpdir(),
-      ]
+    ? [path.join(home, "Downloads"), path.join(home, "Desktop")]
     : [];
 
   // Only return directories that actually exist and are not symlinks
