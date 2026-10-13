@@ -4,17 +4,30 @@
  * project clustering scaling, and media error recovery.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, afterAll } from '@jest/globals';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-import { validateArchiveEntries, sanitizeEntryName } from '../../../src/security/archive-validator.js';
-import { ManifestIntegrityService } from '../../../src/core/organize/manifest-integrity.js';
-import { detectProjects } from '../../../src/core/detect/project.js';
-import { RollbackService } from '../../../src/core/organize/rollback.js';
-import { CONFIG } from '../../../src/core/config/defaults.js';
 import { first } from '../../helpers/safe-index.js';
+
+import { isolateRollbackStorage } from '../../helpers/rollback-storage.js';
+
+/**
+ * Private rollback storage.
+ *
+ * The rollback test below creates and then rolls back a manifest. Doing that in
+ * the shared worktree directory means this suite holds `manifests.lock` against
+ * every other worker, and leaves a manifest behind that a no-id undo elsewhere
+ * can pick as the globally newest one. Both are the #108 hazard.
+ */
+const storage = await isolateRollbackStorage('fom-adv-audit-2-');
+
+const { validateArchiveEntries, sanitizeEntryName } = await import('../../../src/security/archive-validator.js');
+const { ManifestIntegrityService } = await import('../../../src/core/organize/manifest-integrity.js');
+const { detectProjects } = await import('../../../src/core/detect/project.js');
+const { RollbackService } = await import('../../../src/core/organize/rollback.js');
+const { CONFIG } = await import('../../../src/core/config/defaults.js');
 
 describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
   let tempDir: string;
@@ -28,6 +41,10 @@ describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
     CONFIG.paths.customAllowed = [];
     await new Promise((resolve) => setTimeout(resolve, 100));
     await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  afterAll(async () => {
+    await storage.remove();
   });
 
   describe('1. Archive Security & Decompression Bomb Prevention', () => {
@@ -106,7 +123,7 @@ describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
 
   describe('3. Rollback Failure Recovery & Resiliency', () => {
     it('handles rollback gracefully when current file has been deleted externally', async () => {
-      const rollback = new RollbackService();
+      const rollback = new RollbackService(storage.rollbackDir);
       const originalPath = path.join(tempDir, 'orig.txt');
       const currentPath = path.join(tempDir, 'Documents', 'orig.txt');
 

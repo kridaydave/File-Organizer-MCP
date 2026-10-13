@@ -27,6 +27,20 @@ import os from "os";
 import path from "path";
 import type { ToolContext } from "../../../src/mcp/context.js";
 
+import { isolateRollbackStorage } from "../../helpers/rollback-storage.js";
+
+/**
+ * Private rollback storage.
+ *
+ * Quarantine writes a manifest per non-dry run through the default
+ * `getRollbackDirectory()`, which under jest is one directory shared by every
+ * worker. Those manifests decide which manifest is globally newest, so this
+ * file's batches can become another file's no-id undo target, and the lock the
+ * restore takes serializes this suite against every other one. Registering the
+ * redirect before the handlers are imported is what makes them read it.
+ */
+const storage = await isolateRollbackStorage("fom-quarantine-tool-");
+
 const { CONFIG } = await import("../../../src/core/config/defaults.js");
 const { quarantineFilesToolDefinition, restoreQuarantineToolDefinition } =
   await import("../../../src/tools/file-quarantine.js");
@@ -87,6 +101,10 @@ describe("quarantine tools", () => {
     CONFIG.paths.customAllowed = restoreCustomAllowed;
     await new Promise((r) => setTimeout(r, 100));
     await fs.rm(testDir, { recursive: true, force: true });
+  });
+
+  afterAll(async () => {
+    await storage.remove();
   });
 
   /**
