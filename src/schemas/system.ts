@@ -184,8 +184,6 @@ export const ExportConfigInputSchema = z
   })
   .merge(CommonParamsSchema);
 
-export type ExportConfigInput = z.infer<typeof ExportConfigInputSchema>;
-
 /**
  * Schema for export_report tool.
  *
@@ -224,8 +222,6 @@ export const ExportReportInputSchema = z
   })
   .merge(CommonParamsSchema);
 
-export type ExportReportInput = z.infer<typeof ExportReportInputSchema>;
-
 /**
  * The exported bundle document, as read back off disk.
  *
@@ -257,5 +253,3 @@ export const ConfigBundleSchema = z.object({
     notes: z.array(z.string()),
   }),
 });
-
-export type ConfigBundle = z.infer<typeof ConfigBundleSchema>;

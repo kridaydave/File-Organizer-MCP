@@ -22,8 +22,6 @@ import { validateStrictPath } from "../../services/path-validator.service.js";
 import { runOrganizePass } from "./organize-pass.js";
 import { historyLogger } from "../../services/history-logger.service.js";
 
-export type ConfigLoader = () => UserConfig;
-
 /**
  * Why an entry point did not start a pass over a directory.
  *

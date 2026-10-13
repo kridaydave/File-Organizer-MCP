@@ -39,8 +39,5 @@ export const CommonParamsSchema = z.object({
     ),
 });
 
-export type PaginationInput = z.infer<typeof PaginationSchema>;
-export type CommonParams = z.infer<typeof CommonParamsSchema>;
-
 type DirectoryInput = z.infer<typeof DirectoryInputSchema>;
 type RecursiveInput = z.infer<typeof RecursiveInputSchema>;

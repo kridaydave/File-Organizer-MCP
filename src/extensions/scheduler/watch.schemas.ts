@@ -41,8 +41,6 @@ export const WatchDirectoryInputSchema = z
   })
   .merge(CommonParamsSchema);
 
-export type WatchDirectoryInput = z.infer<typeof WatchDirectoryInputSchema>;
-
 export const UnwatchDirectoryInputSchema = z
   .object({
     directory: z
@@ -52,11 +50,7 @@ export const UnwatchDirectoryInputSchema = z
   })
   .merge(CommonParamsSchema);
 
-export type UnwatchDirectoryInput = z.infer<typeof UnwatchDirectoryInputSchema>;
-
 export const ListWatchesInputSchema = z.object({}).merge(CommonParamsSchema);
-
-export type ListWatchesInput = z.infer<typeof ListWatchesInputSchema>;
 
 /**
  * The `trigger` a pass records on its history row, as the `once` CLI accepts it.
