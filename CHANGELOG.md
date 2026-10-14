@@ -4,6 +4,22 @@
 
 ### Fixed
 
+- **The legacy rollback migration could store a manifest nobody verified.**
+  `migrateLegacyStorage` verified a legacy manifest by reading it, then copied
+  the file by path, so anything able to write to the launch directory could
+  replace the contents in between and get an unverified file carried into this
+  install's rollback history. It copied the bytes it had just checked instead of
+  re-reading the path, so what lands in storage is what verification approved.
+  Raised by CodeRabbit on #114.
+- **The output-schema suite passed because of where the checkout sits.**
+  Its fixture lived in `tests/temp`, which is inside the repository, so it passed
+  path validation by accident on any machine whose checkout is under a home
+  directory the allow-list names (`~/Code` and friends). Move the checkout and the
+  suite breaks; on CI it was passing for a reason that had nothing to do with the
+  contracts it checks. The fixture is now in `os.tmpdir()` and whitelists its own
+  root through `CONFIG.paths.customAllowed`, the way the other suites that need a
+  temp directory already do. **No behavior change** to the tools.
+
 - **The temp directory was never allowed under jest, and the code said it was.**
   `getDefaultAllowedDirs` carries a bypass for directories that may be absent on
   a CI runner, and `os.tmpdir()` was listed in it. A bypass only spares a

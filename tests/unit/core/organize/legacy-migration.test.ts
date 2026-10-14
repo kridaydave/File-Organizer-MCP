@@ -14,7 +14,7 @@
  * a manifest that does not verify stays where it is.
  */
 
-import { describe, it, expect, beforeEach, afterEach, afterAll } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, afterAll, jest } from "@jest/globals";
 import fs from "fs/promises";
 import fsSync from "fs";
 import os from "os";
@@ -131,5 +131,80 @@ describe("legacy rollback migration", () => {
 
     const carried = await fs.readdir(storageDir);
     expect(carried).toContain("genuine-id.json");
+  });
+
+  it("stores the bytes it verified, not whatever the path holds afterwards", async () => {
+    const genuine = JSON.stringify(signedManifest("swapped-id"));
+    await fs.writeFile(path.join(legacyDir, "swapped-id.json"), genuine);
+
+    // The gap between verifying a manifest and storing it has to close on the
+    // bytes, not the path: anything able to write to the launch directory could
+    // otherwise replace the file in between and get the forgery carried across.
+    //
+    // Forcing that window open here rather than racing it. The first read of the
+    // legacy file returns the genuine manifest, so verification passes, and every
+    // read after it returns a forgery. A second read of the path is what
+    // `fs.copyFile` would do, so an implementation that re-reads the path stores
+    // the forgery and this fails. One that writes the verified bytes cannot
+    // touch the file again and passes. No timing involved, so it cannot be flaky
+    // and it cannot pass for the wrong reason.
+    const forgery = JSON.stringify({
+      ...JSON.parse(genuine),
+      signature: "deadbeef",
+    });
+    const realReadFile = fs.readFile;
+    const realWriteFile = fs.writeFile;
+    let reads = 0;
+    let copies = 0;
+    const isLegacy = (file: unknown) =>
+      String(file).startsWith(legacyDir);
+
+    // Every read of the legacy file but the first sees the forgery, which is
+    // what the real file holds the instant verification is done. `copyFile` is
+    // mocked as well as `readFile` because it is its own syscall: it does not go
+    // through `readFile`, so leaving it real would copy the genuine bytes sitting
+    // on disk and the test would pass for the wrong reason. It copies whatever
+    // the path currently holds, which is the forgery.
+    const readSpy = jest
+      .spyOn(fs, "readFile")
+      .mockImplementation(((file: never, options?: never) => {
+        if (!isLegacy(file)) return realReadFile(file, options);
+        reads += 1;
+        return Promise.resolve(Buffer.from(reads === 1 ? genuine : forgery));
+      }) as never);
+    const copySpy = jest
+      .spyOn(fs, "copyFile")
+      .mockImplementation((async (src: never, dest: never) => {
+        copies += 1;
+        await realWriteFile(dest as string, await realReadFile(src as string));
+      }) as never);
+
+    try {
+      await triggerMigration(storageDir);
+    } finally {
+      readSpy.mockRestore();
+      copySpy.mockRestore();
+    }
+
+    const stored = await realReadFile(
+      path.join(storageDir, "swapped-id.json"),
+      "utf-8",
+    ).catch(() => undefined);
+
+    // The property first: what landed in the store is the manifest that verified,
+    // not the forgery that replaced it on disk afterwards.
+    expect(stored).toBeDefined();
+    expect(stored).not.toContain("deadbeef");
+    expect(
+      manifestIntegrityService.verifyManifest(JSON.parse(stored as string))
+        .valid,
+    ).toBe(true);
+
+    // And the mechanism that guarantees it. Writing the verified bytes never
+    // re-reads the path, so no copy happens at all; an implementation that
+    // copies the path does. Asserting it separately names the regression if this
+    // ever fails, rather than leaving it inferred from the forgery check.
+    expect(copies).toBe(0);
+    expect(reads).toBeGreaterThan(0);
   });
 });

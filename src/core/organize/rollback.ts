@@ -214,7 +214,11 @@ export class RollbackService {
           skipped += 1;
           continue;
         }
-        await fs.copyFile(path.join(legacyDir, entry), target);
+        // The verified bytes, not a second read of the path. Copying the file
+        // here would re-read it, and anything able to write to the launch
+        // directory could replace the contents in between, so the copy landing
+        // here could be bytes nobody verified.
+        await fs.writeFile(target, carried);
         copied += 1;
       }
       if (copied > 0 || skipped > 0) {
@@ -231,18 +235,26 @@ export class RollbackService {
   }
 
   /**
-   * Whether a legacy manifest carries a signature this install can verify.
+   * The bytes of a legacy manifest, if this install can verify them.
+   *
+   * Returns the contents that were verified rather than a boolean, so the
+   * caller writes exactly what was checked instead of reading the path a
+   * second time and trusting whatever is there by then.
    *
    * A file that will not parse is not this install's history either, so it is
    * reported as unverifiable rather than allowed to abort the whole migration.
    */
-  private async carriesVerifiableManifest(file: string): Promise<boolean> {
+  private async carriesVerifiableManifest(
+    file: string,
+  ): Promise<Buffer | null> {
     try {
-      const parsed = JSON.parse(await fs.readFile(file, "utf-8")) as
-        RollbackManifest;
-      return manifestIntegrityService.verifyManifest(parsed).valid;
+      const bytes = await fs.readFile(file);
+      const parsed = JSON.parse(bytes.toString("utf-8")) as RollbackManifest;
+      return manifestIntegrityService.verifyManifest(parsed).valid
+        ? bytes
+        : null;
     } catch {
-      return false;
+      return null;
     }
   }
 
