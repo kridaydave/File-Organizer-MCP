@@ -24,6 +24,7 @@ export interface UserConfig {
   customRules?: CustomRule[];
   watchList?: WatchConfig[];
   historyLogging?: { enabled?: boolean; maxFileSizeMB?: number; keepRotatedFiles?: number; privacyMode?: PrivacyMode; };
+  rollback?: { retentionDays?: number; retainDays?: number; retentionMinutes?: number; retentionMs?: number; };
 }
 export interface WatchConfig {
   directory: string;
