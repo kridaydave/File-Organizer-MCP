@@ -10,11 +10,6 @@ export interface CustomRule {
   priority: number;
 }
 
-export interface CategoryDefinition {
-  name: string;
-  extensions: string[];
-}
-
 export type CategoryName =
   | "Executables"
   | "Videos"
@@ -75,34 +70,4 @@ export interface DiskUsageSummary {
 
 export interface DiskUsageResult extends DiskUsageSummary {
   directory: string;
-}
-
-// ==================== Content Analysis Types ====================
-
-export interface FileTypeDetection {
-  type: string;
-  mimeType: string;
-  signatures: Buffer[];
-  extensions: string[];
-  category: ContentCategory;
-}
-
-export type ContentCategory =
-  | "Document"
-  | "Image"
-  | "Executable"
-  | "Archive"
-  | "Audio"
-  | "Video"
-  | "Code"
-  | "Unknown";
-
-export interface FileSignature {
-  type: string;
-  mimeType: string;
-  signatures: Buffer[];
-  extensions: string[];
-  category: ContentCategory;
-  description: string;
-  isExecutable: boolean;
 }

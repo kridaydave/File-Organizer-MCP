@@ -508,12 +508,33 @@ describe("manifest lock holds for the whole critical section", () => {
   it("times a waiter out against a lock that is still being used", async () => {
     // The other half of the contract: a live lock is waited for, not stolen
     // from, and a caller gives up with a timeout rather than assuming.
-    const holder = lockService(100);
-    const waiter = lockService(60);
+    //
+    // The waiter has to start only once the holder really holds it. Starting it
+    // straight after calling runExclusive raced the holder's own acquire: both
+    // were mid-stat when they looked, both saw no lock file, and whichever
+    // open('wx') landed first owned the directory. The waiter then resolved
+    // instead of timing out. runExclusive is async, so calling it proves
+    // nothing, and the shape of the failure hid the cause: it looked like the
+    // waiter judging a live lock stale, which is a different bug entirely.
+    //
+    // fn does not run until acquireLock resolves, so a promise settled from
+    // inside it is the honest signal that the lock is held. With that ordering
+    // the timings are arithmetic: the waiter gives up at its own 120 ms window
+    // and judges staleness at 2x that, so 120 is well short of 240, and the
+    // holder is still working until 1500.
+    const holder = lockService(300);
+    const waiter = lockService(120);
+
+    let markHeld: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      markHeld = resolve;
+    });
 
     const holding = holder.runExclusive(async () => {
-      await tick(120);
+      markHeld();
+      await tick(1500);
     });
+    await held;
 
     await expect(waiter.runExclusive(async () => "got in")).rejects.toThrow(
       /lock timeout/i,

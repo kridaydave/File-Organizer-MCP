@@ -29,16 +29,28 @@ const MARKER = ".file-organizer-verify-sandbox";
 const argv = process.argv.slice(2);
 const flags = new Map();
 const positional = [];
+// `--arg key=value` is repeatable, so it cannot live in the flags Map: a second
+// occurrence of the same key would overwrite the first. Collected in order and
+// applied after the flags, so an explicit pair always wins over a bare flag.
+const toolArgs = [];
 for (let i = 0; i < argv.length; i++) {
   const token = argv[i];
   if (token.startsWith("--")) {
     const eq = token.indexOf("=");
-    if (eq !== -1) {
-      flags.set(token.slice(2, eq), token.slice(eq + 1));
-    } else if (argv[i + 1] && !argv[i + 1].startsWith("--")) {
-      flags.set(token.slice(2), argv[++i]);
+    const key = eq !== -1 ? token.slice(2, eq) : token.slice(2);
+    const value =
+      eq !== -1
+        ? token.slice(eq + 1)
+        : argv[i + 1] && !argv[i + 1].startsWith("--")
+          ? argv[++i]
+          : "true";
+    if (key === "arg") {
+      if (value === "true") {
+        fail("--arg needs key=value");
+      }
+      toolArgs.push(value);
     } else {
-      flags.set(token.slice(2), "true");
+      flags.set(key, value);
     }
   } else {
     positional.push(token);
@@ -83,24 +95,24 @@ function sandboxConfigHome(root) {
 /**
  * The config directory, mirroring getConfigDirectory() in src/core/config/paths.ts.
  *
- * `root` is the *sandbox* root, never the real home. The Linux branch derives
- * the answer from `root` alone. It used to read `process.env.XDG_CONFIG_HOME`
- * from the harness's own environment, so on any machine with that variable set
- * it resolved to the developer's real `~/.config/file-organizer-mcp`: the
- * harness wrote the sandbox's config.json into the real config dir while the
- * child, spawned with XDG_CONFIG_HOME=<root>/.config, read a directory that
- * never received it. Every tool call then failed with "Access Denied: Path is
- * outside allowed directories" and doctor's read-only check went red.
+ * `root` is the *sandbox* root, never the real home. Every branch derives the
+ * answer from `root` alone. The Linux branch used to read
+ * `process.env.XDG_CONFIG_HOME` from the harness's own environment, so on any
+ * machine with that variable set it resolved to the developer's real
+ * `~/.config/file-organizer-mcp`: the harness wrote the sandbox's config.json
+ * into the real config dir while the child, spawned with
+ * XDG_CONFIG_HOME=<root>/.config, read a directory that never received it.
+ * Every tool call then failed with "Access Denied: Path is outside allowed
+ * directories" and doctor's read-only check went red.
  *
- * LINUX ONLY. The Windows branch still reads the harness's own APPDATA and the
- * macOS branch still trusts the child to honor HOME, so neither is made correct
- * here. That is a decision, not an oversight: assertSandboxConfigDir() below
- * turns a wrong answer into a hard error on every platform, so the unfixed
- * branches fail loudly instead of writing into the developer's config dir.
+ * The Windows branch had the same defect and was the same one line:
+ * `process.env.APPDATA` wins on a GitHub runner, so every Windows invocation
+ * of the harness refused to start at the assertSandboxConfigDir() guard below.
+ * The macOS branch was already correct.
  */
 function configRootFor(root) {
   if (process.platform === "win32") {
-    return path.join(process.env.APPDATA || path.join(root, "AppData", "Roaming"), "file-organizer-mcp");
+    return path.join(root, "AppData", "Roaming", "file-organizer-mcp");
   }
   if (process.platform === "darwin") {
     return path.join(root, "Library", "Application Support", "file-organizer-mcp");
@@ -427,6 +439,11 @@ async function cmdCall(name) {
   for (const [key, value] of flags) {
     if (["sandbox", "fresh", "out", "verbose", "json", "log-level"].includes(key)) continue;
     args[key] = coerce(value);
+  }
+  for (const pair of toolArgs) {
+    const eq = pair.indexOf("=");
+    if (eq === -1) fail(`--arg needs key=value, got "${pair}"`);
+    args[pair.slice(0, eq)] = coerce(pair.slice(eq + 1));
   }
   if (flags.get("json") === "true" && !args.response_format) args.response_format = "json";
 

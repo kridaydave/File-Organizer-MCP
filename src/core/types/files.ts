@@ -1,18 +1,7 @@
 /**
  * File System + Scan Types
- * Core file info, scan results, and organizer config
+ * Core file info and scan results
  */
-
-import type { CategoryDefinition, CustomRule } from "./categories.js";
-
-// ==================== Configuration Types ====================
-
-export interface ServerConfig {
-  readonly MAX_FILE_SIZE: number;
-  readonly MAX_FILES: number;
-  readonly MAX_DEPTH: number;
-  readonly VERSION: string;
-}
 
 // ==================== File System Types ====================
 
@@ -199,29 +188,4 @@ export interface SensitiveScanResult {
    * the findings still sees that a clean result is not a safe-to-share result.
    */
   limits: string[];
-}
-
-export interface FileOrganizerConfig {
-  security: {
-    maxFileSize: number;
-    maxFiles: number;
-    maxDepth: number;
-    allowedRoots?: string[];
-  };
-  performance: {
-    hashingBatchSize: number;
-    scanBatchSize: number;
-    enableCaching: boolean;
-    cacheMaxAge: number;
-  };
-  organization: {
-    defaultCategories: CategoryDefinition[];
-    customRules: CustomRule[];
-    conflictResolution: "rename" | "skip" | "error";
-  };
-  output: {
-    defaultFormat: "json" | "markdown";
-    includeHiddenFiles: boolean;
-    dateFormat: string;
-  };
 }

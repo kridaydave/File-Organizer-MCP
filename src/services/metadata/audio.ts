@@ -12,17 +12,6 @@ import type {
   AudioMetadataOptions,
 } from "./types.js";
 
-export interface ProgressUpdate {
-  processed: number;
-  total: number;
-  currentFile?: string;
-  currentStage?: "reading" | "extracting" | "caching";
-  errors: number;
-  warnings: number;
-}
-
-export type ProgressCallback = (update: ProgressUpdate) => void;
-
 function first(value?: string | string[]): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }

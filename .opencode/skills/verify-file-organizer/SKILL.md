@@ -46,8 +46,12 @@ Exit code is 0 when the tool call succeeded, 1 when the tool returned an error,
 | `--out <file>` | Also write the full result to a file as proof. Cleanup never deletes it. |
 | `--verbose` | Echo server stderr. Use this when a call fails for no visible reason. |
 
-`--arg` also accepts a bare `--key value` pair, so `--dry_run false` and
-`--dry_run=false` both work.
+A bare `--key value` pair works too, so `--dry_run false` and `--dry_run=false`
+both send a tool argument. Where both forms set the same key, `--arg` wins,
+because it is the explicit one.
+
+Quote a JSON array so the shell keeps it in one piece:
+`--arg 'files=["/tmp/a.txt","/tmp/b.txt"]'`.
 
 ## Launch
 

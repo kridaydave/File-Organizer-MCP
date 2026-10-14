@@ -170,10 +170,6 @@ export const DiskUsageByCategoryInputSchema = z
   })
   .merge(CommonParamsSchema);
 
-export type DiskUsageByCategoryInput = z.infer<
-  typeof DiskUsageByCategoryInputSchema
->;
-
 /**
  * Schema for find_broken_symlinks tool
  */
@@ -185,10 +181,6 @@ export const FindBrokenSymlinksInputSchema = z
       .describe("Full path to the directory to audit for symlink problems"),
   })
   .merge(CommonParamsSchema);
-
-export type FindBrokenSymlinksInput = z.infer<
-  typeof FindBrokenSymlinksInputSchema
->;
 
 /**
  * Schema for find_empty_directories tool
@@ -224,14 +216,9 @@ export const FindEmptyDirectoriesInputSchema = z
   })
   .merge(CommonParamsSchema);
 
-export type FindEmptyDirectoriesInput = z.infer<
-  typeof FindEmptyDirectoriesInputSchema
->;
-
 export type ListFilesInput = z.infer<typeof ListFilesInputSchema>;
 export type ScanDirectoryInput = z.infer<typeof ScanDirectoryInputSchema>;
 export type FindLargestFilesInput = z.infer<typeof FindLargestFilesInputSchema>;
-export type FindOldFilesInput = z.infer<typeof FindOldFilesInputSchema>;
 export type FindDuplicateFilesInput = z.infer<
   typeof FindDuplicateFilesInputSchema
 >;
@@ -376,8 +363,6 @@ export const SensitiveScanInputSchema = z
       ),
   })
   .merge(CommonParamsSchema);
-
-export type SensitiveScanInput = z.infer<typeof SensitiveScanInputSchema>;
 
 /**
  * Schema for analyzing duplicate files

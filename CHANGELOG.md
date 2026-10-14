@@ -4,6 +4,22 @@
 
 ### Fixed
 
+- **The legacy rollback migration could store a manifest nobody verified.**
+  `migrateLegacyStorage` verified a legacy manifest by reading it, then copied
+  the file by path, so anything able to write to the launch directory could
+  replace the contents in between and get an unverified file carried into this
+  install's rollback history. It copied the bytes it had just checked instead of
+  re-reading the path, so what lands in storage is what verification approved.
+  Raised by CodeRabbit on #114.
+- **The output-schema suite passed because of where the checkout sits.**
+  Its fixture lived in `tests/temp`, which is inside the repository, so it passed
+  path validation by accident on any machine whose checkout is under a home
+  directory the allow-list names (`~/Code` and friends). Move the checkout and the
+  suite breaks; on CI it was passing for a reason that had nothing to do with the
+  contracts it checks. The fixture is now in `os.tmpdir()` and whitelists its own
+  root through `CONFIG.paths.customAllowed`, the way the other suites that need a
+  temp directory already do. **No behavior change** to the tools.
+
 - **The temp directory was never allowed under jest, and the code said it was.**
   `getDefaultAllowedDirs` carries a bypass for directories that may be absent on
   a CI runner, and `os.tmpdir()` was listed in it. A bypass only spares a
@@ -69,6 +85,41 @@
   in-flight guard used to only stop overlapping cron ticks; now `triggerNow` and
   `runMissedSchedules` also check it, so any concurrent entry point is skipped
   instead of racing the same sources and destinations.
+
+- **The verify harness wrote the sandbox allow-list into the real user config.**
+  `ensureSandbox` resolved the config directory from the ambient
+  `XDG_CONFIG_HOME` while the server it spawns resolves it from the sandbox root,
+  so on a machine where that variable is set the two disagreed. The harness
+  created and rewrote `~/.config/file-organizer-mcp/config.json`, which is the one
+  thing the skill promises never to touch, and every `--sandbox` call failed with
+  "outside allowed directories" because the server looked for a config.json that
+  was never written. The default sandbox only worked because it was reading the
+  real home's allow-list back. Config resolution now derives from the sandbox
+  root alone on every platform, mirroring the environment handed to the server.
+  The Windows branch had the same defect in one line, `process.env.APPDATA`,
+  which wins on a GitHub runner: every Windows invocation refused to start at the
+  containment guard. macOS was already correct.
+- **The verify harness silently dropped every `--arg key=value`.** Arguments were
+  collected into a map keyed by the literal string `arg`, so `--arg
+  files=[...]` reached the tool as `{arg: "files=[...]"}` and the tool answered
+  with a missing-field error that read like a product bug. Being a map, a repeated
+  key also overwrote the earlier value despite the docs calling it repeatable.
+  Pairs are now collected in order and applied after the plain flags, so `--arg`
+  wins over a bare `--key value` for the same name.
+- **The legacy rollback migration copied in manifests it had not verified.** On
+  first run in a new config dir, `RollbackService` copied every `.json` out of
+  `.file-organizer-rollbacks` in the directory the server was launched from. That
+  directory belongs to no particular install, so anything in it became undo
+  history: another install's manifests, a test run's leftovers, or a file anyone
+  with write access to the launch directory chose to drop there. Copying
+  unsigned manifests in is the thing the manifest signature exists to prevent.
+  Two other symptoms came from the same cause. A sandbox started from a
+  directory holding a `.file-organizer-rollbacks` inherited manifests it never
+  wrote, so it stopped being hermetic, and `undo_last_operation` with no id
+  picked the newest of those and answered "possible tampering detected" instead
+  of undoing anything. Migration now verifies each manifest's signature first and
+  leaves the rest where they are rather than deleting someone else's file. The
+  count skipped is logged.
 - **An unsigned manifest could be listed as an undo target.** `listManifests`
   parsed every file in the rollback directory with no signature check, so once
   manifest ids were shown to a user, a manifest file nobody signed became a

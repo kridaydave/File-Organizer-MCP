@@ -293,8 +293,6 @@ export const VerifyIntegrityInputSchema = z
   })
   .merge(CommonParamsSchema);
 
-export type VerifyIntegrityInput = z.infer<typeof VerifyIntegrityInputSchema>;
-
 // ==================== Music Organization Schema ====================
 
 export const OrganizeMusicInputSchema = z
