@@ -156,8 +156,24 @@ describe("legacy rollback migration", () => {
     const realWriteFile = fs.writeFile;
     let reads = 0;
     let copies = 0;
-    const isLegacy = (file: unknown) =>
-      String(file).startsWith(legacyDir);
+
+    // Both sides canonicalised before comparing. `migrateLegacyStorage` builds
+    // its path from `process.cwd()`, which on macOS is already resolved, while
+    // `legacyDir` here is spelled with `os.tmpdir()` and so carries `/var`
+    // where the canonical form is `/private/var`. Comparing those two strings
+    // never matches on macOS, the mock silently falls through to the real read,
+    // and this test fails for a reason that has nothing to do with the property
+    // it is pinning. Canonicalising both sides makes the match mean the same
+    // thing on every platform.
+    const canonicalLegacyDir = fsSync.realpathSync(legacyDir);
+    const isLegacy = (file: unknown) => {
+      const target = String(file);
+      try {
+        return fsSync.realpathSync(target).startsWith(canonicalLegacyDir);
+      } catch {
+        return target.startsWith(canonicalLegacyDir);
+      }
+    };
 
     // Every read of the legacy file but the first sees the forgery, which is
     // what the real file holds the instant verification is done. `copyFile` is
