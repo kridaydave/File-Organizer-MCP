@@ -26,6 +26,7 @@ We will respond within 48 hours and work with you to address the issue.
 ### Prerequisites
 
 - Node.js v18.0.0 or higher
+- [Bun](https://bun.sh) 1.4.3 or higher (build and type checking)
 - Git
 - A code editor (VSCode recommended)
 
@@ -39,7 +40,7 @@ cd File-Organizer-MCP
 # 2. Install dependencies
 npm install
 
-# 3. Build the project
+# 3. Build the project (type checks, then writes dist/)
 npm run build
 
 # 4. Run tests
@@ -82,10 +83,15 @@ npm run format
 
 ### TypeScript
 
+Type checking is `bun check` and the build is `bun build`, so `npm run build`
+fails on a type error just as `tsc` did. Both read `tsconfig.json`.
+
 - Use strict type checking
 - Avoid `any` - use proper types
 - Document complex types with JSDoc comments
 - Use ESM imports with `.js` extensions
+- New `.ts` files under `src/` and `scripts/` are picked up automatically; only
+  excluded names need touching `scripts/build.mjs`
 
 ### Naming Conventions
 

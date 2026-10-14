@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 
 const DIST_FILE = path.join(__dirname, '..', 'dist', 'src', 'index.js');
 
@@ -19,12 +19,10 @@ function distExists() {
   }
 }
 
-// Check if we're in a development environment (have devDependencies)
-function isDevEnvironment() {
+// Check if we're in a development environment (bun can run the build)
+function canBuild() {
   try {
-    // If typescript is installed, we can build
-    const nodeModulesPath = path.join(__dirname, '..', 'node_modules', 'typescript');
-    return fs.existsSync(nodeModulesPath);
+    return spawnSync('bun', ['--version'], { stdio: 'ignore' }).status === 0;
   } catch {
     return false;
   }
@@ -38,10 +36,10 @@ function main() {
     process.exit(0);
   }
 
-  // Check if we can build (TypeScript installed)
-  if (!isDevEnvironment()) {
-    console.error('ℹ TypeScript not available, skipping build');
-    console.error('  To build manually, run: npm install && npm run build');
+  // Check if we can build (bun available)
+  if (!canBuild()) {
+    console.error('ℹ bun not available, skipping build');
+    console.error('  To build manually, install bun (https://bun.sh) then run: npm run build');
     process.exit(0);
   }
 

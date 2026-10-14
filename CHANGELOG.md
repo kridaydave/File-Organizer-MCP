@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`tsc` is out of the build.** Type checking is `bun check` and emitting is
+  `bun build`, which took the build from 6.9s and ~390MB of resident memory to
+  under 1s and ~140MB, and `typecheck:tests` from 7.6s and ~428MB to 0.4s and
+  ~140MB. `npm run build` still fails on a type error. `scripts/build.mjs` owns
+  the entrypoint list that `tsconfig.json`'s `include` and `exclude` used to
+  define, and `tsconfig.json` stays the source of truth for compiler options,
+  which is what both tools read.
+- **The published package no longer ships `.d.ts` files or source maps.** Bun's
+  transpiler emits neither. Nothing read them: `package.json` declares no
+  `types`, so no TypeScript consumer resolved them, and no entrypoint passes
+  `--enable-source-maps`, so a stack trace was never mapped back to TypeScript.
+  **No runtime behavior change.**
+- **`tsconfig.json` now sets `"types": ["node"]` and `noEmit`.** Bun's checker
+  does not pull in every package under `@types/` the way `tsc` does, so without
+  the explicit list every `Buffer` and `process` is an error. `noEmit` means a
+  stray `tsc` invocation type checks instead of writing `.js` next to sources.
+- **Bun is a build dependency.** CI installs it with `oven-sh/setup-bun@v2` in
+  the three jobs that build. Dependency installs stay on `npm`, so
+  `package-lock.json` remains the only lockfile.
+- **`npm run test:phase1` is gone.** It ran `dist/tests/test-phase1.js`, and no
+  `test-phase1` source exists in the tree, so it failed on every invocation. It
+  was never in CI and nothing documented it.
+- **`npm run build:watch` is gone.** `bun build --no-bundle` accepts `--watch`
+  and ignores it (verified on 1.4.3), so the script would have started, built
+  once, and emitted nothing after that. `npm run build` and `npm run dev` are
+  unchanged.
+
 ### Fixed
 
 - **The legacy rollback migration could store a manifest nobody verified.**
