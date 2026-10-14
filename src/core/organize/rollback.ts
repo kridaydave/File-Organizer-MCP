@@ -490,7 +490,12 @@ export class RollbackService {
 
   private isExpired(timestamp: number): boolean {
     if (!Number.isFinite(timestamp)) return false;
-    return timestamp < Date.now() - this.retentionMs;
+    const windowMs = this.retentionMs;
+    // A window of 0 or less keeps everything: a negative value clamps to 0, and
+    // 0 must not mean "everything older than right now", which would empty the
+    // directory on the next read.
+    if (windowMs <= 0) return false;
+    return timestamp < Date.now() - windowMs;
   }
 
   /**
