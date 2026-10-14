@@ -9,17 +9,20 @@
 
 import { describe, it, expect, beforeAll, afterAll, jest } from "@jest/globals";
 import fs from "fs";
+import os from "os";
 import path from "path";
 
-const tempRoot = path.join(
-  process.cwd(),
-  "tests",
-  "temp",
-  `output-schema-${process.pid}`,
+// os.tmpdir() rather than a directory under the worktree, which this suite used
+// to use: it writes and deletes, and it must not leave anything in the checkout.
+// realpathSync because macOS resolves /var to /private/var, and the handlers
+// canonicalise before comparing, so a non-canonical fixture path would not match.
+const tempRoot = fs.mkdtempSync(
+  path.join(fs.realpathSync(os.tmpdir()), "output-schema-"),
 );
 const tempConfigDir = path.join(tempRoot, "config");
 
 const actualPaths = await import("../../../src/core/config/paths.js");
+const { CONFIG } = await import("../../../src/core/config/defaults.js");
 
 jest.unstable_mockModule("../../../src/core/config/paths.js", () => ({
   ...actualPaths,
@@ -124,6 +127,7 @@ const COVERED_TOOLS = new Set<string>([
 
 describe("Tool outputSchema contracts", () => {
   let testDir: string;
+  let originalCustomAllowed: string[];
 
   beforeAll(async () => {
     testDir = path.join(tempRoot, "sandbox");
@@ -134,9 +138,21 @@ describe("Tool outputSchema contracts", () => {
     fs.writeFileSync(path.join(testDir, "original.txt"), "duplicate content");
     fs.writeFileSync(path.join(testDir, "copy.txt"), "duplicate content");
     fs.writeFileSync(path.join(testDir, "notes.md"), "# notes\n");
+
+    // Grant the sandbox explicitly. Path validation runs in whitelist mode and
+    // checks CONFIG.paths, which lists the user's home directories and nothing
+    // else. A fixture under os.tmpdir() is outside all of them, so every call
+    // here would be refused with "Path is outside allowed directories". While
+    // this fixture lived under tests/temp it passed only because the checkout
+    // happened to sit inside one of those home directories, which is a property
+    // of the machine rather than of the test. Set it explicitly and restored in
+    // afterAll, the way the other suites that use os.tmpdir() do.
+    originalCustomAllowed = CONFIG.paths.customAllowed;
+    CONFIG.paths.customAllowed = [...originalCustomAllowed, tempRoot];
   });
 
   afterAll(async () => {
+    CONFIG.paths.customAllowed = originalCustomAllowed;
     await new Promise((r) => setTimeout(r, 100));
     fs.rmSync(tempRoot, { recursive: true, force: true });
   });
