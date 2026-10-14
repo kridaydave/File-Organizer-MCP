@@ -257,7 +257,8 @@ import { formatBytes } from "../utils/formatters.js";
 ## Commands
 
 ```bash
-npm run build           # tsc to dist/
+npm run build           # bun check, then bun build to dist/
+npm run typecheck:tests  # bun check over src + tests
 npm test                # jest
 npm test tests/unit/services/organizer.test.ts   # one file
 npm run test:security   # path and access control suite

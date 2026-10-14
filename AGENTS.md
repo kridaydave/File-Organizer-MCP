@@ -68,7 +68,7 @@ The most common defect here is a change that works for one tool and is missing e
 - **Security.** Anything crossing into `fs` is typed via `PathValidatorService` and Zod. Change the validation and scanner, organizer, reader, and history logger all follow.
 - **Reverse states.** If you added a way in, add the way out and the way to see it. Organize needs preview + undo + history. Watch needs unwatch + list.
 - **Contracts.** Anything crossing the wire is a `ToolDefinition` in `src/mcp/types.ts:16`. `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) must be honest or the client will make bad decisions.
-- **Two schemas per tool, only one checked.** Every tool definition carries a hand-written JSON `inputSchema` next to its Zod schema in `src/schemas/`. The Zod schema is what the handler parses with; the JSON one is the contract the MCP client actually reads off the wire. They are separate sources of truth for the same field set and nothing keeps them in step: `tsc` sees the Zod type, the build never looks at the JSON, and `docs:check` reads neither. Add a field to one and the server either rejects a call the client was told it could make, or the client cannot see a field the server honours. Editing only Zod is the more tempting mistake, because it is the one the compiler accepts. The guard today is the assertion in `tests/integration/tools/preview-since-last-run.test.ts` comparing `Object.keys(def.inputSchema.properties)` against `Object.keys(Schema.shape)`, which is one tool, not a rule.
+- **Two schemas per tool, only one checked.** Every tool definition carries a hand-written JSON `inputSchema` next to its Zod schema in `src/schemas/`. The Zod schema is what the handler parses with; the JSON one is the contract the MCP client actually reads off the wire. They are separate sources of truth for the same field set and nothing keeps them in step: the type checker sees the Zod type, the build never looks at the JSON, and `docs:check` reads neither. Add a field to one and the server either rejects a call the client was told it could make, or the client cannot see a field the server honours. Editing only Zod is the more tempting mistake, because it is the one the compiler accepts. The guard today is the assertion in `tests/integration/tools/preview-since-last-run.test.ts` comparing `Object.keys(def.inputSchema.properties)` against `Object.keys(Schema.shape)`, which is one tool, not a rule.
 - **Docs.** Behavior a user notices → `README.md`; structural change → `ARCHITECTURE.md`; tool shape → `API.md` + `config.schema.json`; new vocabulary → `docs/FRAMEWORK.md`. `API.md` is not generated in practice: `scripts/generate-docs.js` still reports version 3.0.0 and reformats every table, so running `npm run docs:generate` produces a large unrelated diff and drops the hand-written notes. Hand-edit the tool's parameter table instead.
 
 ## Skills
@@ -218,7 +218,7 @@ File-Organizer-MCP/
 ├── bin/                       # file-organizer-mcp, file-organizer-setup, file-organizer-watch
 ├── docs/                      # FRAMEWORK.md, implementation notes, docs/skills/
 ├── examples/                  # config.strict.json, config.sandboxed.json, mcp-clients/
-├── scripts/                   # postinstall, prepare, benchmarks, security-gates, check-doc-citations
+├── scripts/                   # build.mjs (entrypoints → bun build), postinstall, prepare, benchmarks, security-gates, check-doc-citations
 ├── tests/helpers/             # safe-index: throws on absent, so an assertion can't pass vacuously
 └── .opencode/skills/          # verify-file-organizer: drive the real server
 ```
@@ -235,6 +235,41 @@ File-Organizer-MCP/
 - When you write the same instruction twice, encode it once. A lint, a script, or a schema constraint beats a paragraph someone has to remember. `npm run docs:check` is that rule applied to doc drift; `tests/helpers/safe-index.ts` is it applied to an absent array slot.
 - Errors are part of the interface. Never leak internal paths; use `sanitizeErrorMessage()` (`src/utils/error-handler.ts:64`). Throw `AccessDeniedError` (`src/mcp/types.ts:64`) or `ValidationError` (`src/mcp/types.ts:75`) and let `createErrorResponse` format them.
 - If a schema or tool adds a new field, grep `tests/` and `API.md` before calling it done.
+
+## How the build works
+
+`tsc` is out of the toolchain. It peaked at ~390MB on a 127-file project and
+~428MB over the tests, which is why it is gone.
+
+- **Type checking is `bun check`.** Same errors as `tsc`, ~0.4s, ~140MB. It reads
+  `tsconfig.json`, so the compiler options there are still the ones that decide
+  what passes. `typescript` stays a devDependency for `ts-jest` and
+  `typescript-eslint`; nothing runs it.
+- **`bun check` does not emit, so `scripts/build.mjs` does.** It walks `src/`
+  and `scripts/`, drops the same files `tsconfig.json` excludes, and hands the
+  rest to `bun build --no-bundle`, which transpiles each file in place. The
+  result is tsc's per-file layout: one `dist/src/...js` per `src/...ts`, imports
+  untouched, so relative `.js` specifiers still resolve.
+- **`npm run build` runs the check first**, so a type error still fails the build
+  the way `tsc` used to.
+- **Two things dist/ no longer has: `.d.ts` files and source maps.** Nothing
+  consumed them: package.json declares no `types`, so no TypeScript consumer
+  ever looked for them, and no entrypoint passes `--enable-source-maps`, so a
+  stack trace was never mapped back to TypeScript anyway. If either becomes
+  load-bearing, that is the argument for `tsgo` (the native tsc port, ~240MB and
+  0.9s) rather than for putting `tsc` back. `tsc --watch` is gone for the same
+  reason: `bun build --no-bundle` accepts `--watch` and ignores it, verified in
+  1.4.3, so a `build:watch` script would look like it worked and emit nothing.
+- **Bun must be on PATH.** CI installs it with `oven-sh/setup-bun@v2` in the
+  three jobs that build. Dependency installs stay on `npm`, so
+  `package-lock.json` is still the only lockfile.
+- **`bun check` does not auto-include `@types/*`** the way `tsc` does, which is
+  why `tsconfig.json` names `"types": ["node"]` explicitly. Without it every
+  `Buffer` and `process` reads as an error. Add a package there when a tool needs
+  its types.
+- **`bun build` does not glob.** `src/**/*.ts` is resolved as a module and
+  fails, which is why the entrypoint list is built in Node and passed as
+  arguments.
 
 ## Quality gates
 
@@ -366,14 +401,14 @@ If you touch one of these, close it rather than working around it.
 `npm run` lists them all. The ones you will reach for:
 
 ```bash
-npm run build                              # tsc to dist/
-npm run build:watch                        # watch mode
+npm run build                              # bun check, then bun build to dist/
 npm run dev                                # build + start stdio server
 
 npm test                                   # all tests (Jest, ESM)
 npm test tests/unit/services/organizer.test.ts  # single file
 npm run test:security                      # path + access control suite
-npm run typecheck:tests                    # tsc over src + tests, no emit
+npm run typecheck                          # bun check over src
+npm run typecheck:tests                    # bun check over src + tests
 
 npm run lint                               # eslint src + tests
 npm run lint:fix                           # auto-fix

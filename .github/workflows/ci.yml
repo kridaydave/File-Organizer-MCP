@@ -38,6 +38,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `tsc` is out of the loop: `bun check` type checks and `bun build` emits,
+      # which took the build from ~390MB of resident memory to ~140MB. Installs
+      # stay on npm so package-lock.json remains the only lockfile. The version
+      # is pinned because the build depends on `--no-bundle` transpiling each
+      # file in place rather than bundling the graph.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+
       # Proves the merge gate still asks about every job below, and that each
       # one has a timeout rather than sitting on the runner for six hours.
       - name: Check workflow invariants
@@ -92,6 +102,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
 
       # The integration suites spawn the real CLI, which is dist/src/index.js,
       # so a missing build fails them with empty output rather than a clear error.
@@ -159,6 +174,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
 
       - name: Build
         run: npm run build

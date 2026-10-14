@@ -55,6 +55,35 @@
 
 ### Changed
 
+- **`tsc` is out of the build.** Type checking is `bun check` and emitting is
+  `bun build`, which took `npm run build` from 6.9s and ~390MB of resident
+  memory to 3.5s and ~123MB, and `typecheck:tests` from 7.6s and ~428MB to
+  4.4s and ~137MB. `bun check` reports the same errors off the same
+  `tsconfig.json`, and it does not emit, so `scripts/build.mjs` walks `src/` and
+  `scripts/`, drops what `tsconfig.json` excludes, and hands the rest to
+  `bun build --no-bundle`. That keeps tsc's per-file layout, so relative `.js`
+  specifiers still resolve. `npm run build` type checks before emitting, so a
+  type error still fails it.
+- **The published package no longer ships `.d.ts` files or source maps.** Bun's
+  transpiler emits neither. Nothing read them: `package.json` declares no
+  `types`, so no TypeScript consumer resolved them, and no entrypoint passes
+  `--enable-source-maps`, so a stack trace was never mapped back to TypeScript.
+  **No runtime behavior change.**
+- **`tsconfig.json` now sets `"types": ["node"]` and `noEmit`.** Bun's checker
+  does not pull in every package under `@types/` the way `tsc` does, so without
+  the explicit list every `Buffer` and `process` is an error. `noEmit` means a
+  stray `tsc` invocation type checks instead of writing `.js` next to sources.
+- **Bun is a build dependency.** CI installs it with `oven-sh/setup-bun@v2` in
+  the three jobs that build. Dependency installs stay on `npm`, so
+  `package-lock.json` remains the only lockfile.
+- **`npm run build:watch` is gone.** `bun build --no-bundle` accepts `--watch`
+  and ignores it (verified on 1.4.3), so the script would have started, built
+  once, and emitted nothing after that. `npm run build` and `npm run dev` are
+  unchanged.
+- **`npm run test:phase1` is gone.** It ran `dist/tests/test-phase1.js`, and no
+  `test-phase1` source exists in the tree, so it failed on every invocation. It
+  was never in CI and nothing documented it.
+
 - **The watch daemon runs the same pass as `once`.** The daemon had its own
   copy of a sweep, so a scheduled directory was organized by different code from
   the cron path, and the daemon wrote no history and no rollback handle. There is
