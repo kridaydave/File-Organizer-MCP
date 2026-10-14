@@ -508,11 +508,21 @@ describe("manifest lock holds for the whole critical section", () => {
   it("times a waiter out against a lock that is still being used", async () => {
     // The other half of the contract: a live lock is waited for, not stolen
     // from, and a caller gives up with a timeout rather than assuming.
-    const holder = lockService(100);
-    const waiter = lockService(60);
+    //
+    // The margins are the test, so they are spelled out. A waiter gives up at
+    // its own window and judges staleness at 2x that, so the ordering that
+    // matters is: give up (120) before the stale line (240), with the holder
+    // still holding until 1500. It used to be 60 against a stale line of 120
+    // with the holder releasing at 120, which put the release on the stale line
+    // exactly. On a loaded runner the holder's 25 ms renewal and the waiter's
+    // 15 ms poll are both starved together, one poll lands past 120 ms, finds a
+    // lock nobody has renewed, and steals it. That is a macOS CI failure with
+    // identical code on every other leg, not a contract that broke.
+    const holder = lockService(300);
+    const waiter = lockService(120);
 
     const holding = holder.runExclusive(async () => {
-      await tick(120);
+      await tick(1500);
     });
 
     await expect(waiter.runExclusive(async () => "got in")).rejects.toThrow(
