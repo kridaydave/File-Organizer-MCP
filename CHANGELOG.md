@@ -79,7 +79,10 @@
   "outside allowed directories" because the server looked for a config.json that
   was never written. The default sandbox only worked because it was reading the
   real home's allow-list back. Config resolution now derives from the sandbox
-  root alone, mirroring the environment handed to the server.
+  root alone on every platform, mirroring the environment handed to the server.
+  The Windows branch had the same defect in one line, `process.env.APPDATA`,
+  which wins on a GitHub runner: every Windows invocation refused to start at the
+  containment guard. macOS was already correct.
 - **The verify harness silently dropped every `--arg key=value`.** Arguments were
   collected into a map keyed by the literal string `arg`, so `--arg
   files=[...]` reached the tool as `{arg: "files=[...]"}` and the tool answered

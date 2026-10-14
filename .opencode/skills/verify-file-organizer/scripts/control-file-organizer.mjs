@@ -95,24 +95,24 @@ function sandboxConfigHome(root) {
 /**
  * The config directory, mirroring getConfigDirectory() in src/core/config/paths.ts.
  *
- * `root` is the *sandbox* root, never the real home. The Linux branch derives
- * the answer from `root` alone. It used to read `process.env.XDG_CONFIG_HOME`
- * from the harness's own environment, so on any machine with that variable set
- * it resolved to the developer's real `~/.config/file-organizer-mcp`: the
- * harness wrote the sandbox's config.json into the real config dir while the
- * child, spawned with XDG_CONFIG_HOME=<root>/.config, read a directory that
- * never received it. Every tool call then failed with "Access Denied: Path is
- * outside allowed directories" and doctor's read-only check went red.
+ * `root` is the *sandbox* root, never the real home. Every branch derives the
+ * answer from `root` alone. The Linux branch used to read
+ * `process.env.XDG_CONFIG_HOME` from the harness's own environment, so on any
+ * machine with that variable set it resolved to the developer's real
+ * `~/.config/file-organizer-mcp`: the harness wrote the sandbox's config.json
+ * into the real config dir while the child, spawned with
+ * XDG_CONFIG_HOME=<root>/.config, read a directory that never received it.
+ * Every tool call then failed with "Access Denied: Path is outside allowed
+ * directories" and doctor's read-only check went red.
  *
- * LINUX ONLY. The Windows branch still reads the harness's own APPDATA and the
- * macOS branch still trusts the child to honor HOME, so neither is made correct
- * here. That is a decision, not an oversight: assertSandboxConfigDir() below
- * turns a wrong answer into a hard error on every platform, so the unfixed
- * branches fail loudly instead of writing into the developer's config dir.
+ * The Windows branch had the same defect and was the same one line:
+ * `process.env.APPDATA` wins on a GitHub runner, so every Windows invocation
+ * of the harness refused to start at the assertSandboxConfigDir() guard below.
+ * The macOS branch was already correct.
  */
 function configRootFor(root) {
   if (process.platform === "win32") {
-    return path.join(process.env.APPDATA || path.join(root, "AppData", "Roaming"), "file-organizer-mcp");
+    return path.join(root, "AppData", "Roaming", "file-organizer-mcp");
   }
   if (process.platform === "darwin") {
     return path.join(root, "Library", "Application Support", "file-organizer-mcp");
