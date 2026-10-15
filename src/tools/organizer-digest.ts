@@ -422,7 +422,10 @@ export async function handleOrganizerDigest(
     let total = 0;
     // Paged rather than one read, because the history read path caps a single
     // request and a digest that silently stopped at that cap would under-report
-    // a busy window.
+    // a busy window. Rows are keyed by id because a pass logging mid-digest
+    // shifts newest-first paging by one and would otherwise count the boundary
+    // row twice.
+    const seen = new Set<string>();
     for (;;) {
       const page = await ctx.history.searchHistory({
         startDate: window.start ?? undefined,
@@ -432,11 +435,15 @@ export async function handleOrganizerDigest(
         source,
         pathGlob: path_glob,
         limit: PAGE_SIZE,
-        offset: entries.length,
+        offset: seen.size,
         privacyMode: effectivePrivacyMode,
       });
       total = page.total;
-      entries.push(...page.entries);
+      for (const entry of page.entries) {
+        if (seen.has(entry.id)) continue;
+        seen.add(entry.id);
+        entries.push(entry);
+      }
       if (!page.hasMore) break;
     }
 
