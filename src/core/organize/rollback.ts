@@ -545,11 +545,6 @@ export class RollbackService {
     return this.retentionDays * 24 * 60 * 60 * 1000;
   }
 
-  private isExpired(timestamp: number): boolean {
-    if (!Number.isFinite(timestamp)) return false;
-    return timestamp < Date.now() - this.retentionMs;
-  }
-
   /**
    * Delete manifests older than the retention window. Runs under the manifest
    * lock, so a manifest an undo is in the middle of reading is never unlinked
@@ -559,6 +554,9 @@ export class RollbackService {
   async pruneExpiredManifests(): Promise<number> {
     if (!(await fileExists(this.storageDir))) return 0;
 
+    // Resolved once: retentionDays reads and parses the user config, and a
+    // directory holding many manifests must not pay that per candidate.
+    const cutoff = Date.now() - this.retentionMs;
     const files = await fs.readdir(this.storageDir);
     const expiredIds: string[] = [];
     for (const file of files) {
@@ -573,10 +571,17 @@ export class RollbackService {
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
           continue;
         }
-        const manifest = parsed as { timestamp?: unknown };
+        const manifest = parsed as RollbackManifest;
+        // Only this install's own manifests expire. An unverified file is
+        // foreign, tampered, or corrupt, and the listing contract keeps those
+        // visible instead of deleting them out from under the caller.
+        if (!manifestIntegrityService.verifyManifest(manifest).valid) {
+          continue;
+        }
         if (
           typeof manifest.timestamp === "number" &&
-          this.isExpired(manifest.timestamp)
+          Number.isFinite(manifest.timestamp) &&
+          manifest.timestamp < cutoff
         ) {
           expiredIds.push(id);
         }
