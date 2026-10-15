@@ -38,7 +38,7 @@ export const DEFAULT_NOTIFY_THROTTLE_MINUTES = 60;
 const SCHEDULER_STATE_FILE = "scheduler-state.json";
 
 /** Our slice of that file: directory -> ISO timestamp of the last command. */
-const NOTIFY_STATE_KEY = "notifications";
+const NOTIFY_STATE_FIELD = "notifications";
 
 /** Why no command ran. Absent only when a command did run. */
 export type NotifySkipReason =
@@ -176,7 +176,7 @@ export function readNotifyTimestamps(
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       return {};
     }
-    const stamps = (parsed as Record<string, unknown>)[NOTIFY_STATE_KEY];
+    const stamps = (parsed as Record<string, unknown>)[NOTIFY_STATE_FIELD];
     if (typeof stamps !== "object" || stamps === null || Array.isArray(stamps)) {
       return {};
     }
@@ -236,7 +236,7 @@ export function writeNotifyTimestamp(
     // refusal to organize.
   }
 
-  const existing = root[NOTIFY_STATE_KEY];
+  const existing = root[NOTIFY_STATE_FIELD];
   const stamps =
     typeof existing === "object" &&
     existing !== null &&
@@ -244,7 +244,7 @@ export function writeNotifyTimestamp(
       ? { ...(existing as Record<string, unknown>) }
       : {};
   stamps[directory] = at.toISOString();
-  root[NOTIFY_STATE_KEY] = stamps;
+  root[NOTIFY_STATE_FIELD] = stamps;
 
   fsSync.mkdirSync(path.dirname(stateFilePath), { recursive: true });
   fsSync.writeFileSync(stateFilePath, JSON.stringify(root, null, 2), "utf-8");
