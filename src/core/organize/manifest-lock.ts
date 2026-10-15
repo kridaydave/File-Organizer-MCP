@@ -110,6 +110,42 @@ export class ManifestLockService {
    * service that remembers "the current holder" can only describe one of them
    * and has nothing to say about a second.
    */
+  /**
+   * Try to run `fn` under the lock without waiting. Returns whether the lock
+   * was acquired; when it was not, `fn` is not called and nothing is changed.
+   *
+   * This is what a best-effort, lazy cleanup uses: pruning manifests is not
+   * worth blocking an undo, and a prune that cannot get the lock simply skips
+   * this pass.
+   */
+  async tryRunExclusive<T>(
+    fn: (lease: ManifestLockLease) => Promise<T>,
+  ): Promise<{ acquired: boolean; value?: T }> {
+    const held = await this.tryAcquireLock();
+    if (!held) return { acquired: false };
+
+    const renewal = setInterval(() => {
+      void this.checkOwnership(held).catch(() => {});
+    }, this.renewalMs);
+    renewal.unref?.();
+
+    try {
+      const value = await fn({
+        assertStillOwns: async () => {
+          if (!(await this.checkOwnership(held))) {
+            throw new Error(
+              "Lost the manifest lock — another process reclaimed the rollback directory while this operation was still running, so it stopped before touching another file",
+            );
+          }
+        },
+      });
+      return { acquired: true, value };
+    } finally {
+      clearInterval(renewal);
+      await this.releaseLock(held);
+    }
+  }
+
   async runExclusive<T>(fn: (lease: ManifestLockLease) => Promise<T>): Promise<T> {
     const held = await this.acquireLock();
 

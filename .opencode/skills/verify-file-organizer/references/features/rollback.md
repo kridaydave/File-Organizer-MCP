@@ -8,6 +8,7 @@ rollback service changes.
 
 - `undo_last_operation`: reverse the most recent organizing operation.
 - `view_history`: read the recorded operation log.
+- `organizer_digest`: collapse that log into totals, a per-directory and per-operation breakdown, the partial and failed passes, and the undo handles.
 - `search_history`: filter that log by path glob, date range, operation, status
   or source.
 - `quarantine_files`: move flagged files aside, reversibly.
@@ -62,6 +63,28 @@ Takes no required arguments, so a bare call lists everything. Every filter is
 optional and they combine: `path_glob`, `from`, `to`, `operation`, `status`,
 `source`, `limit`, `privacy_mode`. It returns `entries`, newest first, each with
 `operation`, `status`, `source`, `durationMs`, `paths`, `id` and `timestamp`.
+
+## organizer_digest
+
+The collapse of that same log. One call over a window returns totals, a
+per-directory breakdown, a per-operation breakdown, a `failures` list for every
+partial or failed pass, and `undo_manifests` — the ids `undo_last_operation`
+accepts. Nothing is scheduled; it is a pull.
+
+```bash
+node $C call organizer_digest --last 24h --json
+node $C call organizer_digest --from 2026-01-01T00:00:00.000Z --json
+```
+
+The window is either relative (`last`: `24h`, `7d`, `2w`) or absolute
+(`from`/`since` to `to`/`until`, defaulting to now); an absolute start wins over
+`last`. `limits` always states that the read covers the rotated
+`operations.N.jsonl` files too, so a window that crosses a rotation is still
+covered.
+
+A partial pass appears in `failures` with its `detail` and `manifest_id`, not
+just as a count inside `totals`. `privacy_mode: redacted` collapses every
+directory into one `[REDACTED]` row; the counts survive.
 
 ## How to get to it (client POV)
 

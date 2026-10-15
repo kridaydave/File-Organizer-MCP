@@ -16,7 +16,11 @@
     },
     "conflictStrategy": {
       "type": "string",
-      "enum": ["rename", "skip", "overwrite"],
+      "enum": [
+        "rename",
+        "skip",
+        "overwrite"
+      ],
       "description": "What to do when a destination file already exists: rename (default), skip, or overwrite."
     },
     "autoOrganize": {
@@ -27,10 +31,16 @@
         },
         "schedule": {
           "type": "string",
-          "enum": ["hourly", "daily", "weekly"]
+          "enum": [
+            "hourly",
+            "daily",
+            "weekly"
+          ]
         }
       },
-      "required": ["enabled"],
+      "required": [
+        "enabled"
+      ],
       "description": "Periodic automatic organization of allowed directories."
     },
     "settings": {
@@ -68,7 +78,10 @@
             "default": false
           }
         },
-        "required": ["pattern", "destination"]
+        "required": [
+          "pattern",
+          "destination"
+        ]
       },
       "description": "Move rules: files matching pattern go to destination."
     },
@@ -93,7 +106,10 @@
             "type": "integer"
           }
         },
-        "required": ["category", "priority"]
+        "required": [
+          "category",
+          "priority"
+        ]
       },
       "description": "Custom categorization rules (set via set_custom_rules); loaded by every request."
     },
@@ -125,13 +141,23 @@
               },
               "catchup_mode": {
                 "type": "string",
-                "enum": ["smart", "always", "never"]
+                "enum": [
+                  "smart",
+                  "always",
+                  "never"
+                ]
               }
             },
-            "required": ["auto_organize"]
+            "required": [
+              "auto_organize"
+            ]
           }
         },
-        "required": ["directory", "schedule", "rules"]
+        "required": [
+          "directory",
+          "schedule",
+          "rules"
+        ]
       },
       "description": "Directories the cron watch daemon scans on a schedule."
     },
@@ -151,10 +177,54 @@
         },
         "privacyMode": {
           "type": "string",
-          "enum": ["full", "redacted", "none"]
+          "enum": [
+            "full",
+            "redacted",
+            "none"
+          ]
         }
       },
       "description": "Operation history log rotation and privacy settings."
+    },
+    "notify": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "A command line run after a pass actually moved files, e.g. notify-send \"Organized\" \"$FOM_NOTIFY_MOVED files\". Tokenized into argv and spawned without a shell, so quotes group arguments and |, > and && are literal; write sh -c \"...\" for a pipeline. Nothing runs on a dry run or a pass that moved nothing. The command receives FOM_NOTIFY_DIRECTORY and FOM_NOTIFY_MOVED in its environment."
+        },
+        "throttleMinutes": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minutes before the same directory may notify again. Default 60. The throttle is per directory, and the first notification for a directory is always sent."
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "description": "Desktop notification fired when a scheduled pass moves files."
+    },
+    "rollback": {
+      "type": "object",
+      "description": "Rollback manifest retention.",
+      "properties": {
+        "retentionDays": {
+          "type": "number",
+          "minimum": 0
+        },
+        "retainDays": {
+          "type": "number",
+          "minimum": 0
+        },
+        "retentionMinutes": {
+          "type": "number",
+          "minimum": 0
+        },
+        "retentionMs": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
     }
   }
 }
