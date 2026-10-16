@@ -550,13 +550,22 @@ export class RollbackService {
    * lock, so a manifest an undo is in the middle of reading is never unlinked
    * out from under it: when the lock cannot be taken, the prune refuses and
    * leaves the files alone.
+   *
+   * A retention window of 0 keeps every manifest.
    */
   async pruneExpiredManifests(): Promise<number> {
     if (!(await fileExists(this.storageDir))) return 0;
 
     // Resolved once: retentionDays reads and parses the user config, and a
     // directory holding many manifests must not pay that per candidate.
-    const cutoff = Date.now() - this.retentionMs;
+    const windowMs = this.retentionMs;
+    // A window of 0 or less keeps everything. A negative value clamps to 0 at
+    // resolution, and 0 is the documented "keep every manifest" setting, so it
+    // must not be read as "everything older than right now" and empty the
+    // directory on the next read.
+    if (windowMs <= 0) return 0;
+    const cutoff = Date.now() - windowMs;
+
     const files = await fs.readdir(this.storageDir);
     const expiredIds: string[] = [];
     for (const file of files) {
@@ -607,18 +616,6 @@ export class RollbackService {
     });
 
     return result.acquired ? (result.value ?? 0) : 0;
-  }
-
-  async pruneManifests(): Promise<number> {
-    return this.pruneExpiredManifests();
-  }
-
-  async pruneByAge(): Promise<number> {
-    return this.pruneExpiredManifests();
-  }
-
-  async prune(): Promise<number> {
-    return this.pruneExpiredManifests();
   }
 
   async listManifests(): Promise<ListedManifest[]> {
