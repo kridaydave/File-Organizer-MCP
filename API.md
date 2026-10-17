@@ -31,6 +31,7 @@
 - [file_organizer_organize_by_date](#file_organizer_organize_by_date)
 - [file_organizer_organize_by_project](#file_organizer_organize_by_project)
 - [file_organizer_organize_files](#file_organizer_organize_files)
+- [file_organizer_organizer_digest](#file_organizer_organizer_digest)
 - [file_organizer_organize_music](#file_organizer_organize_music)
 - [file_organizer_organize_photos](#file_organizer_organize_photos)
 - [file_organizer_preview_delete_duplicates](#file_organizer_preview_delete_duplicates)
@@ -1481,6 +1482,99 @@ file_organizer_export_report({
 
 // Or just look, and write nothing.
 file_organizer_export_report({ directory: "~/Documents" });
+```
+
+---
+
+## file_organizer_organizer_digest
+
+[⬆ Back to Top](#top)
+
+**Description:** Aggregate the recorded operation history into one digest over a
+time window. Nothing is scheduled and nothing fires on its own — you ask, you
+get a digest. The pull model, not push.
+
+**Read-only.** It reads the same `operations.jsonl` the history tools read and
+moves nothing. One tick over N watched directories is N rows in that file and N
+manifests on disk; the digest does the collapsing, not the writer.
+
+### Parameters
+
+| Parameter         | Type   | Description                                                          | Default    |
+| ----------------- | ------ | -------------------------------------------------------------------- | ---------- |
+| `last`            | string | Relative window ending now: `24h`, `7d`, `2w`. Ignored when `from`/`since` is given. | - |
+| `from`            | string | ISO date string - window start, inclusive. Alias of `since`.         | -          |
+| `since`           | string | ISO date string - window start, inclusive. Alias of `from`.          | -          |
+| `to`              | string | ISO date string - window end, inclusive. Alias of `until`. Defaults to now. | -    |
+| `until`           | string | ISO date string - window end, inclusive. Alias of `to`.              | -          |
+| `operation`       | string | Restrict the digest to one operation                                 | -          |
+| `status`          | string | 'success', 'error', or 'partial'                                     | -          |
+| `source`          | string | 'manual' or 'scheduled'                                              | -          |
+| `path_glob`       | string | Glob matched against the paths each entry recorded, as in `search_history` | -     |
+| `privacy_mode`    | string | 'full', 'redacted', or 'none'                                        | -          |
+| `response_format` | string | 'json' or 'markdown'                                                 | 'markdown' |
+
+The two window forms are not mixed: `last` is for "the last 24h" without the
+caller knowing the clock, `from`/`to` are for "everything between these two
+timestamps". An absolute start wins over `last`, so passing both does not
+silently drop one. A window that starts after it ends is a `ValidationError`
+rather than an empty digest, because an empty digest would read as "nothing
+happened".
+
+### Returned fields
+
+| Field              | Description                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| `generated_at`     | ISO timestamp of the digest                                                              |
+| `window`           | `start` (null when unbounded), `end`, `start_kind`, `relative`                            |
+| `filters`          | The `operation`, `status`, `source` and `path_glob` the digest was narrowed to            |
+| `totals`           | `passes`, `files_processed`, `files_skipped`, `duration_ms` (+ readable), `successful`, `partial`, `failed`, `passes_with_manifest` |
+| `by_directory`     | One row per directory a pass recorded, with the same counts                                |
+| `by_operation`     | One row per operation, with the same counts                                                |
+| `failures`         | Every partial or failed pass: timestamp, operation, status, source, `manifest_id`, `detail`, `error` |
+| `undo_manifests`   | The manifest id of each run covered, sorted. Pass one to `file_organizer_undo_last_operation` |
+| `limits`           | Prose about what the numbers do not cover                                                 |
+
+### Failures get their own section
+
+A `partial` pass is the thing most worth a human's attention, so it is named in
+`failures` with its `detail` and its undo handle rather than folded into a count
+inside `totals`. It is still counted in the totals — a digest does not hide the
+work a pass did — but a number inside a total is not an alert.
+
+### The `limits` field is part of the contract
+
+History is read from `operations.jsonl` plus the rotated `operations.N.jsonl`
+files beside it, so a window that crosses a rotation is still covered; the digest
+cannot tell which file a row came from and does not claim to.
+`config.historyLogging.keepRotatedFiles` is not honored yet — the number of
+rotated files the history service reads is fixed — and `limits` says so rather
+than implying the window is exact.
+
+A window holding more passes than one read returns reports the shortfall in
+`limits` and counts only what it reached, so a digest over a very busy window
+never reads as complete when it is not.
+
+### `privacy_mode` and the per-directory rows
+
+The directory label is the first path the entry recorded, which both writers set
+to the root they worked on. `redacted` therefore collapses every directory into
+one `[REDACTED]` row: the mode costs resolution, never a number. `none` drops
+the paths entirely, so those passes land in a `(no directory recorded)` row and
+are still counted.
+
+### Example
+
+```typescript
+// What did the scheduled passes do overnight?
+file_organizer_organizer_digest({ last: "24h", source: "scheduled" });
+
+// Or a fixed window, as JSON.
+file_organizer_organizer_digest({
+  from: "2026-01-01T00:00:00.000Z",
+  to: "2026-01-08T00:00:00.000Z",
+  response_format: "json",
+});
 ```
 
 ---

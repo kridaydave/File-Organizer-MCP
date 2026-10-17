@@ -19,6 +19,7 @@ import { fileExists } from "../../utils/file-utils.js";
 import { logger } from "../../utils/logger.js";
 import { CONFIG } from "../../config.js";
 import { getRollbackDirectory } from "../../core/config/paths.js";
+import { loadUserConfig } from "../config/loader.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
 import {
   manifestIntegrityService,
@@ -29,6 +30,7 @@ import { safeAtomicMove } from "../io/atomic-move.js";
 import { HashCalculatorService } from "../hash/hasher.js";
 import {
   ManifestLockService,
+  ManifestLockUnavailableError,
   type ManifestLockLease,
 } from "./manifest-lock.js";
 
@@ -43,6 +45,11 @@ import {
  * `verifyManifestFiles` reports as `unverifiable` — never as "unchanged".
  */
 const DEFAULT_HASH_BUDGET_BYTES = 32 * 1024 * 1024;
+
+/** How long a rollback manifest survives before being pruned on read. */
+export const DEFAULT_RETENTION_DAYS = 30;
+export const DEFAULT_RETENTION_MS =
+  DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 /**
  * Every path a manifest's undo will read, write, or delete.
@@ -152,12 +159,47 @@ export class RollbackService {
   private storageDir: string;
   private pathValidator: PathValidatorService;
   private manifestLock: ManifestLockService;
+  private retentionDaysOverride?: number;
 
   constructor(
-    storageDir: string = getRollbackDirectory(),
+    storageDirOrOptions:
+      | string
+      | {
+          storageDir?: string;
+          lockTimeoutMs?: number;
+          retentionDays?: number;
+          retentionMs?: number;
+          retentionMinutes?: number;
+        } = getRollbackDirectory(),
     lockTimeoutMs?: number,
+    retentionDays?: number,
   ) {
-    this.storageDir = storageDir;
+    let resolvedStorageDir = getRollbackDirectory();
+    let resolvedLockTimeout = lockTimeoutMs;
+    let resolvedRetention: number | undefined = retentionDays;
+
+    if (typeof storageDirOrOptions === "string") {
+      resolvedStorageDir = storageDirOrOptions;
+    } else if (storageDirOrOptions && typeof storageDirOrOptions === "object") {
+      if (typeof storageDirOrOptions.storageDir === "string") {
+        resolvedStorageDir = storageDirOrOptions.storageDir;
+      }
+      if (storageDirOrOptions.lockTimeoutMs !== undefined) {
+        resolvedLockTimeout = storageDirOrOptions.lockTimeoutMs;
+      }
+      if (storageDirOrOptions.retentionDays !== undefined) {
+        resolvedRetention = storageDirOrOptions.retentionDays;
+      } else if (storageDirOrOptions.retentionMinutes !== undefined) {
+        resolvedRetention = storageDirOrOptions.retentionMinutes / (24 * 60);
+      } else if (storageDirOrOptions.retentionMs !== undefined) {
+        resolvedRetention = storageDirOrOptions.retentionMs / (24 * 60 * 60 * 1000);
+      }
+    }
+
+    this.storageDir = resolvedStorageDir;
+    if (resolvedRetention !== undefined) {
+      this.retentionDaysOverride = resolvedRetention;
+    }
     // Do not restrict rollback paths to CWD. Manifests may reference any
     // directory that was permitted at organize-time (e.g. Downloads, Desktop).
     // Security is enforced by manifest HMAC integrity and the global
@@ -165,7 +207,10 @@ export class RollbackService {
     this.pathValidator = new PathValidatorService();
     // Its own lock for its own directory, not the history lock: that one
     // serializes writers to operations.jsonl, a different resource.
-    this.manifestLock = new ManifestLockService(storageDir, lockTimeoutMs);
+    this.manifestLock = new ManifestLockService(
+      resolvedStorageDir,
+      resolvedLockTimeout,
+    );
   }
 
   private async ensureStorage(): Promise<void> {
@@ -450,7 +495,149 @@ export class RollbackService {
    * falls back to the cwd. A test or an embedding caller may still pass its own
    * storageDir to the constructor.
    */
+  /**
+   * How long a manifest lives, in days, resolved from the optional constructor
+   * override first and then from the user config. A value that cannot be read as
+   * a number falls back to the default rather than poisoning the comparison.
+   */
+  private get retentionDays(): number {
+    if (this.retentionDaysOverride !== undefined) {
+      if (
+        typeof this.retentionDaysOverride === "number" &&
+        Number.isFinite(this.retentionDaysOverride)
+      ) {
+        return Math.max(0, this.retentionDaysOverride);
+      }
+    }
+    let configured: unknown;
+    try {
+      const cfg = loadUserConfig() as Record<string, unknown>;
+      const rollback = (cfg?.rollback ??
+        cfg?.rollbackManifests ??
+        cfg?.rollbackRetention ??
+        cfg?.manifestRetention ??
+        {}) as Record<string, unknown>;
+
+      if (typeof rollback?.retentionDays === "number") {
+        configured = rollback.retentionDays;
+      } else if (typeof rollback?.retainDays === "number") {
+        configured = rollback.retainDays;
+      } else if (typeof rollback?.retentionMinutes === "number") {
+        configured = (rollback.retentionMinutes as number) / (24 * 60);
+      } else if (typeof rollback?.retentionMs === "number") {
+        configured = (rollback.retentionMs as number) / (24 * 60 * 60 * 1000);
+      } else if (typeof cfg?.rollbackRetentionDays === "number") {
+        configured = cfg.rollbackRetentionDays;
+      } else if (typeof cfg?.manifestRetentionDays === "number") {
+        configured = cfg.manifestRetentionDays;
+      } else if (typeof cfg?.retentionDays === "number") {
+        configured = cfg.retentionDays;
+      }
+    } catch {
+      configured = undefined;
+    }
+    if (typeof configured === "number" && Number.isFinite(configured)) {
+      return Math.max(0, configured);
+    }
+    return DEFAULT_RETENTION_DAYS;
+  }
+
+  private get retentionMs(): number {
+    return this.retentionDays * 24 * 60 * 60 * 1000;
+  }
+
+  /**
+   * Delete manifests older than the retention window. Runs under the manifest
+   * lock, so a manifest an undo is in the middle of reading is never unlinked
+   * out from under it: when the lock cannot be taken, the prune refuses and
+   * leaves the files alone.
+   *
+   * A retention window of 0 keeps every manifest.
+   */
+  async pruneExpiredManifests(): Promise<number> {
+    if (!(await fileExists(this.storageDir))) return 0;
+
+    // Resolved once: retentionDays reads and parses the user config, and a
+    // directory holding many manifests must not pay that per candidate.
+    const windowMs = this.retentionMs;
+    // A window of 0 or less keeps everything. A negative value clamps to 0 at
+    // resolution, and 0 is the documented "keep every manifest" setting, so it
+    // must not be read as "everything older than right now" and empty the
+    // directory on the next read.
+    if (windowMs <= 0) return 0;
+    const cutoff = Date.now() - windowMs;
+
+    const files = await fs.readdir(this.storageDir);
+    const expiredIds: string[] = [];
+    for (const file of files) {
+      if (!file.endsWith(".json")) continue;
+      const id = file.slice(0, -".json".length);
+      try {
+        const content = await fs.readFile(
+          path.join(this.storageDir, file),
+          "utf-8",
+        );
+        const parsed: unknown = JSON.parse(content);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+          continue;
+        }
+        const manifest = parsed as RollbackManifest;
+        // Only this install's own manifests expire. An unverified file is
+        // foreign, tampered, or corrupt, and the listing contract keeps those
+        // visible instead of deleting them out from under the caller.
+        if (!manifestIntegrityService.verifyManifest(manifest).valid) {
+          continue;
+        }
+        if (
+          typeof manifest.timestamp === "number" &&
+          Number.isFinite(manifest.timestamp) &&
+          manifest.timestamp < cutoff
+        ) {
+          expiredIds.push(id);
+        }
+      } catch {
+        // Unparseable files are not manifests we own; leave them.
+      }
+    }
+
+    if (expiredIds.length === 0) return 0;
+
+    // A directory that can be read but not written to cannot take the lock, and
+    // that is not a reason to refuse a listing that would otherwise work. Not
+    // being able to prove ownership means not pruning, which is the same
+    // outcome as losing the race to another holder below.
+    try {
+      const result = await this.manifestLock.tryRunExclusive(async (lease) => {
+        let removed = 0;
+        for (const id of expiredIds) {
+          await lease.assertStillOwns();
+          try {
+            await fs.unlink(path.join(this.storageDir, `${id}.json`));
+            removed++;
+          } catch {
+            // Already gone: counts as pruned for our purposes.
+          }
+        }
+        return removed;
+      });
+
+      return result.acquired ? (result.value ?? 0) : 0;
+    } catch (error) {
+      // Only the unavailable case is absorbed. Losing the lock mid-prune throws
+      // from assertStillOwns and has to stop the caller, not be swallowed here.
+      if (error instanceof ManifestLockUnavailableError) {
+        logger.warn(
+          "Skipped rollback manifest prune: the rollback directory could not be locked",
+          { code: (error.cause as NodeJS.ErrnoException | undefined)?.code },
+        );
+        return 0;
+      }
+      throw error;
+    }
+  }
+
   async listManifests(): Promise<ListedManifest[]> {
+    await this.pruneExpiredManifests();
     if (!(await fileExists(this.storageDir))) return [];
 
     const files = await fs.readdir(this.storageDir);
