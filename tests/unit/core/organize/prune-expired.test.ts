@@ -225,4 +225,43 @@ describe("pruneExpiredManifests", () => {
     await shortWindow.listManifests();
     expect(await exists(expired)).toBe(false);
   });
+
+  it("still lists when the rollback directory cannot be locked", async () => {
+    const shortWindow = new RollbackService({
+      storageDir,
+      retentionMs: 60_000,
+    });
+    const expired = await seedManifest();
+    await ageManifest(expired, 3_600_000);
+
+    try {
+      await fs.chmod(storageDir, 0o555);
+    } catch {
+      throw new Error("chmod failed, so the read-only setup never happened");
+    }
+
+    // A read-only directory is only read-only for a process that cannot write
+    // as root, so prove the lock really is unavailable before asserting
+    // anything. Otherwise this test is green for the wrong reason.
+    let writable = true;
+    try {
+      await fs.access(path.join(storageDir, "manifests.lock"), fs.constants.W_OK);
+    } catch {
+      writable = false;
+    }
+    if (writable) {
+      throw new Error(
+        "storageDir is still writable, so the lock would succeed and this proves nothing",
+      );
+    }
+
+    try {
+      const listed = await shortWindow.listManifests();
+      expect(listed.map((m) => m.id)).toContain(expired);
+      // Skipped, not deferred: nothing was unlinked and nothing threw.
+      expect(await exists(expired)).toBe(true);
+    } finally {
+      await fs.chmod(storageDir, 0o755).catch(() => null);
+    }
+  });
 });

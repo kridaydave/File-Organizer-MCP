@@ -30,6 +30,7 @@ import { safeAtomicMove } from "../io/atomic-move.js";
 import { HashCalculatorService } from "../hash/hasher.js";
 import {
   ManifestLockService,
+  ManifestLockUnavailableError,
   type ManifestLockLease,
 } from "./manifest-lock.js";
 
@@ -601,21 +602,38 @@ export class RollbackService {
 
     if (expiredIds.length === 0) return 0;
 
-    const result = await this.manifestLock.tryRunExclusive(async (lease) => {
-      let removed = 0;
-      for (const id of expiredIds) {
-        await lease.assertStillOwns();
-        try {
-          await fs.unlink(path.join(this.storageDir, `${id}.json`));
-          removed++;
-        } catch {
-          // Already gone: counts as pruned for our purposes.
+    // A directory that can be read but not written to cannot take the lock, and
+    // that is not a reason to refuse a listing that would otherwise work. Not
+    // being able to prove ownership means not pruning, which is the same
+    // outcome as losing the race to another holder below.
+    try {
+      const result = await this.manifestLock.tryRunExclusive(async (lease) => {
+        let removed = 0;
+        for (const id of expiredIds) {
+          await lease.assertStillOwns();
+          try {
+            await fs.unlink(path.join(this.storageDir, `${id}.json`));
+            removed++;
+          } catch {
+            // Already gone: counts as pruned for our purposes.
+          }
         }
-      }
-      return removed;
-    });
+        return removed;
+      });
 
-    return result.acquired ? (result.value ?? 0) : 0;
+      return result.acquired ? (result.value ?? 0) : 0;
+    } catch (error) {
+      // Only the unavailable case is absorbed. Losing the lock mid-prune throws
+      // from assertStillOwns and has to stop the caller, not be swallowed here.
+      if (error instanceof ManifestLockUnavailableError) {
+        logger.warn(
+          "Skipped rollback manifest prune: the rollback directory could not be locked",
+          { code: (error.cause as NodeJS.ErrnoException | undefined)?.code },
+        );
+        return 0;
+      }
+      throw error;
+    }
   }
 
   async listManifests(): Promise<ListedManifest[]> {

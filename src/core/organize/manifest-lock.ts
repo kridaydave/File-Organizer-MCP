@@ -65,6 +65,20 @@ interface HeldLock {
   handle: fs.FileHandle;
 }
 
+/**
+ * The lock file could not be created at all, as opposed to being held or lost.
+ *
+ * A caller that treats contention and a broken environment the same way either
+ * waits for a process that does not exist or gives up on a directory it could
+ * have used, so the two are separate types rather than one message to match on.
+ */
+export class ManifestLockUnavailableError extends Error {
+  constructor(code: string, options?: { cause?: unknown }) {
+    super(`Manifest lock could not be created (${code})`, options);
+    this.name = "ManifestLockUnavailableError";
+  }
+}
+
 /** What a critical section holds for as long as it runs. */
 export interface ManifestLockLease {
   /**
@@ -245,9 +259,7 @@ export class ManifestLockService {
       // is a broken environment: reporting it as a timeout sends the caller
       // looking for a stuck process that does not exist.
       if (code === "EEXIST") return null;
-      throw new Error(`Manifest lock could not be created (${code})`, {
-        cause: error,
-      });
+      throw new ManifestLockUnavailableError(code, { cause: error });
     }
   }
 
