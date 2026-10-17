@@ -356,7 +356,7 @@
     rfStage.addEventListener("focus",function(){rf.classList.add("is-hover")});
     rfStage.addEventListener("blur",function(){rf.classList.remove("is-hover");setOpen(false)});
     rfStage.addEventListener("keydown",function(e){
-      if(e.key==="Enter"||e.key===" "){e.preventDefault();setOpen(!rfOpen)}
+      if(e.key==="Enter"||e.key===" "){e.preventDefault();if(e.repeat)return;setOpen(!rfOpen)}
       else if(e.key==="Escape"){setOpen(false)}
     });
   }
