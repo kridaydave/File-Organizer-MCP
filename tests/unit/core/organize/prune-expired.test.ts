@@ -226,7 +226,14 @@ describe("pruneExpiredManifests", () => {
     expect(await exists(expired)).toBe(false);
   });
 
-  it("still lists when the rollback directory cannot be locked", async () => {
+  // Windows does not enforce a read-only directory against the current user,
+  // so `chmod 0o555` there leaves the lock creatable, the prune runs, and the
+  // manifest is deleted. The fs.access guard cannot catch that: the lock file
+  // does not exist yet when it runs, access on a missing path throws, and the
+  // guard reads that as "not writable". This test is POSIX-only.
+  const posixOnly = process.platform === "win32" ? it.skip : it;
+
+  posixOnly("still lists when the rollback directory cannot be locked", async () => {
     const shortWindow = new RollbackService({
       storageDir,
       retentionMs: 60_000,
