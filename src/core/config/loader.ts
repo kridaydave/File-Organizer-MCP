@@ -24,6 +24,33 @@ export interface UserConfig {
   customRules?: CustomRule[];
   watchList?: WatchConfig[];
   historyLogging?: { enabled?: boolean; maxFileSizeMB?: number; keepRotatedFiles?: number; privacyMode?: PrivacyMode; };
+  rollback?: {
+    retentionDays?: number;
+    retainDays?: number;
+    retentionMinutes?: number;
+    retentionMs?: number;
+  };
+  /**
+   * Desktop notification after a pass that moved files. Command only: one
+   * command line, spawned without a shell, so a curl line is a URL integration
+   * and there is no second code path. Throttled per directory; see
+   * src/core/notify/notify-service.ts.
+   */
+  notify?: NotifyConfig;
+}
+/** One command line, run after a pass that moved files. */
+export interface NotifyConfig {
+  /**
+   * The command line, e.g. `notify-send "Organized" "$FOM_NOTIFY_MOVED files"`.
+   * Tokenized into argv and spawned with no shell, so quotes group arguments
+   * and `|`/`>` are literal. `sh -c "..."` is how a user asks for a pipeline.
+   */
+  command: string;
+  /**
+   * Minutes before the same directory may notify again. Default 60. The first
+   * notification for a directory is always sent, whatever this is set to.
+   */
+  throttleMinutes?: number;
 }
 export interface WatchConfig {
   directory: string;

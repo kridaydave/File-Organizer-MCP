@@ -70,6 +70,8 @@ export const KNOWN_CONFIG_KEYS: ReadonlySet<string> = new Set(
     customRules: undefined,
     watchList: undefined,
     historyLogging: undefined,
+    rollback: undefined,
+    notify: undefined,
   } satisfies { [K in keyof Required<UserConfig>]: undefined }),
 );
 

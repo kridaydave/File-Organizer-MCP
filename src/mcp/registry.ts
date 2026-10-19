@@ -137,6 +137,10 @@ import {
   exportReportToolDefinition,
   handleExportReport,
 } from "../tools/export-report.js";
+import {
+  organizerDigestToolDefinition,
+  handleOrganizerDigest,
+} from "../tools/organizer-digest.js";
 
 function reg(def: ToolDefinition, handler: ToolHandler) {
   return defineTool({
@@ -175,6 +179,7 @@ const entries = [
   reg(organizeByDateToolDefinition, handleOrganizeByDate),
   reg(organizeByProjectToolDefinition, handleOrganizeByProject),
   reg(organizeFilesToolDefinition, handleOrganizeFiles),
+  reg(organizerDigestToolDefinition, handleOrganizerDigest),
   reg(organizeMusicToolDefinition, handleOrganizeMusic),
   reg(organizePhotosToolDefinition, handleOrganizePhotos),
   reg(previewDeleteDuplicatesToolDefinition, handlePreviewDeleteDuplicates),

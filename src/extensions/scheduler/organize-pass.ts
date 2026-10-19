@@ -14,6 +14,7 @@ import { FileScannerService } from "../../core/scan/scanner.js";
 import { OrganizerService } from "../../core/organize/organizer.js";
 import { CategorizerService } from "../../services/categorizer.service.js";
 import { validateStrictPath } from "../../services/path-validator.service.js";
+import { notifyIfMovedFiles } from "../../core/notify/notify-service.js";
 import type { ConflictStrategy } from "../../core/organize/organizer.js";
 import type { UserConfig } from "../../config.js";
 import type { HistoryLoggerService } from "../../services/history-logger.service.js";
@@ -83,6 +84,13 @@ export interface OrganizePassResult {
   /** True when a history entry was appended. False on a dry run, and false
    * when the append failed after the files already moved. */
   historyLogged: boolean;
+  /**
+   * True when notify.command ran for this pass. Undefined on a dry run, which
+   * never notifies, and false when notify is unset, invalid, throttled, or
+   * failed. Present so a user can tell "nothing was notified" apart from
+   * "nothing moved" without reading a log.
+   */
+  notified?: boolean;
 }
 
 /**
@@ -187,6 +195,16 @@ export async function runOrganizePass(
       }`,
     );
   }
+
+  // After the moves and outside the history try, which is the point: a failed
+  // history write is a pass failure, a failed notification is not. The files
+  // have already moved by the time this runs, so notifyIfMovedFiles() swallows
+  // everything and a notification can never change this pass's exit code.
+  result.notified = await notifyIfMovedFiles({
+    directory: validatedPath,
+    moved: result.moved,
+    config: ctx.config,
+  });
 
   return result;
 }

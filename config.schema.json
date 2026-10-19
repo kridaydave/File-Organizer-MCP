@@ -155,6 +155,44 @@
         }
       },
       "description": "Operation history log rotation and privacy settings."
+    },
+    "notify": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "A command line run after a pass actually moved files, e.g. notify-send \"Organized\" \"$FOM_NOTIFY_MOVED files\". Tokenized into argv and spawned without a shell, so quotes group arguments and |, > and && are literal; write sh -c \"...\" for a pipeline. Nothing runs on a dry run or a pass that moved nothing. The command receives FOM_NOTIFY_DIRECTORY and FOM_NOTIFY_MOVED in its environment."
+        },
+        "throttleMinutes": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minutes before the same directory may notify again. Default 60. The throttle is per directory, and the first notification for a directory is always sent."
+        }
+      },
+      "required": ["command"],
+      "description": "Desktop notification fired when a scheduled pass moves files."
+    },
+    "rollback": {
+      "type": "object",
+      "properties": {
+        "retentionDays": {
+          "type": "number",
+          "minimum": 0
+        },
+        "retainDays": {
+          "type": "number",
+          "minimum": 0
+        },
+        "retentionMinutes": {
+          "type": "number",
+          "minimum": 0
+        },
+        "retentionMs": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "description": "Rollback manifest retention. 0 keeps every manifest."
     }
   }
 }

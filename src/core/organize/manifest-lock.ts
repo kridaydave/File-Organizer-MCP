@@ -65,6 +65,20 @@ interface HeldLock {
   handle: fs.FileHandle;
 }
 
+/**
+ * The lock file could not be created at all, as opposed to being held or lost.
+ *
+ * A caller that treats contention and a broken environment the same way either
+ * waits for a process that does not exist or gives up on a directory it could
+ * have used, so the two are separate types rather than one message to match on.
+ */
+export class ManifestLockUnavailableError extends Error {
+  constructor(code: string, options?: { cause?: unknown }) {
+    super(`Manifest lock could not be created (${code})`, options);
+    this.name = "ManifestLockUnavailableError";
+  }
+}
+
 /** What a critical section holds for as long as it runs. */
 export interface ManifestLockLease {
   /**
@@ -110,6 +124,42 @@ export class ManifestLockService {
    * service that remembers "the current holder" can only describe one of them
    * and has nothing to say about a second.
    */
+  /**
+   * Try to run `fn` under the lock without waiting. Returns whether the lock
+   * was acquired; when it was not, `fn` is not called and nothing is changed.
+   *
+   * This is what a best-effort, lazy cleanup uses: pruning manifests is not
+   * worth blocking an undo, and a prune that cannot get the lock simply skips
+   * this pass.
+   */
+  async tryRunExclusive<T>(
+    fn: (lease: ManifestLockLease) => Promise<T>,
+  ): Promise<{ acquired: boolean; value?: T }> {
+    const held = await this.tryAcquireLock();
+    if (!held) return { acquired: false };
+
+    const renewal = setInterval(() => {
+      void this.checkOwnership(held).catch(() => {});
+    }, this.renewalMs);
+    renewal.unref?.();
+
+    try {
+      const value = await fn({
+        assertStillOwns: async () => {
+          if (!(await this.checkOwnership(held))) {
+            throw new Error(
+              "Lost the manifest lock — another process reclaimed the rollback directory while this operation was still running, so it stopped before touching another file",
+            );
+          }
+        },
+      });
+      return { acquired: true, value };
+    } finally {
+      clearInterval(renewal);
+      await this.releaseLock(held);
+    }
+  }
+
   async runExclusive<T>(fn: (lease: ManifestLockLease) => Promise<T>): Promise<T> {
     const held = await this.acquireLock();
 
@@ -209,9 +259,7 @@ export class ManifestLockService {
       // is a broken environment: reporting it as a timeout sends the caller
       // looking for a stuck process that does not exist.
       if (code === "EEXIST") return null;
-      throw new Error(`Manifest lock could not be created (${code})`, {
-        cause: error,
-      });
+      throw new ManifestLockUnavailableError(code, { cause: error });
     }
   }
 
