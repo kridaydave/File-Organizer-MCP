@@ -249,16 +249,25 @@ describe("pruneExpiredManifests", () => {
 
     // A read-only directory is only read-only for a process that cannot write
     // as root, so prove the lock really is unavailable before asserting
-    // anything. Otherwise this test is green for the wrong reason.
-    let writable = true;
+    // anything. Probe with the same exclusive create the lock uses: if the
+    // directory still accepts a new file the mode did not take, and the prune
+    // would delete the manifest. The old guard used fs.access on manifests.lock,
+    // which does not exist yet, so it always threw and always read "not
+    // writable" no matter what the directory allowed.
+    const probePath = path.join(storageDir, "probe.lock");
+    let probeHandle: Awaited<ReturnType<typeof fs.open>> | undefined;
     try {
-      await fs.access(path.join(storageDir, "manifests.lock"), fs.constants.W_OK);
+      probeHandle = await fs.open(probePath, "wx");
     } catch {
-      writable = false;
+      // EACCES: the directory really is read-only, the case under test.
+    } finally {
+      await probeHandle?.close().catch(() => null);
+      await fs.unlink(probePath).catch(() => null);
     }
-    if (writable) {
+    if (probeHandle) {
+      await fs.chmod(storageDir, 0o755).catch(() => null);
       throw new Error(
-        "storageDir is still writable, so the lock would succeed and this proves nothing",
+        "storageDir still accepted a new file after chmod 0o555, so the lock would succeed and this proves nothing",
       );
     }
 
