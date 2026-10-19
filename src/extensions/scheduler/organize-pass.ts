@@ -10,6 +10,8 @@
  * pass: same history row, same rollback manifest, and now the same tuning.
  */
 
+import fs from "fs/promises";
+import path from "path";
 import { FileScannerService } from "../../core/scan/scanner.js";
 import { OrganizerService } from "../../core/organize/organizer.js";
 import { CategorizerService } from "../../services/categorizer.service.js";
@@ -129,6 +131,40 @@ export function timerTuning(watch: WatchConfig): {
 }
 
 /**
+ * The watch entry for a directory, whichever way each of them spelled it.
+ *
+ * The pass gets its directory back from `validateStrictPath`, which resolves
+ * it: on macOS a `/var/folders/...` temp path comes back as
+ * `/private/var/folders/...`, and on Windows a `RUNNER~1` short name comes back
+ * long. The watch list holds whatever the user registered. Comparing the two as
+ * strings therefore misses on both platforms while matching on Linux, which is
+ * how this shipped green locally and red on four CI legs.
+ *
+ * Resolve both sides before comparing and fold case on Windows, where the same
+ * directory has more than one valid spelling. A directory that no longer exists
+ * falls back to its resolved form, since dropping the tuning because a path
+ * could not be stat'ed would be the worse failure.
+ */
+async function findWatchFor(
+  validatedDirectory: string,
+  watchList: WatchConfig[] | undefined,
+): Promise<WatchConfig | undefined> {
+  if (!watchList?.length) return undefined;
+  const target = await canonicalDirectory(validatedDirectory);
+  for (const watch of watchList) {
+    if ((await canonicalDirectory(watch.directory)) === target) return watch;
+  }
+  return undefined;
+}
+
+async function canonicalDirectory(directory: string): Promise<string> {
+  const resolved = await fs
+    .realpath(directory)
+    .catch(() => path.resolve(directory));
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+/**
  * Run one pass over one directory. Throws when the path fails validation, so
  * the caller can map a throw to a non-zero exit. Per-file failures come back
  * in `errors` rather than throwing, because a partial pass still moved files.
@@ -154,10 +190,7 @@ export async function runOrganizePass(
     new CategorizerService(ctx.config.customRules ?? []),
   );
 
-  const scannedFiles = await scanner.getAllFiles(
-    validatedPath,
-    includeSubdirs,
-  );
+  const scannedFiles = await scanner.getAllFiles(validatedPath, includeSubdirs);
 
   // A scheduled pass is a timer pass, so it picks up the directory's timer
   // tuning even when an OS timer started it rather than our own daemon. The
@@ -169,9 +202,7 @@ export async function runOrganizePass(
   let effectiveMinAge = minFileAgeMinutes;
   let effectiveMaxFiles = maxFiles;
   if (source === "scheduled") {
-    const watch = ctx.config.watchList?.find(
-      (w) => w.directory === validatedPath,
-    );
+    const watch = await findWatchFor(validatedPath, ctx.config.watchList);
     if (watch) {
       const tuning = timerTuning(watch);
       effectiveMinAge ??= tuning.minFileAgeMinutes;
