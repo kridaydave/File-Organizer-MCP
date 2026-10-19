@@ -1101,24 +1101,50 @@ file_organizer_system_organize({
 
 [⬆ Back to Top](#top)
 
-**Description:** Reverses file moves and renames from a previous organization task. Pass manifest_id to undo one specific operation by the id that organize_files returned and file_organizer_view_history lists; omit it to undo the most recent operation. Undoing an operation that is not the newest is refused outright when a newer operation already moved any of the same paths, because undoing out of order would collide with it partway through. Undo the newer one first, then retry. The manifest is deleted only when the whole undo succeeds, so a refused or failed undo can be tried again.
+**Description:** Reverses file moves and renames from a previous organization task. Pass manifest_id to undo one specific operation by the id that organize_files returned and file_organizer_view_history lists; omit it to undo the most recent operation. Undoing an operation that is not the newest is refused outright when a newer operation already moved any of the same paths, because undoing out of order would collide with it partway through. Undo the newer one first, then retry, or pass cascade: true to undo the named operation together with every newer one, walking the stack newest-first; each newer operation is undone and its manifest deleted before the one below it runs, so the refusal never fires. Files a manifest named that are already gone are skipped and counted, not failed. The manifest is deleted only when the whole undo succeeds, so a refused or failed undo can be tried again.
 
 ### Parameters
 
-| Parameter         | Type   | Description                                                              | Default    |
-| ----------------- | ------ | ------------------------------------------------------------------------ | ---------- |
-| `manifest_id`     | string | ID of the operation to undo, a UUID in 8-4-4-4-12 form. Omit to undo the most recent operation. | -          |
-| `response_format` | string | 'json' or 'markdown'                                                     | 'markdown' |
+| Parameter         | Type    | Description                                                              | Default    |
+| ----------------- | ------- | ------------------------------------------------------------------------ | ---------- |
+| `manifest_id`     | string  | ID of the operation to undo, a UUID in 8-4-4-4-12 form. Omit to undo the most recent operation. | -          |
+| `cascade`         | boolean | With manifest_id, also undo every operation newer than it, newest-first down to and including the named one. Without it, undoing an operation a newer one overlapped is refused. | false      |
+| `response_format` | string  | 'json' or 'markdown'                                                     | 'markdown' |
 
 A malformed `manifest_id` is a validation error rather than a lookup miss, so a typo is reported as a typo instead of arriving back as "manifest not found".
 
-A refusal returns `success: 0` and `failed: 1` with an error naming the conflicting manifest ids. No file is moved when that happens. The read-apply-delete cycle runs under a lock on the rollback directory, so two concurrent undoes of the same id cannot both succeed: one wins, and the other is told the manifest is already spent.
+A refusal is an answer rather than a failure: the response carries `refused: true` with `success: 0`, `failed: 1`, and an error naming the conflicting manifest ids, and `isError` stays false, so a client does not log and retry something that can never succeed. No file is moved. A genuine mid-batch failure still sets `isError`. The read-apply-delete cycle runs under a lock on the rollback directory, so two concurrent undoes of the same id cannot both succeed: one wins, and the other is told the manifest is already spent.
+
+With `cascade: true` the walk stops at the first step that fails or refuses: the passes below it are left untouched rather than undone out of order, and the response reports how far it got. Each pass the undo fully completes writes its own history row, so `file_organizer_view_history` keeps the per-pass detail that the response collapses into one summary.
+
+### Output
+
+```typescript
+{
+  success: number;   // files restored
+  failed: number;    // files that could not be restored
+  skipped: number;   // files the manifest named that were already gone
+  passes: number;    // manifests fully undone (always 1 without cascade)
+  refused: boolean;  // a newer operation blocked this undo; nothing moved
+  errors: string[];
+}
+```
 
 ### Example
 
 ```typescript
 file_organizer_undo_last_operation({
   manifest_id: "3f1c8b2e-9a4d-4e77-b0c5-1d2e3f4a5b6c",
+  response_format: "json",
+});
+```
+
+Undo that pass together with every pass made after it:
+
+```typescript
+file_organizer_undo_last_operation({
+  manifest_id: "3f1c8b2e-9a4d-4e77-b0c5-1d2e3f4a5b6c",
+  cascade: true,
   response_format: "json",
 });
 ```

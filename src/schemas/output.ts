@@ -327,6 +327,9 @@ export const sensitiveScanOutputSchema = z.object({
 export const undoOutputSchema = z.object({
   success: z.number(),
   failed: z.number(),
+  skipped: z.number(),
+  passes: z.number(),
+  refused: z.boolean(),
   errors: z.array(z.string()),
 });
 

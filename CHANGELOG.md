@@ -296,6 +296,23 @@
 
 ### Added
 
+- **`undo_last_operation` can walk back through a stack of passes.**
+  `cascade: true` with a `manifest_id` undoes that pass and every pass made after
+  it, newest first, instead of refusing on the first overlap. Each step is the
+  ordinary single-manifest undo, verified before it runs and deleted on success,
+  so by the time the older pass runs nothing newer exists to collide with. The
+  walk stops at the first step that fails: the passes below it are left untouched
+  rather than undone out of order, and the response says how far it got. Files a
+  manifest names that are already gone are skipped and counted, never failed.
+
+- **A refusal is an answer, not an error.** An undo blocked by a newer pass still
+  moves nothing, but it comes back with `refused: true` and `isError: false`, so
+  an MCP client does not log it and retry something that cannot succeed. A
+  genuine mid-batch failure still sets `isError`. The undo output carries
+  `skipped`, `passes` and `refused` alongside `success` and `failed`, and a
+  cascade writes one history row per pass it spent, so `view_history` keeps the
+  per-pass detail the summary collapses.
+
 - **`file_organizer_organize_by_date`** - sorts any file into `YYYY/MM` folders
   (`YYYY/MM/DD` and `YYYY` too). Photos take their folder from EXIF
   `DateTimeOriginal` (`CreateDate` when that is absent); every other file uses its

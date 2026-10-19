@@ -7,9 +7,14 @@
 
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse } from "../types.js";
-import { RollbackService } from "../core/organize/rollback.js";
+import type { ToolContext } from "../mcp/context.js";
+import {
+  RollbackService,
+  type RollbackStepResult,
+} from "../core/organize/rollback.js";
 import { verifyManifestFiles, type IntegrityReport } from "../core/organize/verify-integrity.js";
 import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
+import { logger } from "../utils/logger.js";
 import {
   UndoLastOperationInputSchema,
   VerifyIntegrityInputSchema,
@@ -40,7 +45,7 @@ export const undoLastOperationToolDefinition: ToolDefinition = {
   name: "file_organizer_undo_last_operation",
   title: "Undo Last Organization Operation",
   description:
-    "Reverses file moves and renames from a previous organization task. Pass manifest_id to undo one specific operation by the id that organize_files returned and file_organizer_view_history lists; omit it to undo the most recent operation. Undoing an operation that is not the newest is refused outright when a newer operation already moved any of the same paths, because undoing out of order would collide with it partway through. Undo the newer one first, then retry. The manifest is deleted only when the whole undo succeeds, so a refused or failed undo can be tried again.",
+    "Reverses file moves and renames from a previous organization task. Pass manifest_id to undo one specific operation by the id that organize_files returned and file_organizer_view_history lists; omit it to undo the most recent operation. Undoing an operation that is not the newest is refused outright when a newer operation already moved any of the same paths, because undoing out of order would collide with it partway through. Undo the newer one first, then retry, or pass cascade: true to undo the named operation together with every newer one, walking the stack newest-first; each newer operation is undone and its manifest deleted before the one below it runs, so the refusal never fires. Files a manifest named that are already gone are skipped and counted, not failed. The manifest is deleted only when the whole undo succeeds, so a refused or failed undo can be tried again.",
   inputSchema: {
     type: "object",
     properties: {
@@ -49,6 +54,12 @@ export const undoLastOperationToolDefinition: ToolDefinition = {
         pattern: MANIFEST_ID_JSON_PATTERN,
         description:
           "ID of the operation to undo. Omit to undo the most recent operation.",
+      },
+      cascade: {
+        type: "boolean",
+        default: false,
+        description:
+          "With manifest_id, also undo every operation newer than it, newest-first down to and including the named one. Without it, undoing an operation a newer one overlapped is refused.",
       },
       response_format: {
         type: "string",
@@ -67,8 +78,52 @@ export const undoLastOperationToolDefinition: ToolDefinition = {
   },
 };
 
+/**
+ * One history row per manifest an undo actually spent.
+ *
+ * A cascade that walks three passes is three undo records, not one opaque
+ * row: the response carries one summary, so these rows are the only place
+ * the per-pass detail (which manifest, how many files, how many skipped)
+ * survives for a later reader. `manifestId` is the handle the entry needs,
+ * the same field an organize row carries.
+ *
+ * History must never fail an undo that already moved files, so a log error
+ * is a warning here rather than a thrown response. The server's own audit
+ * wrapper logs the tool call itself; these rows are the per-pass record
+ * that wrapper cannot write, because it sees one call.
+ */
+async function writeUndoHistoryRows(
+  ctx: ToolContext | undefined,
+  steps: RollbackStepResult[],
+  durationMs: number,
+): Promise<void> {
+  if (!ctx) return;
+  for (const step of steps) {
+    // A failed or refused step kept its manifest; nothing was undone, so it
+    // gets no undo row.
+    if (step.failed > 0) continue;
+    try {
+      await ctx.history.log({
+        operation: "file_organizer_undo_last_operation",
+        source: "manual",
+        status: "success",
+        durationMs,
+        filesProcessed: step.success,
+        filesSkipped: step.skipped,
+        details: `Undid operation ${step.manifestId}: ${step.success} file(s) restored, ${step.skipped} already gone`,
+        manifestId: step.manifestId,
+      });
+    } catch (e) {
+      logger.warn(
+        `Undo succeeded but its history row could not be written: ${(e as Error).message}`,
+      );
+    }
+  }
+}
+
 export async function handleUndoLastOperation(
   args: Record<string, unknown>,
+  ctx?: ToolContext,
 ): Promise<ToolResponse> {
   try {
     const parsed = UndoLastOperationInputSchema.safeParse(args);
@@ -84,7 +139,8 @@ export async function handleUndoLastOperation(
       };
     }
 
-    const { manifest_id, response_format } = parsed.data;
+    const { manifest_id, cascade, response_format } = parsed.data;
+    const startedAt = Date.now();
 
     // Reads manifests from disk — no shared state to preserve across calls.
     const rollbackService = new RollbackService();
@@ -102,12 +158,21 @@ export async function handleUndoLastOperation(
       targetId = manifests[0].id;
     }
 
-    const result = await rollbackService.rollback(targetId!);
+    const result = await rollbackService.rollback(targetId!, { cascade });
+    // The per-pass breakdown feeds the history rows; the wire contract is one
+    // summary, so it is stripped before anything is serialized.
+    const { steps, ...summary } = result;
     const sanitizedResult = {
-      ...result,
-      errors: result.errors.map((e) => sanitizeErrorMessage(e)),
+      ...summary,
+      errors: summary.errors.map((e) => sanitizeErrorMessage(e)),
     };
-    const hasFailures = sanitizedResult.failed > 0;
+    // A refusal is a correct answer, not a tool failure: an MCP client that
+    // sees isError logs it and may retry something that will never succeed.
+    // A genuine mid-batch failure still raises the flag.
+    const isRefusal = sanitizedResult.refused;
+    const hasFailures = sanitizedResult.failed > 0 && !isRefusal;
+
+    await writeUndoHistoryRows(ctx, steps, Date.now() - startedAt);
 
     if (response_format === "json") {
       return {
@@ -119,13 +184,16 @@ export async function handleUndoLastOperation(
           unknown
         >,
         ...(hasFailures && { isError: true }),
+        ...(isRefusal && { isError: false }),
       };
     }
 
     const markdown = `### Undo Result
 **Manifest ID:** \`${targetId}\`
-✅ **Restored:** ${sanitizedResult.success} files
+${isRefusal ? "**Refused:** a newer operation already touched the same paths, so nothing was undone. Undo the newer operation first, or pass `cascade: true` to walk the stack newest-first.\n" : ""}✅ **Restored:** ${sanitizedResult.success} files
 ❌ **Failed:** ${sanitizedResult.failed} files
+**Skipped:** ${sanitizedResult.skipped} files (already gone)
+**Passes undone:** ${sanitizedResult.passes}
 
 ${sanitizedResult.errors.length ? `**Errors:**\n${sanitizedResult.errors.map((e) => `- ${e}`).join("\n")}` : ""}
 `;
@@ -133,6 +201,7 @@ ${sanitizedResult.errors.length ? `**Errors:**\n${sanitizedResult.errors.map((e)
       content: [{ type: "text", text: markdown }],
       structuredContent: sanitizedResult as unknown as Record<string, unknown>,
       ...(hasFailures && { isError: true }),
+      ...(isRefusal && { isError: false }),
     };
   } catch (error) {
     return createErrorResponse(error);
