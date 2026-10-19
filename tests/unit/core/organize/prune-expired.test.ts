@@ -226,53 +226,60 @@ describe("pruneExpiredManifests", () => {
     expect(await exists(expired)).toBe(false);
   });
 
-  // Windows does not enforce a read-only directory against the current user,
-  // so `chmod 0o555` there leaves the lock creatable, the prune runs, and the
-  // manifest is deleted. The fs.access guard cannot catch that: the lock file
-  // does not exist yet when it runs, access on a missing path throws, and the
-  // guard reads that as "not writable". This test is POSIX-only.
+  /**
+   * Make the lock unavailable for real and confirm the errno is the one the fix
+   * is about.
+   *
+   * A read-only directory is the only portable way to get the lock to fail with
+   * `EACCES`, and Windows does not restrict directory writes that way at all:
+   * `chmod 0o555` there leaves the directory writable, the lock is created, the
+   * prune runs and the manifest is deleted. This test was written that way and
+   * passed on macOS and ubuntu while failing on both Windows legs.
+   *
+   * A directory *at* the lock path is not a substitute. `fs.open(path, "wx")`
+   * over an existing directory reports `EEXIST`, which the lock already treats
+   * as contention and retries, so a test built on it passes with and without
+   * the fix and proves nothing.
+   *
+   * So this is POSIX-only, and it verifies its own premise instead of assuming
+   * the permission bit took: if the lock can still be created here, the test
+   * fails loudly rather than going green for the wrong reason.
+   */
   const posixOnly = process.platform === "win32" ? it.skip : it;
 
-  posixOnly("still lists when the rollback directory cannot be locked", async () => {
+  async function makeLockUnavailable(): Promise<void> {
+    await fs.chmod(storageDir, 0o555);
+
+    const lockPath = path.join(storageDir, "manifests.lock");
+    let code: string | undefined;
+    try {
+      const handle = await fs.open(lockPath, "wx");
+      await handle.close();
+    } catch (error) {
+      code = (error as NodeJS.ErrnoException).code;
+    }
+
+    if (code !== "EACCES") {
+      await fs.chmod(storageDir, 0o755).catch(() => null);
+      throw new Error(
+        `storageDir is still writable (open returned ${code ?? "success"}), ` +
+          "so the lock would succeed and this proves nothing",
+      );
+    }
+  }
+
+  posixOnly("still lists when the lock cannot be created", async () => {
     const shortWindow = new RollbackService({
       storageDir,
       retentionMs: 60_000,
     });
     const expired = await seedManifest();
     await ageManifest(expired, 3_600_000);
-
-    try {
-      await fs.chmod(storageDir, 0o555);
-    } catch {
-      throw new Error("chmod failed, so the read-only setup never happened");
-    }
-
-    // A read-only directory is only read-only for a process that cannot write
-    // as root, so prove the lock really is unavailable before asserting
-    // anything. Probe with the same exclusive create the lock uses: if the
-    // directory still accepts a new file the mode did not take, and the prune
-    // would delete the manifest. The old guard used fs.access on manifests.lock,
-    // which does not exist yet, so it always threw and always read "not
-    // writable" no matter what the directory allowed.
-    const probePath = path.join(storageDir, "probe.lock");
-    let probeHandle: Awaited<ReturnType<typeof fs.open>> | undefined;
-    try {
-      probeHandle = await fs.open(probePath, "wx");
-    } catch {
-      // EACCES: the directory really is read-only, the case under test.
-    } finally {
-      await probeHandle?.close().catch(() => null);
-      await fs.unlink(probePath).catch(() => null);
-    }
-    if (probeHandle) {
-      await fs.chmod(storageDir, 0o755).catch(() => null);
-      throw new Error(
-        "storageDir still accepted a new file after chmod 0o555, so the lock would succeed and this proves nothing",
-      );
-    }
+    await makeLockUnavailable();
 
     try {
       const listed = await shortWindow.listManifests();
+
       expect(listed.map((m) => m.id)).toContain(expired);
       // Skipped, not deferred: nothing was unlinked and nothing threw.
       expect(await exists(expired)).toBe(true);
@@ -280,4 +287,49 @@ describe("pruneExpiredManifests", () => {
       await fs.chmod(storageDir, 0o755).catch(() => null);
     }
   });
+
+  posixOnly("prunes nothing when the lock cannot be created", async () => {
+    const shortWindow = new RollbackService({
+      storageDir,
+      retentionMs: 60_000,
+    });
+    const expired = await seedManifest();
+    await ageManifest(expired, 3_600_000);
+    await makeLockUnavailable();
+
+    try {
+      expect(await shortWindow.pruneExpiredManifests()).toBe(0);
+      expect(await exists(expired)).toBe(true);
+    } finally {
+      await fs.chmod(storageDir, 0o755).catch(() => null);
+    }
+  });
+
+  posixOnly(
+    "still reports a lock lost mid-prune instead of swallowing it",
+    async () => {
+      const shortWindow = new RollbackService({
+        storageDir,
+        retentionMs: 60_000,
+      });
+      const expired = await seedManifest();
+      await ageManifest(expired, 3_600_000);
+
+      // RollbackService builds its own lock, so the prototype is what has to
+      // be stubbed for the spy to be the one that runs.
+      const spy = jest
+        .spyOn(ManifestLockService.prototype, "tryRunExclusive")
+        .mockRejectedValueOnce(new Error("lease lost"));
+
+      try {
+        // The absorb in pruneExpiredManifests is for one error type only. A
+        // caller that has lost the lock has to find out.
+        await expect(shortWindow.listManifests()).rejects.toThrow("lease lost");
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(await exists(expired)).toBe(true);
+    },
+  );
 });

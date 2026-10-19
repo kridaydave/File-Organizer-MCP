@@ -1004,14 +1004,37 @@ describe("file-organizer-watch once (real CLI)", () => {
     expect(code).toBe(ONCE_EXIT.error);
   }, 30000);
 
+  /**
+   * Keep this test's lock holder looking alive while the child runs.
+   *
+   * `tryAcquireLock` steals a lock whose mtime is older than 2x the timeout
+   * (10s), which is correct: a holder that stopped writing really is abandoned.
+   * But this test writes its lock once before spawning, so a child that takes
+   * longer than that to reach its history write (loaded machine, slow Windows
+   * spawn) breaks straight through and the pass reports success. The assertion
+   * would then fail for a reason that has nothing to do with what is under
+   * test. Touching the mtime keeps the premise the test is actually making:
+   * another writer holds the lock for the whole wait.
+   */
+  function holdLock(): () => void {
+    const lockPath = path.join(configDir, "operations.lock");
+    const timer = setInterval(() => {
+      const now = new Date();
+      void fs.utimes(lockPath, now, now).catch(() => null);
+    }, 1000);
+    return () => clearInterval(timer);
+  }
+
   it("does not report success when the history lock is held and the entry is dropped", async () => {
     await seed({ "notes.txt": "hello", "photo.jpg": "not-really-a-jpeg" });
 
     // Another writer holds operations.lock and never releases it, so the
     // child's append times out after lockTimeoutMs (5s default).
     await fs.writeFile(path.join(configDir, "operations.lock"), "held");
+    const release = holdLock();
 
     const { code, out } = await runCli(["once", workDir, "--apply"]);
+    release();
 
     // The files really did move...
     expect((await fs.readdir(workDir)).sort()).toEqual(["Documents", "Images"]);
@@ -1028,9 +1051,12 @@ describe("file-organizer-watch once (real CLI)", () => {
     await fs.writeFile(path.join(configDir, "operations.lock"), "held");
     await seed({ "notes.txt": "hello" });
 
+    const release = holdLock();
+
     // The blocked pass moved the file, then lost its history entry. Exit 1,
     // not 2: the missing undo record makes it a failure.
     const blocked = await runCli(["once", workDir, "--apply"]);
+    release();
     expect(blocked.code).toBe(ONCE_EXIT.error);
 
     await fs.unlink(path.join(configDir, "operations.lock"));
