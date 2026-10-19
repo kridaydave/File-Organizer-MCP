@@ -469,9 +469,19 @@ function compilePathGlob(pattern: string): (paths: string[]) => boolean {
 
   // minimatch reports an unparseable pattern as false; older shapes throw.
   // Both are a caller error, never a reason to return the whole history.
+  //
+  // An absolute Windows path is a valid thing to pass here and an invalid glob:
+  // minimatch reads `\` as an escape, so `C:\Users\me` compiles to a pattern
+  // that matches nothing, and a caller that just wanted one directory's rows
+  // gets zero results instead of an error. Patterns that are not absolute
+  // Windows paths keep their backslashes, because there `\` really is an escape.
+  const normalisedPattern = /^(?:[A-Za-z]:\\|\\\\)/.test(pattern)
+    ? pattern.replace(/\\/g, "/")
+    : pattern;
+
   let compiled: RegExp | false;
   try {
-    compiled = minimatch.makeRe(pattern, { dot: true });
+    compiled = minimatch.makeRe(normalisedPattern, { dot: true });
   } catch {
     compiled = false;
   }
