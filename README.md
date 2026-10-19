@@ -201,6 +201,24 @@ file-organizer-watch                                # start the daemon
 Watches are stored in the shared user config, so `add`/`remove` work even
 while the daemon is running (restart it to pick up changes).
 
+**An OS timer is the primary path.** Point cron, a systemd timer, or Task
+Scheduler at `once` (below) and the machine's own scheduler owns the schedule:
+it survives reboots, it is visible in `crontab -l`, and it needs no process of
+ours running.
+
+```bash
+# crontab -e: daily at 10am, labelled scheduled so history can filter on it
+0 10 * * * file-organizer-watch once ~/Downloads --apply --source scheduled
+```
+
+The daemon is the fallback for a machine with no timer to point at. Both run the
+same pass over the same watch config, so a watched directory behaves the same
+way either way: same history row, same rollback manifest id, and the same
+per-directory limits from `watch add` (the age filter and the file cap). The
+daemon adds one thing a cron line does not have, which is catchup: on startup it
+reads `scheduler-state.json` and runs a schedule that was missed while the
+machine was off.
+
 #### Single pass from an OS timer
 
 `once` runs one organization pass and exits, holding no watcher, no timer, and
@@ -425,6 +443,11 @@ Register a directory with a cron schedule:
 ```
 
 The server organizes the folder on that schedule. Add more watches for other directories.
+
+These rules follow the directory, not the process that started the sweep: a cron
+line running `once --source scheduled` over this folder gets the same age filter
+and file cap the built-in daemon would apply. A pass you run by hand with no
+`--source` is never filtered.
 
 ---
 

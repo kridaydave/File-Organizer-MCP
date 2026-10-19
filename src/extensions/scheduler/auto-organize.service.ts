@@ -19,7 +19,7 @@ import { logger } from "../../utils/logger.js";
 import { SchedulerStateService } from "./scheduler-state.service.js";
 import { shouldCatchup } from "../../utils/cron-utils.js";
 import { validateStrictPath } from "../../services/path-validator.service.js";
-import { runOrganizePass } from "./organize-pass.js";
+import { runOrganizePass, timerTuning } from "./organize-pass.js";
 import { historyLogger } from "../../services/history-logger.service.js";
 
 /**
@@ -43,18 +43,6 @@ export type PassSkipReason = "not-watched" | "in-flight";
 export type PassOutcome =
   | { status: "ran"; directory: string }
   | { status: "skipped"; directory: string; reason: PassSkipReason };
-
-/**
- * How long a file must have sat still before a sweep will touch it. A file
- * still being written to is half a file, and organizing it moves the half.
- */
-const DEFAULT_MIN_FILE_AGE_MINUTES = 60;
-
-/**
- * Ceiling on one pass, so a folder that accumulated a thousand files overnight
- * does not turn one tick into a thousand moves. The rest wait for the next one.
- */
-const DEFAULT_MAX_FILES_PER_RUN = 300;
 
 /**
  * Auto-Organize Scheduler Service
@@ -317,7 +305,7 @@ export class AutoOrganizeService {
    *   flight for that directory. Throws when the pass itself fails.
    */
   private async runOrganization(watch: WatchConfig): Promise<PassOutcome> {
-    const { directory, rules } = watch;
+    const { directory } = watch;
 
     // Validate directory path before scanning and organizing
     const validatedDirectory = await validateStrictPath(directory);
@@ -349,8 +337,11 @@ export class AutoOrganizeService {
           // being honoured rather than a person asking, and a process cannot
           // detect which one it is.
           source: "scheduled",
-          minFileAgeMinutes: rules.min_file_age_minutes ?? DEFAULT_MIN_FILE_AGE_MINUTES,
-          maxFiles: rules.max_files_per_run ?? DEFAULT_MAX_FILES_PER_RUN,
+          // The directory's timer tuning, from the watch this tick came from.
+          // Passed rather than left for the pass to look up because the tick's
+          // watch can be a legacy `autoOrganize` entry that exists only here
+          // and never in config.watchList.
+          ...timerTuning(watch),
         },
         { config: this.configLoader(), history: historyLogger },
       );

@@ -206,6 +206,70 @@ describe("single-pass organize (once)", () => {
 
       expect(result.moved).toBe(2);
     });
+
+    it("gives a scheduled pass the watched directory's own tuning", async () => {
+      await fs.writeFile(path.join(workDir, "old-a.txt"), "a");
+      await fs.writeFile(path.join(workDir, "old-b.txt"), "b");
+      await age(
+        [path.join(workDir, "old-a.txt"), path.join(workDir, "old-b.txt")],
+        120,
+      );
+
+      const watched: UserConfig = {
+        conflictStrategy: "rename",
+        watchList: [
+          {
+            directory: workDir,
+            schedule: "0 9 * * *",
+            rules: {
+              auto_organize: true,
+              min_file_age_minutes: 60,
+              max_files_per_run: 1,
+            },
+          },
+        ],
+      };
+
+      const result = await runOrganizePass(
+        { directory: workDir, dryRun: false, source: "scheduled" },
+        { config: watched, history },
+      );
+
+      // The two files from beforeEach are inside the watch's age window and the
+      // cap allows one old file, so exactly one move happens. Before the tuning
+      // lived in the pass, this call moved all four: only the daemon knew the
+      // watch's rules, so a crontab line sweeping this directory did not.
+      expect(result.moved).toBe(1);
+      expect(await topLevelFiles()).toContain("notes.txt");
+      expect(await topLevelFiles()).toContain("photo.jpg");
+    });
+
+    it("leaves a manual pass over the same watched directory unfiltered", async () => {
+      // The boundary the other test draws. `--source` is what says a timer
+      // started this, so a person running the same directory by hand still gets
+      // every file: they can see the folder and judge what is safe to move.
+      const watched: UserConfig = {
+        conflictStrategy: "rename",
+        watchList: [
+          {
+            directory: workDir,
+            schedule: "0 9 * * *",
+            rules: {
+              auto_organize: true,
+              min_file_age_minutes: 60,
+              max_files_per_run: 1,
+            },
+          },
+        ],
+      };
+
+      const result = await runOrganizePass(
+        { directory: workDir, dryRun: false },
+        { config: watched, history },
+      );
+
+      expect(result.moved).toBe(2);
+    });
   });
 
   it("moves files into category folders and appends one history entry", async () => {

@@ -105,7 +105,11 @@ Options:
   --source VALUE  Label the pass record manual or scheduled. Default manual.
                   A process cannot tell that cron started it, so a crontab
                   line has to say so itself: --source scheduled is what makes
-                  file_organizer_search_history source=scheduled match.
+                  file_organizer_search_history source=scheduled match. On a
+                  directory registered with watch add, scheduled also applies
+                  that watch's age filter and file cap, so a crontab line does
+                  the same thing the built-in daemon does. A manual pass is
+                  never filtered.
   --json          Print one machine-readable JSON object on stdout and nothing
                   else. Human output (logs, usage, this message) goes to
                   stderr, so stdout stays parseable.
