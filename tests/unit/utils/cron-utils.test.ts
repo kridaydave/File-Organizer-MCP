@@ -156,6 +156,38 @@ describe('cron-utils', () => {
       expect(nextRun.getMinutes()).toBe(0);
     });
 
+    it('should calculate next run for hour steps (every 2 hours)', () => {
+      // 15:10 local. This fires at 16:00: the interval fallback answered
+      // 17:10, which has the right spacing and the wrong time.
+      const baseTime = new Date(2026, 1, 8, 15, 10);
+
+      const nextRun = getNextRunTime('0 */2 * * *', baseTime);
+
+      expect(nextRun.getDate()).toBe(8);
+      expect(nextRun.getHours()).toBe(16);
+      expect(nextRun.getMinutes()).toBe(0);
+    });
+
+    it('should step forward a whole step when the base sits on a run', () => {
+      const baseTime = new Date(2026, 1, 8, 16, 0);
+
+      const nextRun = getNextRunTime('0 */2 * * *', baseTime);
+
+      expect(nextRun.getHours()).toBe(18);
+      expect(nextRun.getMinutes()).toBe(0);
+    });
+
+    it('should not throw on a step in a field it cannot evaluate', () => {
+      // `0 9 * * */2` reached the weekly branch, where the step became a NaN
+      // day-of-week and toISOString() threw on the Invalid Date.
+      const baseTime = new Date(2026, 1, 8, 10, 0);
+
+      const nextRun = getNextRunTime('0 9 * * */2', baseTime);
+
+      expect(Number.isFinite(nextRun.getTime())).toBe(true);
+      expect(nextRun.getTime()).toBeGreaterThan(baseTime.getTime());
+    });
+
     it('should treat every minute as one minute apart', () => {
       // "* * * * *" used to fall through to the 1-day interval fallback.
       const baseTime = new Date(2026, 1, 8, 10, 30, 45);
@@ -225,6 +257,33 @@ describe('cron-utils', () => {
       // Should be at 10:30 local
       expect(prevRun.getHours()).toBe(10);
       expect(prevRun.getMinutes()).toBe(30);
+    });
+
+    it('should calculate previous run for hour steps (every 2 hours)', () => {
+      const baseTime = new Date(2026, 1, 8, 15, 10);
+
+      const prevRun = getPreviousRunTime('0 */2 * * *', baseTime);
+
+      expect(prevRun.getHours()).toBe(14);
+      expect(prevRun.getMinutes()).toBe(0);
+    });
+
+    it('should step back a whole step when the base sits on a run', () => {
+      const baseTime = new Date(2026, 1, 8, 16, 0);
+
+      const prevRun = getPreviousRunTime('0 */2 * * *', baseTime);
+
+      expect(prevRun.getHours()).toBe(14);
+      expect(prevRun.getMinutes()).toBe(0);
+    });
+
+    it('should not throw on a step in a field it cannot evaluate', () => {
+      const baseTime = new Date(2026, 1, 8, 10, 0);
+
+      const prevRun = getPreviousRunTime('0 9 * * */2', baseTime);
+
+      expect(Number.isFinite(prevRun.getTime())).toBe(true);
+      expect(prevRun.getTime()).toBeLessThan(baseTime.getTime());
     });
 
     it('should treat every minute as one minute apart', () => {

@@ -46,8 +46,14 @@ const { getUserConfigPath } = await import(
 );
 const { setSchedulerStateServicePath, getSchedulerStateService } =
   await import("../../../src/extensions/scheduler/scheduler-state.service.js");
+const { materialiseSourceGraph } = await import("../../helpers/source-graph.js");
 
 const TOOL_NAME = "file_organizer_watch_status";
+
+/** The repo root the source-graph copies are placed under. */
+const repoRoot = process.cwd();
+/** Temp dir of transpiled copies for the pinned child, removed in afterEach. */
+let pinnedCopy: string | null = null;
 
 type WatchListEntry = {
   directory: string;
@@ -180,6 +186,10 @@ afterEach(async () => {
   if (originalAppData === undefined) delete process.env.APPDATA;
   else process.env.APPDATA = originalAppData;
   setSchedulerStateServicePath(undefined);
+  if (pinnedCopy) {
+    await fs.rm(pinnedCopy, { recursive: true, force: true });
+    pinnedCopy = null;
+  }
   await new Promise((r) => setTimeout(r, 100));
   await fs.rm(sandbox, { recursive: true, force: true });
 });
@@ -360,6 +370,57 @@ describe("file_organizer_watch_status", () => {
     expect(entry.scheduler).toBe("daemon");
   });
 
+  it("sees scheduler state the daemon wrote after this server started", async () => {
+    const daemonDir = path.join(sandbox, "late-daemon-dir");
+    await writeWatchList([
+      { directory: daemonDir, schedule: "0 9 * * *", rules: { auto_organize: true } },
+    ]);
+    const ranAt = new Date(Date.now() - 3 * 60 * 60 * 1000);
+
+    // The write goes to the file directly rather than through the singleton:
+    // the daemon is a different process, and the singleton loaded an empty
+    // state in beforeEach. Guards the fixture, so a pass here cannot come from
+    // the in-memory copy the tool would otherwise read.
+    const key = path.resolve(daemonDir).replace(/\\/g, "/").toLowerCase();
+    await fs.writeFile(
+      statePath,
+      JSON.stringify({
+        version: 1,
+        directories: { [key]: { lastRunTime: ranAt.toISOString(), schedule: "0 9 * * *" } },
+      }),
+      "utf-8",
+    );
+    expect((await getSchedulerStateService()).getLastRunTime(daemonDir)).toBeNull();
+
+    const res = await status();
+    expect(res.isError).toBeUndefined();
+    const entry = entryByDir(reportOf(res), daemonDir);
+
+    expect(entry.liveness).toBe("ok");
+    expect(entry.last_pass?.recorded_by).toBe("scheduler-state");
+    expect(Date.parse(entry.last_pass!.timestamp!)).toBe(ranAt.getTime());
+    expect(entry.scheduler).toBe("daemon");
+  });
+
+  it("matches a directory whose name contains glob characters", async () => {
+    // A real folder can be called this, and searchHistory takes a glob: an
+    // unescaped name is read as a character class and a wildcard, matches no
+    // row, and a watch that ran a minute ago reports never_run.
+    const globDir = path.join(sandbox, "globs [1] * and ?");
+    expect(globDir).toContain("[");
+    await writeWatchList([
+      { directory: globDir, schedule: "*/5 * * * *", rules: { auto_organize: true } },
+    ]);
+    await seedPass(globDir, { minutesAgo: 1, source: "scheduled" });
+
+    const res = await status();
+    expect(res.isError).toBeUndefined();
+    const entry = entryByDir(reportOf(res), globDir);
+
+    expect(entry.liveness).toBe("ok");
+    expect(entry.liveness_evidence).toContain("(history, success)");
+  });
+
   it("computes next_run at the local wall clock, not UTC", async () => {
     const zoneDir = path.join(sandbox, "zone-dir");
     await writeWatchList([
@@ -394,6 +455,23 @@ describe("file_organizer_watch_status", () => {
       { directory: zoneDir, schedule: "30 14 * * *", rules: { auto_organize: true } },
     ]);
 
+    // The child imports a fresh copy of the source graph rather than dist/, so
+    // this passes without a build and cannot answer with an old build.
+    const copyDir = await fs.mkdtemp(path.join(repoRoot, ".jest-cache", "pin-"));
+    pinnedCopy = copyDir;
+    const graph = materialiseSourceGraph(
+      [
+        "src/tools/watch-status.ts",
+        "src/core/config/paths.ts",
+        "src/core/config/loader.ts",
+        "src/services/history-logger.service.ts",
+        "src/extensions/scheduler/scheduler-state.service.ts",
+      ],
+      copyDir,
+    );
+    const copyUrl = (source: string) =>
+      pathToFileURL(graph.copyOf(source)).href;
+
     const script = `
       import fs from "node:fs";
       import os from "node:os";
@@ -401,25 +479,19 @@ describe("file_organizer_watch_status", () => {
       const sandbox = process.argv[1];
       os.homedir = () => sandbox;
       const { getUserConfigPath } = await import(${JSON.stringify(
-        pathToFileURL(path.resolve("dist/src/core/config/paths.js")).href,
+        copyUrl("src/core/config/paths.ts"),
       )});
       const { loadUserConfig } = await import(${JSON.stringify(
-        pathToFileURL(path.resolve("dist/src/core/config/loader.js")).href,
+        copyUrl("src/core/config/loader.ts"),
       )});
       const { HistoryLoggerService } = await import(${JSON.stringify(
-        pathToFileURL(
-          path.resolve("dist/src/services/history-logger.service.js"),
-        ).href,
+        copyUrl("src/services/history-logger.service.ts"),
       )});
       const { setSchedulerStateServicePath } = await import(${JSON.stringify(
-        pathToFileURL(
-          path.resolve(
-            "dist/src/extensions/scheduler/scheduler-state.service.js",
-          ),
-        ).href,
+        copyUrl("src/extensions/scheduler/scheduler-state.service.ts"),
       )});
       const { handleWatchStatus } = await import(${JSON.stringify(
-        pathToFileURL(path.resolve("dist/src/tools/watch-status.js")).href,
+        copyUrl("src/tools/watch-status.ts"),
       )});
       const configPath = getUserConfigPath();
       if (!configPath.startsWith(sandbox)) {

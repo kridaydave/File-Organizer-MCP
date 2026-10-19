@@ -19,13 +19,31 @@
  * Format: second(optional) minute hour day-of-month month day-of-week
  * or: minute hour day-of-month month day-of-week
  */
+type CronField = number | "*/n" | "*";
+
 interface CronComponents {
-  minute: number | "*/n" | "*";
-  hour: number | "*/n" | "*";
-  dayOfMonth: number | "*/n" | "*";
-  month: number | "*/n" | "*";
-  dayOfWeek: number | "*/n" | "*";
+  minute: CronField;
+  hour: CronField;
+  dayOfMonth: CronField;
+  month: CronField;
+  dayOfWeek: CronField;
 }
+
+/**
+ * A field that names one value ("0 9 * * *") as opposed to a wildcard or a
+ * step. The pattern branches below all need this, and `field !== "*"` is not
+ * it: a step passes that test and then reaches `setHours` with a step string,
+ * which is an Invalid Date and throws on the first `toISOString()`.
+ */
+const isConcrete = (field: CronField): field is number =>
+  typeof field === "number";
+
+/** A step field: `*` followed by `/2`, and so on. */
+const isStepped = (field: CronField): field is "*/n" =>
+  typeof field === "string" && field.startsWith("*/");
+
+/** The `n` in `*` `/n`. Only call it on a field `isStepped` accepted. */
+const stepOf = (step: "*/n"): number => parseInt(step.slice(2), 10);
 
 /**
  * Parse a cron expression into its components
@@ -151,11 +169,8 @@ export function getNextRunTime(
   next.setMilliseconds(0);
 
   // Handle step values (e.g., */30 for every 30 minutes)
-  if (
-    typeof components.minute === "string" &&
-    components.minute.startsWith("*/")
-  ) {
-    const step = parseInt(components.minute.slice(2), 10);
+  if (isStepped(components.minute)) {
+    const step = stepOf(components.minute);
     const currentMinute = next.getMinutes();
     const nextMinute = Math.ceil((currentMinute + 1) / step) * step;
 
@@ -164,6 +179,28 @@ export function getNextRunTime(
       next.setMinutes(0);
     } else {
       next.setMinutes(nextMinute);
+    }
+    return next;
+  }
+
+  // Handle hour steps: "0 */2 * * *" (on the hour, every other hour). The
+  // interval fallback below gets the spacing right and the time wrong: at
+  // 15:10 it answers 17:10, where the schedule fires at 16:00.
+  if (
+    isConcrete(components.minute) &&
+    isStepped(components.hour) &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    const step = stepOf(components.hour);
+    next.setMinutes(components.minute);
+    const remainder = next.getHours() % step;
+    if (remainder !== 0) {
+      next.setHours(next.getHours() + (step - remainder));
+    }
+    if (next.getTime() <= fromDate.getTime()) {
+      next.setHours(next.getHours() + step);
     }
     return next;
   }
@@ -185,13 +222,13 @@ export function getNextRunTime(
 
   // Handle hourly pattern: "0 * * * *"
   if (
-    components.minute !== "*" &&
+    isConcrete(components.minute) &&
     components.hour === "*" &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    next.setMinutes(components.minute as number);
+    next.setMinutes(components.minute);
     if (next.getTime() <= fromDate.getTime()) {
       next.setHours(next.getHours() + 1);
     }
@@ -200,14 +237,14 @@ export function getNextRunTime(
 
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
-    components.minute !== "*" &&
-    components.hour !== "*" &&
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    next.setMinutes(components.minute as number);
-    next.setHours(components.hour as number);
+    next.setMinutes(components.minute);
+    next.setHours(components.hour);
     if (next.getTime() <= fromDate.getTime()) {
       next.setDate(next.getDate() + 1);
     }
@@ -216,14 +253,14 @@ export function getNextRunTime(
 
   // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
   if (
-    components.minute !== "*" &&
-    components.hour !== "*" &&
-    components.dayOfWeek !== "*" &&
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
+    isConcrete(components.dayOfWeek) &&
     components.dayOfMonth === "*"
   ) {
-    next.setMinutes(components.minute as number);
-    next.setHours(components.hour as number);
-    const targetDay = components.dayOfWeek as number;
+    next.setMinutes(components.minute);
+    next.setHours(components.hour);
+    const targetDay = components.dayOfWeek;
     const currentDay = next.getDay();
     const daysUntilTarget = (targetDay - currentDay + 7) % 7;
     next.setDate(next.getDate() + daysUntilTarget);
@@ -259,11 +296,8 @@ export function getPreviousRunTime(
   prev.setMilliseconds(0);
 
   // Handle step values (e.g., */30 for every 30 minutes)
-  if (
-    typeof components.minute === "string" &&
-    components.minute.startsWith("*/")
-  ) {
-    const step = parseInt(components.minute.slice(2), 10);
+  if (isStepped(components.minute)) {
+    const step = stepOf(components.minute);
     const currentMinute = prev.getMinutes();
     const prevMinute = Math.floor(currentMinute / step) * step;
 
@@ -279,6 +313,26 @@ export function getPreviousRunTime(
         prev.setHours(prev.getHours() - 1);
         prev.setMinutes(60 + prev.getMinutes());
       }
+    }
+    return prev;
+  }
+
+  // Handle hour steps: "0 */2 * * *"; mirrors getNextRunTime's branch.
+  if (
+    isConcrete(components.minute) &&
+    isStepped(components.hour) &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    const step = stepOf(components.hour);
+    prev.setMinutes(components.minute);
+    const remainder = prev.getHours() % step;
+    if (remainder !== 0) {
+      prev.setHours(prev.getHours() - remainder);
+    }
+    if (prev.getTime() >= fromDate.getTime()) {
+      prev.setHours(prev.getHours() - step);
     }
     return prev;
   }
@@ -301,13 +355,13 @@ export function getPreviousRunTime(
 
   // Handle hourly pattern: "0 * * * *"
   if (
-    components.minute !== "*" &&
+    isConcrete(components.minute) &&
     components.hour === "*" &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    prev.setMinutes(components.minute as number);
+    prev.setMinutes(components.minute);
     if (prev.getTime() >= fromDate.getTime()) {
       prev.setHours(prev.getHours() - 1);
     }
@@ -316,14 +370,14 @@ export function getPreviousRunTime(
 
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
-    components.minute !== "*" &&
-    components.hour !== "*" &&
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    prev.setMinutes(components.minute as number);
-    prev.setHours(components.hour as number);
+    prev.setMinutes(components.minute);
+    prev.setHours(components.hour);
     if (prev.getTime() >= fromDate.getTime()) {
       prev.setDate(prev.getDate() - 1);
     }
@@ -332,14 +386,14 @@ export function getPreviousRunTime(
 
   // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
   if (
-    components.minute !== "*" &&
-    components.hour !== "*" &&
-    components.dayOfWeek !== "*" &&
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
+    isConcrete(components.dayOfWeek) &&
     components.dayOfMonth === "*"
   ) {
-    prev.setMinutes(components.minute as number);
-    prev.setHours(components.hour as number);
-    const targetDay = components.dayOfWeek as number;
+    prev.setMinutes(components.minute);
+    prev.setHours(components.hour);
+    const targetDay = components.dayOfWeek;
     const currentDay = prev.getDay();
     const daysDiff = currentDay - targetDay;
     const daysToSubtract = daysDiff >= 0 ? daysDiff : daysDiff + 7;

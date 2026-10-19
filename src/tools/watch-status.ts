@@ -228,7 +228,11 @@ export async function handleWatchStatus(
 /** Scheduler state is optional: a failure to read it degrades to "no state". */
 async function loadStateService(): Promise<SchedulerStateService | null> {
   try {
-    return await getSchedulerStateService();
+    const service = await getSchedulerStateService();
+    // The daemon is a separate process and writes this file as passes run, so
+    // re-read it: the singleton alone answers from this server's startup.
+    await service.reload();
+    return service;
   } catch {
     return null;
   }
@@ -290,6 +294,19 @@ async function evaluateWatch(
 }
 
 /**
+ * The watch's directory as a glob that matches only itself.
+ *
+ * `searchHistory` takes a glob, and a directory name is not one: a real folder
+ * called `[archive]` or `notes 2024?` is read as a character class or a
+ * wildcard, matches no row, and the watch reports `never_run` while its passes
+ * sit in history. Backslashes are folded to "/" first, so compilePathGlob's
+ * Windows normalisation cannot eat the escapes that follow.
+ */
+function literalPathGlob(directory: string): string {
+  return directory.replace(/\\/g, "/").replace(/[*?[\]{}()!+@]/g, "\\$&");
+}
+
+/**
  * Newest organize pass recorded for this directory: history first (it carries
  * status for both the daemon and cron paths since #95), scheduler state as the
  * fallback when history has no row. The newer of the two wins when both exist,
@@ -306,7 +323,7 @@ async function findLastPass(
 
   try {
     const result = await ctx.history.searchHistory({
-      pathGlob: watch.directory,
+      pathGlob: literalPathGlob(watch.directory),
       // Only organize passes count as passes. The server audit-logs every tool
       // call with its directory argument, so a path match alone would let
       // preview or scan calls pose as scheduled work.
