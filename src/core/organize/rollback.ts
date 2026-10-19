@@ -969,11 +969,11 @@ export class RollbackService {
             // deleted by hand, or moved by a later pass whose own manifest
             // holds the record of where it went. Either way there is nothing
             // to move back, so this one action is skipped and the rest of the
-            // batch continues. A skip is information, not a failure.
+            // batch continues. A skip is information, not a failure, so it is
+            // counted and kept out of `errors`: a caller reading that list is
+            // looking for what went wrong. The manifest still names the path,
+            // and verify_integrity reports it as missing.
             results.skipped++;
-            results.errors.push(
-              `Skipped: current file not accessible, nothing to restore: ${action.currentPath}`,
-            );
             continue;
           }
 
@@ -1064,11 +1064,9 @@ export class RollbackService {
           } catch (e) {
             if ((e as NodeJS.ErrnoException).code === "ENOENT") {
               // Already gone: the copy no longer exists, so there is nothing
-              // to un-copy. Information, not a failure.
+              // to un-copy. Information, not a failure, so it stays out of
+              // `errors` for the same reason as the skip above.
               results.skipped++;
-              results.errors.push(
-                `Skipped: file to un-copy already gone: ${action.currentPath}`,
-              );
             } else {
               throw e;
             }
@@ -1106,11 +1104,9 @@ export class RollbackService {
             const err = e as NodeJS.ErrnoException;
             if (err.code === "ENOENT") {
               // The backup is gone, so the deleted file cannot be restored.
-              // Skip this action; the rest of the batch continues.
+              // Skip this action; the rest of the batch continues. Counted,
+              // not reported as an error.
               results.skipped++;
-              results.errors.push(
-                `Skipped: backup already gone, nothing to restore: ${action.backupPath}`,
-              );
               continue;
             }
             if (err.code === "EEXIST") {

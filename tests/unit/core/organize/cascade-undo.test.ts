@@ -258,9 +258,10 @@ describe("cascade undo", () => {
       passes: 1,
       refused: false,
     });
-    // The skip note names the path at the service layer; the tool layer
-    // sanitizes it before it reaches a client.
-    expect(result.errors.join(" ")).toContain(destination);
+    // Counted, not reported: a skip is not a failure, so it does not join the
+    // errors a caller reads looking for what went wrong. The manifest names the
+    // path, and verify_integrity is the tool that reports it as missing.
+    expect(result.errors).toEqual([]);
     // A manifest with nothing left to undo is still spent.
     expect(await exists(path.join(storageDir, `${id}.json`))).toBe(false);
   });
