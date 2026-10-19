@@ -5,6 +5,13 @@
  * Utilities for parsing cron expressions and calculating run times.
  * Supports common cron patterns (hourly, daily, weekly) with fallback
  * heuristics for complex patterns.
+ *
+ * Every calculation in this file runs in LOCAL time, because that is how
+ * node-cron interprets a schedule: `0 9 * * *` fires at 9am wall-clock time,
+ * whatever timezone the machine is set to. These functions used the setUTC*
+ * family, so they disagreed with the scheduler by the machine's UTC offset
+ * (issue #99). A test suite that only ever ran in UTC is why that survived —
+ * tests/unit/utils/cron-utils.test.ts pins a non-UTC offset now.
  */
 
 /**
@@ -140,8 +147,8 @@ export function getNextRunTime(
   }
 
   const next = new Date(fromDate.getTime());
-  next.setUTCSeconds(0);
-  next.setUTCMilliseconds(0);
+  next.setSeconds(0);
+  next.setMilliseconds(0);
 
   // Handle step values (e.g., */30 for every 30 minutes)
   if (
@@ -149,15 +156,30 @@ export function getNextRunTime(
     components.minute.startsWith("*/")
   ) {
     const step = parseInt(components.minute.slice(2), 10);
-    const currentMinute = next.getUTCMinutes();
+    const currentMinute = next.getMinutes();
     const nextMinute = Math.ceil((currentMinute + 1) / step) * step;
 
     if (nextMinute >= 60) {
-      next.setUTCHours(next.getUTCHours() + 1);
-      next.setUTCMinutes(0);
+      next.setHours(next.getHours() + 1);
+      next.setMinutes(0);
     } else {
-      next.setUTCMinutes(nextMinute);
+      next.setMinutes(nextMinute);
     }
+    return next;
+  }
+
+  // Handle "* * * * *" — every minute. The pattern branches below all require
+  // a concrete minute, so without this the schedule fell through to the
+  // 1-day interval fallback and a watch firing every minute would be reported
+  // as one that runs once a day.
+  if (
+    components.minute === "*" &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    next.setMinutes(next.getMinutes() + 1);
     return next;
   }
 
@@ -169,9 +191,9 @@ export function getNextRunTime(
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    next.setUTCMinutes(components.minute as number);
+    next.setMinutes(components.minute as number);
     if (next.getTime() <= fromDate.getTime()) {
-      next.setUTCHours(next.getUTCHours() + 1);
+      next.setHours(next.getHours() + 1);
     }
     return next;
   }
@@ -184,10 +206,10 @@ export function getNextRunTime(
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    next.setUTCMinutes(components.minute as number);
-    next.setUTCHours(components.hour as number);
+    next.setMinutes(components.minute as number);
+    next.setHours(components.hour as number);
     if (next.getTime() <= fromDate.getTime()) {
-      next.setUTCDate(next.getUTCDate() + 1);
+      next.setDate(next.getDate() + 1);
     }
     return next;
   }
@@ -199,14 +221,14 @@ export function getNextRunTime(
     components.dayOfWeek !== "*" &&
     components.dayOfMonth === "*"
   ) {
-    next.setUTCMinutes(components.minute as number);
-    next.setUTCHours(components.hour as number);
+    next.setMinutes(components.minute as number);
+    next.setHours(components.hour as number);
     const targetDay = components.dayOfWeek as number;
-    const currentDay = next.getUTCDay();
+    const currentDay = next.getDay();
     const daysUntilTarget = (targetDay - currentDay + 7) % 7;
-    next.setUTCDate(next.getUTCDate() + daysUntilTarget);
+    next.setDate(next.getDate() + daysUntilTarget);
     if (next.getTime() <= fromDate.getTime()) {
-      next.setUTCDate(next.getUTCDate() + 7);
+      next.setDate(next.getDate() + 7);
     }
     return next;
   }
@@ -233,8 +255,8 @@ export function getPreviousRunTime(
   }
 
   const prev = new Date(fromDate.getTime());
-  prev.setUTCSeconds(0);
-  prev.setUTCMilliseconds(0);
+  prev.setSeconds(0);
+  prev.setMilliseconds(0);
 
   // Handle step values (e.g., */30 for every 30 minutes)
   if (
@@ -242,21 +264,37 @@ export function getPreviousRunTime(
     components.minute.startsWith("*/")
   ) {
     const step = parseInt(components.minute.slice(2), 10);
-    const currentMinute = prev.getUTCMinutes();
+    const currentMinute = prev.getMinutes();
     const prevMinute = Math.floor(currentMinute / step) * step;
 
     if (prevMinute < 0) {
-      prev.setUTCHours(prev.getUTCHours() - 1);
-      prev.setUTCMinutes(60 - step);
+      prev.setHours(prev.getHours() - 1);
+      prev.setMinutes(60 - step);
     } else {
-      prev.setUTCMinutes(prevMinute);
+      prev.setMinutes(prevMinute);
     }
     if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCMinutes(prev.getUTCMinutes() - step);
-      if (prev.getUTCMinutes() < 0) {
-        prev.setUTCHours(prev.getUTCHours() - 1);
-        prev.setUTCMinutes(60 + prev.getUTCMinutes());
+      prev.setMinutes(prev.getMinutes() - step);
+      if (prev.getMinutes() < 0) {
+        prev.setHours(prev.getHours() - 1);
+        prev.setMinutes(60 + prev.getMinutes());
       }
+    }
+    return prev;
+  }
+
+  // Handle "* * * * *" — every minute; mirrors getNextRunTime's branch. The
+  // seconds were zeroed above, so an fromDate that lands exactly on a minute
+  // boundary steps back one minute to stay strictly in the past.
+  if (
+    components.minute === "*" &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    if (prev.getTime() >= fromDate.getTime()) {
+      prev.setMinutes(prev.getMinutes() - 1);
     }
     return prev;
   }
@@ -269,9 +307,9 @@ export function getPreviousRunTime(
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    prev.setUTCMinutes(components.minute as number);
+    prev.setMinutes(components.minute as number);
     if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCHours(prev.getUTCHours() - 1);
+      prev.setHours(prev.getHours() - 1);
     }
     return prev;
   }
@@ -284,10 +322,10 @@ export function getPreviousRunTime(
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    prev.setUTCMinutes(components.minute as number);
-    prev.setUTCHours(components.hour as number);
+    prev.setMinutes(components.minute as number);
+    prev.setHours(components.hour as number);
     if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCDate(prev.getUTCDate() - 1);
+      prev.setDate(prev.getDate() - 1);
     }
     return prev;
   }
@@ -299,15 +337,15 @@ export function getPreviousRunTime(
     components.dayOfWeek !== "*" &&
     components.dayOfMonth === "*"
   ) {
-    prev.setUTCMinutes(components.minute as number);
-    prev.setUTCHours(components.hour as number);
+    prev.setMinutes(components.minute as number);
+    prev.setHours(components.hour as number);
     const targetDay = components.dayOfWeek as number;
-    const currentDay = prev.getUTCDay();
+    const currentDay = prev.getDay();
     const daysDiff = currentDay - targetDay;
     const daysToSubtract = daysDiff >= 0 ? daysDiff : daysDiff + 7;
-    prev.setUTCDate(prev.getUTCDate() - daysToSubtract);
+    prev.setDate(prev.getDate() - daysToSubtract);
     if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCDate(prev.getUTCDate() - 7);
+      prev.setDate(prev.getDate() - 7);
     }
     return prev;
   }

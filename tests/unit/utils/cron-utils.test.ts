@@ -1,9 +1,27 @@
 /**
  * File Organizer MCP Server - Cron Utils Tests
  * Tests for cron expression parsing and time calculation utilities
+ *
+ * The calculation functions run in LOCAL time (the same clock node-cron fires
+ * on, issue #99), so every assertion here is built from local Date components
+ * and read back with local getters: that stays correct on any machine, and it
+ * fails on any non-UTC machine if the code ever drifts back to setUTC*. The
+ * two pinned-offset describes go further and force a specific zone, so a
+ * UTC-only CI machine still exercises the bug. They cannot do that with a
+ * runtime process.env.TZ: jest's vm sandbox never forwards it to V8's date
+ * cache, so an in-process pin silently does nothing (it only looks right on a
+ * machine already sitting in that zone). The zone is inherited at child
+ * process spawn instead, which is the same workaround the EXIF calendar suites
+ * in tests/unit/services/ use.
  */
 
-import { jest, describe, it, expect } from '@jest/globals';
+import { describe, it, expect } from '@jest/globals';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
 import {
   getNextRunTime,
   getPreviousRunTime,
@@ -12,71 +30,145 @@ import {
   isValidCronExpression,
 } from '../../../src/utils/cron-utils.js';
 
+type PinnedResult = {
+  offsetMinutes: number;
+  next: string;
+  previous: string;
+  timeUntil: number;
+};
+
+/**
+ * Run one cron calculation in a child process pinned to `tz`.
+ *
+ * The child transpiles src/utils/cron-utils.ts at call time rather than
+ * importing dist/: the pinned contract exists to catch a regression in the
+ * source, and a stale build could answer for code that no longer exists. The
+ * returned offset is the pin's own guard — if the platform cannot load the
+ * zone, it comes back as 0 and the caller's first assertion fails instead of
+ * every later one answering for UTC.
+ */
+function runCronUnderTz(
+  cron: string,
+  iso: string,
+  tz: string,
+): PinnedResult {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cron-utils-tz-'));
+  try {
+    const source = fs.readFileSync(
+      path.resolve('src/utils/cron-utils.ts'),
+      'utf8',
+    );
+    const js = ts.transpileModule(source, {
+      fileName: 'cron-utils.ts',
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2022,
+      },
+    }).outputText;
+    const modulePath = path.join(dir, 'cron-utils.mjs');
+    fs.writeFileSync(modulePath, js);
+
+    const script = [
+      `import { getNextRunTime, getPreviousRunTime, getTimeUntilNextRun } from ${JSON.stringify(pathToFileURL(modulePath).href)};`,
+      `const base = new Date(${JSON.stringify(iso)});`,
+      `const next = getNextRunTime(${JSON.stringify(cron)}, base);`,
+      `const previous = getPreviousRunTime(${JSON.stringify(cron)}, base);`,
+      `const timeUntil = getTimeUntilNextRun(${JSON.stringify(cron)}, base);`,
+      `console.log(JSON.stringify({`,
+      `  offsetMinutes: base.getTimezoneOffset(),`,
+      `  next: next.toISOString(),`,
+      `  previous: previous.toISOString(),`,
+      `  timeUntil,`,
+      `}));`,
+    ].join('\n');
+
+    const out = execFileSync(
+      process.execPath,
+      ['--input-type=module', '-e', script],
+      { env: { ...process.env, TZ: tz }, encoding: 'utf8' },
+    );
+    return JSON.parse(out) as PinnedResult;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 describe('cron-utils', () => {
   describe('getNextRunTime', () => {
     it('should calculate next run for hourly cron', () => {
-      const baseTime = new Date('2026-02-08T10:30:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 30);
       const nextRun = getNextRunTime('0 * * * *', baseTime);
 
-      // Should be at 11:00
-      expect(nextRun.getUTCHours()).toBe(11);
-      expect(nextRun.getUTCMinutes()).toBe(0);
-      expect(nextRun.getUTCDate()).toBe(baseTime.getUTCDate());
+      // Should be at 11:00 local
+      expect(nextRun.getHours()).toBe(11);
+      expect(nextRun.getMinutes()).toBe(0);
+      expect(nextRun.getDate()).toBe(baseTime.getDate());
     });
 
     it('should calculate next run for daily cron', () => {
-      const baseTime = new Date('2026-02-08T10:30:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 30);
       const nextRun = getNextRunTime('0 9 * * *', baseTime);
 
-      // Should be next day at 9:00 since we passed 9:00
-      expect(nextRun.getUTCDate()).toBe(9);
-      expect(nextRun.getUTCHours()).toBe(9);
-      expect(nextRun.getUTCMinutes()).toBe(0);
+      // Should be next day at 9:00 local since we passed 9:00
+      expect(nextRun.getDate()).toBe(9);
+      expect(nextRun.getHours()).toBe(9);
+      expect(nextRun.getMinutes()).toBe(0);
     });
 
     it('should calculate next run for daily cron when still before scheduled time', () => {
-      const baseTime = new Date('2026-02-08T08:00:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 8, 0);
       const nextRun = getNextRunTime('0 9 * * *', baseTime);
 
-      // Should be same day at 9:00
-      expect(nextRun.getUTCDate()).toBe(8);
-      expect(nextRun.getUTCHours()).toBe(9);
-      expect(nextRun.getUTCMinutes()).toBe(0);
+      // Should be same day at 9:00 local
+      expect(nextRun.getDate()).toBe(8);
+      expect(nextRun.getHours()).toBe(9);
+      expect(nextRun.getMinutes()).toBe(0);
     });
 
     it('should calculate next run for weekly cron', () => {
       // Feb 8, 2026 is a Sunday (day 0)
-      const baseTime = new Date('2026-02-08T10:00:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 0);
       const nextRun = getNextRunTime('0 9 * * 0', baseTime);
 
-      // Should be next Sunday at 9:00
-      expect(nextRun.getUTCDay()).toBe(0);
-      expect(nextRun.getUTCHours()).toBe(9);
-      expect(nextRun.getUTCMinutes()).toBe(0);
+      // Should be next Sunday at 9:00 local
+      expect(nextRun.getDay()).toBe(0);
+      expect(nextRun.getHours()).toBe(9);
+      expect(nextRun.getMinutes()).toBe(0);
       // Since baseTime is already Sunday after 9am, next run is next week
       expect(nextRun.getTime()).toBeGreaterThan(baseTime.getTime());
     });
 
     it('should calculate next run for step values (every 30 minutes)', () => {
-      const baseTime = new Date('2026-02-08T10:15:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 15);
       const nextRun = getNextRunTime('*/30 * * * *', baseTime);
 
-      // Should be at 10:30
-      expect(nextRun.getUTCHours()).toBe(10);
-      expect(nextRun.getUTCMinutes()).toBe(30);
+      // Should be at 10:30 local
+      expect(nextRun.getHours()).toBe(10);
+      expect(nextRun.getMinutes()).toBe(30);
     });
 
     it('should handle step values crossing hour boundary', () => {
-      const baseTime = new Date('2026-02-08T10:45:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 45);
       const nextRun = getNextRunTime('*/30 * * * *', baseTime);
 
-      // Should be at 11:00
-      expect(nextRun.getUTCHours()).toBe(11);
-      expect(nextRun.getUTCMinutes()).toBe(0);
+      // Should be at 11:00 local
+      expect(nextRun.getHours()).toBe(11);
+      expect(nextRun.getMinutes()).toBe(0);
+    });
+
+    it('should treat every minute as one minute apart', () => {
+      // "* * * * *" used to fall through to the 1-day interval fallback.
+      const baseTime = new Date(2026, 1, 8, 10, 30, 45);
+      const nextRun = getNextRunTime('* * * * *', baseTime);
+
+      // 10:30:45 -> the next whole minute, 10:31:00.
+      expect(nextRun.getTime() - baseTime.getTime()).toBe(15_000);
+      expect(nextRun.getHours()).toBe(10);
+      expect(nextRun.getMinutes()).toBe(31);
     });
 
     it('should return valid date for invalid cron (fallback)', () => {
-      const baseTime = new Date('2026-02-08T10:00:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 0);
       const nextRun = getNextRunTime('invalid', baseTime);
 
       // Should return a date 1 day later (fallback behavior)
@@ -87,56 +179,66 @@ describe('cron-utils', () => {
 
   describe('getPreviousRunTime', () => {
     it('should calculate previous run for hourly cron', () => {
-      const baseTime = new Date('2026-02-08T10:30:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 30);
       const prevRun = getPreviousRunTime('0 * * * *', baseTime);
 
-      // Should be at 10:00
-      expect(prevRun.getUTCHours()).toBe(10);
-      expect(prevRun.getUTCMinutes()).toBe(0);
+      // Should be at 10:00 local
+      expect(prevRun.getHours()).toBe(10);
+      expect(prevRun.getMinutes()).toBe(0);
     });
 
     it('should calculate previous run for daily cron', () => {
-      const baseTime = new Date('2026-02-08T10:30:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 30);
       const prevRun = getPreviousRunTime('0 9 * * *', baseTime);
 
-      // Should be today at 9:00 since we passed 9:00
-      expect(prevRun.getUTCDate()).toBe(8);
-      expect(prevRun.getUTCHours()).toBe(9);
-      expect(prevRun.getUTCMinutes()).toBe(0);
+      // Should be today at 9:00 local since we passed 9:00
+      expect(prevRun.getDate()).toBe(8);
+      expect(prevRun.getHours()).toBe(9);
+      expect(prevRun.getMinutes()).toBe(0);
     });
 
     it('should calculate previous run for daily cron before scheduled time', () => {
-      const baseTime = new Date('2026-02-08T08:00:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 8, 0);
       const prevRun = getPreviousRunTime('0 9 * * *', baseTime);
 
-      // Should be yesterday at 9:00
-      expect(prevRun.getUTCDate()).toBe(7);
-      expect(prevRun.getUTCHours()).toBe(9);
-      expect(prevRun.getUTCMinutes()).toBe(0);
+      // Should be yesterday at 9:00 local
+      expect(prevRun.getDate()).toBe(7);
+      expect(prevRun.getHours()).toBe(9);
+      expect(prevRun.getMinutes()).toBe(0);
     });
 
     it('should calculate previous run for weekly cron', () => {
       // Feb 8, 2026 is a Sunday (day 0)
-      const baseTime = new Date('2026-02-08T10:00:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 0);
       const prevRun = getPreviousRunTime('0 9 * * 0', baseTime);
 
-      // Should be today at 9:00 (Sunday)
-      expect(prevRun.getUTCDay()).toBe(0);
-      expect(prevRun.getUTCHours()).toBe(9);
-      expect(prevRun.getUTCMinutes()).toBe(0);
+      // Should be today at 9:00 local (Sunday)
+      expect(prevRun.getDay()).toBe(0);
+      expect(prevRun.getHours()).toBe(9);
+      expect(prevRun.getMinutes()).toBe(0);
     });
 
     it('should calculate previous run for step values', () => {
-      const baseTime = new Date('2026-02-08T10:45:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 45);
       const prevRun = getPreviousRunTime('*/30 * * * *', baseTime);
 
-      // Should be at 10:30
-      expect(prevRun.getUTCHours()).toBe(10);
-      expect(prevRun.getUTCMinutes()).toBe(30);
+      // Should be at 10:30 local
+      expect(prevRun.getHours()).toBe(10);
+      expect(prevRun.getMinutes()).toBe(30);
+    });
+
+    it('should treat every minute as one minute apart', () => {
+      const baseTime = new Date(2026, 1, 8, 10, 30, 45);
+      const prevRun = getPreviousRunTime('* * * * *', baseTime);
+
+      expect(prevRun.getTime()).toBe(
+        new Date(2026, 1, 8, 10, 30, 0).getTime(),
+      );
+      expect(prevRun.getTime()).toBeLessThan(baseTime.getTime());
     });
 
     it('should return valid date for invalid cron (fallback)', () => {
-      const baseTime = new Date('2026-02-08T10:00:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 0);
       const prevRun = getPreviousRunTime('invalid', baseTime);
 
       // Should return a valid date
@@ -156,10 +258,10 @@ describe('cron-utils', () => {
     });
 
     it('should return false when recently ran (daily)', () => {
-      // Use fixed times for consistent testing
-      // Current time: 10:00 AM, last run at 9:30 AM (after today's 9 AM schedule)
-      const currentTime = new Date('2026-02-08T10:00:00.000Z');
-      const lastRunTime = new Date('2026-02-08T09:30:00.000Z');
+      // Fixed local times: current 10:00, last run at 9:30 (after today's
+      // 9 AM schedule) on the same local day.
+      const currentTime = new Date(2026, 1, 8, 10, 0);
+      const lastRunTime = new Date(2026, 1, 8, 9, 30);
 
       const result = shouldCatchup('0 9 * * *', lastRunTime, currentTime);
       expect(result).toBe(false);
@@ -172,10 +274,10 @@ describe('cron-utils', () => {
     });
 
     it('should return false for hourly schedule when ran recently', () => {
-      // Use fixed times for consistent testing
-      // 10:30 current time, last run at 10:00 (within the same hour)
-      const currentTime = new Date('2026-02-08T10:30:00.000Z');
-      const lastRunTime = new Date('2026-02-08T10:00:00.000Z');
+      // Fixed local times: 10:30 current, last run at 10:00 (within the
+      // same hour).
+      const currentTime = new Date(2026, 1, 8, 10, 30);
+      const lastRunTime = new Date(2026, 1, 8, 10, 0);
 
       const result = shouldCatchup('0 * * * *', lastRunTime, currentTime);
       expect(result).toBe(false);
@@ -191,13 +293,12 @@ describe('cron-utils', () => {
     });
 
     it('should handle edge case at exact boundary', () => {
-      // Set up a scenario where last run was exactly at the expected time
-      const currentTime = new Date('2026-02-08T10:00:00.000Z');
-      const lastRunTime = new Date('2026-02-08T09:00:00.000Z');
+      // Last run exactly at the expected time.
+      const currentTime = new Date(2026, 1, 8, 10, 0);
+      const lastRunTime = new Date(2026, 1, 8, 9, 0);
 
-      // Should not need catchup since we ran at the expected time (with buffer)
+      // With the 1 second buffer, running exactly at 9:00 is not a miss.
       const result = shouldCatchup('0 9 * * *', lastRunTime, currentTime);
-      // Result depends on exact timing; with 1 second buffer, should be false
       expect(result).toBe(false);
     });
 
@@ -213,7 +314,7 @@ describe('cron-utils', () => {
 
   describe('getTimeUntilNextRun', () => {
     it('should return positive time until next run', () => {
-      const baseTime = new Date('2026-02-08T10:00:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 0);
       const timeUntil = getTimeUntilNextRun('0 11 * * *', baseTime);
 
       // Should be 1 hour
@@ -221,8 +322,8 @@ describe('cron-utils', () => {
     });
 
     it('should return time until next run even if scheduled time passed today', () => {
-      // Use a time where the scheduled time (9am) has passed (12pm)
-      const baseTime = new Date('2026-02-08T12:00:00.000Z');
+      // Scheduled 9am has passed (local noon).
+      const baseTime = new Date(2026, 1, 8, 12, 0);
       const timeUntil = getTimeUntilNextRun('0 9 * * *', baseTime);
 
       // Next run is tomorrow at 9am, so should be 21 hours
@@ -230,7 +331,7 @@ describe('cron-utils', () => {
     });
 
     it('should calculate correctly for hourly schedule', () => {
-      const baseTime = new Date('2026-02-08T10:30:00.000Z');
+      const baseTime = new Date(2026, 1, 8, 10, 30);
       const timeUntil = getTimeUntilNextRun('0 * * * *', baseTime);
 
       // Should be 30 minutes until 11:00
@@ -272,6 +373,70 @@ describe('cron-utils', () => {
     it('should return false for invalid step values', () => {
       expect(isValidCronExpression('*/0 * * * *')).toBe(false);
       expect(isValidCronExpression('*/70 * * * *')).toBe(false);
+    });
+  });
+});
+
+/**
+ * The bug that issue #99 exists for: computing run times in UTC while
+ * node-cron fires in local time. These cases run in child processes pinned to
+ * a known offset and assert fixed instants, so they fail even on a UTC machine
+ * if the UTC implementation comes back — a plain-UTC test suite is exactly why
+ * the bug shipped.
+ */
+describe('cron-utils local timezone contract', () => {
+  describe('Asia/Kolkata (UTC+5:30)', () => {
+    const zone = 'Asia/Kolkata';
+    // 10:30 local on Feb 8, 2026 = 05:00Z at this offset.
+    const baseIso = '2026-02-08T05:00:00.000Z';
+
+    it('applies the pinned offset before anything else is asserted', () => {
+      // Guards the fixture: if the child came back unpinned (zone unloadable,
+      // TZ dropped from the env), the assertions below would be answering for
+      // whatever zone the runner happens to sit in.
+      const { offsetMinutes } = runCronUnderTz('0 9 * * *', baseIso, zone);
+      expect(offsetMinutes).toBe(-330);
+    });
+
+    it('computes 0 9 * * * as 9am local, not 9am UTC', () => {
+      // Past 9am local, so the next run is 9am local on Feb 9.
+      const { next } = runCronUnderTz('0 9 * * *', baseIso, zone);
+
+      // 9am IST on Feb 9 = 03:30Z. The old UTC code returned 09:00Z, which
+      // is 14:30 for this user: wrong by exactly the offset (issue #99).
+      expect(next).toBe('2026-02-09T03:30:00.000Z');
+    });
+
+    it('computes the previous run at 9am local too', () => {
+      const { previous } = runCronUnderTz('0 9 * * *', baseIso, zone);
+
+      // 9am IST on Feb 8 = 03:30Z.
+      expect(previous).toBe('2026-02-08T03:30:00.000Z');
+    });
+
+    it('measures time until the next local run', () => {
+      // 10:30 today to 9:00 tomorrow is 22h30m.
+      const { timeUntil } = runCronUnderTz('0 9 * * *', baseIso, zone);
+      expect(timeUntil).toBe(22.5 * 60 * 60 * 1000);
+    });
+  });
+
+  describe('Europe/Berlin (UTC+1 in February)', () => {
+    const zone = 'Europe/Berlin';
+    // 8:00 local on Feb 8, 2026 = 07:00Z at this offset.
+    const baseIso = '2026-02-08T07:00:00.000Z';
+
+    it('applies the pinned offset before anything else is asserted', () => {
+      const { offsetMinutes } = runCronUnderTz('0 9 * * *', baseIso, zone);
+      expect(offsetMinutes).toBe(-60);
+    });
+
+    it('computes a run due later today at the local wall clock', () => {
+      const { next } = runCronUnderTz('0 9 * * *', baseIso, zone);
+
+      // A negative offset catches the sign of the bug, which a UTC+ zone
+      // alone would not.
+      expect(next).toBe('2026-02-08T08:00:00.000Z');
     });
   });
 });

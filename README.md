@@ -98,7 +98,7 @@ You can ask the assistant things like:
 - `file_organizer_search_history` - Filter the history by path glob (`path_glob`), date range (`from`/`to`), or operation type. Every filter is optional and they combine, so a long history stays queryable instead of one flat list.
 - `file_organizer_export_report` - Write a health report for a directory in one call: totals, space per category, duplicate groups, largest files. Pass `output_path` to leave a file behind, or leave it out and nothing is written. See below.
 
-### Full tool list (38 tools)
+### Full tool list (42 tools)
 <!-- BEGIN GENERATED TOOL LIST -->
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
@@ -117,6 +117,7 @@ You can ask the assistant things like:
 - `file_organizer_get_categories`
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`
+- `file_organizer_list_watches`
 - `file_organizer_organize_by_date`
 - `file_organizer_organize_by_project`
 - `file_organizer_organize_files`
@@ -135,9 +136,12 @@ You can ask the assistant things like:
 - `file_organizer_smart_suggest`
 - `file_organizer_system_organize`
 - `file_organizer_undo_last_operation`
+- `file_organizer_unwatch_directory`
 - `file_organizer_validate_organization_plan`
 - `file_organizer_verify_integrity`
 - `file_organizer_view_history`
+- `file_organizer_watch_directory`
+- `file_organizer_watch_status`
 <!-- END GENERATED TOOL LIST -->
 
 For parameters and return shapes, see [API.md](API.md).

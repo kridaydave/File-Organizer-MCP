@@ -141,6 +141,18 @@ import {
   organizerDigestToolDefinition,
   handleOrganizerDigest,
 } from "../tools/organizer-digest.js";
+import {
+  watchStatusToolDefinition,
+  handleWatchStatus,
+} from "../tools/watch-status.js";
+import {
+  watchDirectoryToolDefinition,
+  handleWatchDirectory,
+  unwatchDirectoryToolDefinition,
+  handleUnwatchDirectory,
+  listWatchesToolDefinition,
+  handleListWatches,
+} from "../tools/watch-tools.js";
 
 function reg(def: ToolDefinition, handler: ToolHandler) {
   return defineTool({
@@ -176,6 +188,7 @@ const entries = [
   reg(getCategoriesToolDefinition, handleGetCategories),
   reg(inspectMetadataToolDefinition, handleInspectMetadata),
   reg(listFilesToolDefinition, handleListFiles),
+  reg(listWatchesToolDefinition, handleListWatches),
   reg(organizeByDateToolDefinition, handleOrganizeByDate),
   reg(organizeByProjectToolDefinition, handleOrganizeByProject),
   reg(organizeFilesToolDefinition, handleOrganizeFiles),
@@ -193,9 +206,12 @@ const entries = [
   reg(smartSuggestToolDefinition, handleSmartSuggest),
   reg(systemOrganizationToolDefinition, handleSystemOrganization),
   reg(undoLastOperationToolDefinition, handleUndoLastOperation),
+  reg(unwatchDirectoryToolDefinition, handleUnwatchDirectory),
   reg(validateOrganizationPlanToolDefinition, handleValidateOrganizationPlan),
   reg(verifyIntegrityToolDefinition, handleVerifyIntegrity),
   reg(viewHistoryToolDefinition, handleViewHistory),
+  reg(watchDirectoryToolDefinition, handleWatchDirectory),
+  reg(watchStatusToolDefinition, handleWatchStatus),
 ];
 
 export const TOOLS: ToolDefinition[] = entries.map((e) => e.definition);
