@@ -32,6 +32,7 @@ live in `data/`, and the short names below all expand to the
 | Find and resolve duplicates | [duplicates.md](duplicates.md) | `find_duplicate_files`, `analyze_duplicates`, `preview_delete_duplicates`, `delete_duplicates` |
 | Find space, old files and empty directories | [find.md](find.md) | `disk_usage_by_category`, `find_old_files`, `find_empty_directories`, `sensitive_scan` |
 | Rename in bulk | [rename.md](rename.md) | `batch_rename` |
+| Schedule a directory | [watch.md](watch.md) | `watch_directory`, `unwatch_directory`, `list_watches`, `watch_status` |
 | Adapt behavior to the user | [customize.md](customize.md) | `set_custom_rules`, `smart_suggest`, `find_broken_symlinks`, `export_config` |
 | Stay inside the sandbox | [security.md](security.md) | every tool, via `path-validator.service.ts` |
 

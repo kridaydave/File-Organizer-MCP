@@ -106,6 +106,21 @@ export class SchedulerStateService {
   }
 
   /**
+   * Re-read the state file from disk.
+   *
+   * Loading once is right for the daemon, which owns the file and saves after
+   * every pass. A read-only caller in another process is the opposite case: it
+   * would otherwise report whatever was on disk when its own server started,
+   * so a watch that has run since then still reads as `never_run`. Only
+   * read-only callers should call this. A writer would drop entries it has set
+   * in memory but not yet saved.
+   */
+  async reload(): Promise<void> {
+    this.initialized = false;
+    await this.initialize();
+  }
+
+  /**
    * Load state from disk.
    *
    * SECURITY JUSTIFICATION (SEC-016):

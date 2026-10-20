@@ -47,6 +47,16 @@ export const ViewHistoryInputSchema = z
 export type ViewHistoryInput = z.infer<typeof ViewHistoryInputSchema>;
 
 /**
+ * Schema for watch_status tool — read the watch list and report each watch's
+ * schedule, next run, and liveness. No inputs beyond the common params: the
+ * watch list itself is the subject, so there is nothing to filter on and no
+ * optional argument that would let a caller ask for a partial answer.
+ */
+export const WatchStatusInputSchema = z.object({}).merge(CommonParamsSchema);
+
+export type WatchStatusInput = z.infer<typeof WatchStatusInputSchema>;
+
+/**
  * Schema for path validation - ensures path is a valid non-empty string
  * without null bytes (security check)
  */

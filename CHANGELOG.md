@@ -55,6 +55,30 @@
 
 ### Changed
 
+- **The watch tools are reachable from the MCP server again.**
+  `file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
+  `file_organizer_list_watches` and a new read-only
+  `file_organizer_watch_status` are registered once more, so an agent can see and
+  edit a schedule without shelling out to the CLI. They call the same handlers
+  the CLI does. Scheduled work still runs in its own process: an MCP server holds
+  no timer, so `file-organizer-watch once` under cron/systemd remains the way a
+  pass actually happens.
+
+- **`watch_status` reports a pass history, not a heartbeat.** For each watch it
+  gives the cron, the next run in local time, and one of four liveness states:
+  `never_run`, `ok`, `stale` (last pass older than the schedule interval), or
+  `unknown` (the schedule no longer parses, or the newest record is an error).
+  Liveness is inferred from the last recorded pass plus `scheduler-state.json`,
+  and the evidence is reported alongside it, so a quiet folder and a dead timer
+  are distinguishable. Nothing writes on a tick, which is why there is still no
+  pidfile.
+
+- **Next-run times are computed in local time.** `getNextRunTime` and
+  `getPreviousRunTime` used the `setUTC*` family while `node-cron` fires on wall
+  clock, so every expression that was not a midnight-UTC one came back off by the
+  machine's UTC offset. They are also wired to their first caller here, so the
+  offset would have been visible in `watch_status` rather than in a test.
+
 - **`tsc` is out of the build.** Type checking is `bun check` and emitting is
   `bun build`, which took `npm run build` from 6.9s and ~390MB of resident
   memory to 3.5s and ~123MB, and `typecheck:tests` from 7.6s and ~428MB to

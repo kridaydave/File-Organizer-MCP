@@ -28,6 +28,7 @@
 - [file_organizer_get_categories](#file_organizer_get_categories)
 - [file_organizer_inspect_metadata](#file_organizer_inspect_metadata)
 - [file_organizer_list_files](#file_organizer_list_files)
+- [file_organizer_list_watches](#file_organizer_list_watches)
 - [file_organizer_organize_by_date](#file_organizer_organize_by_date)
 - [file_organizer_organize_by_project](#file_organizer_organize_by_project)
 - [file_organizer_organize_files](#file_organizer_organize_files)
@@ -46,17 +47,25 @@
 - [file_organizer_smart_suggest](#file_organizer_smart_suggest)
 - [file_organizer_system_organize](#file_organizer_system_organize)
 - [file_organizer_undo_last_operation](#file_organizer_undo_last_operation)
+- [file_organizer_unwatch_directory](#file_organizer_unwatch_directory)
 - [file_organizer_validate_organization_plan](#file_organizer_validate_organization_plan)
 - [file_organizer_verify_integrity](#file_organizer_verify_integrity)
 - [file_organizer_view_history](#file_organizer_view_history)
+- [file_organizer_watch_directory](#file_organizer_watch_directory)
+- [file_organizer_watch_status](#file_organizer_watch_status)
 
-> **Note:** The watch tools (`file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
-> `file_organizer_list_watches`) are no longer part of the MCP server. Scheduled organization
-> runs as a standalone process — see `file-organizer-watch` (`bin/file-organizer-watch.mjs`)
-> with `add` / `remove` / `list` / `once` / `run` subcommands. `once` runs a single
-> organization pass and exits, so an OS timer can be the scheduler. It takes `--json`
-> for one parseable object on stdout and exits 0 (nothing to do), 1 (failed), or 2
-> (moved files) — see README.md for the full contract. No MCP tool shape changed.
+> **Note:** Scheduled organization still runs as its own process, not inside the MCP
+> server. The watch tools are registered in the server again though:
+> `file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
+> `file_organizer_list_watches`, and the read-only `file_organizer_watch_status`.
+> A status has to come with a way to see and a way to act, so the set is complete.
+> They call the same handlers the CLI does, so either side can drive a schedule.
+> Running a pass needs a timer, and an MCP server holds none: `file-organizer-watch`
+> (`bin/file-organizer-watch.mjs`) has `add` / `remove` / `list` / `once` / `run`
+> subcommands, and `once` runs a single organization pass and exits so an OS timer
+> can be the scheduler. It takes `--json` for one parseable object on stdout and
+> exits 0 (nothing to do), 1 (failed), or 2 (moved files). See README.md for the
+> full contract.
 
 ---
 
@@ -553,6 +562,46 @@ file_organizer_list_files({
   offset: 123,
   response_format: "value",
 });
+```
+
+---
+
+## file_organizer_list_watches
+
+[⬆ Back to Top](#top)
+
+**Description:** List every directory currently in the watch list with its cron schedule and rules (auto_organize, min_file_age_minutes, max_files_per_run). Read-only: reads config.json and writes nothing. This is the raw watch list; file_organizer_watch_status adds next-run times and a liveness state for the same entries.
+
+### Parameters
+
+| Parameter         | Type   | Description          | Default    |
+| ----------------- | ------ | -------------------- | ---------- |
+| `response_format` | string | 'json' or 'markdown' | 'markdown' |
+
+### Output
+
+```typescript
+{
+  count: number;
+  watches: Array<{
+    directory: string;
+    schedule: string;
+    rules: {
+      auto_organize: boolean;
+      min_file_age_minutes?: number;
+      max_files_per_run?: number;
+      catchup_mode?: "smart" | "always" | "never";
+    };
+  }>;
+}
+```
+
+An empty list is `count: 0` with an empty `watches` array, not an error.
+
+### Example
+
+```typescript
+file_organizer_list_watches({ response_format: "json" });
 ```
 
 ---
@@ -1076,6 +1125,40 @@ file_organizer_undo_last_operation({
 
 ---
 
+## file_organizer_unwatch_directory
+
+[⬆ Back to Top](#top)
+
+**Description:** Remove a directory from the watch list. Writes config.json. Only the watch entry is removed; files the watch already organized are left where they are. Removing a directory that is not in the watch list is reported as an error and changes nothing. A running daemon keeps the watch until it reloads, so restart it for the removal to take effect there; scheduled `once` runs read the config themselves and pick the change up on the next tick.
+
+### Parameters
+
+| Parameter         | Type   | Description                                            | Default    |
+| ----------------- | ------ | ------------------------------------------------------ | ---------- |
+| `directory`       | string | Full path of the directory to remove from watch list   | -          |
+| `response_format` | string | 'json' or 'markdown'                                   | 'markdown' |
+
+### Output
+
+```typescript
+{
+  success: boolean;
+  action: "Removed";
+  directory: string;
+}
+```
+
+### Example
+
+```typescript
+file_organizer_unwatch_directory({
+  directory: "/Users/john/Downloads",
+  response_format: "json",
+});
+```
+
+---
+
 ## file_organizer_validate_organization_plan
 
 [⬆ Back to Top](#top)
@@ -1214,6 +1297,112 @@ path, so `privacy_mode` leaves it as it is. Entries with no manifest report
 file_organizer_view_history({
   limit: 20,
 });
+```
+
+---
+
+## file_organizer_watch_directory
+
+[⬆ Back to Top](#top)
+
+**Description:** Add a directory to the watch list, or update the schedule of one already listed. Writes config.json. The schedule is a standard cron expression evaluated in the machine's local time (the timezone node-cron actually fires in, not UTC). A pass organized by this watch honors the watch's own rules: min_file_age_minutes skips files written moments ago, and max_files_per_run caps how many files one pass moves. Registering a directory that is already watched replaces its entry rather than adding a second one. This only edits the configuration; run the file-organizer-watch command to start the watcher that acts on it.
+
+### Parameters
+
+| Parameter              | Type    | Description                                                              | Default    |
+| ---------------------- | ------- | ------------------------------------------------------------------------ | ---------- |
+| `directory`            | string  | Full path to the directory to watch                                      | -          |
+| `schedule`             | string  | Cron expression, for example `0 9 * * *` for 9am daily or `*/30 * * * *` every 30 minutes | -          |
+| `auto_organize`        | boolean | Enable auto-organization on this schedule                                | true       |
+| `min_file_age_minutes` | integer | Minimum file age in minutes before organizing, so files still being written are left alone | -          |
+| `max_files_per_run`    | integer | Maximum files one pass over this directory may move                      | -          |
+| `response_format`      | string  | 'json' or 'markdown'                                                     | 'markdown' |
+
+Required parameters: `directory`, `schedule`.
+
+These rules follow the directory. Both the built-in daemon and a cron line running `file-organizer-watch once ... --source scheduled` apply them, and a pass you run by hand never does.
+
+### Output
+
+```typescript
+{
+  success: boolean;
+  action: "Added" | "Updated";
+  directory: string;
+  schedule: string;
+  rules: {
+    auto_organize: boolean;
+    min_file_age_minutes?: number;
+    max_files_per_run?: number;
+    catchup_mode?: "smart" | "always" | "never";
+  };
+}
+```
+
+### Example
+
+```typescript
+file_organizer_watch_directory({
+  directory: "/Users/john/Downloads",
+  schedule: "0 9 * * *",
+  min_file_age_minutes: 60,
+  max_files_per_run: 300,
+  response_format: "json",
+});
+```
+
+---
+
+## file_organizer_watch_status
+
+[⬆ Back to Top](#top)
+
+**Description:** Report every directory in the watch list with its cron schedule, the next time the schedule is due (computed in local time, the timezone node-cron actually fires in), and a liveness state per watch: never_run, ok, stale, or unknown, each with the evidence behind it (for example "last pass was 6 minutes ago, expected every 5 minutes"). Liveness is derived from the last recorded pass in history or scheduler state, not from a heartbeat, so it also reports where the record came from and which scheduler (daemon, cron, none) has been observed firing each watch. Read-only: reads config, history, and scheduler state, writes nothing and starts nothing.
+
+### Parameters
+
+| Parameter         | Type   | Description                          | Default    |
+| ----------------- | ------ | ------------------------------------ | ---------- |
+| `response_format` | string | 'json' or 'markdown'                 | 'markdown' |
+
+### Output
+
+```typescript
+{
+  count: number;
+  watches: Array<{
+    directory: string;
+    schedule: string;
+    schedule_valid: boolean;   // false when the stored cron expression no longer parses
+    rules: {
+      auto_organize: boolean;
+      min_file_age_minutes?: number;
+      max_files_per_run?: number;
+      catchup_mode?: "smart" | "always" | "never";
+    };
+    next_run: string | null;                 // ISO instant, computed in local time
+    minutes_until_next_run: number | null;
+    expected_interval_minutes: number | null;
+    liveness: "never_run" | "ok" | "stale" | "unknown";
+    liveness_evidence: string;               // e.g. "last pass was 6 minutes ago, expected every 5 minutes"
+    last_pass: {
+      timestamp: string | null;              // null when privacy_mode stripped it
+      status: "success" | "error" | "partial";
+      source: "manual" | "scheduled";
+      recorded_by: "history" | "scheduler-state";
+      error?: string;                        // only when privacy_mode allows it through
+    } | null;
+    scheduler: "daemon" | "cron" | "none";   // which mechanism has been observed firing this watch
+  }>;
+}
+```
+
+The four liveness states say different things on purpose. `never_run` means no pass has ever been recorded for the directory. `ok` means the last pass landed inside its own schedule interval. `stale` means it landed longer ago than the schedule allows, so the timer is not firing. `unknown` covers a schedule that no longer parses and a newest record that is an error: something was attempted and failed, which is neither healthy nor confirmed dead.
+
+### Example
+
+```typescript
+file_organizer_watch_status({ response_format: "json" });
 ```
 
 ---

@@ -147,6 +147,27 @@ describe("HistoryLoggerService.searchHistory", () => {
     expect(result.entries[0]!.operation).toBe("windows_run");
   });
 
+  it("matches a Windows absolute path used as the pattern itself", async () => {
+    // watch_status finds a directory's rows by passing that directory as
+    // path_glob. On Windows that is a path with backslashes, which minimatch
+    // reads as escapes, so the search returned nothing and every watch reported
+    // "never run". Absolute Windows patterns are separator-normalised for that
+    // reason; a relative pattern keeps its escapes, where a backslash is real.
+    await seed([
+      {
+        timestamp: "2026-01-02T10:00:00.000Z",
+        operation: "windows_run",
+        paths: ["C:\\Users\\test\\Downloads"],
+      },
+    ]);
+
+    const result = await service.searchHistory({
+      pathGlob: "C:\\Users\\test\\Downloads",
+    });
+
+    expect(result.entries.map((e) => e.operation)).toEqual(["windows_run"]);
+  });
+
   it("never matches an entry that recorded no path", async () => {
     await seed([
       { timestamp: "2026-01-02T10:00:00.000Z", operation: "no_paths" },
