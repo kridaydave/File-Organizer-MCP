@@ -6,6 +6,12 @@
  * The sweep itself is the shared pass in organize-pass.ts; this file owns the
  * timer, the catchup decision, and the per-directory tuning it supplies.
  * Includes smart catchup for missed schedules.
+ *
+ * The daemon is a convenience loop over that one pass (issue #52), not a second
+ * mechanism: a tick runs exactly what `file-organizer-watch once <directory>
+ * --apply --source scheduled` runs, nothing more. A thrown pass is logged and
+ * the schedule's next tick is the retry, which is what a crontab line gets.
+ * Cron, systemd, or launchd driving `once` is the primary scheduling path.
  */
 
 import cron, { type ScheduledTask } from "node-cron";
@@ -227,31 +233,17 @@ export class AutoOrganizeService {
         const task = cron.schedule(
           watch.schedule,
           async () => {
-            const maxRetries = 3;
-            let attempt = 0;
-            while (attempt < maxRetries) {
-              try {
-                // Only a thrown pass retries. A pass the in-flight guard
-                // refused is a tick that lost the directory to a manual
-                // trigger or a catchup, and retrying it would just re-check
-                // the same busy directory until the attempt budget ran out.
-                await this.runOrganization(watch);
-                break;
-              } catch (error) {
-                attempt++;
-                if (attempt >= maxRetries) {
-                  logger.error(
-                    `Cron job failed for ${watch.directory} after ${maxRetries} attempts: ${error}`,
-                  );
-                } else {
-                  logger.warn(
-                    `Cron job failed for ${watch.directory}, retrying (attempt ${attempt}/${maxRetries}): ${error}`,
-                  );
-                  await new Promise((resolve) =>
-                    setTimeout(resolve, 1000 * attempt),
-                  );
-                }
-              }
+            // One attempt per tick, exactly what a crontab line driving
+            // `once` gets (issue #52). A thrown pass is logged and the
+            // schedule's next tick is the retry; it also means an in-flight
+            // refusal or per-file errors, which never reach here, can't be
+            // confused with a failure worth burning attempts on.
+            try {
+              await this.runOrganization(watch);
+            } catch (error) {
+              logger.error(
+                `Scheduled pass failed for ${watch.directory}: ${error}`,
+              );
             }
           },
           { noOverlap: true },

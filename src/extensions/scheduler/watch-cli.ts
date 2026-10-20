@@ -14,6 +14,11 @@
  * report flush. Its exit code and `--json` output are the scripting contract
  * (ONCE_EXIT in once-cli.ts). See once-cli.ts and organize-pass.ts.
  *
+ * Cron, systemd, or launchd driving `once` is the primary scheduling path
+ * (issue #52). The default no-argument `run` below is the convenience loop:
+ * it runs that same pass on a built-in timer for machines that are always on
+ * and run no scheduler of their own.
+ *
  * Task state lives in the shared user config (watchList), so the daemon and
  * the CLI subcommands stay in sync without any in-memory coupling.
  */
