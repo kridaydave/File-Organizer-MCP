@@ -103,6 +103,17 @@
   hour, and a backlog larger than 300 files is worked through over several ticks.
   Set either rule explicitly on a watch to keep the old behavior; `0` disables
   the filter.
+- **Those limits follow the directory now, not the daemon.** A crontab line
+  running `file-organizer-watch once --apply --source scheduled` over a
+  registered directory swept it unfiltered, so the same folder was filtered by
+  the built-in daemon and not by an OS timer. The rule lives in the shared pass
+  and keys on `--source`: a scheduled pass over a watched directory picks up that
+  watch's limits, and a pass run by hand is still never filtered, because the
+  person running it can see the folder. **No behavior change for a manual pass or
+  for a directory that was never registered with `watch add`.**
+- **Cron and systemd are documented as the primary scheduling path.** The README
+  now leads with an OS timer driving `once`, and describes the built-in daemon as
+  the fallback for a machine with no timer, adding catchup on startup.
 
 - **Two ticks of the same watch could run on top of each other.** The daemon
   refused a second pass over a directory already being processed, which meant an

@@ -48,13 +48,10 @@ const storage = await isolateRollbackStorage("fom-once-");
 
 // Imported after the redirect above, so every default `RollbackService` these
 // modules build reads and writes this file's private directory.
-const { runOrganizePass } = await import(
-  "../../src/extensions/scheduler/organize-pass.js"
-);
+const { runOrganizePass } =
+  await import("../../src/extensions/scheduler/organize-pass.js");
 const { RollbackService } = await import("../../src/core/organize/rollback.js");
-const { handleUndoLastOperation } = await import(
-  "../../src/tools/rollback.js"
-);
+const { handleUndoLastOperation } = await import("../../src/tools/rollback.js");
 const {
   ONCE_EXIT,
   failureReport,
@@ -64,9 +61,8 @@ const {
   passExitCode,
 } = await import("../../src/extensions/scheduler/once-cli.js");
 const { CONFIG } = await import("../../src/core/config/defaults.js");
-const { HistoryLoggerService } = await import(
-  "../../src/services/history-logger.service.js"
-);
+const { HistoryLoggerService } =
+  await import("../../src/services/history-logger.service.js");
 const { first } = await import("../helpers/safe-index.js");
 
 const REPO_ROOT = path.resolve(
@@ -206,6 +202,113 @@ describe("single-pass organize (once)", () => {
 
       expect(result.moved).toBe(2);
     });
+
+    it("gives a scheduled pass the watched directory's own tuning", async () => {
+      await fs.writeFile(path.join(workDir, "old-a.txt"), "a");
+      await fs.writeFile(path.join(workDir, "old-b.txt"), "b");
+      await age(
+        [path.join(workDir, "old-a.txt"), path.join(workDir, "old-b.txt")],
+        120,
+      );
+
+      const watched: UserConfig = {
+        conflictStrategy: "rename",
+        watchList: [
+          {
+            directory: workDir,
+            schedule: "0 9 * * *",
+            rules: {
+              auto_organize: true,
+              min_file_age_minutes: 60,
+              max_files_per_run: 1,
+            },
+          },
+        ],
+      };
+
+      const result = await runOrganizePass(
+        { directory: workDir, dryRun: false, source: "scheduled" },
+        { config: watched, history },
+      );
+
+      // The two files from beforeEach are inside the watch's age window and the
+      // cap allows one old file, so exactly one move happens. Before the tuning
+      // lived in the pass, this call moved all four: only the daemon knew the
+      // watch's rules, so a crontab line sweeping this directory did not.
+      expect(result.moved).toBe(1);
+      expect(await topLevelFiles()).toContain("notes.txt");
+      expect(await topLevelFiles()).toContain("photo.jpg");
+    });
+
+    it("finds the watch when the pass and the watch spell the directory differently", async () => {
+      // The pass gets its directory back from validateStrictPath, which resolves
+      // it; a watch holds whatever the user registered. On macOS /var/folders
+      // resolves to /private/var/folders and on Windows an 8.3 short name
+      // resolves long, so a string comparison matched on Linux only. A symlink
+      // reproduces the same split on any POSIX box.
+      const linkDir = path.join(
+        path.dirname(workDir),
+        `${path.basename(workDir)}-link`,
+      );
+      await fs.symlink(workDir, linkDir, "dir");
+
+      await fs.writeFile(path.join(workDir, "old-a.txt"), "a");
+      await fs.writeFile(path.join(workDir, "old-b.txt"), "b");
+      await age(
+        [path.join(workDir, "old-a.txt"), path.join(workDir, "old-b.txt")],
+        120,
+      );
+
+      const watched: UserConfig = {
+        conflictStrategy: "rename",
+        watchList: [
+          {
+            // Registered through the link, swept through the resolved path.
+            directory: linkDir,
+            schedule: "0 9 * * *",
+            rules: {
+              auto_organize: true,
+              min_file_age_minutes: 60,
+              max_files_per_run: 1,
+            },
+          },
+        ],
+      };
+
+      const result = await runOrganizePass(
+        { directory: linkDir, dryRun: false, source: "scheduled" },
+        { config: watched, history },
+      );
+
+      expect(result.moved).toBe(1);
+    });
+
+    it("leaves a manual pass over the same watched directory unfiltered", async () => {
+      // The boundary the other test draws. `--source` is what says a timer
+      // started this, so a person running the same directory by hand still gets
+      // every file: they can see the folder and judge what is safe to move.
+      const watched: UserConfig = {
+        conflictStrategy: "rename",
+        watchList: [
+          {
+            directory: workDir,
+            schedule: "0 9 * * *",
+            rules: {
+              auto_organize: true,
+              min_file_age_minutes: 60,
+              max_files_per_run: 1,
+            },
+          },
+        ],
+      };
+
+      const result = await runOrganizePass(
+        { directory: workDir, dryRun: false },
+        { config: watched, history },
+      );
+
+      expect(result.moved).toBe(2);
+    });
   });
 
   it("moves files into category folders and appends one history entry", async () => {
@@ -311,8 +414,9 @@ describe("single-pass organize (once)", () => {
       manifestId as string,
     );
     expect(manifest.actions).toHaveLength(3);
-    expect(manifest.actions.map((a) => path.basename(a.originalPath)).sort())
-      .toEqual(["notes.txt", "photo.jpg", "song.mp3"]);
+    expect(
+      manifest.actions.map((a) => path.basename(a.originalPath)).sort(),
+    ).toEqual(["notes.txt", "photo.jpg", "song.mp3"]);
   });
 
   it("undo puts every file the pass moved back where it found it", async () => {
@@ -503,7 +607,9 @@ describe("once flag parsing and exit code", () => {
     });
     const parsed = parseOnceFlags(["/tmp/x", "--json"]);
     if ("error" in parsed) {
-      throw new Error(`Expected parsed flags, got usage error: ${parsed.error}`);
+      throw new Error(
+        `Expected parsed flags, got usage error: ${parsed.error}`,
+      );
     }
     expect(parsed.json).toBe(true);
   });
@@ -520,19 +626,21 @@ describe("once flag parsing and exit code", () => {
   it("labels the pass source and defaults to manual", () => {
     // --source consumes the next argument. A parser that did not know it took a
     // value would read "scheduled" as a second directory and refuse the line.
-    expect(parseOnceFlags(["/tmp/x", "--apply", "--source", "scheduled"])).toEqual(
-      {
-        directory: "/tmp/x",
-        apply: true,
-        recursive: false,
-        json: false,
-        help: false,
-        source: "scheduled",
-      },
-    );
+    expect(
+      parseOnceFlags(["/tmp/x", "--apply", "--source", "scheduled"]),
+    ).toEqual({
+      directory: "/tmp/x",
+      apply: true,
+      recursive: false,
+      json: false,
+      help: false,
+      source: "scheduled",
+    });
     const parsed = parseOnceFlags(["/tmp/x", "--source", "manual"]);
     if ("error" in parsed) {
-      throw new Error(`Expected parsed flags, got usage error: ${parsed.error}`);
+      throw new Error(
+        `Expected parsed flags, got usage error: ${parsed.error}`,
+      );
     }
     expect(parsed.source).toBe("manual");
   });
