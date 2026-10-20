@@ -138,9 +138,13 @@ describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
       ]);
 
       const result = await rollback.rollback(manifestId);
-      expect(result.failed).toBe(1);
+      // Already gone is skipped, not failed: the undo had nothing to move back,
+      // and a pass whose files were deleted by hand is not a broken undo. It is
+      // still not a success, so `success` stays 0 and nothing is invented.
+      expect(result.failed).toBe(0);
+      expect(result.skipped).toBe(1);
       expect(result.success).toBe(0);
-      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors).toEqual([]);
     });
   });
 

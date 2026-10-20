@@ -724,7 +724,12 @@ describe("selective undo by manifest id", () => {
           response_format: "json",
         });
         const jsonText = textOf(json);
-        expect(json.isError).toBe(true);
+        // A refusal is an answer, not an error: refused true with isError
+        // false, so an MCP client reports it instead of retrying forever.
+        expect(json.isError).toBe(false);
+        expect(
+          (JSON.parse(jsonText) as { refused?: boolean }).refused,
+        ).toBe(true);
         expect(jsonText).toContain("Refused to undo manifest");
         expect(jsonText).not.toContain(toolStorage);
 
@@ -732,7 +737,11 @@ describe("selective undo by manifest id", () => {
           manifest_id: olderId,
           response_format: "markdown",
         });
-        expect(markdown.isError).toBe(true);
+        expect(markdown.isError).toBe(false);
+        expect(
+          (markdown.structuredContent as { refused?: boolean } | undefined)
+            ?.refused,
+        ).toBe(true);
         expect(textOf(markdown)).toContain("Refused to undo manifest");
         expect(textOf(markdown)).not.toContain(toolStorage);
 
