@@ -1762,9 +1762,9 @@ work a pass did — but a number inside a total is not an alert.
 History is read from `operations.jsonl` plus the rotated `operations.N.jsonl`
 files beside it, so a window that crosses a rotation is still covered; the digest
 cannot tell which file a row came from and does not claim to.
-`config.historyLogging.keepRotatedFiles` is not honored yet — the number of
-rotated files the history service reads is fixed — and `limits` says so rather
-than implying the window is exact.
+`config.historyLogging.keepRotatedFiles` (default 5) sets how many rotated files
+the history service reads, and `limits` reports the rotation coverage rather than
+implying the window is exact.
 
 A window holding more passes than one read returns reports the shortfall in
 `limits` and counts only what it reached, so a digest over a very busy window
