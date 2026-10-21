@@ -205,6 +205,39 @@ describe('SchedulerStateService', () => {
       expect(onDisk.notifications?.[dirKey]).toBe('2026-02-08T09:05:00.000Z');
       expect(onDisk.directories[dirKey]?.lastRunTime).toBe('2026-02-08T09:10:00.000Z');
     });
+
+    it('does not push a stale notifications value back over a fresher one after a restart', async () => {
+      // A daemon that restarts loads a file already carrying a notifications
+      // key, so this.state retains the old throttle timestamp. A pass then
+      // writes a fresher one to disk, and the next setLastRunTime must keep the
+      // fresh value rather than overwriting it with the in-memory stale one.
+      await fs.writeFile(
+        stateFilePath,
+        JSON.stringify({
+          version: 1,
+          directories: {},
+          notifications: { '/test/dir': '2026-02-08T09:00:00.000Z' },
+        }),
+        'utf-8',
+      );
+      const restarted = new SchedulerStateService(stateFilePath);
+      await restarted.initialize();
+      const [dirKey] = restarted.getTrackedDirectories();
+
+      // runNotify writes a fresher throttle timestamp straight to disk.
+      const onDiskBefore = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as Record<string, unknown>;
+      const freshKey = dirKey ?? '/test/dir';
+      onDiskBefore.notifications = { [freshKey]: '2026-02-08T09:30:00.000Z' };
+      await fs.writeFile(stateFilePath, JSON.stringify(onDiskBefore, null, 2), 'utf-8');
+
+      await restarted.setLastRunTime('/test/dir', new Date('2026-02-08T09:35:00.000Z'), '0 9 * * *');
+
+      const onDisk = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as {
+        notifications?: Record<string, string>;
+      };
+      // The fresh 09:30 timestamp survives, not the stale 09:00 the restart loaded.
+      expect(onDisk.notifications?.[freshKey]).toBe('2026-02-08T09:30:00.000Z');
+    });
   });
 
   describe('getSchedule', () => {

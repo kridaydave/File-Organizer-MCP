@@ -192,12 +192,13 @@ export class SchedulerStateService {
 
       // This file is shared with a writer that does not go through this
       // service: runNotify drops a `notifications` throttle key straight onto
-      // disk after a pass, while this service's in-memory state was loaded
-      // before that write and only ever holds `version` and `directories`. A
-      // blind stringify would wipe the throttle key on the next setLastRunTime,
-      // so the save merges the current file back in first and keeps any key it
-      // does not own. `this.state` wins for `version`/`directories`, which stay
-      // the service's own, so clears and updates still apply.
+      // disk after a pass. A blind stringify would wipe it on the next
+      // setLastRunTime, so the save reads the current file and carries every
+      // key forward that this service does not own. Only the owned fields are
+      // spread from `this.state`: loadState keeps foreign keys in memory, so
+      // spreading the whole object could push a stale `notifications` value
+      // back over the fresher one runNotify just wrote. `this.state` still
+      // wins for `version`/`directories`, so clears and updates apply.
       let current: Record<string, unknown> = {};
       try {
         const raw = await fsPromises.readFile(this.stateFilePath, "utf-8");
@@ -213,7 +214,11 @@ export class SchedulerStateService {
       // Write state to file
       await fsPromises.writeFile(
         this.stateFilePath,
-        JSON.stringify({ ...current, ...this.state }, null, 2),
+        JSON.stringify(
+          { ...current, version: this.state.version, directories: this.state.directories },
+          null,
+          2,
+        ),
         "utf-8",
       );
       logger.debug("Scheduler state saved successfully");
