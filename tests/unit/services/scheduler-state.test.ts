@@ -178,6 +178,28 @@ describe('SchedulerStateService', () => {
       expect(result?.toISOString()).toBe('2026-02-08T10:00:00.000Z');
       expect(service.getSchedule('/test/dir')).toBe('0 10 * * *');
     });
+
+    it('preserves a notifications key written after the state was loaded', async () => {
+      await service.setLastRunTime('/test/dir', new Date('2026-02-08T09:00:00.000Z'), '0 9 * * *');
+
+      // A scheduled pass notifies right after organizing, and runNotify writes
+      // the throttle key straight to scheduler-state.json — after this service
+      // already loaded its state at startup, so the in-memory copy never sees it.
+      const onDiskBefore = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as Record<string, unknown>;
+      onDiskBefore.notifications = { '/test/dir': '2026-02-08T09:05:00.000Z' };
+      await fs.writeFile(stateFilePath, JSON.stringify(onDiskBefore, null, 2), 'utf-8');
+
+      // The same tick then records the run time, which saves state. That save
+      // must not drop the throttle key the notify write just put there.
+      await service.setLastRunTime('/test/dir', new Date('2026-02-08T09:10:00.000Z'), '0 9 * * *');
+
+      const onDisk = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as {
+        directories: Record<string, { lastRunTime: string }>;
+        notifications?: Record<string, string>;
+      };
+      expect(onDisk.notifications?.['/test/dir']).toBe('2026-02-08T09:05:00.000Z');
+      expect(onDisk.directories['/test/dir']?.lastRunTime).toBe('2026-02-08T09:10:00.000Z');
+    });
   });
 
   describe('getSchedule', () => {
