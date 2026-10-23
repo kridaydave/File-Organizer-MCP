@@ -19,7 +19,9 @@
  */
 
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,6 +33,7 @@ const BEGIN = '<!-- BEGIN GENERATED TOOL LIST -->';
 const END = '<!-- END GENERATED TOOL LIST -->';
 
 const checkOnly = process.argv.includes('--check');
+const staged = process.argv.includes('--staged');
 
 /** Pull the tool names out of the built registry, which is the real source. */
 async function loadToolNames() {
@@ -78,8 +81,19 @@ const names = await loadToolNames();
 const count = names.length;
 const body = renderList(names);
 
-const originalReadme = await fs.readFile(README, 'utf-8');
-const originalArch = await fs.readFile(ARCHITECTURE, 'utf-8');
+function readDoc(filePath, stagedName) {
+  if (staged) {
+    try {
+      return execSync(`git show :${stagedName}`, { encoding: 'utf8' });
+    } catch {
+      return '';
+    }
+  }
+  return fsSync.readFileSync(filePath, 'utf-8');
+}
+
+const originalReadme = readDoc(README, 'README.md');
+const originalArch = readDoc(ARCHITECTURE, 'ARCHITECTURE.md');
 
 let nextReadme = replaceBlock(originalReadme, body, 'README.md');
 nextReadme = replaceHeading(nextReadme, count, 'README.md');

@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+node scripts/check-conflict-markers.cjs
+if command -v bun >/dev/null 2>&1; then
+  npm run build --silent
+  node scripts/sync-tool-docs.mjs --check --staged
+else
+  echo "bun not available; skipping docs check"
+fi
