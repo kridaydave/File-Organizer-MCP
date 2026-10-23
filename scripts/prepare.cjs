@@ -30,6 +30,18 @@ function canBuild() {
 
 // Main logic
 function main() {
+  // Enable committed git hooks (only when this package is the repo root)
+  try {
+    if (fs.existsSync(path.join(__dirname, '..', '.git'))) {
+      execSync('git config core.hooksPath .githooks', {
+        stdio: 'ignore',
+        cwd: path.join(__dirname, '..'),
+      });
+    }
+  } catch {
+    // Not a git checkout or git unavailable; ignore.
+  }
+
   // Skip if dist already exists (pre-built package)
   if (distExists()) {
     console.error('✓ dist/ already exists, skipping build');
@@ -43,8 +55,6 @@ function main() {
     process.exit(0);
   }
 
-  // Try to build
-  console.error('🔨 Building project...');
   try {
     execSync('npm run build', { 
       stdio: 'inherit',
