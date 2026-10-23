@@ -290,6 +290,19 @@ describe('SchedulerStateService', () => {
 
       expect(newService.getTrackedDirectories()).toHaveLength(0);
     });
+
+    it('should not leave a stale notifications key behind on clear', async () => {
+      await service.setLastRunTime('/test/dir', new Date(), '0 9 * * *');
+      // Simulate a notify write landing on disk after load.
+      const onDisk = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as Record<string, unknown>;
+      onDisk.notifications = { '/test/dir': new Date().toISOString() };
+      await fs.writeFile(stateFilePath, JSON.stringify(onDisk, null, 2), 'utf-8');
+
+      await service.clearState();
+
+      const after = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as Record<string, unknown>;
+      expect(after.notifications).toBeUndefined();
+    });
   });
 
   describe('getTrackedDirectories', () => {

@@ -182,7 +182,7 @@ export class SchedulerStateService {
   /**
    * Save state to disk
    */
-  private async saveState(): Promise<void> {
+  private async saveState(merge: boolean = true): Promise<void> {
     try {
       // Ensure directory exists
       const dir = path.dirname(this.stateFilePath);
@@ -200,25 +200,28 @@ export class SchedulerStateService {
       // back over the fresher one runNotify just wrote. `this.state` still
       // wins for `version`/`directories`, so clears and updates apply.
       let current: Record<string, unknown> = {};
-      try {
-        const raw = await fsPromises.readFile(this.stateFilePath, "utf-8");
-        const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-          current = parsed as Record<string, unknown>;
+      if (merge) {
+        try {
+          const raw = await fsPromises.readFile(this.stateFilePath, "utf-8");
+          const parsed: unknown = JSON.parse(raw);
+          if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+            current = parsed as Record<string, unknown>;
+          }
+        } catch {
+          // Absent, empty, or corrupted on the way in: nothing to preserve, and
+          // the fresh write below replaces it either way.
         }
-      } catch {
-        // Absent, empty, or corrupted on the way in: nothing to preserve, and
-        // the fresh write below replaces it either way.
       }
 
-      // Write state to file
+      // Write state to file. When merge is false (clearState), write this.state
+      // alone so foreign keys like notifications are dropped too — a clear means
+      // a clear, not "keep everyone else's data".
+      const payload = merge
+        ? { ...current, version: this.state.version, directories: this.state.directories }
+        : this.state;
       await fsPromises.writeFile(
         this.stateFilePath,
-        JSON.stringify(
-          { ...current, version: this.state.version, directories: this.state.directories },
-          null,
-          2,
-        ),
+        JSON.stringify(payload, null, 2),
         "utf-8",
       );
       logger.debug("Scheduler state saved successfully");
@@ -381,7 +384,7 @@ export class SchedulerStateService {
     this.ensureInitialized();
 
     this.state = this.createEmptyState();
-    await this.saveState();
+    await this.saveState(false);
     logger.info("Scheduler state cleared");
   }
 
