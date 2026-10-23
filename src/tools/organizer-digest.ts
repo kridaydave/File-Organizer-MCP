@@ -246,7 +246,7 @@ function assembleDigest(input: {
     );
   }
   limits.push(
-    "History is read from operations.jsonl plus the rotated operations.N.jsonl files beside it, so a window that crosses a rotation is still covered. config.historyLogging.keepRotatedFiles is not honored yet — the number of rotated files read is fixed by the history service.",
+    "History is read from operations.jsonl plus the rotated operations.N.jsonl files beside it, so a window that crosses a rotation is still covered. The number of rotated files read follows config.historyLogging.keepRotatedFiles (default 5).",
   );
 
   return {
