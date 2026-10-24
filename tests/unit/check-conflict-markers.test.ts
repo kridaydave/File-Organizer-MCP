@@ -53,6 +53,22 @@ function runScript(repo: string): { code: number; stderr: string } {
   }
 }
 
+function runScriptFromSubdir(repo: string): { code: number; stderr: string } {
+  const sub = path.join(repo, "nested", "deep");
+  fs.mkdirSync(sub, { recursive: true });
+  try {
+    const stderr = execFileSync(process.execPath, [SCRIPT], {
+      cwd: sub,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return { code: 0, stderr: stderr ?? "" };
+  } catch (err) {
+    const e = err as { status?: number; stderr?: string };
+    return { code: e.status ?? 1, stderr: e.stderr ?? "" };
+  }
+}
+
 describe("check-conflict-markers pre-commit guard", () => {
   it("passes when the staged change is clean", async () => {
     const repo = makeRepo();
@@ -86,6 +102,19 @@ describe("check-conflict-markers pre-commit guard", () => {
       const r = runScript(repo);
       expect(r.code).not.toBe(0);
       expect(r.stderr).toMatch(/Em-dash/);
+    } finally {
+      await new Promise((r) => setTimeout(r, 100));
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks a staged conflict marker when run from a subdirectory", async () => {
+    const repo = makeRepo();
+    try {
+      stageFile(repo, "src/bad.ts", "<<<<<<< HEAD\nexport const x = 1;\n");
+      const r = runScriptFromSubdir(repo);
+      expect(r.code).not.toBe(0);
+      expect(r.stderr).toMatch(/Conflict marker/);
     } finally {
       await new Promise((r) => setTimeout(r, 100));
       fs.rmSync(repo, { recursive: true, force: true });

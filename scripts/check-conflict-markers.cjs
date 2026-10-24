@@ -1,10 +1,24 @@
 #!/usr/bin/env node
 // Block conflict markers and em-dashes from being introduced in staged changes.
+// Runs git against the repo root so the guard works no matter where it is
+// invoked from (pre-commit hooks run from the repo root, but callers elsewhere
+// should not get a silent pass or a wrong-file result).
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { execSync } = require('child_process');
+
+let repoRoot = '';
+try {
+  repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+} catch {
+  process.exit(0);
+}
 
 let diff = '';
 try {
-  diff = execSync('git diff --cached --unified=0 --no-color', { encoding: 'utf8' });
+  diff = execSync('git diff --cached --unified=0 --no-color', {
+    encoding: 'utf8',
+    cwd: repoRoot,
+  });
 } catch {
   process.exit(0);
 }
