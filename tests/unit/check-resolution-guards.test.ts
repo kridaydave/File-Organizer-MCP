@@ -540,4 +540,37 @@ describe("check-resolution-guards post-rewrite", () => {
       await cleanup(repo);
     }
   });
+
+  it("flags a tool the branch itself added when the rebase resolution dropped it", async () => {
+    // The mirror of the test above: a one-sided resolution that takes the
+    // upstream side drops gamma, which only the old tip ever had. Neither
+    // the fork point (which predates the branch's additions) nor the commit
+    // rebased onto can see it, so the old tip itself must be a base.
+    const repo = makeRepo(0);
+    try {
+      writeRegistry(repo, ["alpha", "beta"]);
+      writeTxt(repo, "f.txt", "base\n");
+      git(repo, ["add", "-A"]);
+      git(repo, ["commit", "-qm", "fork point"]);
+      git(repo, ["checkout", "-qb", "feature"]);
+      writeRegistry(repo, ["alpha", "beta", "gamma"]); // branch's own tool
+      git(repo, ["commit", "-qam", "tip"]);
+      const oldTip = git(repo, ["rev-parse", "HEAD"]).trim();
+      git(repo, ["checkout", "-q", "main"]);
+      writeRegistry(repo, ["alpha", "beta", "delta"]); // merged in between
+      git(repo, ["commit", "-qam", "add delta"]);
+      // The rewritten tip: resolution took the upstream side, keeping delta
+      // and dropping the branch's own gamma. f.txt stands in for the branch's
+      // non-registry changes, which a real rebase replays either way.
+      writeRegistry(repo, ["alpha", "beta", "delta"]);
+      writeTxt(repo, "f.txt", "replayed\n");
+      git(repo, ["commit", "-qam", "rewritten"]);
+      const newTip = git(repo, ["rev-parse", "HEAD"]).trim();
+      const r = runGuard(repo, "post-rewrite", `${oldTip} ${newTip}\n`);
+      expect(r.code).not.toBe(0);
+      expect(r.stderr).toMatch(/gamma/);
+    } finally {
+      await cleanup(repo);
+    }
+  });
 });
