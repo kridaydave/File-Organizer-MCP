@@ -1,0 +1,6 @@
+#!/bin/sh
+# Fires after `git merge` completes (clean merges and `git pull` merges).
+# A clean merge has no pre-commit hook to block it, so rule 3 (reg() survival)
+# and rule 4 (docs:check) run here as warnings: the merge is already committed
+# and this hook's exit code cannot un-land it.
+node scripts/check-resolution-guards.cjs post-merge
