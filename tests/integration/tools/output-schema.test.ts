@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll, afterAll, jest } from "@jest/globals";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import type { z } from "zod";
+import { z } from "zod";
 import type { ToolResponse } from "../../../src/mcp/types.js";
 
 // os.tmpdir() rather than a directory under the worktree, which this suite used
@@ -149,36 +149,90 @@ const COVERED_TOOLS = new Set<string>([
 ]);
 
 /**
- * The JSON schema each tool registers, by tool name.
+ * Each tool's Zod schema and the JSON schema object its definition registers.
  *
  * The safeParse assertions in this file run against the Zod schemas; the wire
- * contract is the `outputSchema` on the ToolDefinition, a separate object.
- * They only stay the same because schemas/output.ts derives each
- * `*OutputJsonSchema` from the Zod schema and each tool attaches that object
- * by import. The identity test below pins both links.
+ * contract is the `outputSchema` on the ToolDefinition. Those only stay the
+ * same because schemas/output.ts derives each `*OutputJsonSchema` from the
+ * Zod schema and each tool attaches that object by import. The identity test
+ * below pins the whole chain including the derivation, so neither a
+ * hand-written blob on a definition nor a hand-written const in output.ts can
+ * drift from the Zod schema silently.
  */
-const JSON_SCHEMA_BY_TOOL: Record<string, unknown> = {
-  file_organizer_analyze_duplicates: analyzeDuplicatesOutputJsonSchema,
-  file_organizer_batch_rename: batchRenameOutputJsonSchema,
-  file_organizer_delete_duplicates: deleteDuplicatesOutputJsonSchema,
-  file_organizer_disk_usage_by_category: diskUsageByCategoryOutputJsonSchema,
-  file_organizer_doctor: doctorOutputJsonSchema,
-  file_organizer_export_config: exportConfigOutputJsonSchema,
-  file_organizer_export_report: exportReportOutputJsonSchema,
-  file_organizer_find_broken_symlinks: findBrokenSymlinksOutputJsonSchema,
-  file_organizer_find_duplicate_files: findDuplicatesOutputJsonSchema,
-  file_organizer_find_empty_directories: findEmptyDirectoriesOutputJsonSchema,
-  file_organizer_organize_files: organizeFilesOutputJsonSchema,
-  file_organizer_preview_delete_duplicates:
+const SCHEMAS_BY_TOOL: Record<string, [z.ZodType, unknown]> = {
+  file_organizer_analyze_duplicates: [
+    analyzeDuplicatesOutputSchema,
+    analyzeDuplicatesOutputJsonSchema,
+  ],
+  file_organizer_batch_rename: [
+    batchRenameOutputSchema,
+    batchRenameOutputJsonSchema,
+  ],
+  file_organizer_delete_duplicates: [
+    deleteDuplicatesOutputSchema,
+    deleteDuplicatesOutputJsonSchema,
+  ],
+  file_organizer_disk_usage_by_category: [
+    diskUsageByCategoryOutputSchema,
+    diskUsageByCategoryOutputJsonSchema,
+  ],
+  file_organizer_doctor: [doctorOutputSchema, doctorOutputJsonSchema],
+  file_organizer_export_config: [
+    exportConfigOutputSchema,
+    exportConfigOutputJsonSchema,
+  ],
+  file_organizer_export_report: [
+    exportReportOutputSchema,
+    exportReportOutputJsonSchema,
+  ],
+  file_organizer_find_broken_symlinks: [
+    findBrokenSymlinksOutputSchema,
+    findBrokenSymlinksOutputJsonSchema,
+  ],
+  file_organizer_find_duplicate_files: [
+    findDuplicatesOutputSchema,
+    findDuplicatesOutputJsonSchema,
+  ],
+  file_organizer_find_empty_directories: [
+    findEmptyDirectoriesOutputSchema,
+    findEmptyDirectoriesOutputJsonSchema,
+  ],
+  file_organizer_organize_files: [
+    organizeFilesOutputSchema,
+    organizeFilesOutputJsonSchema,
+  ],
+  file_organizer_preview_delete_duplicates: [
+    previewDeleteDuplicatesOutputSchema,
     previewDeleteDuplicatesOutputJsonSchema,
-  file_organizer_preview_organization: previewOrganizationOutputJsonSchema,
-  file_organizer_quarantine_files: quarantineFilesOutputJsonSchema,
-  file_organizer_restore_quarantine: restoreQuarantineOutputJsonSchema,
-  file_organizer_sensitive_scan: sensitiveScanOutputJsonSchema,
-  file_organizer_undo_last_operation: undoOutputJsonSchema,
-  file_organizer_validate_organization_plan:
+  ],
+  file_organizer_preview_organization: [
+    previewOrganizationOutputSchema,
+    previewOrganizationOutputJsonSchema,
+  ],
+  file_organizer_quarantine_files: [
+    quarantineFilesOutputSchema,
+    quarantineFilesOutputJsonSchema,
+  ],
+  file_organizer_restore_quarantine: [
+    restoreQuarantineOutputSchema,
+    restoreQuarantineOutputJsonSchema,
+  ],
+  file_organizer_sensitive_scan: [
+    sensitiveScanOutputSchema,
+    sensitiveScanOutputJsonSchema,
+  ],
+  file_organizer_undo_last_operation: [
+    undoOutputSchema,
+    undoOutputJsonSchema,
+  ],
+  file_organizer_validate_organization_plan: [
+    validateOrganizationPlanOutputSchema,
     validateOrganizationPlanOutputJsonSchema,
-  file_organizer_verify_integrity: verifyIntegrityOutputJsonSchema,
+  ],
+  file_organizer_verify_integrity: [
+    verifyIntegrityOutputSchema,
+    verifyIntegrityOutputJsonSchema,
+  ],
 };
 
 describe("Tool outputSchema contracts", () => {
@@ -451,12 +505,14 @@ describe("Tool outputSchema contracts", () => {
   it("every outputSchema tool registers the JSON conversion of its own Zod schema", () => {
     // The map must track COVERED_TOOLS exactly, or the loop below silently
     // skips a tool the safeParse tests cover.
-    expect(Object.keys(JSON_SCHEMA_BY_TOOL).sort()).toEqual(
+    expect(Object.keys(SCHEMAS_BY_TOOL).sort()).toEqual(
       [...COVERED_TOOLS].sort(),
     );
 
     const violations: string[] = [];
-    for (const [name, jsonSchema] of Object.entries(JSON_SCHEMA_BY_TOOL)) {
+    for (const [name, [zodSchema, jsonSchema]] of Object.entries(
+      SCHEMAS_BY_TOOL,
+    )) {
       const tool = TOOLS.find((t) => t.name === name);
       if (tool === undefined) {
         violations.push(`${name}: registered in this file, not in the registry`);
@@ -464,6 +520,15 @@ describe("Tool outputSchema contracts", () => {
         violations.push(
           `${name}: def.outputSchema is not the exported JSON schema object`,
         );
+      } else {
+        // Same serialization both sides: the const must literally be the
+        // z.toJSONSchema conversion of its Zod schema, not a lookalike.
+        const derived = z.toJSONSchema(zodSchema);
+        if (JSON.stringify(jsonSchema) !== JSON.stringify(derived)) {
+          violations.push(
+            `${name}: exported JSON schema is not z.toJSONSchema of its Zod schema`,
+          );
+        }
       }
     }
     expect(violations).toEqual([]);
