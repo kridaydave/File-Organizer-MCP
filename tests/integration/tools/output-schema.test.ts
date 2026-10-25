@@ -11,6 +11,8 @@ import { describe, it, expect, beforeAll, afterAll, jest } from "@jest/globals";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import type { z } from "zod";
+import type { ToolResponse } from "../../../src/mcp/types.js";
 
 // os.tmpdir() rather than a directory under the worktree, which this suite used
 // to use: it writes and deletes, and it must not leave anything in the checkout.
@@ -91,6 +93,27 @@ const {
   sensitiveScanOutputSchema,
   findBrokenSymlinksOutputSchema,
 } = await import("../../../src/schemas/output.js");
+const {
+  findDuplicatesOutputJsonSchema,
+  analyzeDuplicatesOutputJsonSchema,
+  deleteDuplicatesOutputJsonSchema,
+  previewDeleteDuplicatesOutputJsonSchema,
+  organizeFilesOutputJsonSchema,
+  previewOrganizationOutputJsonSchema,
+  validateOrganizationPlanOutputJsonSchema,
+  undoOutputJsonSchema,
+  verifyIntegrityOutputJsonSchema,
+  doctorOutputJsonSchema,
+  findEmptyDirectoriesOutputJsonSchema,
+  findBrokenSymlinksOutputJsonSchema,
+  batchRenameOutputJsonSchema,
+  diskUsageByCategoryOutputJsonSchema,
+  quarantineFilesOutputJsonSchema,
+  restoreQuarantineOutputJsonSchema,
+  exportConfigOutputJsonSchema,
+  exportReportOutputJsonSchema,
+  sensitiveScanOutputJsonSchema,
+} = await import("../../../src/schemas/output.js");
 
 /**
  * Every tool this file drives, as its registered name.
@@ -124,6 +147,39 @@ const COVERED_TOOLS = new Set<string>([
   "file_organizer_validate_organization_plan",
   "file_organizer_verify_integrity",
 ]);
+
+/**
+ * The JSON schema each tool registers, by tool name.
+ *
+ * The safeParse assertions in this file run against the Zod schemas; the wire
+ * contract is the `outputSchema` on the ToolDefinition, a separate object.
+ * They only stay the same because schemas/output.ts derives each
+ * `*OutputJsonSchema` from the Zod schema and each tool attaches that object
+ * by import. The identity test below pins both links.
+ */
+const JSON_SCHEMA_BY_TOOL: Record<string, unknown> = {
+  file_organizer_analyze_duplicates: analyzeDuplicatesOutputJsonSchema,
+  file_organizer_batch_rename: batchRenameOutputJsonSchema,
+  file_organizer_delete_duplicates: deleteDuplicatesOutputJsonSchema,
+  file_organizer_disk_usage_by_category: diskUsageByCategoryOutputJsonSchema,
+  file_organizer_doctor: doctorOutputJsonSchema,
+  file_organizer_export_config: exportConfigOutputJsonSchema,
+  file_organizer_export_report: exportReportOutputJsonSchema,
+  file_organizer_find_broken_symlinks: findBrokenSymlinksOutputJsonSchema,
+  file_organizer_find_duplicate_files: findDuplicatesOutputJsonSchema,
+  file_organizer_find_empty_directories: findEmptyDirectoriesOutputJsonSchema,
+  file_organizer_organize_files: organizeFilesOutputJsonSchema,
+  file_organizer_preview_delete_duplicates:
+    previewDeleteDuplicatesOutputJsonSchema,
+  file_organizer_preview_organization: previewOrganizationOutputJsonSchema,
+  file_organizer_quarantine_files: quarantineFilesOutputJsonSchema,
+  file_organizer_restore_quarantine: restoreQuarantineOutputJsonSchema,
+  file_organizer_sensitive_scan: sensitiveScanOutputJsonSchema,
+  file_organizer_undo_last_operation: undoOutputJsonSchema,
+  file_organizer_validate_organization_plan:
+    validateOrganizationPlanOutputJsonSchema,
+  file_organizer_verify_integrity: verifyIntegrityOutputJsonSchema,
+};
 
 describe("Tool outputSchema contracts", () => {
   let testDir: string;
@@ -390,5 +446,226 @@ describe("Tool outputSchema contracts", () => {
     // The other direction too, so a stale entry cannot mask a removed tool.
     const stale = [...COVERED_TOOLS].filter((name) => !declaring.includes(name));
     expect(stale).toEqual([]);
+  });
+
+  it("every outputSchema tool registers the JSON conversion of its own Zod schema", () => {
+    // The map must track COVERED_TOOLS exactly, or the loop below silently
+    // skips a tool the safeParse tests cover.
+    expect(Object.keys(JSON_SCHEMA_BY_TOOL).sort()).toEqual(
+      [...COVERED_TOOLS].sort(),
+    );
+
+    const violations: string[] = [];
+    for (const [name, jsonSchema] of Object.entries(JSON_SCHEMA_BY_TOOL)) {
+      const tool = TOOLS.find((t) => t.name === name);
+      if (tool === undefined) {
+        violations.push(`${name}: registered in this file, not in the registry`);
+      } else if (tool.outputSchema !== jsonSchema) {
+        violations.push(
+          `${name}: def.outputSchema is not the exported JSON schema object`,
+        );
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  // The SDK rejects a result from an outputSchema-declaring tool that carries
+  // no structuredContent, so the markdown path must produce it too, and it
+  // must parse. That constraint is per tool; driving one tool (as the single
+  // markdown test above does) proves the plumbing, not the other eighteen.
+  describe("markdown responses still carry structuredContent", () => {
+    const stateless: Array<[string, () => Promise<ToolResponse>, z.ZodType]> = [
+      [
+        "find_duplicate_files",
+        () =>
+          handleFindDuplicateFiles({
+            directory: testDir,
+            response_format: "markdown",
+          }),
+        findDuplicatesOutputSchema,
+      ],
+      [
+        "analyze_duplicates",
+        () =>
+          handleAnalyzeDuplicates({
+            directory: testDir,
+            response_format: "markdown",
+          }),
+        analyzeDuplicatesOutputSchema,
+      ],
+      [
+        "preview_organization",
+        () =>
+          handlePreviewOrganization({
+            directory: testDir,
+            response_format: "markdown",
+          }),
+        previewOrganizationOutputSchema,
+      ],
+      [
+        "organize_files",
+        () =>
+          handleOrganizeFiles({
+            directory: testDir,
+            dry_run: true,
+            response_format: "markdown",
+          }),
+        organizeFilesOutputSchema,
+      ],
+      [
+        "doctor",
+        () => handleDoctor({ response_format: "markdown" }),
+        doctorOutputSchema,
+      ],
+      [
+        "find_empty_directories",
+        () =>
+          handleFindEmptyDirectories({
+            directory: testDir,
+            response_format: "markdown",
+          }),
+        findEmptyDirectoriesOutputSchema,
+      ],
+      [
+        "disk_usage_by_category",
+        () =>
+          handleDiskUsageByCategory({
+            directory: testDir,
+            response_format: "markdown",
+          }),
+        diskUsageByCategoryOutputSchema,
+      ],
+      [
+        "find_broken_symlinks",
+        () =>
+          handleFindBrokenSymlinks({
+            directory: testDir,
+            response_format: "markdown",
+          }),
+        findBrokenSymlinksOutputSchema,
+      ],
+      [
+        "sensitive_scan",
+        () =>
+          handleSensitiveScan({
+            directory: testDir,
+            response_format: "markdown",
+          }),
+        sensitiveScanOutputSchema,
+      ],
+      [
+        "export_report",
+        () =>
+          handleExportReport({
+            directory: testDir,
+            response_format: "markdown",
+          }),
+        exportReportOutputSchema,
+      ],
+      [
+        "export_config",
+        () => handleExportConfig({ response_format: "markdown" }),
+        exportConfigOutputSchema,
+      ],
+      [
+        "preview_delete_duplicates",
+        () =>
+          handlePreviewDeleteDuplicates({
+            directory: testDir,
+            response_format: "markdown",
+          }),
+        previewDeleteDuplicatesOutputSchema,
+      ],
+      [
+        "batch_rename",
+        () =>
+          handleBatchRename({
+            directory: testDir,
+            rules: [{ type: "find_replace", find: "notes", replace: "copy" }],
+            dry_run: true,
+            response_format: "markdown",
+          }),
+        batchRenameOutputSchema,
+      ],
+      [
+        "validate_organization_plan",
+        () =>
+          handleValidateOrganizationPlan({
+            directory: testDir,
+            response_format: "markdown",
+          }),
+        validateOrganizationPlanOutputSchema,
+      ],
+    ];
+
+    it.each(stateless)(
+      "%s answers markdown with parseable structuredContent",
+      async (_name, drive, schema) => {
+        const res = await drive();
+        expect(res.structuredContent).toBeDefined();
+        expect(schema.safeParse(res.structuredContent).success).toBe(true);
+      },
+    );
+
+    it("delete_duplicates, verify_integrity, and undo answer markdown with parseable structuredContent", async () => {
+      // The json pass above deleted copy.txt; recreate it so this chain has a
+      // duplicate to remove.
+      fs.writeFileSync(path.join(testDir, "copy.txt"), "duplicate content");
+
+      const deleted = await handleDeleteDuplicates({
+        files_to_delete: [path.join(testDir, "copy.txt")],
+        response_format: "markdown",
+      });
+      const parsed = deleteDuplicatesOutputSchema.safeParse(
+        deleted.structuredContent,
+      );
+      expect(parsed.success).toBe(true);
+      if (!parsed.success) return;
+
+      // While the delete's manifest is the newest one on disk, and before the
+      // undo consumes the state, mirror the json suite's proven ordering.
+      const integrity = await handleVerifyIntegrity({
+        response_format: "markdown",
+      });
+      expect(
+        verifyIntegrityOutputSchema.safeParse(integrity.structuredContent)
+          .success,
+      ).toBe(true);
+
+      const undo = await handleUndoLastOperation({
+        manifest_id: parsed.data.manifest_id,
+        response_format: "markdown",
+      });
+      expect(undoOutputSchema.safeParse(undo.structuredContent).success).toBe(
+        true,
+      );
+    });
+
+    it("quarantine_files and restore_quarantine answer markdown with parseable structuredContent", async () => {
+      const victim = path.join(testDir, "markdown-quarantine.txt");
+      fs.writeFileSync(victim, "quarantine me too");
+
+      const quarantined = await handleQuarantineFiles({
+        directory: testDir,
+        files: [victim],
+        dry_run: false,
+        response_format: "markdown",
+      });
+      const parsed = quarantineFilesOutputSchema.safeParse(
+        quarantined.structuredContent,
+      );
+      expect(parsed.success).toBe(true);
+      if (!parsed.success) return;
+
+      const restored = await handleRestoreQuarantine({
+        manifest_id: parsed.data.manifest_id,
+        dry_run: false,
+        response_format: "markdown",
+      });
+      expect(
+        restoreQuarantineOutputSchema.safeParse(restored.structuredContent)
+          .success,
+      ).toBe(true);
+    });
   });
 });
