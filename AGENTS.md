@@ -109,19 +109,12 @@ Repo facts a generic skill does not know, which is where they belong:
 
 Every tool PR edits the same few coordinates: an import block and one `reg()` line in `src/mcp/registry.ts`, the README tool count, and ARCHITECTURE.md. That is the documented contract (`ARCHITECTURE.md:112`), so parallel tool PRs collide on every merge. `main` also runs `strict: true` with 9 required checks, no merge queue, and no auto-merge, so every merge makes every other open branch stale and merges are serial. Plan for that instead of discovering it halfway through a batch.
 
-Most of the damage is not the conflict, it is the resolution. Four rules:
+Most of the damage is not the conflict, it is the resolution. Four rules, three of them enforced by the hooks in `.githooks/` (`scripts/check-conflict-markers.cjs`, `scripts/check-resolution-guards.cjs`):
 
-- **Never `git add -A` after resolving a conflict.** It stages every *other* conflicted file with its `<<<<<<<` still in it. `git add` only the paths you actually resolved.
-- **Check for markers before every commit that follows a resolution.** Two branches shipped committed `<<<<<<<`/`=======` and needed four cleanup commits on `main`:
-  ```bash
-  grep -rnE '^(<<<<<<<|=======|>>>>>>>)' --include='*.ts' --include='*.md' . && exit 1
-  ```
-- **Prove the tool set survived.** A rebase that resolves `registry.ts` by taking one side can silently delete tools that merged in between. This must be empty:
-  ```bash
-  comm -3 <(git show ORIG_HEAD:src/mcp/registry.ts | grep -oP '^\s+reg\(\K\w+' | sort) \
-          <(grep -oP '^\s+reg\(\K\w+' src/mcp/registry.ts | sort)
-  ```
-- **Run `npm run docs:check` after every resolution**, not once at the end. A squash merge truncated an ARCHITECTURE.md paragraph and the count test stayed green, because the count test does not read prose.
+- **Never `git add -A` after resolving a conflict.** It stages every *other* conflicted file with its `<<<<<<<` still in it. `git add` only the paths you actually resolved. This is the one rule no hook can check for you.
+- **No committed conflict markers.** Two branches shipped committed `<<<<<<<`/`=======` and needed four cleanup commits on `main`. The pre-commit hook blocks markers, and newly introduced em-dashes, on every commit.
+- **Prove the tool set survived.** A resolution that takes one side of `registry.ts` can silently delete tools that merged in between. The resolution guard blocks a merge, cherry-pick, or revert commit whose resolution deletes a `reg()` tool name; deletions block, additions never do. It compares against `ORIG_HEAD` for merges and `HEAD` for picks, because cherry-pick never sets `ORIG_HEAD`. `pre-commit` does not fire during `git rebase --continue`, so rebase resolutions are checked after the fact by `post-rewrite` and clean merges by `post-merge`, both warn-only because the rewrite has already landed. A deliberate tool removal commits with `--no-verify`.
+- **Run `npm run docs:check` after every resolution**, not once at the end. A squash merge truncated an ARCHITECTURE.md paragraph and the count test stayed green, because the count test does not read prose. The guard runs the full `docs:check` automatically when a resolution lands `README.md`, `ARCHITECTURE.md`, `API.md`, anything under `docs/`, or `registry.ts`.
 
 Before you push a branch that adds a tool, check what it will collide with while you still have the context. Finding out during a batch merge means reading a transcript instead of the code:
 
@@ -287,7 +280,7 @@ Before submitting changes:
 - [ ] If you added or removed a tool: `npm run docs:sync`, and commit the result. Never hand-edit the tool count or the tool list in README.md / ARCHITECTURE.md — they are generated from the registry. Your branch is expected to be **self-consistent**. CI enforces, it does not repair: a branch that is stale on arrival goes red on every matrix leg. Expect to re-run `docs:sync` when a sibling tool PR merges underneath you; that is the normal cost of a generated list, not a bug in your PR.
 - [ ] The behavior is proven on the real server via `verify-file-organizer`, not only by a unit test
 - [ ] If you touched `path.join`, `path.sep`, or `path.relative`: you checked the value cannot reach a test assertion or a documented format string. See rule 3.
-- [ ] If you resolved a conflict: no markers in the diff, and the `comm -3` on the `reg()` set is empty if `registry.ts` was involved.
+- [ ] If you resolved a conflict: the hooks have checked markers, `reg()` survival, and `docs:check` for you; your part is `git add` discipline, staging only the paths you actually resolved.
 
 `npm run verify:all` runs the first four plus docs, security, and the full
 suite. Reach for it when the change is broad or when you are about to hand the
@@ -377,14 +370,11 @@ capability does and how to drive it.
 
 Every rule above is a sentence in this file, so it holds exactly as well as the agent reading it. These gaps are why defects reached CI instead of your editor. None of them exist today:
 
-- No commit hooks. No husky, no lint-staged, no `pre-push`. The four conflict rules above are manual.
-- `npm run docs:check` runs in CI but only on ubuntu and only after `typecheck:tests`. `tests/unit/docs-tool-list.test.ts` still guards the count from inside the 6-leg matrix, so one stale count reports as 2 failing tests × 6 legs = 12 red checks rather than 1.
 - No portability profile. Nothing runs the suite with `os.tmpdir`, `fs.readdir` order, or `fs.realpath` perturbed, so the five leak classes in rule 3 can only be found on macOS or Windows.
 - `main` has `strict: true`, no ruleset, no merge queue, `allow_auto_merge: false`. Merges serialise by hand.
 - The tool list and count are generated, but the hand-written tool bullets in README.md above the `<!-- BEGIN GENERATED TOOL LIST -->` marker, and the tool references in ARCHITECTURE.md, are not. Those are the two hottest conflict sites left.
 - `src/mcp/registry.ts` is a hand-maintained flat array of `reg()` lines. `ARCHITECTURE.md:112` records that auto-discovery was deliberately rejected in favour of a visible one-line edit. Under parallel tool PRs, that decision is what generates the conflicts.
 - A tool that writes a report to a user-chosen path is a fresh place for all five rule 3 leak classes to surface, because a report is mostly file paths. `file_organizer_export_report` is the worked example: it returns real filesystem paths on purpose (success payloads carry paths by design), and its markdown prints a nested path that a `path.join` would have rendered with a backslash on Windows. What keeps it honest is the shape of the test, not the shape of the tool: `tests/integration/tools/export-report.test.ts` derives its sandbox base from `fs.realpathSync(os.tmpdir())` because `/var` is blocked while `/private/var` is not, sorts every `readdir` before comparing, canonicalises `beforeEach` once, and takes the config path from `getUserConfigPath()` instead of spelling out a platform directory.
-- Nothing checks that a tool's `outputSchema` matches what its handler returns. `export_report` declares `exportReportOutputJsonSchema` and also returns `structuredContent` on the markdown path, because the SDK rejects a result that carries a declared schema and no structured content. A test that runs `safeParse(handler(...).structuredContent)` against the declared schema is the only thing that catches a drift between the two, and `npm run typecheck:tests` will not, since both sides are typed.
 - Tool counts written in prose are not tied to the registry. This file and `verify-file-organizer` both said "24 tools" while the registry registered 36, and each was a true statement about something real: the verify skill's feature map really did name 24 tools, and someone wrote that coverage count as though it were the total. A generated count sitting next to a hand-written one is an invitation. The fix is to not write the count at all: run `node $C tools` for the live list and let `npm run docs:sync` own the numbers. A wrong count is cheap, but a coverage claim resting on one is not. The map now names every registered tool, and `tests/unit/docs-tool-list.test.ts` holds it there by reading the map's files rather than a count, so the next added tool cannot reopen the gap silently.
 
 If you touch one of these, close it rather than working around it.
