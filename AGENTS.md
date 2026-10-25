@@ -46,7 +46,7 @@ Use this language so we stay on the same page:
 
 2. **Killing by pattern.** Never `pkill -f node`, `pgrep | kill`, or `kill` a PID you matched by name/path. Your own agent has this worktree path in its argv and several dev servers may be running. Kill only a PID you spawned, or the port owner from `ss -H -ltnp` after checking `/proc/<pid>/cwd` is your worktree.
 
-3. **Baking in paths.** Never hardcode `process.cwd()`, `os.homedir()`, or absolute test paths into schemas, tools, or snapshots. Allowed roots are platform-aware and user-configurable via `src/core/config/loader.ts:109` (`loadCustomAllowedDirs`). Tests that bake `/home/kriday` will fail on Windows/macOS and leak intent. Derive from `CONFIG.paths` or inject via `ValidatePathOptions`.
+3. **Baking in paths.** Never hardcode `process.cwd()`, `os.homedir()`, or absolute test paths into schemas, tools, or snapshots. Allowed roots are platform-aware and user-configurable via `src/core/config/loader.ts:136` (`loadCustomAllowedDirs`). Tests that bake `/home/kriday` will fail on Windows/macOS and leak intent. Derive from `CONFIG.paths` or inject via `ValidatePathOptions`.
 
    CI runs 6 legs (3 OS × Node 20/22) and a green Linux run proves nothing about the other five. Five ways a platform value leaks into a contract or an assertion. Check each before you push:
 

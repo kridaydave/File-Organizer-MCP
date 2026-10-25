@@ -5,17 +5,20 @@
  *
  * This is the unit an OS timer (cron, launchd, systemd timer, Task Scheduler)
  * drives. It holds no watcher, no timer, and no open handle, so the process
- * ends on its own. The watch daemon keeps its own loop for now; when #52
- * rewrites that daemon as a thin loop, it calls runOrganizePass() per tick
- * instead of its private copy of the pass.
+ * ends on its own. The watch daemon calls this per tick rather than keeping a
+ * private copy of the pass, so a cron line and a daemon sweep are the same
+ * pass: same history row, same rollback manifest, and now the same tuning.
  */
 
+import fs from "fs/promises";
+import path from "path";
 import { FileScannerService } from "../../core/scan/scanner.js";
 import { OrganizerService } from "../../core/organize/organizer.js";
 import { CategorizerService } from "../../services/categorizer.service.js";
 import { validateStrictPath } from "../../services/path-validator.service.js";
+import { notifyIfMovedFiles } from "../../core/notify/notify-service.js";
 import type { ConflictStrategy } from "../../core/organize/organizer.js";
-import type { UserConfig } from "../../config.js";
+import type { UserConfig, WatchConfig } from "../../config.js";
 import type { HistoryLoggerService } from "../../services/history-logger.service.js";
 import type { OnceSource } from "./watch.schemas.js";
 import { logger } from "../../utils/logger.js";
@@ -42,8 +45,8 @@ export interface OrganizePassOptions {
   /**
    * Skip files younger than this many minutes. No default: a caller that omits
    * it gets every file, which is what a person running `--once` by hand wants.
-   * The watch daemon supplies its own default, because a folder swept on a
-   * timer should not touch a file that is still being written to.
+   * A scheduled pass that omits it gets the directory's timer tuning instead;
+   * see timerTuning().
    */
   minFileAgeMinutes?: number;
   /**
@@ -83,6 +86,82 @@ export interface OrganizePassResult {
   /** True when a history entry was appended. False on a dry run, and false
    * when the append failed after the files already moved. */
   historyLogged: boolean;
+  /**
+   * True when notify.command ran for this pass. Undefined on a dry run, which
+   * never notifies, and false when notify is unset, invalid, throttled, or
+   * failed. Present so a user can tell "nothing was notified" apart from
+   * "nothing moved" without reading a log.
+   */
+  notified?: boolean;
+}
+
+/**
+ * How long a file must have sat still before a timer sweep will touch it. A
+ * file still being written to is half a file, and organizing it moves the half.
+ */
+const DEFAULT_MIN_FILE_AGE_MINUTES = 60;
+
+/**
+ * Ceiling on one pass, so a folder that accumulated a thousand files overnight
+ * does not turn one tick into a thousand moves. The rest wait for the next one.
+ */
+const DEFAULT_MAX_FILES_PER_RUN = 300;
+
+/**
+ * What a timer sweep over one watched directory is allowed to touch.
+ *
+ * This used to live only in the daemon, which meant `file-organizer-watch once
+ * --apply --source scheduled` from a crontab ran the same directory unfiltered
+ * while the built-in daemon filtered it. One rule now, and both callers go
+ * through it: a watch's own tuning when it configured any, the timer defaults
+ * when it did not.
+ *
+ * A caller that sets `minFileAgeMinutes` or `maxFiles` explicitly still wins;
+ * the defaults are for whoever did not say.
+ */
+export function timerTuning(watch: WatchConfig): {
+  minFileAgeMinutes: number;
+  maxFiles: number;
+} {
+  return {
+    minFileAgeMinutes:
+      watch.rules.min_file_age_minutes ?? DEFAULT_MIN_FILE_AGE_MINUTES,
+    maxFiles: watch.rules.max_files_per_run ?? DEFAULT_MAX_FILES_PER_RUN,
+  };
+}
+
+/**
+ * The watch entry for a directory, whichever way each of them spelled it.
+ *
+ * The pass gets its directory back from `validateStrictPath`, which resolves
+ * it: on macOS a `/var/folders/...` temp path comes back as
+ * `/private/var/folders/...`, and on Windows a `RUNNER~1` short name comes back
+ * long. The watch list holds whatever the user registered. Comparing the two as
+ * strings therefore misses on both platforms while matching on Linux, which is
+ * how this shipped green locally and red on four CI legs.
+ *
+ * Resolve both sides before comparing and fold case on Windows, where the same
+ * directory has more than one valid spelling. A directory that no longer exists
+ * falls back to its resolved form, since dropping the tuning because a path
+ * could not be stat'ed would be the worse failure.
+ */
+async function findWatchFor(
+  validatedDirectory: string,
+  watchList: WatchConfig[] | undefined,
+): Promise<WatchConfig | undefined> {
+  if (!watchList?.length) return undefined;
+  const target = await canonicalDirectory(validatedDirectory);
+  for (const watch of watchList) {
+    if ((await canonicalDirectory(watch.directory)) === target) return watch;
+  }
+  return undefined;
+}
+
+async function canonicalDirectory(directory: string): Promise<string> {
+  const resolved = await fs
+    .realpath(directory)
+    .catch(() => path.resolve(directory));
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
 /**
@@ -111,20 +190,39 @@ export async function runOrganizePass(
     new CategorizerService(ctx.config.customRules ?? []),
   );
 
-  const scannedFiles = await scanner.getAllFiles(
-    validatedPath,
-    includeSubdirs,
-  );
+  const scannedFiles = await scanner.getAllFiles(validatedPath, includeSubdirs);
+
+  // A scheduled pass is a timer pass, so it picks up the directory's timer
+  // tuning even when an OS timer started it rather than our own daemon. The
+  // daemon already supplies this from the watch it holds, which is how legacy
+  // `autoOrganize` watches (never written to config.watchList) keep their
+  // behavior; the lookup here is what makes a crontab line do the same thing.
+  // A manual pass is untouched — a person who can see the folder decides what
+  // is safe to move, and `--source` stays honest as a history label for them.
+  let effectiveMinAge = minFileAgeMinutes;
+  let effectiveMaxFiles = maxFiles;
+  if (source === "scheduled") {
+    const watch = await findWatchFor(validatedPath, ctx.config.watchList);
+    if (watch) {
+      const tuning = timerTuning(watch);
+      effectiveMinAge ??= tuning.minFileAgeMinutes;
+      effectiveMaxFiles ??= tuning.maxFiles;
+    }
+  }
 
   // Age before size, so a directory full of fresh files spends the cap on
   // nothing rather than on files that are about to be skipped anyway.
   let files = scannedFiles;
-  if (minFileAgeMinutes !== undefined && minFileAgeMinutes > 0) {
-    files = filterByAge(files, minFileAgeMinutes);
+  if (effectiveMinAge !== undefined && effectiveMinAge > 0) {
+    files = filterByAge(files, effectiveMinAge);
   }
 
-  if (maxFiles !== undefined && maxFiles > 0 && files.length > maxFiles) {
-    files = files.slice(0, maxFiles);
+  if (
+    effectiveMaxFiles !== undefined &&
+    effectiveMaxFiles > 0 &&
+    files.length > effectiveMaxFiles
+  ) {
+    files = files.slice(0, effectiveMaxFiles);
   }
 
   const organizeResult = await organizer.organize(validatedPath, files, {
@@ -187,6 +285,16 @@ export async function runOrganizePass(
       }`,
     );
   }
+
+  // After the moves and outside the history try, which is the point: a failed
+  // history write is a pass failure, a failed notification is not. The files
+  // have already moved by the time this runs, so notifyIfMovedFiles() swallows
+  // everything and a notification can never change this pass's exit code.
+  result.notified = await notifyIfMovedFiles({
+    directory: validatedPath,
+    moved: result.moved,
+    config: ctx.config,
+  });
 
   return result;
 }

@@ -55,6 +55,30 @@
 
 ### Changed
 
+- **The watch tools are reachable from the MCP server again.**
+  `file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
+  `file_organizer_list_watches` and a new read-only
+  `file_organizer_watch_status` are registered once more, so an agent can see and
+  edit a schedule without shelling out to the CLI. They call the same handlers
+  the CLI does. Scheduled work still runs in its own process: an MCP server holds
+  no timer, so `file-organizer-watch once` under cron/systemd remains the way a
+  pass actually happens.
+
+- **`watch_status` reports a pass history, not a heartbeat.** For each watch it
+  gives the cron, the next run in local time, and one of four liveness states:
+  `never_run`, `ok`, `stale` (last pass older than the schedule interval), or
+  `unknown` (the schedule no longer parses, or the newest record is an error).
+  Liveness is inferred from the last recorded pass plus `scheduler-state.json`,
+  and the evidence is reported alongside it, so a quiet folder and a dead timer
+  are distinguishable. Nothing writes on a tick, which is why there is still no
+  pidfile.
+
+- **Next-run times are computed in local time.** `getNextRunTime` and
+  `getPreviousRunTime` used the `setUTC*` family while `node-cron` fires on wall
+  clock, so every expression that was not a midnight-UTC one came back off by the
+  machine's UTC offset. They are also wired to their first caller here, so the
+  offset would have been visible in `watch_status` rather than in a test.
+
 - **`tsc` is out of the build.** Type checking is `bun check` and emitting is
   `bun build`, which took `npm run build` from 6.9s and ~390MB of resident
   memory to 3.5s and ~123MB, and `typecheck:tests` from 7.6s and ~428MB to
@@ -103,6 +127,17 @@
   hour, and a backlog larger than 300 files is worked through over several ticks.
   Set either rule explicitly on a watch to keep the old behavior; `0` disables
   the filter.
+- **Those limits follow the directory now, not the daemon.** A crontab line
+  running `file-organizer-watch once --apply --source scheduled` over a
+  registered directory swept it unfiltered, so the same folder was filtered by
+  the built-in daemon and not by an OS timer. The rule lives in the shared pass
+  and keys on `--source`: a scheduled pass over a watched directory picks up that
+  watch's limits, and a pass run by hand is still never filtered, because the
+  person running it can see the folder. **No behavior change for a manual pass or
+  for a directory that was never registered with `watch add`.**
+- **Cron and systemd are documented as the primary scheduling path.** The README
+  now leads with an OS timer driving `once`, and describes the built-in daemon as
+  the fallback for a machine with no timer, adding catchup on startup.
 
 - **Two ticks of the same watch could run on top of each other.** The daemon
   refused a second pass over a directory already being processed, which meant an
@@ -260,6 +295,23 @@
   serialization guard itself is unchanged; only what gets reported about it is.
 
 ### Added
+
+- **`undo_last_operation` can walk back through a stack of passes.**
+  `cascade: true` with a `manifest_id` undoes that pass and every pass made after
+  it, newest first, instead of refusing on the first overlap. Each step is the
+  ordinary single-manifest undo, verified before it runs and deleted on success,
+  so by the time the older pass runs nothing newer exists to collide with. The
+  walk stops at the first step that fails: the passes below it are left untouched
+  rather than undone out of order, and the response says how far it got. Files a
+  manifest names that are already gone are skipped and counted, never failed.
+
+- **A refusal is an answer, not an error.** An undo blocked by a newer pass still
+  moves nothing, but it comes back with `refused: true` and `isError: false`, so
+  an MCP client does not log it and retry something that cannot succeed. A
+  genuine mid-batch failure still sets `isError`. The undo output carries
+  `skipped`, `passes` and `refused` alongside `success` and `failed`, and a
+  cascade writes one history row per pass it spent, so `view_history` keeps the
+  per-pass detail the summary collapses.
 
 - **`file_organizer_organize_by_date`** - sorts any file into `YYYY/MM` folders
   (`YYYY/MM/DD` and `YYYY` too). Photos take their folder from EXIF

@@ -1,13 +1,13 @@
 # File Organizer MCP Server
 
-Version 5.0.0 | MCP protocol 2026-07-28 (stateless) | Node.js 20+
+Version 5.0.0 | MCP protocol 2026-07-28, stateless | Node.js 20+
 
 [![npm version](https://img.shields.io/badge/npm-v5.0.0-blue.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/file-organizer-mcp.svg)](https://www.npmjs.com/package/file-organizer-mcp)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-835%20passing-success.svg)](tests/)
 
-A Model Context Protocol (MCP) server that organizes files. It gives a Claude-style assistant a single atomic operation to categorize, sort, dedupe, and rename files, instead of making it chain dozens of primitive `read`, `write`, and `rename` calls.
+A Model Context Protocol server that organizes files. It gives a Claude-style assistant a single atomic operation to categorize, sort, dedupe, and rename files, instead of making it chain dozens of primitive `read`, `write`, and `rename` calls.
 
 - [Why](#why)
 - [Quick start](#quick-start)
@@ -92,13 +92,13 @@ You can ask the assistant things like:
 - `file_organizer_scan_directory` - List a directory with detailed file info. `directory` is required; `include_subdirs` toggles recursion.
 - `file_organizer_read_file` - Read a file through the validated path pipeline. `path` is required; `encoding` is utf-8, base64, or binary.
 - `file_organizer_batch_rename` - Rename many files by pattern, regex, or numbering. Checks the whole plan for name collisions first: if a real run would put two files on one name, or overwrite a name a different file already holds, the batch is rejected before anything moves and the conflicts come back as structured data.
-- `file_organizer_undo_last_operation` - Reverse the most recent organization.
+- `file_organizer_undo_last_operation` - Reverse the most recent organization, or any pass you name by the manifest id it returned and `file_organizer_view_history` lists. Pass `cascade: true` to walk back through every pass made after that one, newest first. An older pass whose files a newer pass also touched is refused unless you ask for the cascade.
 - `file_organizer_quarantine_files` - Set flagged files aside for review, reversibly. See below.
 - `file_organizer_restore_quarantine` - Put quarantined files back where they came from.
 - `file_organizer_search_history` - Filter the history by path glob (`path_glob`), date range (`from`/`to`), or operation type. Every filter is optional and they combine, so a long history stays queryable instead of one flat list.
 - `file_organizer_export_report` - Write a health report for a directory in one call: totals, space per category, duplicate groups, largest files. Pass `output_path` to leave a file behind, or leave it out and nothing is written. See below.
 
-### Full tool list (37 tools)
+### Full tool list (42 tools)
 <!-- BEGIN GENERATED TOOL LIST -->
 - `file_organizer_analyze_duplicates`
 - `file_organizer_batch_read_files`
@@ -117,11 +117,13 @@ You can ask the assistant things like:
 - `file_organizer_get_categories`
 - `file_organizer_inspect_metadata`
 - `file_organizer_list_files`
+- `file_organizer_list_watches`
 - `file_organizer_organize_by_date`
 - `file_organizer_organize_by_project`
 - `file_organizer_organize_files`
 - `file_organizer_organize_music`
 - `file_organizer_organize_photos`
+- `file_organizer_organizer_digest`
 - `file_organizer_preview_delete_duplicates`
 - `file_organizer_preview_organization`
 - `file_organizer_quarantine_files`
@@ -134,9 +136,12 @@ You can ask the assistant things like:
 - `file_organizer_smart_suggest`
 - `file_organizer_system_organize`
 - `file_organizer_undo_last_operation`
+- `file_organizer_unwatch_directory`
 - `file_organizer_validate_organization_plan`
 - `file_organizer_verify_integrity`
 - `file_organizer_view_history`
+- `file_organizer_watch_directory`
+- `file_organizer_watch_status`
 <!-- END GENERATED TOOL LIST -->
 
 For parameters and return shapes, see [API.md](API.md).
@@ -157,10 +162,10 @@ file_organizer_quarantine_files({
 
 Reversibility is the whole point, so it comes back two ways:
 
-- `file_organizer_undo_last_operation` — the existing undo path. Quarantine
+- `file_organizer_undo_last_operation`. The existing undo path reverses a quarantine.
   writes the same rollback manifest the organizer writes, so undo is the same
   call you already use.
-- `file_organizer_restore_quarantine` — reads that manifest and puts every file
+- `file_organizer_restore_quarantine`. It reads that manifest and puts every file
   back at the exact path it was taken from. The restore writes a manifest of
   its own, so the restore is reversible too.
 
@@ -173,7 +178,7 @@ What to know before you move something:
 - **The quarantine directory is derived, not hardcoded.** By default it is
   `.file-organizer-quarantine` inside the `directory` you passed, which means it
   inherits that directory's access grant. Set `quarantine_dir` to move it
-  elsewhere — it goes through the same path validation as any other directory,
+  elsewhere. It goes through the same path validation as any other directory,
   so it cannot be pointed outside your allowed directories.
 - **Same names do not collide.** Two files called `notes.txt` become
   `notes.txt` and `notes_1.txt`. Neither overwrites the other, and a restore
@@ -181,14 +186,14 @@ What to know before you move something:
 - **One batch at a time.** Every listed file must live inside `directory`. If any
   path is outside it, nothing moves.
 - **Paths in the result are absolute**, like `organize_files`. They are
-  canonicalised, so they differ in spelling by platform — Windows expands 8.3
+  canonicalised, so they differ in spelling by platform. Windows expands 8.3
   short names (`RUNNER~1` becomes `runneradmin`) and macOS rewrites `/var` to
   `/private/var`. Compare basenames, or normalise both sides, instead of
   comparing raw path strings.
 
 ### Scheduled organization (separate process)
 
-The stdio MCP server stays stateless — cron-based watching runs as its own
+The stdio MCP server stays stateless. Cron-based watching runs as its own
 process:
 
 ```bash
@@ -199,6 +204,24 @@ file-organizer-watch                                # start the daemon
 
 Watches are stored in the shared user config, so `add`/`remove` work even
 while the daemon is running (restart it to pick up changes).
+
+**An OS timer is the primary path.** Point cron, a systemd timer, or Task
+Scheduler at `once` (below) and the machine's own scheduler owns the schedule:
+it survives reboots, it is visible in `crontab -l`, and it needs no process of
+ours running.
+
+```bash
+# crontab -e: daily at 10am, labelled scheduled so history can filter on it
+0 10 * * * file-organizer-watch once ~/Downloads --apply --source scheduled
+```
+
+The daemon is the fallback for a machine with no timer to point at. Both run the
+same pass over the same watch config, so a watched directory behaves the same
+way either way: same history row, same rollback manifest id, and the same
+per-directory limits from `watch add` (the age filter and the file cap). The
+daemon adds one thing a cron line does not have, which is catchup: on startup it
+reads `scheduler-state.json` and runs a schedule that was missed while the
+machine was off.
 
 #### Single pass from an OS timer
 
@@ -216,7 +239,7 @@ file-organizer-watch once . --apply --recursive --json
 
 | Code | Meaning                                                    |
 | ---- | ---------------------------------------------------------- |
-| `0`  | Pass finished, moved nothing — empty dir or dry run        |
+| `0`  | Pass finished, moved nothing: empty dir or dry run        |
 | `1`  | Failed: bad flags, refused path, per-file errors, or abort |
 | `2`  | Pass finished clean and moved at least one file            |
 
@@ -245,7 +268,7 @@ run succeeded or not.
 }
 ```
 
-Every key is always present, including on failure — a refused path reports the
+Every key is always present, including on failure. A refused path reports the
 same shape with `ok` false, `exitCode` 1, and the reason in `errors`. `ok` is
 true for exit codes 0 and 2. `historyLogged: false` on an applied pass means
 no history row was written for the moves: nothing names that pass in history
@@ -256,7 +279,7 @@ pass file by file. A pass whose manifest write failed has a row with no id:
 the pass is in history, but it cannot be undone by handle.
 
 On a pass that ran, `directory` is the **resolved** path, not the argument
-verbatim — the same convention every tool uses (`file_organizer_organize_files`
+verbatim. The same convention every tool uses (`file_organizer_organize_files`
 reports the directory its path validator approved). It is the path the gate
 checked and the pass scanned, so symlinks are already followed and `~` is
 expanded. The two forms differ on macOS (`/var/folders/...` →
@@ -264,12 +287,12 @@ expanded. The two forms differ on macOS (`/var/folders/...` →
 expands to the long name), so a caller must not string-compare it against what
 it passed in.
 
-The one exception is a failure that never reached a scan — a path the gate
+The one exception is a failure that never reached a scan. A path the gate
 refused, or a thrown error. There is no approved path to report, so `directory`
 carries the original argument exactly as typed. Key your reports on `exitCode`
 and `errors`, not on `directory`.
 
-When scripting a pipeline, keep the CLI's exit code — without `pipefail` the
+When scripting a pipeline, keep the CLI's exit code. Without `pipefail` the
 pipeline reports `jq`'s status, and a pass that moved files and then failed
 would look like success:
 
@@ -282,7 +305,7 @@ file-organizer-watch once ~/Downloads --apply --json \
   | jq -e '.ok and (.moved > 0)' >/dev/null && echo "organized"
 ```
 
-For a read-only sweep — scan plus `preview_organization` on a timer, no moves —
+For a read-only sweep, scan plus `preview_organization` on a timer, no moves.
 see [examples/scheduling](examples/scheduling/README.md). It has ready-to-copy
 recipes for three surfaces:
 
@@ -425,6 +448,11 @@ Register a directory with a cron schedule:
 
 The server organizes the folder on that schedule. Add more watches for other directories.
 
+These rules follow the directory, not the process that started the sweep: a cron
+line running `once --source scheduled` over this folder gets the same age filter
+and file cap the built-in daemon would apply. A pass you run by hand with no
+`--source` is never filtered.
+
 ---
 
 ## Security configuration
@@ -554,6 +582,49 @@ For a simple hourly, daily, or weekly schedule:
 ```
 
 For anything more granular, run `file-organizer-watch add <directory> "<cron>"`.
+
+### Notification after a pass
+
+A scheduled pass that actually moved files can run one command, so you find out
+without watching the log:
+
+```json
+{
+  "notify": {
+    "command": "notify-send \"Organized\" \"$FOM_NOTIFY_MOVED files\"",
+    "throttleMinutes": 60
+  }
+}
+```
+
+The command is tokenized into argv and spawned without a shell. Quotes group
+arguments and `|`, `>` and `&&` are literal; write `sh -c "..."` when you do
+want a pipeline. It gets `FOM_NOTIFY_DIRECTORY` and `FOM_NOTIFY_MOVED` in its
+environment.
+
+Nothing runs on a dry run, or on a pass that moved nothing. The throttle is per
+directory and the first notification for a directory always goes out, so a
+failed command or a full disk cannot silence you for good. A command that fails
+is logged and never fails the pass.
+
+### Rollback retention
+
+Rollback manifests expire. The default window is 30 days, and expired manifests
+are deleted the next time anything reads the rollback directory.
+
+```json
+{
+  "rollback": {
+    "retentionDays": 30
+  }
+}
+```
+
+`0` keeps every manifest forever. A negative value clamps to `0`, so it keeps
+everything rather than expiring everything. Only manifests this install wrote
+and can still verify are eligible; an unverified or corrupt file stays visible
+instead of being deleted. If a rollback is in flight when a read happens, the
+prune skips that pass and tries again later.
 
 ### Defenses
 

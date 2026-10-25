@@ -267,6 +267,13 @@ export const UndoLastOperationInputSchema = z
       .describe(
         "ID of the operation to undo. if omitted, undoes the last operation.",
       ),
+    cascade: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "With a manifest_id, also undo every operation newer than it, walking the stack newest-first down to and including the named one. Without it, undoing an operation that a newer one overlapped is refused.",
+      ),
   })
   .merge(CommonParamsSchema);
 

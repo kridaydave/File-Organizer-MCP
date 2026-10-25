@@ -399,6 +399,41 @@ describe('AutoOrganizeService', () => {
       }
     });
 
+    it('gives a thrown pass one attempt per tick, like a cron line gets', async () => {
+      const cron = (await import('node-cron')).default;
+      const { AutoOrganizeService } =
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+
+      const watches: WatchConfig[] = [
+        { directory: tempDir, schedule: '*/5 * * * *', rules: { auto_organize: true } },
+      ];
+      let calls = 0;
+      const service = new AutoOrganizeService(
+        () => ({ watchList: watches }),
+        undefined,
+        async (): Promise<OrganizePassResult> => {
+          calls++;
+          throw new Error('simulated throwing pass');
+        },
+      );
+
+      // The daemon has no retry of its own (issue #52): one invocation of the
+      // tick callback is one attempt. If the schedule's next tick is the
+      // retry, nothing in the tick body may burn attempts re-running the
+      // throw, and the swallow keeps the tick from becoming a daemon crash.
+      const scheduleSpy = jest.spyOn(cron, 'schedule');
+      try {
+        service.reloadTasks();
+        const tick = scheduleSpy.mock.calls[0]?.[1] as () => Promise<void>;
+
+        await expect(tick()).resolves.toBeUndefined();
+        expect(calls).toBe(1);
+      } finally {
+        scheduleSpy.mockRestore();
+        service.stop();
+      }
+    });
+
     it('should handle errors when catch-up fails for a directory without throwing', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');

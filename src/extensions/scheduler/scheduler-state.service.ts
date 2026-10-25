@@ -106,6 +106,21 @@ export class SchedulerStateService {
   }
 
   /**
+   * Re-read the state file from disk.
+   *
+   * Loading once is right for the daemon, which owns the file and saves after
+   * every pass. A read-only caller in another process is the opposite case: it
+   * would otherwise report whatever was on disk when its own server started,
+   * so a watch that has run since then still reads as `never_run`. Only
+   * read-only callers should call this. A writer would drop entries it has set
+   * in memory but not yet saved.
+   */
+  async reload(): Promise<void> {
+    this.initialized = false;
+    await this.initialize();
+  }
+
+  /**
    * Load state from disk.
    *
    * SECURITY JUSTIFICATION (SEC-016):
@@ -167,7 +182,7 @@ export class SchedulerStateService {
   /**
    * Save state to disk
    */
-  private async saveState(): Promise<void> {
+  private async saveState(merge: boolean = true): Promise<void> {
     try {
       // Ensure directory exists
       const dir = path.dirname(this.stateFilePath);
@@ -175,10 +190,38 @@ export class SchedulerStateService {
         await fsPromises.mkdir(dir, { recursive: true });
       }
 
-      // Write state to file
+      // This file is shared with a writer that does not go through this
+      // service: runNotify drops a `notifications` throttle key straight onto
+      // disk after a pass. A blind stringify would wipe it on the next
+      // setLastRunTime, so the save reads the current file and carries every
+      // key forward that this service does not own. Only the owned fields are
+      // spread from `this.state`: loadState keeps foreign keys in memory, so
+      // spreading the whole object could push a stale `notifications` value
+      // back over the fresher one runNotify just wrote. `this.state` still
+      // wins for `version`/`directories`, so clears and updates apply.
+      let current: Record<string, unknown> = {};
+      if (merge) {
+        try {
+          const raw = await fsPromises.readFile(this.stateFilePath, "utf-8");
+          const parsed: unknown = JSON.parse(raw);
+          if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+            current = parsed as Record<string, unknown>;
+          }
+        } catch {
+          // Absent, empty, or corrupted on the way in: nothing to preserve, and
+          // the fresh write below replaces it either way.
+        }
+      }
+
+      // Write state to file. When merge is false (clearState), write this.state
+      // alone so foreign keys like notifications are dropped too — a clear means
+      // a clear, not "keep everyone else's data".
+      const payload = merge
+        ? { ...current, version: this.state.version, directories: this.state.directories }
+        : this.state;
       await fsPromises.writeFile(
         this.stateFilePath,
-        JSON.stringify(this.state, null, 2),
+        JSON.stringify(payload, null, 2),
         "utf-8",
       );
       logger.debug("Scheduler state saved successfully");
@@ -341,7 +384,7 @@ export class SchedulerStateService {
     this.ensureInitialized();
 
     this.state = this.createEmptyState();
-    await this.saveState();
+    await this.saveState(false);
     logger.info("Scheduler state cleared");
   }
 

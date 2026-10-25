@@ -644,9 +644,21 @@ describe("an undo holds the directory for as long as it runs", () => {
     const second = new RollbackService(storageDir, 10);
 
     const running = first.rollback(manifestId);
-    // Let the first caller take the lock before the second one asks for it, so
-    // the two are a holder and a waiter rather than a coin toss.
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    // Wait until the first caller has actually taken the lock before starting
+    // the second one, so the two are a holder and a waiter rather than a coin
+    // toss. Polling the lock file (rather than sleeping a fixed number of ms)
+    // keeps this stable on slower schedulers such as macOS.
+    const lockPath = path.join(storageDir, "manifests.lock");
+    let acquired = false;
+    for (let attempt = 0; attempt < 2000 && !acquired; attempt++) {
+      const current = await fs.readFile(lockPath, "utf-8").catch(() => "");
+      if (current !== "") {
+        acquired = true;
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+    }
+    expect(acquired).toBe(true);
 
     const outcomes = await Promise.allSettled([
       running,

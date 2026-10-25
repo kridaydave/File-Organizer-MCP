@@ -178,6 +178,66 @@ describe('SchedulerStateService', () => {
       expect(result?.toISOString()).toBe('2026-02-08T10:00:00.000Z');
       expect(service.getSchedule('/test/dir')).toBe('0 10 * * *');
     });
+
+    it('preserves a notifications key written after the state was loaded', async () => {
+      await service.setLastRunTime('/test/dir', new Date('2026-02-08T09:00:00.000Z'), '0 9 * * *');
+      // The directories key is the normalized path, which is platform-dependent
+      // (backslashes and lowercase on Windows), so take it from the service
+      // rather than spelling it out.
+      const [dirKey] = service.getTrackedDirectories();
+      if (!dirKey) throw new Error('expected one tracked directory');
+
+      // A scheduled pass notifies right after organizing, and runNotify writes
+      // the throttle key straight to scheduler-state.json — after this service
+      // already loaded its state at startup, so the in-memory copy never sees it.
+      const onDiskBefore = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as Record<string, unknown>;
+      onDiskBefore.notifications = { [dirKey]: '2026-02-08T09:05:00.000Z' };
+      await fs.writeFile(stateFilePath, JSON.stringify(onDiskBefore, null, 2), 'utf-8');
+
+      // The same tick then records the run time, which saves state. That save
+      // must not drop the throttle key the notify write just put there.
+      await service.setLastRunTime('/test/dir', new Date('2026-02-08T09:10:00.000Z'), '0 9 * * *');
+
+      const onDisk = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as {
+        directories: Record<string, { lastRunTime: string }>;
+        notifications?: Record<string, string>;
+      };
+      expect(onDisk.notifications?.[dirKey]).toBe('2026-02-08T09:05:00.000Z');
+      expect(onDisk.directories[dirKey]?.lastRunTime).toBe('2026-02-08T09:10:00.000Z');
+    });
+
+    it('does not push a stale notifications value back over a fresher one after a restart', async () => {
+      // A daemon that restarts loads a file already carrying a notifications
+      // key, so this.state retains the old throttle timestamp. A pass then
+      // writes a fresher one to disk, and the next setLastRunTime must keep the
+      // fresh value rather than overwriting it with the in-memory stale one.
+      await fs.writeFile(
+        stateFilePath,
+        JSON.stringify({
+          version: 1,
+          directories: {},
+          notifications: { '/test/dir': '2026-02-08T09:00:00.000Z' },
+        }),
+        'utf-8',
+      );
+      const restarted = new SchedulerStateService(stateFilePath);
+      await restarted.initialize();
+      const [dirKey] = restarted.getTrackedDirectories();
+
+      // runNotify writes a fresher throttle timestamp straight to disk.
+      const onDiskBefore = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as Record<string, unknown>;
+      const freshKey = dirKey ?? '/test/dir';
+      onDiskBefore.notifications = { [freshKey]: '2026-02-08T09:30:00.000Z' };
+      await fs.writeFile(stateFilePath, JSON.stringify(onDiskBefore, null, 2), 'utf-8');
+
+      await restarted.setLastRunTime('/test/dir', new Date('2026-02-08T09:35:00.000Z'), '0 9 * * *');
+
+      const onDisk = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as {
+        notifications?: Record<string, string>;
+      };
+      // The fresh 09:30 timestamp survives, not the stale 09:00 the restart loaded.
+      expect(onDisk.notifications?.[freshKey]).toBe('2026-02-08T09:30:00.000Z');
+    });
   });
 
   describe('getSchedule', () => {
@@ -229,6 +289,19 @@ describe('SchedulerStateService', () => {
       await newService.initialize();
 
       expect(newService.getTrackedDirectories()).toHaveLength(0);
+    });
+
+    it('should not leave a stale notifications key behind on clear', async () => {
+      await service.setLastRunTime('/test/dir', new Date(), '0 9 * * *');
+      // Simulate a notify write landing on disk after load.
+      const onDisk = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as Record<string, unknown>;
+      onDisk.notifications = { '/test/dir': new Date().toISOString() };
+      await fs.writeFile(stateFilePath, JSON.stringify(onDisk, null, 2), 'utf-8');
+
+      await service.clearState();
+
+      const after = JSON.parse(await fs.readFile(stateFilePath, 'utf-8')) as Record<string, unknown>;
+      expect(after.notifications).toBeUndefined();
     });
   });
 

@@ -28,9 +28,11 @@
 - [file_organizer_get_categories](#file_organizer_get_categories)
 - [file_organizer_inspect_metadata](#file_organizer_inspect_metadata)
 - [file_organizer_list_files](#file_organizer_list_files)
+- [file_organizer_list_watches](#file_organizer_list_watches)
 - [file_organizer_organize_by_date](#file_organizer_organize_by_date)
 - [file_organizer_organize_by_project](#file_organizer_organize_by_project)
 - [file_organizer_organize_files](#file_organizer_organize_files)
+- [file_organizer_organizer_digest](#file_organizer_organizer_digest)
 - [file_organizer_organize_music](#file_organizer_organize_music)
 - [file_organizer_organize_photos](#file_organizer_organize_photos)
 - [file_organizer_preview_delete_duplicates](#file_organizer_preview_delete_duplicates)
@@ -45,17 +47,25 @@
 - [file_organizer_smart_suggest](#file_organizer_smart_suggest)
 - [file_organizer_system_organize](#file_organizer_system_organize)
 - [file_organizer_undo_last_operation](#file_organizer_undo_last_operation)
+- [file_organizer_unwatch_directory](#file_organizer_unwatch_directory)
 - [file_organizer_validate_organization_plan](#file_organizer_validate_organization_plan)
 - [file_organizer_verify_integrity](#file_organizer_verify_integrity)
 - [file_organizer_view_history](#file_organizer_view_history)
+- [file_organizer_watch_directory](#file_organizer_watch_directory)
+- [file_organizer_watch_status](#file_organizer_watch_status)
 
-> **Note:** The watch tools (`file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
-> `file_organizer_list_watches`) are no longer part of the MCP server. Scheduled organization
-> runs as a standalone process — see `file-organizer-watch` (`bin/file-organizer-watch.mjs`)
-> with `add` / `remove` / `list` / `once` / `run` subcommands. `once` runs a single
-> organization pass and exits, so an OS timer can be the scheduler. It takes `--json`
-> for one parseable object on stdout and exits 0 (nothing to do), 1 (failed), or 2
-> (moved files) — see README.md for the full contract. No MCP tool shape changed.
+> **Note:** Scheduled organization still runs as its own process, not inside the MCP
+> server. The watch tools are registered in the server again though:
+> `file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
+> `file_organizer_list_watches`, and the read-only `file_organizer_watch_status`.
+> A status has to come with a way to see and a way to act, so the set is complete.
+> They call the same handlers the CLI does, so either side can drive a schedule.
+> Running a pass needs a timer, and an MCP server holds none: `file-organizer-watch`
+> (`bin/file-organizer-watch.mjs`) has `add` / `remove` / `list` / `once` / `run`
+> subcommands, and `once` runs a single organization pass and exits so an OS timer
+> can be the scheduler. It takes `--json` for one parseable object on stdout and
+> exits 0 (nothing to do), 1 (failed), or 2 (moved files). See README.md for the
+> full contract.
 
 ---
 
@@ -556,6 +566,46 @@ file_organizer_list_files({
 
 ---
 
+## file_organizer_list_watches
+
+[⬆ Back to Top](#top)
+
+**Description:** List every directory currently in the watch list with its cron schedule and rules (auto_organize, min_file_age_minutes, max_files_per_run). Read-only: reads config.json and writes nothing. This is the raw watch list; file_organizer_watch_status adds next-run times and a liveness state for the same entries.
+
+### Parameters
+
+| Parameter         | Type   | Description          | Default    |
+| ----------------- | ------ | -------------------- | ---------- |
+| `response_format` | string | 'json' or 'markdown' | 'markdown' |
+
+### Output
+
+```typescript
+{
+  count: number;
+  watches: Array<{
+    directory: string;
+    schedule: string;
+    rules: {
+      auto_organize: boolean;
+      min_file_age_minutes?: number;
+      max_files_per_run?: number;
+      catchup_mode?: "smart" | "always" | "never";
+    };
+  }>;
+}
+```
+
+An empty list is `count: 0` with an empty `watches` array, not an error.
+
+### Example
+
+```typescript
+file_organizer_list_watches({ response_format: "json" });
+```
+
+---
+
 ## file_organizer_organize_files
 
 [⬆ Back to Top](#top)
@@ -1051,24 +1101,84 @@ file_organizer_system_organize({
 
 [⬆ Back to Top](#top)
 
-**Description:** Reverses file moves and renames from a previous organization task. Pass manifest_id to undo one specific operation by the id that organize_files returned and file_organizer_view_history lists; omit it to undo the most recent operation. Undoing an operation that is not the newest is refused outright when a newer operation already moved any of the same paths, because undoing out of order would collide with it partway through. Undo the newer one first, then retry. The manifest is deleted only when the whole undo succeeds, so a refused or failed undo can be tried again.
+**Description:** Reverses file moves and renames from a previous organization task. Pass manifest_id to undo one specific operation by the id that organize_files returned and file_organizer_view_history lists; omit it to undo the most recent operation. Undoing an operation that is not the newest is refused outright when a newer operation already moved any of the same paths, because undoing out of order would collide with it partway through. Undo the newer one first, then retry, or pass cascade: true to undo the named operation together with every newer one, walking the stack newest-first; each newer operation is undone and its manifest deleted before the one below it runs, so the refusal never fires. Files a manifest named that are already gone are skipped and counted, not failed. The manifest is deleted only when the whole undo succeeds, so a refused or failed undo can be tried again.
 
 ### Parameters
 
-| Parameter         | Type   | Description                                                              | Default    |
-| ----------------- | ------ | ------------------------------------------------------------------------ | ---------- |
-| `manifest_id`     | string | ID of the operation to undo, a UUID in 8-4-4-4-12 form. Omit to undo the most recent operation. | -          |
-| `response_format` | string | 'json' or 'markdown'                                                     | 'markdown' |
+| Parameter         | Type    | Description                                                              | Default    |
+| ----------------- | ------- | ------------------------------------------------------------------------ | ---------- |
+| `manifest_id`     | string  | ID of the operation to undo, a UUID in 8-4-4-4-12 form. Omit to undo the most recent operation. | -          |
+| `cascade`         | boolean | With manifest_id, also undo every operation newer than it, newest-first down to and including the named one. Without it, undoing an operation a newer one overlapped is refused. | false      |
+| `response_format` | string  | 'json' or 'markdown'                                                     | 'markdown' |
 
 A malformed `manifest_id` is a validation error rather than a lookup miss, so a typo is reported as a typo instead of arriving back as "manifest not found".
 
-A refusal returns `success: 0` and `failed: 1` with an error naming the conflicting manifest ids. No file is moved when that happens. The read-apply-delete cycle runs under a lock on the rollback directory, so two concurrent undoes of the same id cannot both succeed: one wins, and the other is told the manifest is already spent.
+A refusal is an answer rather than a failure: the response carries `refused: true` with `success: 0`, `failed: 1`, and an error naming the conflicting manifest ids, and `isError` stays false, so a client does not log and retry something that can never succeed. No file is moved. A genuine mid-batch failure still sets `isError`. The read-apply-delete cycle runs under a lock on the rollback directory, so two concurrent undoes of the same id cannot both succeed: one wins, and the other is told the manifest is already spent.
+
+With `cascade: true` the walk stops at the first step that fails or refuses: the passes below it are left untouched rather than undone out of order, and the response reports how far it got. Each pass the undo fully completes writes its own history row, so `file_organizer_view_history` keeps the per-pass detail that the response collapses into one summary.
+
+### Output
+
+```typescript
+{
+  success: number;   // files restored
+  failed: number;    // files that could not be restored
+  skipped: number;   // files the manifest named that were already gone
+  passes: number;    // manifests fully undone (always 1 without cascade)
+  refused: boolean;  // a newer operation blocked this undo; nothing moved
+  errors: string[];
+}
+```
 
 ### Example
 
 ```typescript
 file_organizer_undo_last_operation({
   manifest_id: "3f1c8b2e-9a4d-4e77-b0c5-1d2e3f4a5b6c",
+  response_format: "json",
+});
+```
+
+Undo that pass together with every pass made after it:
+
+```typescript
+file_organizer_undo_last_operation({
+  manifest_id: "3f1c8b2e-9a4d-4e77-b0c5-1d2e3f4a5b6c",
+  cascade: true,
+  response_format: "json",
+});
+```
+
+---
+
+## file_organizer_unwatch_directory
+
+[⬆ Back to Top](#top)
+
+**Description:** Remove a directory from the watch list. Writes config.json. Only the watch entry is removed; files the watch already organized are left where they are. Removing a directory that is not in the watch list is reported as an error and changes nothing. A running daemon keeps the watch until it reloads, so restart it for the removal to take effect there; scheduled `once` runs read the config themselves and pick the change up on the next tick.
+
+### Parameters
+
+| Parameter         | Type   | Description                                            | Default    |
+| ----------------- | ------ | ------------------------------------------------------ | ---------- |
+| `directory`       | string | Full path of the directory to remove from watch list   | -          |
+| `response_format` | string | 'json' or 'markdown'                                   | 'markdown' |
+
+### Output
+
+```typescript
+{
+  success: boolean;
+  action: "Removed";
+  directory: string;
+}
+```
+
+### Example
+
+```typescript
+file_organizer_unwatch_directory({
+  directory: "/Users/john/Downloads",
   response_format: "json",
 });
 ```
@@ -1213,6 +1323,112 @@ path, so `privacy_mode` leaves it as it is. Entries with no manifest report
 file_organizer_view_history({
   limit: 20,
 });
+```
+
+---
+
+## file_organizer_watch_directory
+
+[⬆ Back to Top](#top)
+
+**Description:** Add a directory to the watch list, or update the schedule of one already listed. Writes config.json. The schedule is a standard cron expression evaluated in the machine's local time (the timezone node-cron actually fires in, not UTC). A pass organized by this watch honors the watch's own rules: min_file_age_minutes skips files written moments ago, and max_files_per_run caps how many files one pass moves. Registering a directory that is already watched replaces its entry rather than adding a second one. This only edits the configuration; run the file-organizer-watch command to start the watcher that acts on it.
+
+### Parameters
+
+| Parameter              | Type    | Description                                                              | Default    |
+| ---------------------- | ------- | ------------------------------------------------------------------------ | ---------- |
+| `directory`            | string  | Full path to the directory to watch                                      | -          |
+| `schedule`             | string  | Cron expression, for example `0 9 * * *` for 9am daily or `*/30 * * * *` every 30 minutes | -          |
+| `auto_organize`        | boolean | Enable auto-organization on this schedule                                | true       |
+| `min_file_age_minutes` | integer | Minimum file age in minutes before organizing, so files still being written are left alone | -          |
+| `max_files_per_run`    | integer | Maximum files one pass over this directory may move                      | -          |
+| `response_format`      | string  | 'json' or 'markdown'                                                     | 'markdown' |
+
+Required parameters: `directory`, `schedule`.
+
+These rules follow the directory. Both the built-in daemon and a cron line running `file-organizer-watch once ... --source scheduled` apply them, and a pass you run by hand never does.
+
+### Output
+
+```typescript
+{
+  success: boolean;
+  action: "Added" | "Updated";
+  directory: string;
+  schedule: string;
+  rules: {
+    auto_organize: boolean;
+    min_file_age_minutes?: number;
+    max_files_per_run?: number;
+    catchup_mode?: "smart" | "always" | "never";
+  };
+}
+```
+
+### Example
+
+```typescript
+file_organizer_watch_directory({
+  directory: "/Users/john/Downloads",
+  schedule: "0 9 * * *",
+  min_file_age_minutes: 60,
+  max_files_per_run: 300,
+  response_format: "json",
+});
+```
+
+---
+
+## file_organizer_watch_status
+
+[⬆ Back to Top](#top)
+
+**Description:** Report every directory in the watch list with its cron schedule, the next time the schedule is due (computed in local time, the timezone node-cron actually fires in), and a liveness state per watch: never_run, ok, stale, or unknown, each with the evidence behind it (for example "last pass was 6 minutes ago, expected every 5 minutes"). Liveness is derived from the last recorded pass in history or scheduler state, not from a heartbeat, so it also reports where the record came from and which scheduler (daemon, cron, none) has been observed firing each watch. Read-only: reads config, history, and scheduler state, writes nothing and starts nothing.
+
+### Parameters
+
+| Parameter         | Type   | Description                          | Default    |
+| ----------------- | ------ | ------------------------------------ | ---------- |
+| `response_format` | string | 'json' or 'markdown'                 | 'markdown' |
+
+### Output
+
+```typescript
+{
+  count: number;
+  watches: Array<{
+    directory: string;
+    schedule: string;
+    schedule_valid: boolean;   // false when the stored cron expression no longer parses
+    rules: {
+      auto_organize: boolean;
+      min_file_age_minutes?: number;
+      max_files_per_run?: number;
+      catchup_mode?: "smart" | "always" | "never";
+    };
+    next_run: string | null;                 // ISO instant, computed in local time
+    minutes_until_next_run: number | null;
+    expected_interval_minutes: number | null;
+    liveness: "never_run" | "ok" | "stale" | "unknown";
+    liveness_evidence: string;               // e.g. "last pass was 6 minutes ago, expected every 5 minutes"
+    last_pass: {
+      timestamp: string | null;              // null when privacy_mode stripped it
+      status: "success" | "error" | "partial";
+      source: "manual" | "scheduled";
+      recorded_by: "history" | "scheduler-state";
+      error?: string;                        // only when privacy_mode allows it through
+    } | null;
+    scheduler: "daemon" | "cron" | "none";   // which mechanism has been observed firing this watch
+  }>;
+}
+```
+
+The four liveness states say different things on purpose. `never_run` means no pass has ever been recorded for the directory. `ok` means the last pass landed inside its own schedule interval. `stale` means it landed longer ago than the schedule allows, so the timer is not firing. `unknown` covers a schedule that no longer parses and a newest record that is an error: something was attempted and failed, which is neither healthy nor confirmed dead.
+
+### Example
+
+```typescript
+file_organizer_watch_status({ response_format: "json" });
 ```
 
 ---
@@ -1481,6 +1697,99 @@ file_organizer_export_report({
 
 // Or just look, and write nothing.
 file_organizer_export_report({ directory: "~/Documents" });
+```
+
+---
+
+## file_organizer_organizer_digest
+
+[⬆ Back to Top](#top)
+
+**Description:** Aggregate the recorded operation history into one digest over a
+time window. Nothing is scheduled and nothing fires on its own — you ask, you
+get a digest. The pull model, not push.
+
+**Read-only.** It reads the same `operations.jsonl` the history tools read and
+moves nothing. One tick over N watched directories is N rows in that file and N
+manifests on disk; the digest does the collapsing, not the writer.
+
+### Parameters
+
+| Parameter         | Type   | Description                                                          | Default    |
+| ----------------- | ------ | -------------------------------------------------------------------- | ---------- |
+| `last`            | string | Relative window ending now: `24h`, `7d`, `2w`. Ignored when `from`/`since` is given. | - |
+| `from`            | string | ISO date string - window start, inclusive. Alias of `since`.         | -          |
+| `since`           | string | ISO date string - window start, inclusive. Alias of `from`.          | -          |
+| `to`              | string | ISO date string - window end, inclusive. Alias of `until`. Defaults to now. | -    |
+| `until`           | string | ISO date string - window end, inclusive. Alias of `to`.              | -          |
+| `operation`       | string | Restrict the digest to one operation                                 | -          |
+| `status`          | string | 'success', 'error', or 'partial'                                     | -          |
+| `source`          | string | 'manual' or 'scheduled'                                              | -          |
+| `path_glob`       | string | Glob matched against the paths each entry recorded, as in `search_history` | -     |
+| `privacy_mode`    | string | 'full', 'redacted', or 'none'                                        | -          |
+| `response_format` | string | 'json' or 'markdown'                                                 | 'markdown' |
+
+The two window forms are not mixed: `last` is for "the last 24h" without the
+caller knowing the clock, `from`/`to` are for "everything between these two
+timestamps". An absolute start wins over `last`, so passing both does not
+silently drop one. A window that starts after it ends is a `ValidationError`
+rather than an empty digest, because an empty digest would read as "nothing
+happened".
+
+### Returned fields
+
+| Field              | Description                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| `generated_at`     | ISO timestamp of the digest                                                              |
+| `window`           | `start` (null when unbounded), `end`, `start_kind`, `relative`                            |
+| `filters`          | The `operation`, `status`, `source` and `path_glob` the digest was narrowed to            |
+| `totals`           | `passes`, `files_processed`, `files_skipped`, `duration_ms` (+ readable), `successful`, `partial`, `failed`, `passes_with_manifest` |
+| `by_directory`     | One row per directory a pass recorded, with the same counts                                |
+| `by_operation`     | One row per operation, with the same counts                                                |
+| `failures`         | Every partial or failed pass: timestamp, operation, status, source, `manifest_id`, `detail`, `error` |
+| `undo_manifests`   | The manifest id of each run covered, sorted. Pass one to `file_organizer_undo_last_operation` |
+| `limits`           | Prose about what the numbers do not cover                                                 |
+
+### Failures get their own section
+
+A `partial` pass is the thing most worth a human's attention, so it is named in
+`failures` with its `detail` and its undo handle rather than folded into a count
+inside `totals`. It is still counted in the totals — a digest does not hide the
+work a pass did — but a number inside a total is not an alert.
+
+### The `limits` field is part of the contract
+
+History is read from `operations.jsonl` plus the rotated `operations.N.jsonl`
+files beside it, so a window that crosses a rotation is still covered; the digest
+cannot tell which file a row came from and does not claim to.
+`config.historyLogging.keepRotatedFiles` (default 5) sets how many rotated files
+the history service reads, and `limits` reports the rotation coverage rather than
+implying the window is exact.
+
+A window holding more passes than one read returns reports the shortfall in
+`limits` and counts only what it reached, so a digest over a very busy window
+never reads as complete when it is not.
+
+### `privacy_mode` and the per-directory rows
+
+The directory label is the first path the entry recorded, which both writers set
+to the root they worked on. `redacted` therefore collapses every directory into
+one `[REDACTED]` row: the mode costs resolution, never a number. `none` drops
+the paths entirely, so those passes land in a `(no directory recorded)` row and
+are still counted.
+
+### Example
+
+```typescript
+// What did the scheduled passes do overnight?
+file_organizer_organizer_digest({ last: "24h", source: "scheduled" });
+
+// Or a fixed window, as JSON.
+file_organizer_organizer_digest({
+  from: "2026-01-01T00:00:00.000Z",
+  to: "2026-01-08T00:00:00.000Z",
+  response_format: "json",
+});
 ```
 
 ---

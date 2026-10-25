@@ -47,6 +47,16 @@ export const ViewHistoryInputSchema = z
 export type ViewHistoryInput = z.infer<typeof ViewHistoryInputSchema>;
 
 /**
+ * Schema for watch_status tool — read the watch list and report each watch's
+ * schedule, next run, and liveness. No inputs beyond the common params: the
+ * watch list itself is the subject, so there is nothing to filter on and no
+ * optional argument that would let a caller ask for a partial answer.
+ */
+export const WatchStatusInputSchema = z.object({}).merge(CommonParamsSchema);
+
+export type WatchStatusInput = z.infer<typeof WatchStatusInputSchema>;
+
+/**
  * Schema for path validation - ensures path is a valid non-empty string
  * without null bytes (security check)
  */
@@ -133,6 +143,88 @@ export const SearchHistoryInputSchema = z
   .merge(CommonParamsSchema);
 
 export type SearchHistoryInput = z.infer<typeof SearchHistoryInputSchema>;
+
+/**
+ * A point in time as an ISO date string. Parsed rather than pattern-matched,
+ * because the history stores full ISO timestamps and a caller who writes
+ * `2026-01-01` means the same instant either way; what matters is that a value
+ * the Date constructor cannot read is refused here instead of being compared
+ * as a string against timestamps and silently matching nothing.
+ */
+const IsoDateSchema = z
+  .string()
+  .refine((value) => Number.isFinite(Date.parse(value)), {
+    message: "must be an ISO date string, e.g. 2026-01-01 or 2026-01-01T09:00:00.000Z",
+  });
+
+/**
+ * A relative window spelled as `<number><unit>`: `30m`, `24h`, `7d`, `2w`.
+ *
+ * No bare number and no unit spelling other than these four, so `--last 24`
+ * fails loudly instead of being read as 24 of something the caller did not
+ * choose. `0h` is rejected for the same reason.
+ */
+const RelativeWindowSchema = z
+  .string()
+  .regex(/^[1-9]\d*[mhdw]$/, {
+    message:
+      "must be a number followed by a unit: m (minutes), h (hours), d (days) or w (weeks), e.g. '24h' or '7d'",
+  });
+
+/**
+ * Schema for organizer_digest tool — one aggregate over the recorded history.
+ *
+ * The window can be spelled relative or absolute and the two forms are not
+ * mixed: `last` covers "the last 24h" without the caller knowing the clock,
+ * `from`/`to` (and their `since`/`until` aliases, matching the two existing
+ * history tools) cover "everything between these two timestamps". An absolute
+ * start wins over `last`, so `last 7d, from: <date>` means the absolute date
+ * rather than an argument the caller can silently lose.
+ */
+export const OrganizerDigestInputSchema = z
+  .object({
+    last: RelativeWindowSchema.optional().describe(
+      "Relative window ending now, e.g. '24h', '7d', '2w'. Ignored when from/since is given.",
+    ),
+    from: IsoDateSchema.optional().describe(
+      "ISO date string - window start, inclusive. Alias of since.",
+    ),
+    since: IsoDateSchema.optional().describe(
+      "ISO date string - window start, inclusive. Alias of from.",
+    ),
+    to: IsoDateSchema.optional().describe(
+      "ISO date string - window end, inclusive. Alias of until. Defaults to now.",
+    ),
+    until: IsoDateSchema.optional().describe(
+      "ISO date string - window end, inclusive. Alias of to. Defaults to now.",
+    ),
+    operation: z
+      .string()
+      .optional()
+      .describe(
+        "Restrict the digest to one operation, e.g. 'file_organizer_organize_files'",
+      ),
+    status: z
+      .enum(["success", "error", "partial"])
+      .optional()
+      .describe("Restrict the digest to one pass status"),
+    source: z
+      .enum(["manual", "scheduled"])
+      .optional()
+      .describe("Restrict the digest to manual or scheduled passes"),
+    path_glob: PathSchema.optional().describe(
+      "Glob matched against the paths each entry recorded, same as search_history",
+    ),
+    privacy_mode: z
+      .enum(["full", "redacted", "none"])
+      .optional()
+      .describe(
+        "Privacy mode for output: full (all details), redacted (paths hidden), none (minimal info)",
+      ),
+  })
+  .merge(CommonParamsSchema);
+
+export type OrganizerDigestInput = z.infer<typeof OrganizerDigestInputSchema>;
 
 /**
  * Schema for security mode configuration
