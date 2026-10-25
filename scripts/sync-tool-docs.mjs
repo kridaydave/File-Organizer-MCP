@@ -5,9 +5,10 @@
  * Why this exists: three numbers used to be maintained by hand — the count in the
  * README heading, the tool list beneath it, and the count in ARCHITECTURE.md.
  * Every PR that added a tool had to remember all three, from a base that went
- * stale the moment a sibling tool PR merged. tests/unit/docs-tool-list.test.ts
- * caught the drift, so the failure was loud, but it was still a per-PR chore
- * that made unrelated tool PRs collide.
+ * stale the moment a sibling tool PR merged. A jest test caught the drift, so
+ * the failure was loud, but it was still a per-PR chore that made unrelated
+ * tool PRs collide, and it reported on all six CI lanes. The drift guard is
+ * `npm run docs:check` now, reported once by the `docs` CI job.
  *
  * The registry is the only source of truth here. Run this instead of editing
  * those three places by hand:

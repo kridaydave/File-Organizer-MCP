@@ -62,9 +62,6 @@ jobs:
       - name: Typecheck src and tests
         run: npm run typecheck:tests
 
-      - name: Check agent docs still point at real code
-        run: npm run docs:check
-
       - name: Run static security analysis
         run: npm run test:security:static
 
@@ -225,13 +222,47 @@ jobs:
             MIGRATION.md
             SECURITY.md
 
+  # docs:check used to run as the last step of `static`, after typecheck, so a
+  # typecheck failure masked it. The same drift was also guarded from inside the
+  # jest suite, where one stale count reported on all six matrix lanes. Here it
+  # runs unmasked, and the suite keeps only the guards docs:check cannot
+  # express (see tests/unit/docs-tool-list.test.ts).
+  docs:
+    name: Docs Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # docs:check:tool-count builds and reads the registry from dist/, and the
+      # build is `bun build --no-bundle`.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Citations resolve, and README/ARCHITECTURE tool facts match the registry.
+      - name: Check docs for drift
+        run: npm run docs:check
+
   # One required check, so adding or renaming a job never needs a branch
   # protection edit. `always()` keeps it reporting when a job below failed or
   # was cancelled instead of vanishing, which would block forever.
   check:
     name: Check
     if: ${{ always() }}
-    needs: [static, test, security, build, lint-docs]
+    needs: [static, test, security, build, lint-docs, docs]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
