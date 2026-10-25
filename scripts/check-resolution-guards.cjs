@@ -212,22 +212,23 @@ function postRewrite() {
   let failed = false;
   // Two bases, because a rebase can drop a reg() tool from either side:
   //  - HEAD~<rewritten count> is the commit that was rebased ONTO. Tools that
-  //    "merged in between" live here, and neither the old tip nor the fork
-  //    point ever had them, so only this base sees a one-sided resolution
+  //    "merged in between" live here, and neither the old tip nor any of its
+  //    ancestors ever had them, so only this base sees a one-sided resolution
   //    that dropped the upstream side.
-  //  - merge-base(old tip, HEAD) is the fork point, which sees tools the
-  //    branch itself had before the rewrite.
+  //  - the old tip itself. A one-sided resolution can also drop a tool the
+  //    branch added before the rewrite, which neither the commit rebased onto
+  //    nor the fork point ever had. The old tip subsumes the fork point (an
+  //    ancestor of it), so it covers both in one base.
   const onto = gitOk(['rev-parse', '--verify', '--quiet', `HEAD~${pairs.length}`]);
-  const forkPoint = gitOk(['merge-base', oldTip, 'HEAD']);
+  const bases = [onto?.trim(), oldTip.trim()].filter(Boolean);
   const dropped = new Set();
-  for (const b of [onto, forkPoint]) {
-    if (b === null) continue;
-    for (const n of deletedTools(b.trim(), 'HEAD')) dropped.add(n);
+  for (const b of bases) {
+    for (const n of deletedTools(b, 'HEAD')) dropped.add(n);
   }
   if (dropped.size > 0) {
     reportDeletedTools(
       'rebase',
-      'the pre-rewrite history (fork point and/or the commit rebased onto)',
+      'the pre-rewrite history (the old tip and/or the commit rebased onto)',
       [...dropped],
       ALREADY_LANDED,
     );
