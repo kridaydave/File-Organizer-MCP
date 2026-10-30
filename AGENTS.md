@@ -107,7 +107,7 @@ Repo facts a generic skill does not know, which is where they belong:
 
 ## Merging and conflicts
 
-Every tool PR edits the same few coordinates: an import block and one `reg()` line in `src/mcp/registry.ts`, the README tool count, and ARCHITECTURE.md. That is the documented contract (`ARCHITECTURE.md:112`), so parallel tool PRs collide on every merge. `main` also runs `strict: true` with 9 required checks, no merge queue, and no auto-merge, so every merge makes every other open branch stale and merges are serial. Plan for that instead of discovering it halfway through a batch.
+Every tool PR edits the same few coordinates: an import block and one `reg()` line in `src/mcp/registry.ts`, the README tool count, and ARCHITECTURE.md. That is the documented contract (`ARCHITECTURE.md:112`), so parallel tool PRs collide on every merge. `main` also runs `strict: true` with a single aggregate required check ("Check", so adding or renaming jobs never needs a branch-protection edit), no merge queue, and no auto-merge, so every merge makes every other open branch stale and merges are serial. Plan for that instead of discovering it halfway through a batch.
 
 Most of the damage is not the conflict, it is the resolution. Four rules:
 
@@ -377,7 +377,7 @@ capability does and how to drive it.
 
 Every rule above is a sentence in this file, so it holds exactly as well as the agent reading it. These gaps are why defects reached CI instead of your editor. None of them exist today:
 
-- No commit hooks. No husky, no lint-staged, no `pre-push`. The four conflict rules above are manual.
+- No pre-push-era conflict-rule coverage beyond hooks: a pre-commit hook (conflict markers on staged lines, docs-sync on staged state) and a pre-push hook (tree-wide conflict markers, duplicate `reg()` names, `docs:check`) run locally, but nothing on the remote stops a `--no-verify` push. The four conflict rules above are otherwise manual.
 - `npm run docs:check` runs in CI but only on ubuntu and only after `typecheck:tests`. `tests/unit/docs-tool-list.test.ts` still guards the count from inside the 6-leg matrix, so one stale count reports as 2 failing tests × 6 legs = 12 red checks rather than 1.
 - No portability profile. Nothing runs the suite with `os.tmpdir`, `fs.readdir` order, or `fs.realpath` perturbed, so the five leak classes in rule 3 can only be found on macOS or Windows.
 - `main` has `strict: true`, no ruleset, no merge queue, `allow_auto_merge: false`. Merges serialise by hand.

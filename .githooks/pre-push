@@ -1,0 +1,27 @@
+#!/bin/sh
+# The four conflict rules from AGENTS.md ("Merging and conflicts") that the
+# pre-commit hook cannot cover: they inspect the whole tree and the registry
+# set, not just staged lines. Runs before a push so a bad resolution cannot
+# reach CI.
+set -e
+
+# Rule 2: no conflict markers committed anywhere the scanner reads.
+if grep -rnE '^(<<<<<<<|>>>>>>>|=======$)' --include='*.ts' --include='*.md' . \
+    --exclude-dir=node_modules --exclude-dir=dist; then
+  echo "pre-push: conflict markers found in tree" >&2
+  exit 1
+fi
+
+# Rule 3: a resolution that duplicated a tool line instead of merging both.
+if grep -oP '^\s+reg\(\K\w+' src/mcp/registry.ts | sort | uniq -d | grep .; then
+  echo "pre-push: duplicate reg() entries in src/mcp/registry.ts" >&2
+  exit 1
+fi
+
+# Rule 4: citations and tool counts still hold for the tree being pushed.
+# docs:check rebuilds dist itself when it needs the registry.
+if command -v bun >/dev/null 2>&1; then
+  npm run --silent docs:check
+else
+  echo "bun not available; skipping docs:check"
+fi
