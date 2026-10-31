@@ -16,7 +16,10 @@ written. Do not point this at a real home directory to "just check quickly".
 
 ## The helper
 
-`scripts/control-file-organizer.mjs` is the harness. Run it from the repo root.
+`scripts/control-file-organizer.mjs` is a thin forwarder: the harness itself
+lives in the repo it verifies, at `scripts/verify/` (`harness.mjs` for the
+sandbox + stdio machinery, `cli.mjs` for the subcommands below), where CI runs
+it as `npm run verify:scenarios`. Run the forwarder from the repo root.
 Every subcommand prints JSON on stdout and keeps stdout free of diagnostics.
 
 ```bash
@@ -29,6 +32,7 @@ node $C schema organize_files   # input schema plus honest annotations
 node $C sandbox --fresh # recreate fixtures, print the paths
 node $C call <tool> --arg k=v --json
 node $C history         # operations.jsonl written by this sandbox
+node $C scenarios       # run the declarative scenarios (scan->organize->undo, ...)
 node $C cleanup         # remove the sandbox
 ```
 

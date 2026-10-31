@@ -68,7 +68,7 @@ The most common defect here is a change that works for one tool and is missing e
 - **Security.** Anything crossing into `fs` is typed via `PathValidatorService` and Zod. Change the validation and scanner, organizer, reader, and history logger all follow.
 - **Reverse states.** If you added a way in, add the way out and the way to see it. Organize needs preview + undo + history. Watch needs unwatch + list.
 - **Contracts.** Anything crossing the wire is a `ToolDefinition` in `src/mcp/types.ts:16`. `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) must be honest or the client will make bad decisions.
-- **Two schemas per tool, only one checked.** Every tool definition carries a hand-written JSON `inputSchema` next to its Zod schema in `src/schemas/`. The Zod schema is what the handler parses with; the JSON one is the contract the MCP client actually reads off the wire. They are separate sources of truth for the same field set and nothing keeps them in step: the type checker sees the Zod type, the build never looks at the JSON, and `docs:check` reads neither. Add a field to one and the server either rejects a call the client was told it could make, or the client cannot see a field the server honours. Editing only Zod is the more tempting mistake, because it is the one the compiler accepts. The guard today is the assertion in `tests/integration/tools/preview-since-last-run.test.ts` comparing `Object.keys(def.inputSchema.properties)` against `Object.keys(Schema.shape)`, which is one tool, not a rule.
+- **Two schemas per tool, both checked.** Every tool definition carries a hand-written JSON `inputSchema` next to its Zod schema in `src/schemas/`. The Zod schema is what the handler parses with; the JSON one is the contract the MCP client actually reads off the wire. They are separate sources of truth for the same field set: the type checker sees the Zod type, the build never looks at the JSON, and `docs:check` reads neither. Add a field to one and the server either rejects a call the client was told it could make, or the client cannot see a field the server honours. Editing only Zod is the more tempting mistake, because it is the one the compiler accepts. `tests/unit/schemas/input-schema-parity.test.ts` now holds the two sides together for every registered tool: its SCHEMAS ledger maps each wire name to the Zod schema, fails when a registered tool is missing from the ledger, and compares the top-level field sets both ways. When you add a tool, add its ledger line in the same commit.
 - **Docs.** Behavior a user notices → `README.md`; structural change → `ARCHITECTURE.md`; tool shape → `API.md` + `config.schema.json`; new vocabulary → `docs/FRAMEWORK.md`. `API.md` is not generated in practice: `scripts/generate-docs.js` still reports version 3.0.0 and reformats every table, so running `npm run docs:generate` produces a large unrelated diff and drops the hand-written notes. Hand-edit the tool's parameter table instead.
 
 ## Skills
@@ -219,6 +219,7 @@ File-Organizer-MCP/
 ├── docs/                      # FRAMEWORK.md, implementation notes, docs/skills/
 ├── examples/                  # config.strict.json, config.sandboxed.json, mcp-clients/
 ├── scripts/                   # build.mjs (entrypoints → bun build), postinstall, prepare, benchmarks, security-gates, check-doc-citations
+│   └── verify/                # the verify harness (harness.mjs, cli.mjs) + scenarios/ + coverage.json
 ├── tests/helpers/             # safe-index: throws on absent, so an assertion can't pass vacuously
 └── .opencode/skills/          # verify-file-organizer: drive the real server
 ```
@@ -289,9 +290,9 @@ Before submitting changes:
 - [ ] If you touched `path.join`, `path.sep`, or `path.relative`: you checked the value cannot reach a test assertion or a documented format string. See rule 3.
 - [ ] If you resolved a conflict: no markers in the diff, and the `comm -3` on the `reg()` set is empty if `registry.ts` was involved.
 
-`npm run verify:all` runs the first four plus docs, security, and the full
-suite. Reach for it when the change is broad or when you are about to hand the
-work over.
+`npm run verify:all` runs the first four plus the workflow-invariant check,
+docs, security, the fuzzing/TOCTOU gates, and the full suite. Reach for it when
+the change is broad or when you are about to hand the work over.
 
 ## Security notes worth knowing
 
@@ -419,7 +420,8 @@ npm run docs:check:citations:fix           # rewrite drifted file:line citations
 npm run docs:check:tool-count              # tool count/list only, no citation check
 npm run docs:sync                          # regenerate the tool list/count from the registry
 
-npm run verify:all                         # build, lint, typecheck, docs, security, tests
+npm run verify:all                         # build, lint, typecheck, workflow invariants, docs, security, gates, tests
+npm run verify:scenarios                   # drive the real server through scripts/verify/scenarios/
 
 npm run setup                              # TUI wizard
 ```

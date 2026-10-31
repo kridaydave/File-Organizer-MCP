@@ -126,12 +126,13 @@ If a tool adds a way in, add the way out and the way to see it: organize ships w
 
 ## Testing
 
-- `tests/unit/` — services tested in isolation against temp dirs
-- `tests/integration/` — tool wiring through the real schema + validator path
-- `scripts/security-gates/` — path-traversal fuzzing, TOCTOU races, sensitive-file patterns, static analysis
+- `tests/unit/` - services tested in isolation against temp dirs
+- `tests/integration/` - tool wiring through the real schema + validator path
+- `scripts/security-gates/` - path-traversal fuzzing, TOCTOU races, sensitive-file patterns, static analysis
+- `scripts/verify/` - the verify harness: drives the real built server over stdio inside a throwaway sandbox. `harness.mjs` is the sandbox + JSON-RPC core, `cli.mjs` the subcommands (also what the `verify-file-organizer` skill forwards to), `run-scenarios.mjs` executes the declarative scenarios in `scripts/verify/scenarios/` (`npm run verify:scenarios`, also a CI job). `scripts/verify/coverage.json` waives tools a scenario does not drive yet; `tests/unit/verify-scenario-coverage.test.ts` holds the ledger to the registry, and `tests/unit/schemas/input-schema-parity.test.ts` holds each tool's hand-written JSON `inputSchema` to its Zod schema.
 
 Tests derive all paths from `os.tmpdir()` or `tests/sandbox/`. A test that needs `sleep()` to pass is wrong; wait on receipts instead.
 
 ## Performance
 
-The lean-v5 shape was benchmarked against v3.5.0 — preview/organize 12–35× faster with the content-analysis stack removed, the tested large-directory organize scenarios completing without failures where v3.5 failed them, path-validation cost unchanged. Numbers and method: `docs/benchmarks-v5-vs-v3.5.md`.
+The lean-v5 shape was benchmarked against v3.5.0 - preview/organize 12–35× faster with the content-analysis stack removed, the tested large-directory organize scenarios completing without failures where v3.5 failed them, path-validation cost unchanged. Numbers and method: `docs/benchmarks-v5-vs-v3.5.md`.
