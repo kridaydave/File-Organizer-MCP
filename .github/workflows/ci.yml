@@ -256,13 +256,47 @@ jobs:
       - name: Run verify scenarios
         run: npm run verify:scenarios
 
+  # Perturbation profile: FO_PORTABILITY=1 makes Linux lie about readdir
+  # order and tmpdir resolution (see tests/perturb/setup.ts), so the five
+  # leak classes in AGENTS.md rule 3 surface here instead of only on macOS
+  # or Windows runners. One extra lane, full gate.
+  portability:
+    name: Portability profile (perturbed fs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FO_PORTABILITY: "1"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run test suite with perturbed fs
+        run: npm run test:portability
+
   # One required check, so adding or renaming a job never needs a branch
   # protection edit. `always()` keeps it reporting when a job below failed or
   # was cancelled instead of vanishing, which would block forever.
   check:
     name: Check
     if: ${{ always() }}
-    needs: [static, test, security, build, lint-docs, verify-harness]
+    needs: [static, test, security, build, lint-docs, verify-harness, portability]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

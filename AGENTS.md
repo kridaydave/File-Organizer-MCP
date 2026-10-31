@@ -380,7 +380,7 @@ Every rule above is a sentence in this file, so it holds exactly as well as the 
 
 - No pre-push-era conflict-rule coverage beyond hooks: a pre-commit hook (conflict markers on staged lines, docs-sync on staged state) and a pre-push hook (tree-wide conflict markers, duplicate `reg()` names, `docs:check`) run locally, but nothing on the remote stops a `--no-verify` push. The four conflict rules above are otherwise manual.
 - `npm run docs:check` runs in CI but only on ubuntu and only after `typecheck:tests`. `tests/unit/docs-tool-list.test.ts` still guards the count from inside the 6-leg matrix, so one stale count reports as 2 failing tests × 6 legs = 12 red checks rather than 1.
-- No portability profile. Nothing runs the suite with `os.tmpdir`, `fs.readdir` order, or `fs.realpath` perturbed, so the five leak classes in rule 3 can only be found on macOS or Windows.
+- The portability profile (`npm run test:portability`, CI job `portability`) perturbs readdir order and tmpdir resolution but nothing else; `fs.realpath` and 8.3 short-name behavior are still only exercised by the real macOS/Windows legs and `nightly`.
 - `main` has `strict: true`, no ruleset, no merge queue, `allow_auto_merge: false`. Merges serialise by hand.
 - The tool list and count are generated, but the hand-written tool bullets in README.md above the `<!-- BEGIN GENERATED TOOL LIST -->` marker, and the tool references in ARCHITECTURE.md, are not. Those are the two hottest conflict sites left.
 - `src/mcp/registry.ts` is a hand-maintained flat array of `reg()` lines. `ARCHITECTURE.md:112` records that auto-discovery was deliberately rejected in favour of a visible one-line edit. Under parallel tool PRs, that decision is what generates the conflicts.

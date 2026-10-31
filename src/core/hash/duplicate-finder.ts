@@ -191,13 +191,21 @@ export class DuplicateFinderService {
     const groups = scan.groups
       .filter((group) => group.size_bytes > 0)
       .map((group) => {
-        const keepIndex = this.pickSurvivor(group.files, keepStrategy);
+        // Group order is scan order, which follows fs.readdir and differs
+        // between filesystems. Sorting by path once here makes keep_first and
+        // the date-strategy tie-break produce the same survivor on every OS
+        // instead of whichever copy the scan happened to see first. Byte-order
+        // comparison, not localeCompare: the answer must not depend on locale.
+        const files = [...group.files].sort((a, b) =>
+          a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+        );
+        const keepIndex = this.pickSurvivor(files, keepStrategy);
         return {
           hash: group.hash,
           size_bytes: group.size_bytes,
           file_count: group.count,
-          keep: group.files[keepIndex]?.path ?? "",
-          would_delete: group.files
+          keep: files[keepIndex]?.path ?? "",
+          would_delete: files
             .filter((_, i) => i !== keepIndex)
             .map((f) => f.path),
           wasted_space_bytes: group.size_bytes * (group.count - 1),

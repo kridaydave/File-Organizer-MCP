@@ -45,6 +45,7 @@ npm test tests/unit/services/organizer.test.ts   # single file
 npm run test:coverage                      # with coverage
 npm run test:security                      # static gates + the 7 security suites
 npm run test:security:gates                # fuzzing + TOCTOU + sensitive files (needs build)
+npm run test:portability                   # full suite with perturbed fs (FO_PORTABILITY=1)
 npm run typecheck:tests                    # bun check over src + tests - a real gate
 npm run verify:all                         # everything: build, lint, types, docs, security, tests
 ```
@@ -81,7 +82,9 @@ through directly.
 ### Portability
 
 CI runs 6 legs (3 OS × Node 20/22); a green Linux run proves nothing about the
-other five. The five leak classes and their fixes live in AGENTS.md rule 3
+other five. `npm run test:portability` makes Linux lie about readdir order and
+tmpdir resolution (`tests/perturb/setup.ts`), so the leak classes surface on a
+plain Linux box too - a red run there is a portability finding, not flakiness. The five leak classes and their fixes live in AGENTS.md rule 3
 ("Baking in paths"). Short form: no raw absolute paths in assertions, sort both
 sides of every `readdir` comparison, never `path.join` a value a human reads,
 canonicalise realpaths once in `beforeEach`, and assert the setup fired so a
