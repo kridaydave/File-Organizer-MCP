@@ -29,8 +29,9 @@ tests/
 
 Outside `tests/`:
 
-- `scripts/security-gates/` - fuzzing, TOCTOU, sensitive-file, and static-analysis
-  gates (`npm run test:security:gates`), plus static analysis alone
+- `scripts/security-gates/` - payload fuzzing, generative property fuzzing
+  (fast-check), TOCTOU, sensitive-file, and static-analysis gates
+  (`npm run test:security:gates`), plus static analysis alone
   (`npm run test:security:static`).
 - `.opencode/skills/verify-file-organizer/` - the stdio harness that drives the
   real built server inside a throwaway sandbox. Unit tests do not prove a tool
