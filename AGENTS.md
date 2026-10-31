@@ -166,6 +166,13 @@ An empty directory is a bad test. Seed with real shapes, but keep them in the sa
 - For user-visible tool output, check both `json` and `markdown` formats — both are part of the contract.
 - A passing unit test is not proof the tool works. `principle-prove-it-works` means the real artifact. Drive it through `verify-file-organizer`.
 
+The verification layers, cheapest first:
+
+- **Every push (CI):** static checks, the 6-leg test matrix, security audit, `verify-harness` driving `scripts/verify/scenarios/` against the real built server, and the `portability` lane running the suite with perturbed fs. One aggregate required check ("Check").
+- **Every push (gates):** `test:security:gates` includes payload fuzzing, generative property fuzzing (`fast-check`), TOCTOU, and sensitive-file gates.
+- **Local, before handover:** `verify:all`, plus the pre-push hook (conflict markers, duplicate `reg()` names, `docs:check`).
+- **Nightly (`nightly.yml`, 03:00 UTC):** security gates and scenarios on all three OSes, and the Stryker mutation gate over the path validator against `scripts/mutation-baseline.json`. Failures open an issue.
+
 ## Pull requests
 
 - Never make a PR unless the developer explicitly asks.
@@ -422,6 +429,8 @@ npm run docs:sync                          # regenerate the tool list/count from
 
 npm run verify:all                         # build, lint, typecheck, workflow invariants, docs, security, gates, tests
 npm run verify:scenarios                   # drive the real server through scripts/verify/scenarios/
+npm run test:portability                   # full suite with perturbed fs (readdir order, tmpdir symlink)
+npm run test:mutation                      # Stryker over the path validator, gated by the baseline floor
 
 npm run setup                              # TUI wizard
 ```
