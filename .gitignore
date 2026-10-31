@@ -127,3 +127,7 @@ test-templates.js
 
 # Windows artifacts
 nul
+
+# Stryker mutation testing
+.stryker-tmp/
+reports/mutation/

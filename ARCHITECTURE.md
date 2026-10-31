@@ -129,6 +129,7 @@ If a tool adds a way in, add the way out and the way to see it: organize ships w
 - `tests/unit/` - services tested in isolation against temp dirs
 - `tests/integration/` - tool wiring through the real schema + validator path
 - `scripts/security-gates/` - path-traversal fuzzing, property-based path fuzzing (fast-check, generative), TOCTOU races, sensitive-file patterns, static analysis
+- `stryker.conf.json` + `jest.mutation.config.cjs` - mutation testing scoped to the path validator (`npm run test:mutation`), gated by the floor in `scripts/mutation-baseline.json`; runs nightly
 - `scripts/verify/` - the verify harness: drives the real built server over stdio inside a throwaway sandbox. `harness.mjs` is the sandbox + JSON-RPC core, `cli.mjs` the subcommands (also what the `verify-file-organizer` skill forwards to), `run-scenarios.mjs` executes the declarative scenarios in `scripts/verify/scenarios/` (`npm run verify:scenarios`, also a CI job). `scripts/verify/coverage.json` waives tools a scenario does not drive yet; `tests/unit/verify-scenario-coverage.test.ts` holds the ledger to the registry, and `tests/unit/schemas/input-schema-parity.test.ts` holds each tool's hand-written JSON `inputSchema` to its Zod schema.
 
 Tests derive all paths from `os.tmpdir()` or `tests/sandbox/`. The portability profile (`tests/perturb/`, `npm run test:portability`) runs the whole suite with readdir order shuffled and tmpdir behind a symlink, surfacing rule-3 leak classes on Linux. A test that needs `sleep()` to pass is wrong; wait on receipts instead.

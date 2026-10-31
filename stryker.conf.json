@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-js/master/packages/api/schema/stryker-schema.json",
+  "testRunner": "jest",
+  "reporters": [
+    "html",
+    "json",
+    "clear-text",
+    "progress"
+  ],
+  "coverageAnalysis": "perTest",
+  "concurrency": 2,
+  "timeoutMS": 60000,
+  "mutate": [
+    "src/services/path-validator.service.ts"
+  ],
+  "buildCommand": "bun run build",
+  "jest": {
+    "projectType": "custom",
+    "configFile": "jest.mutation.config.cjs",
+    "enableFindRelatedTests": true
+  },
+  "jsonReporter": {
+    "fileName": "reports/mutation/mutation.json"
+  }
+}

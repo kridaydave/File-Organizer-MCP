@@ -29,6 +29,8 @@ tests/
 
 Outside `tests/`:
 
+- `scripts/check-mutation-baseline.mjs` - compares the Stryker score against
+  the floor in `scripts/mutation-baseline.json` (`npm run test:mutation`).
 - `scripts/security-gates/` - payload fuzzing, generative property fuzzing
   (fast-check), TOCTOU, sensitive-file, and static-analysis gates
   (`npm run test:security:gates`), plus static analysis alone
@@ -46,6 +48,7 @@ npm run test:coverage                      # with coverage
 npm run test:security                      # static gates + the 7 security suites
 npm run test:security:gates                # fuzzing + TOCTOU + sensitive files (needs build)
 npm run test:portability                   # full suite with perturbed fs (FO_PORTABILITY=1)
+npm run test:mutation                      # Stryker over the path validator, gated by the baseline floor
 npm run typecheck:tests                    # bun check over src + tests - a real gate
 npm run verify:all                         # everything: build, lint, types, docs, security, tests
 ```
