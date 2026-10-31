@@ -65,6 +65,21 @@ function parseArgs(argv) {
 
 // ── output helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Terminal error inside a subcommand: fail() throws this instead of calling
+ * process.exit, and main() turns it into the exit code. process.exit must not
+ * run while stdout still holds output: writes to a pipe are ASYNCHRONOUS on
+ * macOS, so an immediate exit truncates the response at the pipe buffer (a
+ * ~8KB `tools` listing arrived on the macOS CI leg as unterminated JSON).
+ * Letting the process end naturally flushes queued writes on every platform.
+ */
+class CliExit extends Error {
+  constructor(message, code) {
+    super(message);
+    this.code = code;
+  }
+}
+
 function makeIo(flags) {
   const verbose = flags.get("verbose") === "true";
   return {
@@ -73,8 +88,7 @@ function makeIo(flags) {
       if (verbose) process.stderr.write(parts.join(" ") + "\n");
     },
     fail(message, code = 2) {
-      process.stderr.write(message + "\n");
-      process.exit(code);
+      throw new CliExit(message, code);
     },
     ok(payload) {
       process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
@@ -264,7 +278,7 @@ export async function main(argv) {
     parsed = parseArgs(argv);
   } catch (error) {
     process.stderr.write(error.message + "\n");
-    process.exit(2);
+    return 2;
   }
   const io = makeIo(parsed.flags);
   const [command] = parsed.positional;
@@ -292,8 +306,9 @@ export async function main(argv) {
         return command ? 2 : 0;
     }
   } catch (error) {
-    if (error instanceof SandboxRefusalError) {
-      io.fail(error.message, 2);
+    if (error instanceof CliExit || error instanceof SandboxRefusalError) {
+      process.stderr.write(error.message + "\n");
+      return error.code ?? 2;
     }
     throw error;
   }
@@ -302,5 +317,6 @@ export async function main(argv) {
 // Run directly (not when imported by the skill forwarder's main()).
 const invoked = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.url.replace("file://", ""));
 if (invoked) {
-  process.exit(await main(process.argv.slice(2)));
+  // exitCode, never process.exit: see CliExit above.
+  process.exitCode = await main(process.argv.slice(2));
 }

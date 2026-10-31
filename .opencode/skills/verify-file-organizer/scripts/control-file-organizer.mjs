@@ -9,4 +9,6 @@
 
 import { main } from "../../../../scripts/verify/cli.mjs";
 
-process.exit(await main(process.argv.slice(2)));
+// exitCode, never process.exit: stdout to a pipe is asynchronous on macOS, so
+// an immediate exit would truncate the JSON response at the pipe buffer.
+process.exitCode = await main(process.argv.slice(2));
