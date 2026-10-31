@@ -6,14 +6,16 @@
 set -e
 
 # Rule 2: no conflict markers committed anywhere the scanner reads.
-if grep -rnE '^(<<<<<<<|>>>>>>>|=======$)' --include='*.ts' --include='*.md' . \
+if grep -rnE '^(<<<<<<<|>>>>>>>|=======($|[^=])|\|\|\|\|\|\|\|)' --include='*.ts' --include='*.md' . \
     --exclude-dir=node_modules --exclude-dir=dist; then
   echo "pre-push: conflict markers found in tree" >&2
   exit 1
 fi
 
 # Rule 3: a resolution that duplicated a tool line instead of merging both.
-if grep -oP '^\s+reg\(\K\w+' src/mcp/registry.ts | sort | uniq -d | grep .; then
+# sed, not grep -oP: macOS ships BSD grep without -P, and a failing grep here
+# would read as "no duplicates".
+if sed -nE 's/^[[:space:]]*reg\(([A-Za-z0-9_]+).*/\1/p' src/mcp/registry.ts | sort | uniq -d | grep .; then
   echo "pre-push: duplicate reg() entries in src/mcp/registry.ts" >&2
   exit 1
 fi

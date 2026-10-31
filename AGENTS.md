@@ -114,7 +114,7 @@ Most of the damage is not the conflict, it is the resolution. Four rules:
 - **Never `git add -A` after resolving a conflict.** It stages every *other* conflicted file with its `<<<<<<<` still in it. `git add` only the paths you actually resolved.
 - **Check for markers before every commit that follows a resolution.** Two branches shipped committed `<<<<<<<`/`=======` and needed four cleanup commits on `main`:
   ```bash
-  grep -rnE '^(<<<<<<<|=======|>>>>>>>)' --include='*.ts' --include='*.md' . && exit 1
+  grep -rnE '^(<<<<<<<|>>>>>>>|=======($|[^=])|\|\|\|\|\|\|\|)' --include='*.ts' --include='*.md' . && exit 1
   ```
 - **Prove the tool set survived.** A rebase that resolves `registry.ts` by taking one side can silently delete tools that merged in between. This must be empty:
   ```bash
