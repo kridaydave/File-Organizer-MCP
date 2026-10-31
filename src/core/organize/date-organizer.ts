@@ -248,6 +248,13 @@ export class DateOrganizerService {
     for (const move of result.moves) {
       (result.structure[move.folder] ??= []).push(path.basename(move.to));
     }
+    // `structure` is a contract value an agent reads, so its arrays are sorted:
+    // their natural order is the scan order, which follows fs.readdir and is
+    // filesystem-dependent. Two runs over the same tree must report the same
+    // structure on every OS, not two orders.
+    for (const files of Object.values(result.structure)) {
+      files.sort();
+    }
 
     return result;
   }
