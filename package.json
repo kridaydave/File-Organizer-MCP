@@ -18,6 +18,7 @@
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "test:portability": "FO_PORTABILITY=1 node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:mutation": "bun x stryker run && bun scripts/check-mutation-baseline.mjs",
     "typecheck": "bun check",
     "typecheck:tests": "bun check -p tsconfig.tests.json",
     "test:security:static": "node dist/scripts/security-gates/static-analysis.js",
