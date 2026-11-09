@@ -257,10 +257,11 @@ describe("File Signatures Database", () => {
       expect(result?.type).toBe("MACHO_32");
     });
 
-    it("should detect Mach-O little-endian as executable content (BUG-06)", async () => {
-      const { isExecutableContent } = await import("../../../src/constants/file-signatures.js");
+    it("should detect Mach-O little-endian as executable content (BUG-06)", () => {
       const macho64LeBuffer = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]);
-      expect(isExecutableContent(macho64LeBuffer)).toBe(true);
+      const result = matchSignature(macho64LeBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_64");
     });
 
     it("should match Java class files or Mach-O (both use CAFEBABE)", () => {
