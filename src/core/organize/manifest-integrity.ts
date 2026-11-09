@@ -38,28 +38,49 @@ function getMachineSecret(): string {
   try {
     const configDir = getHistoryDirectory();
     const machineIdPath = path.join(configDir, "machine-id");
-    let machineId: string;
+    let machineId: string | undefined;
     try {
       machineId = fs.readFileSync(machineIdPath, "utf-8").trim();
     } catch {
-      machineId = crypto.randomUUID();
+      machineId = undefined;
+    }
+
+    if (machineId) {
+      return crypto
+        .createHash("sha256")
+        .update(SECRET_SEED + machineId)
+        .digest("hex");
+    }
+
+    // Derive a stable secret from the config directory when machine-id
+    // cannot be read. This ensures cross-process verification even if the
+    // filesystem is read-only or machine-id cannot be persisted.
+    try {
+      const stableSeed = crypto
+        .createHash("sha256")
+        .update(SECRET_SEED + configDir)
+        .digest("hex");
+      // Try to persist it for future runs if possible
       try {
         fs.mkdirSync(configDir, { recursive: true });
-        fs.writeFileSync(machineIdPath, machineId, {
+        fs.writeFileSync(machineIdPath, stableSeed, {
           encoding: "utf-8",
           mode: 0o600,
         });
       } catch {
-        // Fall back to in-memory ID if filesystem is read-only
+        // Ignore write failures - secret remains stable via configDir
       }
+      return crypto
+        .createHash("sha256")
+        .update(SECRET_SEED + stableSeed)
+        .digest("hex");
+    } catch {
+      // Fall back to deterministic secret derived from seed only
+      return crypto
+        .createHash("sha256")
+        .update(SECRET_SEED + configDir || "fallback-machine-id")
+        .digest("hex");
     }
-    if (!machineId) {
-      machineId = crypto.randomUUID();
-    }
-    return crypto
-      .createHash("sha256")
-      .update(SECRET_SEED + machineId)
-      .digest("hex");
   } catch {
     return crypto
       .createHash("sha256")
