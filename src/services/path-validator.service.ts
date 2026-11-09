@@ -487,9 +487,7 @@ export class PathValidatorService {
       if (checkContainment(canonicalPath, canonicalAllowed)) {
         return true;
       }
-      // Fallback: direct string containment (handles non-existent nested
-      // paths and Windows short-name mismatches)
-      return checkContainment(absolutePath, this.allowedPaths);
+      return false;
     } catch {
       return false;
     }
