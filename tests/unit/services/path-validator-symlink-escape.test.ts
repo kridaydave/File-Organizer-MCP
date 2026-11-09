@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { PathValidatorService } from '../../src/services/path-validator.service.js';
+import { PathValidatorService } from '../../../src/services/path-validator.service.js';
 
 describe('BUG-04 symlink escape', () => {
   let testDir: string;
