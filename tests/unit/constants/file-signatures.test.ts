@@ -3,7 +3,6 @@
  * Tests signature matching, validation, and lookup functions
  */
 
-import * as fileSigs from "../../../src/constants/file-signatures.js";
 import {
   FILE_SIGNATURES,
   EXECUTABLE_SIGNATURES,
@@ -258,9 +257,10 @@ describe("File Signatures Database", () => {
       expect(result?.type).toBe("MACHO_32");
     });
 
-    it("should detect Mach-O little-endian as executable content (BUG-06)", () => {
+    it("should detect Mach-O little-endian as executable content (BUG-06)", async () => {
+      const { isExecutableContent } = await import("../../../src/constants/file-signatures.js");
       const macho64LeBuffer = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]);
-      expect(fileSigs.isExecutableContent(macho64LeBuffer)).toBe(true);
+      expect(isExecutableContent(macho64LeBuffer)).toBe(true);
     });
 
     it("should match Java class files or Mach-O (both use CAFEBABE)", () => {
