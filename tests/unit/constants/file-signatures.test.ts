@@ -13,6 +13,7 @@ import {
   matchSignature,
   detectExtensionMismatch,
   FileSignature,
+  isExecutableContent,
 } from "../../../src/constants/file-signatures.js";
 import { required } from "../../helpers/safe-index.js";
 
@@ -258,7 +259,6 @@ describe("File Signatures Database", () => {
     });
 
     it("should detect Mach-O little-endian as executable content (BUG-06)", () => {
-      const { isExecutableContent } = require("../../../src/constants/file-signatures.js");
       const macho64LeBuffer = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]);
       expect(isExecutableContent(macho64LeBuffer)).toBe(true);
     });
