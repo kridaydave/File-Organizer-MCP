@@ -132,6 +132,38 @@ export function detectArchiveFormat(filePath: string): ArchiveValidationResult {
 }
 
 /**
+ * Resolve the nearest existing ancestor of a path and re-append the
+ * non-existent tail. Mirrors the ancestor walk in resolveSymlinks
+ * (path-validator.service.ts) so containment is checked against real
+ * paths, not just lexical ones. Returns null on resolution failure
+ * (e.g. symlink loop) so callers can fail closed.
+ */
+function resolveNearestExistingAncestor(targetPath: string): string | null {
+  let current = targetPath;
+  const tail: string[] = [];
+  while (true) {
+    try {
+      const realPath =
+        typeof fs.realpathSync?.native === "function"
+          ? fs.realpathSync.native(current)
+          : fs.realpathSync(current);
+      return tail.length > 0 ? path.join(realPath, ...tail) : realPath;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT" && code !== "ENOTDIR") {
+        return null;
+      }
+      const parent = path.dirname(current);
+      if (parent === current) {
+        return targetPath;
+      }
+      tail.unshift(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
+/**
  * Validate an archive entry path for zip-slip vulnerability
  * Returns the safe extraction path if valid, or error if invalid
  */
@@ -196,9 +228,27 @@ export function validateEntryPath(
   // Ensure the resolved path is still within the target directory and does not resolve to target itself
   const normalizedTarget = path.resolve(targetDirectory);
 
+  // Resolve symlinks to prevent zip-slip via pre-existing symlinks
+  const realTarget = resolveNearestExistingAncestor(normalizedTarget);
+  if (realTarget === null) {
+    return {
+      valid: false,
+      entryName,
+      error: "Zip-slip attempt: extracted path escapes target directory",
+    };
+  }
+  const realResolvedPath = resolveNearestExistingAncestor(resolvedPath);
+  if (realResolvedPath === null) {
+    return {
+      valid: false,
+      entryName,
+      error: "Zip-slip attempt: extracted path escapes target directory",
+    };
+  }
+
   if (
-    !isSubPath(normalizedTarget, resolvedPath) ||
-    resolvedPath === normalizedTarget ||
+    !isSubPath(realTarget, realResolvedPath) ||
+    realResolvedPath === realTarget ||
     normalizedEntry === "." ||
     normalizedEntry === ""
   ) {
