@@ -243,6 +243,26 @@ describe("File Signatures Database", () => {
       expect(result?.type).toBe("EXE");
     });
 
+    it("should match Mach-O 64-bit little-endian binaries (BUG-06)", () => {
+      const macho64LeBuffer = Buffer.from([0xcf, 0xfa, 0xed, 0xfe]);
+      const result = matchSignature(macho64LeBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_64");
+    });
+
+    it("should match Mach-O 32-bit little-endian binaries", () => {
+      const macho32LeBuffer = Buffer.from([0xce, 0xfa, 0xed, 0xfe]);
+      const result = matchSignature(macho32LeBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_32");
+    });
+
+    it("should detect Mach-O little-endian as executable content (BUG-06)", () => {
+      const { isExecutableContent } = require("../../../src/constants/file-signatures.js");
+      const macho64LeBuffer = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]);
+      expect(isExecutableContent(macho64LeBuffer)).toBe(true);
+    });
+
     it("should match Java class files or Mach-O (both use CAFEBABE)", () => {
       const classBuffer = Buffer.from([0xca, 0xfe, 0xba, 0xbe]);
       const result = matchSignature(classBuffer);
