@@ -7,9 +7,9 @@ import { FileOrganizerError } from "../../errors.js";
 
 export const SENSITIVE_PATTERNS: RegExp[] = [
   // Environment files - secrets, API keys, database credentials
-  /\.env$/i,
-  /\.env\.local$/i,
-  /\.env\.[a-z]+$/i,
+  /\.env(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.env\.local(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.env\.[a-z]+(?:~|\.(?:bak|backup|old|orig))?$/i,
   /\.env\./i,
 
   // SSH keys
@@ -18,29 +18,29 @@ export const SENSITIVE_PATTERNS: RegExp[] = [
   /id_ed25519/i,
   /id_ecdsa/i,
   /id_dsa/i,
-  /\.pem$/i,
-  /\.key$/i,
+  /\.pem(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.key(?:~|\.(?:bak|backup|old|orig))?$/i,
   /ssh_key/i,
   /private.*key/i,
 
   // AWS credentials
   /\.aws\//i,
-  /aws\/(credentials|config)$/i,
+  /aws\/(credentials|config)(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // Docker config may contain registry credentials
-  /\.docker\/config\.json$/i,
+  /\.docker\/config\.json(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // Package manager configs with auth tokens
-  /\.npmrc$/i,
-  /\.pypirc$/i,
-  /\.gemrc$/i,
+  /\.npmrc(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.pypirc(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.gemrc(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // System password files
-  /shadow$/i,
-  /passwd$/i,
-  /master\.passwd$/i,
-  /sam$/i,
-  /system32/i,
+  /shadow(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /passwd(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /master\.passwd(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /sam(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /system32(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // Generic sensitive names
   /password/i,
@@ -51,25 +51,25 @@ export const SENSITIVE_PATTERNS: RegExp[] = [
   /auth[_-]?token/i,
   /bearer/i,
   /confidential/i,
-  /config\.json$/i,
+  /config\.json(?:~|\.(?:bak|backup|old|orig))?$/i,
   /secrets?\./i,
   /credentials?\./i,
 
   // Kubernetes secrets
-  /kubeconfig$/i,
-  /\.kube\/config$/i,
+  /kubeconfig(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.kube\/config(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // TLS/SSL material
-  /\.pfx$/i,
-  /\.p12$/i,
-  /\.crt$/i,
-  /\.cert$/i,
-  /\.csr$/i,
+  /\.pfx(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.p12(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.crt(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.cert(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.csr(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // Database files
-  /\.sqlite$/i,
-  /\.sqlite3$/i,
-  /\.db$/i,
+  /\.sqlite(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.sqlite3(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.db(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // Backups that might contain sensitive data
   /\.bak$/i,
@@ -78,42 +78,42 @@ export const SENSITIVE_PATTERNS: RegExp[] = [
   /\.orig$/i,
 
   // Environment files - secrets, API keys, database credentials
-  /\.env$/i,
-  /\.envrc$/i,
-  /\.env\.local$/i,
-  /\.env\.[a-z0-9_-]+$/i,
+  /\.env(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.envrc(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.env\.local(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.env\.[a-z0-9_-]+(?:~|\.(?:bak|backup|old|orig))?$/i,
   /\.env\./i,
 
   // Package manager configs with auth tokens
-  /\.npmrc$/i,
-  /\.pypirc$/i,
-  /\.gemrc$/i,
-  /\.yarnrc$/i,
-  /\.yarnrc\.ya?ml$/i,
-  /\.dockercfg$/i,
+  /\.npmrc(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.pypirc(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.gemrc(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.yarnrc(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.yarnrc\.ya?ml(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.dockercfg(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // Network & DB credentials
-  /\.netrc$/i,
-  /_netrc$/i,
-  /\.pgpass$/i,
+  /\.netrc(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /_netrc(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.pgpass(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // IDE/CI configs with potential credentials
-  /\.vscode\/settings\.json$/i,
-  /\.idea\/.*\.xml$/i,
-  /\.github\/workflows\/.*\.yml$/i,
-  /\.gitlab-ci\.yml$/i,
-  /\.travis\.yml$/i,
+  /\.vscode\/settings\.json(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.idea\/.*\.xml(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.github\/workflows\/.*\.yml(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.gitlab-ci\.yml(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.travis\.yml(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // Git repository internals (credentials, tokens, config)
   /\.git[\/\\]/i,
-  /\.gitconfig$/i,
-  /\.git-credentials$/i,
+  /\.gitconfig(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.git-credentials(?:~|\.(?:bak|backup|old|orig))?$/i,
 
   // Shell history
-  /\.bash_history$/i,
-  /\.zsh_history$/i,
-  /\.sh_history$/i,
-  /fish_history$/i,
+  /\.bash_history(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.zsh_history(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /\.sh_history(?:~|\.(?:bak|backup|old|orig))?$/i,
+  /fish_history(?:~|\.(?:bak|backup|old|orig))?$/i,
 ];
 
 /** Directories blocked recursively. */
