@@ -147,6 +147,7 @@ export class RollbackService {
       }
       throw new Error(
         "Lost the manifest lock — another process reclaimed the rollback directory while this operation was still running, so it stopped before touching another file",
+        { cause: error },
       );
     }
   }
