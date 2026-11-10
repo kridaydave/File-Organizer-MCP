@@ -179,19 +179,40 @@ export class PhotoOrganizerService {
           if (config.copyInsteadOfMove) {
             if (config.stripGPS && photo.hasGPS) {
               // Copy without GPS data
-              await this.copyWithoutGPS(photo.path, finalTargetPath);
-              result.strippedGPSFiles++;
-              logger.info("Stripped GPS data from file", {
-                source: photo.path,
-                target: finalTargetPath,
-              });
+              const gpsStripped = await this.copyWithoutGPS(
+                photo.path,
+                finalTargetPath,
+              );
+              if (gpsStripped) {
+                result.strippedGPSFiles++;
+                logger.info("Stripped GPS data from file", {
+                  source: photo.path,
+                  target: finalTargetPath,
+                });
+              } else {
+                logger.warn("GPS stripping was requested but did not occur", {
+                  source: photo.path,
+                  target: finalTargetPath,
+                });
+              }
             } else {
               await this.copyFile(photo.path, finalTargetPath);
             }
           } else {
             if (config.stripGPS && photo.hasGPS) {
               // Move with GPS stripping: copy without GPS then delete original
-              await this.copyWithoutGPS(photo.path, finalTargetPath);
+              const gpsStripped = await this.copyWithoutGPS(
+                photo.path,
+                finalTargetPath,
+              );
+
+              if (!gpsStripped) {
+                // Do not delete original if GPS was not actually stripped
+                await fs.unlink(finalTargetPath).catch(() => {});
+                throw new Error(
+                  "GPS stripping failed or not supported for this file",
+                );
+              }
 
               // Verify the copy succeeded before deleting original
               const targetExists = await fs
@@ -615,23 +636,28 @@ export class PhotoOrganizerService {
    * service method that receives pre-validated paths from the public-facing tools,
    * ensuring all path access control checks happen at the boundary of the service layer.
    */
-  private async copyWithoutGPS(source: string, target: string): Promise<void> {
+  private async copyWithoutGPS(source: string, target: string): Promise<boolean> {
     const readResult = await readFile(source, { encoding: null }); /* validates sensitive files */
     const buffer = Buffer.isBuffer(readResult.data)
       ? readResult.data
       : Buffer.from(readResult.data);
 
     // For JPEG files, attempt to strip GPS EXIF segments
-    const strippedBuffer = this.stripGPSFromBuffer(buffer);
+    const stripResult = this.stripGPSFromBuffer(buffer);
 
     // Write the stripped file
-    await fs.writeFile(target, strippedBuffer);
+    await fs.writeFile(target, stripResult.buffer);
 
     // Preserve timestamps
     const stats = await fs.stat(source);
     await fs.utimes(target, stats.atime, stats.mtime);
 
-    logger.debug("GPS data stripped from file", { source, target });
+    if (stripResult.gpsStripped) {
+      logger.debug("GPS data stripped from file", { source, target });
+    } else {
+      logger.debug("GPS data not stripped from file", { source, target });
+    }
+    return stripResult.gpsStripped;
   }
 
   /**
@@ -639,16 +665,16 @@ export class PhotoOrganizerService {
    * Uses piexifjs to remove GPS EXIF data while preserving other metadata
    *
    * @param buffer - JPEG file buffer
-   * @returns Buffer with GPS data stripped
+   * @returns Buffer with GPS data stripped and whether GPS was actually removed
    */
-  private stripGPSFromBuffer(buffer: Buffer): Buffer {
+  private stripGPSFromBuffer(buffer: Buffer): { buffer: Buffer; gpsStripped: boolean } {
     // Check if it's a JPEG
     if (buffer[0] !== 0xff || buffer[1] !== 0xd8) {
       // Not a JPEG, cannot strip GPS without format-specific handling
       logger.warn(
         "GPS stripping is only supported for JPEG files. Non-JPEG file will be copied with metadata intact.",
       );
-      return buffer;
+      return { buffer, gpsStripped: false };
     }
 
     try {
@@ -663,7 +689,7 @@ export class PhotoOrganizerService {
 
       if (!hasGPS) {
         // No GPS data to strip
-        return buffer;
+        return { buffer, gpsStripped: false };
       }
 
       // Remove GPS IFD entirely
@@ -689,7 +715,7 @@ export class PhotoOrganizerService {
         newSize: resultBuffer.length,
       });
 
-      return resultBuffer;
+      return { buffer: resultBuffer, gpsStripped: true };
     } catch (error) {
       // If EXIF manipulation fails, log error but return original buffer
       // to prevent data loss
@@ -700,7 +726,7 @@ export class PhotoOrganizerService {
       logger.warn(
         "GPS stripping failed - file will be copied with GPS data intact",
       );
-      return buffer;
+      return { buffer, gpsStripped: false };
     }
   }
 }

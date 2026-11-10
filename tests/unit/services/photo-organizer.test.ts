@@ -85,6 +85,19 @@ jest.unstable_mockModule(
   }),
 );
 
+jest.unstable_mockModule("../../../src/core/io/index.js", () => ({
+  readFile: jest.fn(async (filePath: string, options?: any) => {
+    const encoding = options?.encoding === undefined ? "utf-8" : options?.encoding;
+    const data = encoding === null ? Buffer.from([0xff, 0xd8]) : "[mock]";
+    return { data, bytesRead: data.length, totalSize: data.length, mimeType: "image/jpeg" };
+  }),
+  assertNotSensitive: jest.fn(),
+  isSensitiveFile: jest.fn(() => false),
+  SENSITIVE_PATTERNS: [],
+  SENSITIVE_DIRECTORIES: [],
+  safeAtomicMove: jest.fn(),
+}));
+
 const { PhotoOrganizerService } = await import(
   "../../../src/services/photo-organizer.service.js"
 );
@@ -366,6 +379,43 @@ describe("PhotoOrganizerService", () => {
             "Source and target directories cannot be nested within each other",
           ),
         )).toBe(true);
+      }),
+    );
+  });
+
+  describe("GPS stripping (BUG-13 regression)", () => {
+    it(
+      "does not count GPS as stripped when stripping does not actually occur on non-JPEG",
+      withMockedLogger(async (_logger: MockLogger) => {
+        // Simulate PNG file that has GPS marker detected by hasGPSData
+        mockReaddir.mockResolvedValue([
+          { name: "photo.png", isFile: () => true },
+        ]);
+        mockOpen.mockImplementation(async () => ({
+          read: async (buf: Buffer) => {
+            if (buf.length > 1) {
+              buf[0] = 0x25;
+              buf[1] = 0x88;
+            }
+            return { bytesRead: 2 };
+          },
+          close: jest.fn(),
+        }));
+
+        // copyWithoutGPS will read via mocked core/io/readFile returning JPEG header,
+        // but stripGPSFromBuffer will see it's not a JPEG? Let us look - our mocked readFile
+        // returns [0xff, 0xd8] which is JPEG. But the actual file is PNG. The bug says
+        // "organize with stripGPS:true on non-JPEG (PNG)..." 
+        const result = await service.organize({
+          sourceDir,
+          targetDir,
+          dateFormat: "YYYY/MM/DD",
+          dryRun: false,
+          stripGPS: true,
+          copyInsteadOfMove: true,
+        });
+
+        expect(result.strippedGPSFiles).toBe(0);
       }),
     );
   });
