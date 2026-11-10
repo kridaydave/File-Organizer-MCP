@@ -242,6 +242,57 @@ export class OrganizerService {
     );
 
     if (dryRun) {
+      // Preview must reflect what organize actually does. Mirror disk collision
+      // resolution for rename strategy so dry-run matches real execution.
+      if (conflictStrategy === "rename") {
+        const reserved = new Set<string>();
+        for (const move of plan.moves) {
+          let destPath = move.destination;
+          const destDir = path.dirname(destPath);
+          const ext = path.extname(destPath);
+          const sourceBase = path.basename(move.source, path.extname(move.source));
+
+          const existsOnDisk = async (p: string): Promise<boolean> => {
+            try {
+              await fs.access(p);
+              return true;
+            } catch {
+              return false;
+            }
+          };
+
+          if (reserved.has(destPath) || (await existsOnDisk(destPath))) {
+            const currentBase = path.basename(destPath, ext);
+            let startCounter = 1;
+            if (currentBase.startsWith(`${sourceBase}_`)) {
+              const suffix = currentBase.slice(sourceBase.length + 1);
+              if (/^\d+$/.test(suffix)) {
+                startCounter = parseInt(suffix, 10) + 1;
+              }
+            }
+            let candidate: string | null = null;
+            for (let counter = startCounter; counter < 1000; counter++) {
+              const nextPath = path.join(
+                destDir,
+                `${sourceBase}_${counter}${ext}`,
+              );
+              if (!reserved.has(nextPath) && !(await existsOnDisk(nextPath))) {
+                candidate = nextPath;
+                break;
+              }
+            }
+            if (candidate) {
+              reserved.delete(destPath);
+              destPath = candidate;
+              reserved.add(destPath);
+              move.destination = destPath;
+            }
+          } else {
+            reserved.add(destPath);
+          }
+        }
+      }
+
       return {
         statistics: plan.categoryCounts,
         actions: plan.moves.map((m) => ({
