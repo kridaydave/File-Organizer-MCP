@@ -20,7 +20,6 @@ import { SystemOrganizationInputSchema } from "../schemas/organize.js";
 import { logger } from "../utils/logger.js";
 
 const VALID_SOURCE_DIRS = ["Downloads", "Desktop", "Temp"];
-const VALID_SOURCE_NAMES = ["downloads", "desktop", "temp"];
 
 function resolveSourceDir(sourceDir: string): string {
   const trimmed = sourceDir.trim();
@@ -38,20 +37,17 @@ function resolveSourceDir(sourceDir: string): string {
 }
 
 function isValidSourceDir(dirPath: string): boolean {
-  const base = path.basename(dirPath).toLowerCase();
-  if (VALID_SOURCE_NAMES.includes(base)) {
-    return true;
-  }
   const homeDir = os.homedir();
   const allowed = [
     path.join(homeDir, "Downloads").toLowerCase(),
     path.join(homeDir, "Desktop").toLowerCase(),
     os.tmpdir().toLowerCase(),
   ];
+  const normalized = dirPath.toLowerCase();
   return allowed.some(
     (a) =>
-      dirPath.toLowerCase() === a ||
-      dirPath.toLowerCase().startsWith(a + path.sep),
+      normalized === a ||
+      normalized.startsWith(a + path.sep),
   );
 }
 

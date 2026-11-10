@@ -227,6 +227,14 @@ describe("SystemOrganizeService", () => {
 
       expect(result.valid).toBe(false);
     });
+
+    it("should reject arbitrary directory named downloads outside allowed roots", async () => {
+      mockAccess.mockResolvedValue(undefined);
+      mockLstat.mockResolvedValue({ isSymbolicLink: () => false });
+      const arbitraryDownloads = path.join(os.tmpdir(), "projects", "downloads");
+      const result = await service.validateSourceDir(arbitraryDownloads);
+      expect(result.valid).toBe(false);
+    });
   });
 
   describe("determineSystemDestination", () => {

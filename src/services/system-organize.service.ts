@@ -179,15 +179,11 @@ export class SystemOrganizeService {
         systemDirs.temp,
       ];
 
-      const allowedBaseNames = new Set(["downloads", "desktop", "temp"]);
       const isAllowedSystemDir = allowedDirs.some(
         (allowed) => allowed && this.isSubPath(allowed, validatedPath),
       );
-      const hasAllowedBaseName = allowedBaseNames.has(
-        path.basename(validatedPath).toLowerCase(),
-      );
 
-      if (!isAllowedSystemDir && !hasAllowedBaseName) {
+      if (!isAllowedSystemDir) {
         return {
           valid: false,
           normalizedPath: validatedPath,
