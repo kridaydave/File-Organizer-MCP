@@ -7,6 +7,7 @@ import fs from "fs/promises";
 import path from "path";
 import { parseFile } from "music-metadata";
 import { logger } from "../../utils/logger.js";
+import { ValidationError } from "../../mcp/types.js";
 import type {
   AudioMetadata,
   AudioMetadataOptions,
@@ -108,6 +109,16 @@ export class AudioMetadataService {
     options: AudioMetadataOptions = {},
   ): Promise<AudioMetadata[]> {
     const { concurrency = 4, onProgress } = options;
+    if (
+      typeof concurrency !== "number" ||
+      !Number.isFinite(concurrency) ||
+      concurrency < 1
+    ) {
+      throw new ValidationError("concurrency must be a positive integer", {
+        field: "concurrency",
+        value: concurrency,
+      });
+    }
     logger.info(
       `Batch extracting metadata for ${filePaths.length} files with concurrency ${concurrency}`,
     );

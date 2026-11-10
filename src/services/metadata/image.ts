@@ -5,6 +5,7 @@
 
 import path from "path";
 import { logger } from "../../utils/logger.js";
+import { ValidationError } from "../../mcp/types.js";
 import {
   detectGpsPresence,
   detectImageFormat,
@@ -102,6 +103,16 @@ export class ImageMetadataService {
     options: ImageMetadataOptions = {},
   ): Promise<ImageMetadata[]> {
     const { concurrency = 4, onProgress } = options;
+    if (
+      typeof concurrency !== "number" ||
+      !Number.isFinite(concurrency) ||
+      concurrency < 1
+    ) {
+      throw new ValidationError("concurrency must be a positive integer", {
+        field: "concurrency",
+        value: concurrency,
+      });
+    }
     logger.info(
       `Batch extracting metadata for ${filePaths.length} files with concurrency ${concurrency}`,
     );
