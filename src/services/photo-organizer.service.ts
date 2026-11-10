@@ -465,7 +465,15 @@ export class PhotoOrganizerService {
       }
     }
 
-    return path.join(targetDir, photo.name);
+    const finalTargetPath = path.join(targetDir, photo.name);
+
+    // Defense-in-depth: never allow a computed destination to escape the
+    // validated target directory.
+    if (!isSubPath(config.targetDir, finalTargetPath)) {
+      throw new Error("Unsafe destination path rejected");
+    }
+
+    return finalTargetPath;
   }
 
   /**
@@ -477,7 +485,9 @@ export class PhotoOrganizerService {
     unknownFolder: string,
   ): string {
     if (!date || isNaN(date.getTime())) {
-      return unknownFolder;
+      // Treat the user-supplied folder as a single leaf name so values like
+      // "../../evil" cannot escape the target directory.
+      return this.sanitizeFolderName(unknownFolder);
     }
 
     const year = date.getFullYear().toString();

@@ -369,4 +369,30 @@ describe("PhotoOrganizerService", () => {
       }),
     );
   });
+
+  describe("unknown date folder containment", () => {
+    it("sanitizes traversal sequences so the folder stays a leaf", () => {
+      expect(
+        service.getDateFolderName(undefined, "YYYY/MM", "../../evil"),
+      ).toBe("____evil");
+    });
+
+    it("keeps organized files under the target directory", async () => {
+      mockExtractMetadata.mockResolvedValue({});
+
+      const result = await service.organize({
+        sourceDir,
+        targetDir,
+        dateFormat: "YYYY/MM",
+        unknownDateFolder: "../../evil",
+        dryRun: true,
+      });
+
+      expect(result.success).toBe(true);
+      const folders = Object.keys(result.structure);
+      expect(folders.length).toBe(1);
+      expect(folders[0]).toBe(path.join(targetDir, "____evil"));
+      expect(folders[0].includes("..")).toBe(false);
+    });
+  });
 });
