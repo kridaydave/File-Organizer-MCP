@@ -155,6 +155,7 @@ export async function parseJPEGMetadata(
     const lat = tags.GPSLatitude as number | undefined;
     const lng = tags.GPSLongitude as number | undefined;
     if (
+      options.extractGPS === true &&
       options.stripGPS !== true &&
       typeof lat === "number" &&
       typeof lng === "number"
