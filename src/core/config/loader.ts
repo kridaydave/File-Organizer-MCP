@@ -112,33 +112,34 @@ export function loadCustomAllowedDirs(): string[] {
   try {
     const config = loadUserConfig();
     if (Array.isArray(config.customAllowedDirectories)) {
-      return config.customAllowedDirectories.filter((dir: string) => {
+      const allowed: string[] = [];
+      for (const dir of config.customAllowedDirectories) {
         try {
           const expandedDir = dir.startsWith("~") ? path.join(os.homedir(), dir.slice(1)) : dir;
           const stats = fs.lstatSync(expandedDir);
           if (stats.isSymbolicLink()) {
             logger.error(`Warning: Custom directory blocked (symlink): ${dir}`);
-            return false;
+            continue;
           }
           if (expandedDir.includes("..") || expandedDir.includes("\0")) {
             const reason = expandedDir.includes("\0") ? "null byte" : "path traversal";
             logger.error(`Warning: Custom directory blocked (${reason}): ${dir}`);
-            return false;
+            continue;
           }
-          if (!stats.isDirectory()) return false;
+          if (!stats.isDirectory()) continue;
           const resolvedDir = path.resolve(expandedDir);
           const home = os.homedir();
           const externalVolumeAllowed = config.allowExternalVolumes === true && isExternalVolumePath(resolvedDir);
           if (!isSubPath(home, resolvedDir) && !externalVolumeAllowed) {
             logger.error(`Warning: Custom directory blocked (outside home): ${dir}`);
-            return false;
+            continue;
           }
-          return true;
+          allowed.push(expandedDir);
         } catch {
           logger.error(`Warning: Custom directory does not exist: ${dir}`);
-          return false;
         }
-      });
+      }
+      return allowed;
     }
   } catch (error) {
     logger.error("Error loading custom config:", (error as Error).message);
