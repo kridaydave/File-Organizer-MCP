@@ -10,6 +10,7 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
 import os from "os";
+import crypto from "crypto";
 import { logger } from "../../utils/logger.js";
 
 const STATE_FILE_VERSION = 1;
@@ -41,6 +42,9 @@ export class SchedulerStateService {
   private stateFilePath: string;
   private state: SchedulerState;
   private initialized: boolean = false;
+  private saveQueue: Promise<void> = Promise.resolve();
+  private operationQueue: Promise<void> = Promise.resolve();
+  private lastKnownGoodState: SchedulerState | null = null;
 
   /**
    * Create a new SchedulerStateService
@@ -138,9 +142,27 @@ export class SchedulerStateService {
    *    matches the expected SchedulerState type
    */
   private async loadState(): Promise<void> {
+    const backupPath = `${this.stateFilePath}.bak`;
     try {
       // Check if file exists
       if (!fs.existsSync(this.stateFilePath)) {
+        // Try backup if main doesn't exist
+        if (fs.existsSync(backupPath)) {
+          try {
+            const backupData = await fsPromises.readFile(backupPath, "utf-8");
+            if (backupData.trim()) {
+              const parsedBackup = JSON.parse(backupData) as SchedulerState;
+              if (this.isValidState(parsedBackup)) {
+                this.state = this.migrateState(parsedBackup);
+                this.lastKnownGoodState = JSON.parse(JSON.stringify(this.state));
+                logger.debug("Scheduler state loaded from backup");
+                return;
+              }
+            }
+          } catch {
+            // ignore backup load errors
+          }
+        }
         logger.debug(
           `Scheduler state file not found at ${this.stateFilePath}, starting fresh`,
         );
@@ -153,25 +175,98 @@ export class SchedulerStateService {
 
       // Handle empty file
       if (!data.trim()) {
+        // Try backup
+        if (fs.existsSync(backupPath)) {
+          try {
+            const backupData = await fsPromises.readFile(backupPath, "utf-8");
+            if (backupData.trim()) {
+              const parsedBackup = JSON.parse(backupData) as SchedulerState;
+              if (this.isValidState(parsedBackup)) {
+                this.state = this.migrateState(parsedBackup);
+                this.lastKnownGoodState = JSON.parse(JSON.stringify(this.state));
+                logger.warn("Scheduler state file is empty, restored from backup");
+                return;
+              }
+            }
+          } catch {
+            // ignore backup load errors
+          }
+        }
         logger.warn("Scheduler state file is empty, starting fresh");
         this.state = this.createEmptyState();
         return;
       }
 
-      const parsed = JSON.parse(data) as SchedulerState;
+      try {
+        const parsed = JSON.parse(data) as SchedulerState;
 
-      // Validate structure
-      if (!this.isValidState(parsed)) {
-        logger.warn("Scheduler state file is invalid, starting fresh");
+        // Validate structure
+        if (!this.isValidState(parsed)) {
+          // Try backup on invalid state
+          if (fs.existsSync(backupPath)) {
+            try {
+              const backupData = await fsPromises.readFile(backupPath, "utf-8");
+              if (backupData.trim()) {
+                const parsedBackup = JSON.parse(backupData) as SchedulerState;
+                if (this.isValidState(parsedBackup)) {
+                  this.state = this.migrateState(parsedBackup);
+                  this.lastKnownGoodState = JSON.parse(JSON.stringify(this.state));
+                  logger.warn("Scheduler state file is invalid, restored from backup");
+                  return;
+                }
+              }
+            } catch {
+              // ignore backup load errors
+            }
+          }
+          logger.warn("Scheduler state file is invalid, starting fresh");
+          this.state = this.createEmptyState();
+          return;
+        }
+
+        // Migrate if needed
+        this.state = this.migrateState(parsed);
+        this.lastKnownGoodState = JSON.parse(JSON.stringify(this.state));
+        // Save backup of good state
+        try {
+          const dir = path.dirname(this.stateFilePath);
+          if (!fs.existsSync(dir)) {
+            await fsPromises.mkdir(dir, { recursive: true });
+          }
+          await fsPromises.writeFile(backupPath, data, "utf-8");
+        } catch {
+          // ignore backup write errors
+        }
+        logger.debug("Scheduler state loaded successfully");
+      } catch (parseError) {
+        // Handle JSON parse errors specifically - try backup first
+        if (fs.existsSync(backupPath)) {
+          try {
+            const backupData = await fsPromises.readFile(backupPath, "utf-8");
+            if (backupData.trim()) {
+              const parsedBackup = JSON.parse(backupData) as SchedulerState;
+              if (this.isValidState(parsedBackup)) {
+                this.state = this.migrateState(parsedBackup);
+                this.lastKnownGoodState = JSON.parse(JSON.stringify(this.state));
+                logger.error("Scheduler state file is corrupted, restored from backup:", parseError);
+                return;
+              }
+            }
+          } catch {
+            // ignore backup load errors
+          }
+        }
+        if (parseError instanceof SyntaxError) {
+          logger.error(
+            "Scheduler state file is corrupted, starting fresh:",
+            parseError,
+          );
+        } else {
+          logger.error("Error loading scheduler state:", parseError);
+        }
         this.state = this.createEmptyState();
-        return;
       }
-
-      // Migrate if needed
-      this.state = this.migrateState(parsed);
-      logger.debug("Scheduler state loaded successfully");
     } catch (error) {
-      // Handle JSON parse errors specifically
       if (error instanceof SyntaxError) {
         logger.error(
           "Scheduler state file is corrupted, starting fresh:",
@@ -180,32 +275,66 @@ export class SchedulerStateService {
       } else {
         logger.error("Error loading scheduler state:", error);
       }
-      this.state = this.createEmptyState();
+      // Try to use last known good state if available
+      if (this.lastKnownGoodState) {
+        this.state = JSON.parse(JSON.stringify(this.lastKnownGoodState));
+      } else {
+        this.state = this.createEmptyState();
+      }
     }
   }
 
   /**
-   * Save state to disk
+   * Save state to disk atomically with serialization
    */
   private async saveState(): Promise<void> {
-    try {
-      // Ensure directory exists
-      const dir = path.dirname(this.stateFilePath);
-      if (!fs.existsSync(dir)) {
-        await fsPromises.mkdir(dir, { recursive: true });
-      }
+    // Serialize writes to prevent concurrent save interleaving
+    this.saveQueue = this.saveQueue.then(async () => {
+      let tempPath: string | null = null;
+      try {
+        // Ensure directory exists
+        const dir = path.dirname(this.stateFilePath);
+        if (!fs.existsSync(dir)) {
+          await fsPromises.mkdir(dir, { recursive: true });
+        }
 
-      // Write state to file
-      await fsPromises.writeFile(
-        this.stateFilePath,
-        JSON.stringify(this.state, null, 2),
-        "utf-8",
-      );
-      logger.debug("Scheduler state saved successfully");
-    } catch (error) {
-      logger.error("Failed to save scheduler state:", error);
-      // Don't throw - state persistence is best-effort
-    }
+        // Create a snapshot of current state to avoid races during serialization
+        const stateSnapshot = JSON.parse(JSON.stringify(this.state)) as SchedulerState;
+
+        // Write to temp file first for atomicity
+        tempPath = path.join(
+          dir,
+          `.scheduler-state.tmp.${process.pid}.${Date.now()}.${crypto.randomUUID()}`,
+        );
+        const data = JSON.stringify(stateSnapshot, null, 2);
+        await fsPromises.writeFile(tempPath, data, "utf-8");
+
+        // Atomic rename
+        await fsPromises.rename(tempPath, this.stateFilePath);
+        tempPath = null;
+        this.lastKnownGoodState = JSON.parse(JSON.stringify(stateSnapshot));
+        // Update backup
+        try {
+          const backupPath = `${this.stateFilePath}.bak`;
+          await fsPromises.writeFile(backupPath, data, "utf-8");
+        } catch {
+          // ignore backup write errors
+        }
+        logger.debug("Scheduler state saved successfully");
+      } catch (error) {
+        if (tempPath) {
+          try {
+            await fsPromises.unlink(tempPath);
+          } catch {
+            // ignore cleanup error
+          }
+        }
+        logger.error("Failed to save scheduler state:", error);
+        // Don't throw - state persistence is best-effort
+      }
+    });
+
+    return this.saveQueue;
   }
 
   /**
@@ -318,16 +447,20 @@ export class SchedulerStateService {
   ): Promise<void> {
     this.ensureInitialized();
 
-    const normalizedDir = this.normalizeDirectory(directory);
-    const runTime = timestamp || new Date();
+    this.operationQueue = this.operationQueue.then(async () => {
+      const normalizedDir = this.normalizeDirectory(directory);
+      const runTime = timestamp || new Date();
 
-    this.state.directories[normalizedDir] = {
-      lastRunTime: runTime.toISOString(),
-      schedule:
-        schedule || this.state.directories[normalizedDir]?.schedule || "",
-    };
+      this.state.directories[normalizedDir] = {
+        lastRunTime: runTime.toISOString(),
+        schedule:
+          schedule || this.state.directories[normalizedDir]?.schedule || "",
+      };
 
-    await this.saveState();
+      await this.saveState();
+    });
+
+    return this.operationQueue;
   }
 
   /**
@@ -349,9 +482,13 @@ export class SchedulerStateService {
   async clearDirectoryState(directory: string): Promise<void> {
     this.ensureInitialized();
 
-    const normalizedDir = this.normalizeDirectory(directory);
-    delete this.state.directories[normalizedDir];
-    await this.saveState();
+    this.operationQueue = this.operationQueue.then(async () => {
+      const normalizedDir = this.normalizeDirectory(directory);
+      delete this.state.directories[normalizedDir];
+      await this.saveState();
+    });
+
+    return this.operationQueue;
   }
 
   /**
@@ -360,9 +497,13 @@ export class SchedulerStateService {
   async clearState(): Promise<void> {
     this.ensureInitialized();
 
-    this.state = this.createEmptyState();
-    await this.saveState();
-    logger.info("Scheduler state cleared");
+    this.operationQueue = this.operationQueue.then(async () => {
+      this.state = this.createEmptyState();
+      await this.saveState();
+      logger.info("Scheduler state cleared");
+    });
+
+    return this.operationQueue;
   }
 
   /**
