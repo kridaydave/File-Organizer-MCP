@@ -115,18 +115,47 @@ export function loadCustomAllowedDirs(): string[] {
       return config.customAllowedDirectories.filter((dir: string) => {
         try {
           const expandedDir = dir.startsWith("~") ? path.join(os.homedir(), dir.slice(1)) : dir;
-          const stats = fs.lstatSync(expandedDir);
-          if (stats.isSymbolicLink()) {
-            logger.error(`Warning: Custom directory blocked (symlink): ${dir}`);
-            return false;
-          }
           if (expandedDir.includes("..") || expandedDir.includes("\0")) {
             const reason = expandedDir.includes("\0") ? "null byte" : "path traversal";
             logger.error(`Warning: Custom directory blocked (${reason}): ${dir}`);
             return false;
           }
+
+          // Resolve every ancestor step to catch symlinked parents
+          let current = path.resolve(expandedDir);
+          const root = path.parse(current).root;
+          while (current !== root) {
+            try {
+              const lstats = fs.lstatSync(current);
+              if (lstats.isSymbolicLink()) {
+                logger.error(`Warning: Custom directory blocked (symlink): ${dir}`);
+                return false;
+              }
+            } catch (e) {
+              if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+                current = path.dirname(current);
+                continue;
+              }
+              throw e;
+            }
+            current = path.dirname(current);
+          }
+
+          // Check the expanded directory itself
+          const stats = fs.lstatSync(expandedDir);
+          if (stats.isSymbolicLink()) {
+            logger.error(`Warning: Custom directory blocked (symlink): ${dir}`);
+            return false;
+          }
           if (!stats.isDirectory()) return false;
-          const resolvedDir = path.resolve(expandedDir);
+
+          // Resolve real path to catch symlink escapes
+          let resolvedDir: string;
+          try {
+            resolvedDir = fs.realpathSync(expandedDir);
+          } catch {
+            resolvedDir = path.resolve(expandedDir);
+          }
           const home = os.homedir();
           const externalVolumeAllowed = config.allowExternalVolumes === true && isExternalVolumePath(resolvedDir);
           if (!isSubPath(home, resolvedDir) && !externalVolumeAllowed) {
