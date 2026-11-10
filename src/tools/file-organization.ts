@@ -119,12 +119,20 @@ export async function handleOrganizeFiles(
     // Full content analysis per-file would require modifying the organizer service
     // For now, we document that content analysis is available in categorize_by_type
 
-    const { statistics, actions, errors, errorCount, successCount, aborted } =
-      await organizer.organize(validatedPath, files, {
-        dryRun: dry_run,
-        conflictStrategy: effectiveConflictStrategy,
-        useContentAnalysis: use_content_analysis,
-      });
+    const {
+      statistics,
+      actions,
+      errors,
+      errorCount,
+      successCount,
+      aborted,
+      skippedCount,
+      skippedFiles,
+    } = await organizer.organize(validatedPath, files, {
+      dryRun: dry_run,
+      conflictStrategy: effectiveConflictStrategy,
+      useContentAnalysis: use_content_analysis,
+    });
 
     const result: OrganizeResult & { content_analysis_enabled?: boolean } = {
       directory: validatedPath,
@@ -136,6 +144,8 @@ export async function handleOrganizeFiles(
       errorCount,
       successCount,
       aborted,
+      skippedCount,
+      skippedFiles,
     };
 
     if (use_content_analysis) {
@@ -159,6 +169,7 @@ export async function handleOrganizeFiles(
 
 **Total Files Processed:** ${result.total_files}
 **Errors:** ${result.errors.length}
+**Skipped Files:** ${result.skippedCount ?? result.skippedFiles?.length ?? 0}
 **Conflict Strategy:** ${effectiveConflictStrategy}
 
 **Statistics:**
@@ -175,6 +186,8 @@ ${result.actions
   )
   .join("\n")}
 ${result.actions.length > 20 ? `\n*(...and ${result.actions.length - 20} more actions)*` : ""}
+
+${(result.skippedFiles && result.skippedFiles.length > 0) ? `\n**Skipped Files:**\n${result.skippedFiles.map((f) => `- ${escapeMarkdown(f.path)}: ${escapeMarkdown(f.reason)}`).join("\n")}` : ""}
 
 ${result.errors.length > 0 ? `\n**Errors:**\n${result.errors.join("\n")}` : ""}`;
 

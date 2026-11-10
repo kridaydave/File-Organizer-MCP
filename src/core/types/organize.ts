@@ -64,6 +64,8 @@ export interface OrganizeResult {
   errorCount: number;
   successCount: number;
   aborted: boolean;
+  skippedCount?: number;
+  skippedFiles?: { path: string; reason: string }[];
 }
 
 // ==================== Analysis Types ====================
