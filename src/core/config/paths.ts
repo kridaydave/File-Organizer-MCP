@@ -124,8 +124,9 @@ export function getUserConfigPath(): string {
       "config.json",
     );
   } else {
-    // Linux: ~/.config/file-organizer-mcp/config.json
-    return path.join(home, ".config", "file-organizer-mcp", "config.json");
+    // Linux: $XDG_CONFIG_HOME/file-organizer-mcp/config.json or ~/.config/file-organizer-mcp/config.json
+    const basePath = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
+    return path.join(basePath, "file-organizer-mcp", "config.json");
   }
 }
 
