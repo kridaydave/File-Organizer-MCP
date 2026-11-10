@@ -86,25 +86,31 @@ export async function handleBatchRename(
     } = parsed.data;
 
     let filesToProcess: string[] = [];
+    const validationErrors: string[] = [];
 
     if (explicitFiles && explicitFiles.length > 0) {
       const validatedFiles: string[] = [];
-      const errors: string[] = [];
       for (const f of explicitFiles) {
-        const validated = await validateStrictPath(f);
-        if (validated) {
-          validatedFiles.push(validated);
-        } else {
-          errors.push(`Invalid path: ${f}`);
+        try {
+          const validated = await validateStrictPath(f);
+          if (validated) {
+            validatedFiles.push(validated);
+          } else {
+            validationErrors.push("Invalid path");
+          }
+        } catch (error) {
+          validationErrors.push("Invalid path");
         }
       }
       filesToProcess = validatedFiles;
-      if (errors.length > 0 && filesToProcess.length === 0) {
+      if (validationErrors.length > 0 && filesToProcess.length === 0) {
         return {
           content: [
             {
               type: "text",
-              text: `Error: All provided paths are invalid.\n${errors.join("\n")}`,
+              text: `Error: All provided paths are invalid.\n${validationErrors
+                .map(() => "- Invalid path")
+                .join("\n")}`,
             },
           ],
           isError: true,
@@ -142,12 +148,16 @@ export async function handleBatchRename(
     // 3. Format Output
 
     if (response_format === "json") {
-      const outputData = {
+      const outputData: Record<string, unknown> = {
         dry_run,
         rules,
         previews: dry_run ? previews : undefined, // show previews in dry run
         result: !dry_run ? result : undefined, // show result in execution
       };
+      if (validationErrors.length > 0) {
+        outputData.validationErrors = validationErrors;
+        outputData.invalidPathCount = validationErrors.length;
+      }
       return {
         content: [
           {
@@ -156,7 +166,7 @@ export async function handleBatchRename(
           },
         ],
         structuredContent: outputData as Record<string, unknown>,
-        ...(hasError && { isError: true }),
+        ...((hasError || validationErrors.length > 0) && { isError: true }),
       };
     }
 
@@ -164,6 +174,13 @@ export async function handleBatchRename(
     let md = `### Batch Rename ${dry_run ? "(Dry Run)" : "Result"}\n\n`;
     md += `**Rules Applied:** ${rules.length}\n`;
     md += `**Files Processed:** ${previews.length}\n\n`;
+    if (validationErrors.length > 0) {
+      md += `**Invalid paths:** ${validationErrors.length}\n`;
+      for (const err of validationErrors) {
+        md += `- ${err}\n`;
+      }
+      md += "\n";
+    }
 
     if (dry_run) {
       md += `#### Preview Changes\n`;

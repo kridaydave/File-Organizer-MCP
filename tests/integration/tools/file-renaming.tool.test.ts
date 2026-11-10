@@ -92,4 +92,34 @@ describe('file_organizer_batch_rename Tool', () => {
         expect(onDisk).toContain('a.txt');
         expect(onDisk).toContain('b.txt');
     });
+
+    it('should report invalid paths in mixed batch for both json and markdown', async () => {
+        const validFile = path.join(testDir, 'VALID.txt');
+        await fs.writeFile(validFile, 'content');
+        const invalidFile = path.join(testDir, '..', 'outside.txt');
+
+        const markdownResult = await handleBatchRename({
+            files: [validFile, invalidFile],
+            rules: [{ type: 'case', conversion: 'lowercase' }],
+            dry_run: true,
+            response_format: 'markdown'
+        });
+        const mdOutput = markdownResult.content[0].text;
+        expect(mdOutput).toContain('Invalid paths');
+        expect(mdOutput).toContain('valid.txt');
+        expect(mdOutput).not.toContain(invalidFile);
+
+        const jsonResult = await handleBatchRename({
+            files: [validFile, invalidFile],
+            rules: [{ type: 'case', conversion: 'lowercase' }],
+            dry_run: true,
+            response_format: 'json'
+        });
+        expect(jsonResult.isError).toBe(true);
+        const jsonData = JSON.parse(jsonResult.content[0].text);
+        expect(jsonData.invalidPathCount).toBe(1);
+        expect(Array.isArray(jsonData.validationErrors)).toBe(true);
+        expect(jsonData.validationErrors.length).toBe(1);
+        expect(JSON.stringify(jsonData)).not.toContain(invalidFile);
+    });
 });
