@@ -246,6 +246,36 @@ const ICO_SIGNATURE: FileSignature = {
   description: "Windows Icon",
 };
 
+const HEIC_SIGNATURE: FileSignature = {
+  type: "HEIC",
+  mimeType: "image/heic",
+  signatures: [
+    Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]),
+    Buffer.from([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]),
+    Buffer.from([0x00, 0x00, 0x00, 0x1c, 0x66, 0x74, 0x79, 0x70]),
+  ],
+  extensions: [".heic", ".heif"],
+  category: "Image",
+  description: "High Efficiency Image Container",
+  validator: (buffer: Buffer) => {
+    if (buffer.length < 12) return false;
+    if (buffer.slice(4, 8).toString() !== "ftyp") return false;
+    const brand = buffer.slice(8, 12).toString();
+    return [
+      "heic",
+      "heix",
+      "heim",
+      "heis",
+      "hevc",
+      "hev1",
+      "mif1",
+      "msf1",
+      "avci",
+      "avcs",
+    ].includes(brand);
+  },
+};
+
 const SVG_SIGNATURE: FileSignature = {
   type: "SVG",
   mimeType: "image/svg+xml",
@@ -457,7 +487,24 @@ const MP4_SIGNATURE: FileSignature = {
   validator: (buffer: Buffer) => {
     if (buffer.length < 12) return false;
     // Check for ftyp at offset 4
-    return buffer.slice(4, 8).toString() === "ftyp";
+    if (buffer.slice(4, 8).toString() !== "ftyp") return false;
+    const brand = buffer.slice(8, 12).toString();
+    const heicBrands = [
+      "heic",
+      "heix",
+      "heim",
+      "heis",
+      "hevc",
+      "hev1",
+      "mif1",
+      "msf1",
+      "avci",
+      "avcs",
+    ];
+    if (heicBrands.includes(brand)) {
+      return false;
+    }
+    return true;
   },
 };
 
@@ -708,6 +755,7 @@ export const FILE_SIGNATURES: FileSignature[] = [
   TIFF_LE_SIGNATURE,
   TIFF_BE_SIGNATURE,
   ICO_SIGNATURE,
+  HEIC_SIGNATURE,
   SVG_SIGNATURE,
 
   // Executables (Security Critical)
@@ -799,6 +847,8 @@ export const EXTENSION_TO_SIGNATURE: Record<string, string[]> = {
   ".tif": ["TIFF_LE", "TIFF_BE"],
   ".tiff": ["TIFF_LE", "TIFF_BE"],
   ".ico": ["ICO"],
+  ".heic": ["HEIC"],
+  ".heif": ["HEIC"],
   ".svg": ["SVG"],
 
   // Executables
