@@ -192,6 +192,7 @@ export async function handleDeleteDuplicates(
 
     const result = await duplicateFinder.deleteFiles(files_to_delete, {
       createBackupManifest: create_backup_manifest,
+      autoVerify: true,
     });
 
     const output = {
