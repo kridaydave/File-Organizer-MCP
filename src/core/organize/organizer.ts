@@ -59,6 +59,7 @@ export class OrganizerService {
   constructor(
     private categorizer: CategorizerService = new CategorizerService(),
     private metadataService: MetadataService = new MetadataService(),
+    private rollbackService?: RollbackService,
   ) {}
 
   /**
@@ -259,7 +260,32 @@ export class OrganizerService {
     const errors: string[] = [];
     const skippedFiles: { path: string; reason: string }[] = [...plan.skippedFiles];
 
-    const rollbackService = new RollbackService();
+    const rollbackService = this.rollbackService || new RollbackService();
+
+    // Create manifest before starting moves to ensure undo path exists even if crash occurs mid-run
+    let manifestId: string | null = null;
+    if (plan.moves.length > 0) {
+      try {
+        manifestId = await rollbackService.createManifest(
+          `Organization of ${directory} (0 files)`,
+          [],
+        );
+      } catch (manifestErr) {
+        const manifestError =
+          manifestErr instanceof Error
+            ? manifestErr
+            : new Error(String(manifestErr));
+        const msg = `Failed to create rollback manifest: ${manifestError.message}`;
+        errors.push(msg);
+        logger.error(msg, {
+          operation: "manifest_create",
+          directory,
+          rollbackCount: 0,
+          error: manifestError.message,
+          errorStack: manifestError.stack,
+        });
+      }
+    }
 
     // 2. Prepare Backup Directory for Overwrites
     const backupDir = getBackupDirectory();
@@ -628,6 +654,30 @@ export class OrganizerService {
           overwrittenBackupPath: overwrittenBackupPath,
           timestamp: Date.now(),
         });
+
+        if (manifestId) {
+          try {
+            await rollbackService.createManifest(
+              `Organization of ${directory} (${rollbackActions.length} files)`,
+              rollbackActions,
+              manifestId,
+            );
+          } catch (manifestErr) {
+            const manifestError =
+              manifestErr instanceof Error
+                ? manifestErr
+                : new Error(String(manifestErr));
+            const msg = `Failed to update rollback manifest: ${manifestError.message}`;
+            errors.push(msg);
+            logger.error(msg, {
+              operation: "manifest_update",
+              directory,
+              rollbackCount: rollbackActions.length,
+              error: manifestError.message,
+              errorStack: manifestError.stack,
+            });
+          }
+        }
       } catch (error) {
         const msg = `Failed to move ${move.source}: ${(error as Error).message}`;
         errors.push(msg);
@@ -635,8 +685,30 @@ export class OrganizerService {
       }
     }
 
-    // Save rollback manifest once for the entire batch
-    if (rollbackActions.length > 0) {
+    // Finalize rollback manifest if not already updated incrementally
+    if (rollbackActions.length > 0 && manifestId) {
+      try {
+        await rollbackService.createManifest(
+          `Organization of ${directory} (${rollbackActions.length} files)`,
+          rollbackActions,
+          manifestId,
+        );
+      } catch (manifestErr) {
+        const manifestError =
+          manifestErr instanceof Error
+            ? manifestErr
+            : new Error(String(manifestErr));
+        const msg = `Failed to create rollback manifest: ${manifestError.message}`;
+        errors.push(msg);
+        logger.error(msg, {
+          operation: "manifest_create",
+          directory,
+          rollbackCount: rollbackActions.length,
+          error: manifestError.message,
+          errorStack: manifestError.stack,
+        });
+      }
+    } else if (rollbackActions.length > 0 && !manifestId) {
       try {
         await rollbackService.createManifest(
           `Organization of ${directory} (${rollbackActions.length} files)`,

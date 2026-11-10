@@ -71,10 +71,11 @@ export class RollbackService {
   async createManifest(
     description: string,
     actions: RollbackAction[],
+    manifestId?: string,
   ): Promise<string> {
     await this.ensureStorage();
 
-    const id = randomUUID();
+    const id = manifestId || randomUUID();
     const timestamp = Date.now();
     const hash = manifestIntegrityService.computeHash(actions, timestamp);
 

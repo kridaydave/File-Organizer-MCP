@@ -265,6 +265,22 @@ export class RenamingService {
 
     const rollbackActions: RollbackAction[] = [];
 
+    // Create manifest before starting renames to ensure undo path exists even if crash occurs mid-run
+    let manifestId: string | null = null;
+    if (previews.some((item) => item.willChange && !item.conflict && !item.error)) {
+      try {
+        manifestId = await this.rollbackService.createManifest(
+          "Batch Rename of 0 files",
+          [],
+        );
+      } catch (manifestErr) {
+        const manifestError =
+          manifestErr instanceof Error ? manifestErr : new Error(String(manifestErr));
+        result.errors.push(`Failed to create rollback manifest: ${manifestError.message}`);
+        logger.error(`Failed to create rollback manifest: ${manifestError.message}`);
+      }
+    }
+
     // Sort: Process renames that don't conflict first?
     // Or process carefully.
     // If we have A -> B and B -> C. We must do B -> C first, then A -> B.
@@ -333,6 +349,21 @@ export class RenamingService {
           currentPath: item.new,
           timestamp: Date.now(),
         });
+
+        if (manifestId) {
+          try {
+            await this.rollbackService.createManifest(
+              `Batch Rename of ${rollbackActions.length} files`,
+              rollbackActions as RollbackAction[],
+              manifestId,
+            );
+          } catch (manifestErr) {
+            const manifestError =
+              manifestErr instanceof Error ? manifestErr : new Error(String(manifestErr));
+            result.errors.push(`Failed to update rollback manifest: ${manifestError.message}`);
+            logger.error(`Failed to update rollback manifest: ${manifestError.message}`);
+          }
+        }
       } catch (error) {
         result.statistics.failed++;
         const msg = `Failed to rename ${path.basename(item.original)}: ${(error as Error).message}`;
@@ -341,11 +372,31 @@ export class RenamingService {
       }
     }
 
-    if (rollbackActions.length > 0) {
-      await this.rollbackService.createManifest(
-        `Batch Rename of ${rollbackActions.length} files`,
-        rollbackActions as RollbackAction[],
-      );
+    if (rollbackActions.length > 0 && manifestId) {
+      try {
+        await this.rollbackService.createManifest(
+          `Batch Rename of ${rollbackActions.length} files`,
+          rollbackActions as RollbackAction[],
+          manifestId,
+        );
+      } catch (manifestErr) {
+        const manifestError =
+          manifestErr instanceof Error ? manifestErr : new Error(String(manifestErr));
+        result.errors.push(`Failed to create rollback manifest: ${manifestError.message}`);
+        logger.error(`Failed to create rollback manifest: ${manifestError.message}`);
+      }
+    } else if (rollbackActions.length > 0 && !manifestId) {
+      try {
+        await this.rollbackService.createManifest(
+          `Batch Rename of ${rollbackActions.length} files`,
+          rollbackActions as RollbackAction[],
+        );
+      } catch (manifestErr) {
+        const manifestError =
+          manifestErr instanceof Error ? manifestErr : new Error(String(manifestErr));
+        result.errors.push(`Failed to create rollback manifest: ${manifestError.message}`);
+        logger.error(`Failed to create rollback manifest: ${manifestError.message}`);
+      }
     }
 
     return result;
