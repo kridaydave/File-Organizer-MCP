@@ -519,6 +519,29 @@ describe("View History Tool - Integration Tests", () => {
       expect(entry.details).toBeUndefined();
       expect(entry.error).toBeUndefined();
     });
+
+    it("should render markdown correctly in none mode without Invalid Date or undefined", async () => {
+      populateHistory([
+        createTestEntry({
+          operation: "test_op",
+          source: "manual",
+          status: "success",
+          filesProcessed: 10,
+          details: "Sensitive details",
+        }),
+      ]);
+
+      const result = await handleViewHistory({
+        privacy_mode: "none",
+        response_format: "markdown",
+      });
+
+      const text = result.content[0].text;
+      expect(text).not.toContain("Invalid Date");
+      expect(text).not.toContain("undefined");
+      expect(text).toContain("test_op");
+      expect(text).toContain("### File Organization History");
+    });
   });
 
   describe("Empty History", () => {

@@ -159,12 +159,12 @@ export async function handleViewHistory(
 
 function formatHistoryAsMarkdown(
   entries: Array<{
-    id: string;
-    timestamp: string;
-    operation: string;
-    source: "manual" | "scheduled";
-    status: "success" | "error" | "partial";
-    durationMs: number;
+    id?: string;
+    timestamp?: string;
+    operation?: string;
+    source?: "manual" | "scheduled";
+    status?: "success" | "error" | "partial";
+    durationMs?: number;
     filesProcessed?: number;
     filesSkipped?: number;
     details?: string;
@@ -188,16 +188,23 @@ function formatHistoryAsMarkdown(
     "|-----------|-----------|--------|--------|----------|-------|\n";
 
   for (const entry of entries) {
-    const timestamp = new Date(entry.timestamp).toLocaleString();
+    const timestamp =
+      entry.timestamp && !isNaN(new Date(entry.timestamp).getTime())
+        ? new Date(entry.timestamp).toLocaleString()
+        : "-";
+    const durationMs = entry.durationMs ?? 0;
     const duration =
-      entry.durationMs < 1000
-        ? `${entry.durationMs}ms`
-        : `${(entry.durationMs / 1000).toFixed(1)}s`;
+      durationMs < 1000
+        ? `${durationMs}ms`
+        : `${(durationMs / 1000).toFixed(1)}s`;
     const files = entry.filesProcessed ?? "-";
+    const status = entry.status ?? "-";
     const statusEmoji =
-      entry.status === "success" ? "✓" : entry.status === "error" ? "✗" : "⚠";
+      status === "success" ? "✓" : status === "error" ? "✗" : status === "partial" ? "⚠" : "-";
+    const operation = entry.operation ?? "-";
+    const source = entry.source ?? "-";
 
-    markdown += `| ${timestamp} | ${entry.operation} | ${entry.source} | ${statusEmoji} ${entry.status} | ${duration} | ${files} |\n`;
+    markdown += `| ${timestamp} | ${operation} | ${source} | ${statusEmoji} ${status} | ${duration} | ${files} |\n`;
   }
 
   markdown += "\n";
@@ -208,7 +215,11 @@ function formatHistoryAsMarkdown(
   if (errorEntries.length > 0) {
     markdown += "### Errors\n\n";
     for (const entry of errorEntries) {
-      markdown += `**${entry.operation}** (${new Date(entry.timestamp).toLocaleString()})\n`;
+      const timestamp =
+        entry.timestamp && !isNaN(new Date(entry.timestamp).getTime())
+          ? new Date(entry.timestamp).toLocaleString()
+          : "-";
+      markdown += `**${entry.operation ?? "-"}** (${timestamp})\n`;
       if (entry.error?.message) {
         markdown += `- Error: ${entry.error.message}\n`;
       }
