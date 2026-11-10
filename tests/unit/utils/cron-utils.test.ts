@@ -75,6 +75,16 @@ describe('cron-utils', () => {
       expect(nextRun.getUTCMinutes()).toBe(0);
     });
 
+    it('should calculate next run for hour step cron (0 */6 * * *)', () => {
+      const baseTime = new Date('2026-02-08T10:00:00.000Z');
+      const nextRun = getNextRunTime('0 */6 * * *', baseTime);
+
+      expect(nextRun).toBeInstanceOf(Date);
+      expect(Number.isNaN(nextRun.getTime())).toBe(false);
+      expect(nextRun.getUTCHours()).toBe(12);
+      expect(nextRun.getUTCMinutes()).toBe(0);
+    });
+
     it('should return valid date for invalid cron (fallback)', () => {
       const baseTime = new Date('2026-02-08T10:00:00.000Z');
       const nextRun = getNextRunTime('invalid', baseTime);
@@ -133,6 +143,16 @@ describe('cron-utils', () => {
       // Should be at 10:30
       expect(prevRun.getUTCHours()).toBe(10);
       expect(prevRun.getUTCMinutes()).toBe(30);
+    });
+
+    it('should calculate previous run for hour step cron (0 */6 * * *)', () => {
+      const baseTime = new Date('2026-02-08T10:00:00.000Z');
+      const prevRun = getPreviousRunTime('0 */6 * * *', baseTime);
+
+      expect(prevRun).toBeInstanceOf(Date);
+      expect(Number.isNaN(prevRun.getTime())).toBe(false);
+      expect(prevRun.getUTCHours()).toBe(6);
+      expect(prevRun.getUTCMinutes()).toBe(0);
     });
 
     it('should return valid date for invalid cron (fallback)', () => {
@@ -207,6 +227,13 @@ describe('cron-utils', () => {
       const currentTime = new Date();
 
       const result = shouldCatchup('0 9 * * 0', lastRunTime, currentTime);
+      expect(result).toBe(true);
+    });
+
+    it('should handle catchup for hour step cron (0 */6 * * *)', () => {
+      const currentTime = new Date('2026-02-08T10:00:00.000Z');
+      const lastRunTime = new Date('2026-02-08T03:00:00.000Z');
+      const result = shouldCatchup('0 */6 * * *', lastRunTime, currentTime);
       expect(result).toBe(true);
     });
   });

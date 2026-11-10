@@ -161,6 +161,52 @@ export function getNextRunTime(
     return next;
   }
 
+  // Handle hour step values (e.g., "0 */6 * * *" for every 6 hours)
+  if (
+    components.minute !== "*" &&
+    typeof components.hour === "string" &&
+    components.hour.startsWith("*/") &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    const step = parseInt(components.hour.slice(2), 10);
+    next.setUTCMinutes(components.minute as number);
+    next.setUTCSeconds(0);
+    next.setUTCMilliseconds(0);
+    const currentHour = next.getUTCHours();
+    if (currentHour % step === 0 && next.getTime() <= fromDate.getTime()) {
+      next.setUTCHours(currentHour + step);
+    } else if (currentHour % step !== 0) {
+      const nextHour = Math.ceil(currentHour / step) * step;
+      if (nextHour >= 24) {
+        const daysToAdd = Math.floor(nextHour / 24);
+        const hourInDay = nextHour % 24;
+        next.setUTCDate(next.getUTCDate() + daysToAdd);
+        next.setUTCHours(hourInDay);
+      } else {
+        next.setUTCHours(nextHour);
+      }
+    } else {
+      // Exactly on a scheduled hour but time hasn't passed? Check - if we're exactly at the scheduled time
+      if (next.getTime() <= fromDate.getTime()) {
+        next.setUTCHours(currentHour + step);
+      }
+    }
+    if (next.getUTCHours() >= 24 && next.getUTCHours() % 24 !== next.getUTCHours()) {
+      const extraHours = next.getUTCHours();
+      const daysToAdd = Math.floor(extraHours / 24);
+      const hourInDay = extraHours % 24;
+      next.setUTCDate(next.getUTCDate() + daysToAdd);
+      next.setUTCHours(hourInDay);
+    } else if (next.getUTCHours() >= 24) {
+      const daysToAdd = Math.floor(next.getUTCHours() / 24);
+      next.setUTCDate(next.getUTCDate() + daysToAdd);
+      next.setUTCHours(next.getUTCHours() % 24);
+    }
+    return next;
+  }
+
   // Handle hourly pattern: "0 * * * *"
   if (
     components.minute !== "*" &&
@@ -179,7 +225,7 @@ export function getNextRunTime(
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
     components.minute !== "*" &&
-    components.hour !== "*" &&
+    typeof components.hour === "number" &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
@@ -261,6 +307,43 @@ export function getPreviousRunTime(
     return prev;
   }
 
+  // Handle hour step values (e.g., "0 */6 * * *" for every 6 hours)
+  if (
+    components.minute !== "*" &&
+    typeof components.hour === "string" &&
+    components.hour.startsWith("*/") &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    const step = parseInt(components.hour.slice(2), 10);
+    prev.setUTCMinutes(components.minute as number);
+    prev.setUTCSeconds(0);
+    prev.setUTCMilliseconds(0);
+    const currentHour = prev.getUTCHours();
+    if (currentHour % step === 0 && prev.getTime() >= fromDate.getTime()) {
+      prev.setUTCHours(currentHour - step);
+    } else if (currentHour % step !== 0) {
+      const prevHour = Math.floor(currentHour / step) * step;
+      if (prevHour < 0) {
+        prev.setUTCDate(prev.getUTCDate() - 1);
+        prev.setUTCHours(24 + prevHour);
+      } else {
+        prev.setUTCHours(prevHour);
+      }
+    } else {
+      if (prev.getTime() >= fromDate.getTime()) {
+        prev.setUTCHours(currentHour - step);
+      }
+    }
+    if (prev.getUTCHours() < 0) {
+      const daysToSubtract = Math.ceil(Math.abs(prev.getUTCHours()) / 24);
+      prev.setUTCDate(prev.getUTCDate() - daysToSubtract);
+      prev.setUTCHours(((prev.getUTCHours() % 24) + 24) % 24);
+    }
+    return prev;
+  }
+
   // Handle hourly pattern: "0 * * * *"
   if (
     components.minute !== "*" &&
@@ -279,7 +362,7 @@ export function getPreviousRunTime(
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
     components.minute !== "*" &&
-    components.hour !== "*" &&
+    typeof components.hour === "number" &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
