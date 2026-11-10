@@ -144,37 +144,45 @@ export function findEXIFSegment(
 function removeGPSFromJPEG(buffer: Buffer): Buffer {
   try {
     const jpegBase64 = buffer.toString("base64");
-    const exifObj = piexif.load(jpegBase64);
-
-    const gpsTag = piexif.ImageIFD?.GPSTag;
-    const hasGPS =
-      (piexif.GPSIFD && exifObj.GPS && Object.keys(exifObj.GPS).length > 0) ||
-      (exifObj["0th"] && gpsTag !== undefined && gpsTag in exifObj["0th"]);
-
-    if (!hasGPS && !exifObj.GPS) {
-      return buffer;
-    }
-
-    delete exifObj.GPS;
-
-    if (exifObj["0th"] && piexif.ImageIFD?.GPSTag !== undefined) {
-      delete exifObj["0th"][piexif.ImageIFD.GPSTag];
-    }
-
     try {
-      const exifBytes = piexif.dump(exifObj);
-      const newJpegBase64 = piexif.remove(jpegBase64);
-      const finalJpegBase64 = piexif.insert(exifBytes, newJpegBase64);
-      return Buffer.from(finalJpegBase64, "base64");
-    } catch {
-      // If dumping fails, try removing EXIF entirely as a last resort
-      // to ensure GPS data is not recoverable
-      try {
-        const newJpegBase64 = piexif.remove(jpegBase64);
-        return Buffer.from(newJpegBase64, "base64");
-      } catch {
-        return buffer;
+      const exifObj = piexif.load(jpegBase64);
+
+      const gpsTag = piexif.ImageIFD?.GPSTag;
+      const hasGPS =
+        (piexif.GPSIFD && exifObj.GPS && Object.keys(exifObj.GPS).length > 0) ||
+        (exifObj["0th"] && gpsTag !== undefined && gpsTag in exifObj["0th"]);
+
+      if (hasGPS || exifObj.GPS) {
+        delete exifObj.GPS;
+
+        if (exifObj["0th"] && piexif.ImageIFD?.GPSTag !== undefined) {
+          delete exifObj["0th"][piexif.ImageIFD.GPSTag];
+        }
+
+        try {
+          const exifBytes = piexif.dump(exifObj);
+          const newJpegBase64 = piexif.remove(jpegBase64);
+          const finalJpegBase64 = piexif.insert(exifBytes, newJpegBase64);
+          const result = Buffer.from(finalJpegBase64, "base64");
+          // If piexifjs didn't actually remove GPS pointer, fall through to aggressive removal
+          if (result.includes(Buffer.from([0x25, 0x88]))) {
+            throw new Error("GPS pointer still present");
+          }
+          return result;
+        } catch {
+          // Fall through to aggressive removal
+        }
       }
+    } catch {
+      // piexifjs couldn't parse; fall through to aggressive removal
+    }
+
+    // If piexifjs can't reliably remove GPS, remove all EXIF/metadata to guarantee no GPS remains
+    try {
+      const stripped = removeAllMetadataFromJPEG(buffer);
+      return stripped;
+    } catch {
+      return buffer;
     }
   } catch {
     return buffer;
@@ -261,7 +269,17 @@ export async function stripGPS(
       return { success: true, gpsRemoved: false };
     }
 
-    await fs.writeFile(outputPath || filePath, removeGPSFromJPEG(buffer));
+    const stripped = removeGPSFromJPEG(buffer);
+    await fs.writeFile(outputPath || filePath, stripped);
+
+    // Verify GPS is actually removed; if not, report failure per privacy requirement
+    if (await detectGpsPresence(stripped)) {
+      return { success: false, gpsRemoved: false };
+    }
+    if (stripped.includes(Buffer.from([0x25, 0x88]))) {
+      return { success: false, gpsRemoved: false };
+    }
+
     return { success: true, gpsRemoved: true };
   } catch {
     return { success: false, gpsRemoved: false };
