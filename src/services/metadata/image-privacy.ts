@@ -7,6 +7,7 @@
 import fs from "fs/promises";
 import path from "path";
 import ExifParser from "exif-parser";
+import * as piexif from "piexifjs";
 
 /** Check whether EXIF tags carry GPS coordinates. */
 export async function detectGpsPresence(buffer: Buffer): Promise<boolean> {
@@ -138,47 +139,45 @@ export function findEXIFSegment(
 }
 
 /**
- * Zero out the GPS IFD pointer in IFD0.
- * Reads the real IFD0 offset from the TIFF header (endian + magic occupy
- * 8 bytes before the pointer field).
+ * Remove GPS IFD and related GPS tags from JPEG EXIF data.
  */
 function removeGPSFromJPEG(buffer: Buffer): Buffer {
-  const exifData = findEXIFSegment(buffer);
-  if (!exifData) return buffer;
-
-  const tiffHeaderOffset = exifData.tiffHeaderOffset;
-  const isLittleEndian =
-    buffer.toString("ascii", tiffHeaderOffset, tiffHeaderOffset + 2) === "II";
-
-  const readU16 = (o: number) =>
-    isLittleEndian ? buffer.readUInt16LE(o) : buffer.readUInt16BE(o);
-  const readU32 = (o: number) =>
-    isLittleEndian ? buffer.readUInt32LE(o) : buffer.readUInt32BE(o);
-
-  let ifd0Offset: number;
   try {
-    ifd0Offset = tiffHeaderOffset + readU32(tiffHeaderOffset + 4);
+    const jpegBase64 = buffer.toString("base64");
+    const exifObj = piexif.load(jpegBase64);
+
+    const hasGPS =
+      (piexif.GPSIFD && exifObj.GPS && Object.keys(exifObj.GPS).length > 0) ||
+      (exifObj["0th"] && (exifObj["0th"] as any)[piexif.ImageIFD?.GPSTag]);
+
+    if (!hasGPS && !exifObj.GPS) {
+      return buffer;
+    }
+
+    delete exifObj.GPS;
+
+    if (exifObj["0th"] && piexif.ImageIFD?.GPSTag !== undefined) {
+      delete exifObj["0th"][piexif.ImageIFD.GPSTag];
+    }
+
+    try {
+      const exifBytes = piexif.dump(exifObj);
+      const newJpegBase64 = piexif.remove(jpegBase64);
+      const finalJpegBase64 = piexif.insert(exifBytes, newJpegBase64);
+      return Buffer.from(finalJpegBase64, "base64");
+    } catch {
+      // If dumping fails, try removing EXIF entirely as a last resort
+      // to ensure GPS data is not recoverable
+      try {
+        const newJpegBase64 = piexif.remove(jpegBase64);
+        return Buffer.from(newJpegBase64, "base64");
+      } catch {
+        return buffer;
+      }
+    }
   } catch {
     return buffer;
   }
-  if (ifd0Offset + 2 > buffer.length) return buffer;
-
-  const numEntries = readU16(ifd0Offset);
-
-  const newBuffer = Buffer.from(buffer);
-  let entryOffset = ifd0Offset + 2;
-  for (let i = 0; i < numEntries; i++) {
-    if (entryOffset + 12 > newBuffer.length) break;
-    const tag = readU16(entryOffset);
-    if (tag === GPS_IFD_POINTER_TAG) {
-      // Zeroed value bytes are endian-independent
-      newBuffer.writeUInt32BE(0, entryOffset + 8);
-      break;
-    }
-    entryOffset += 12;
-  }
-
-  return newBuffer;
 }
 
 /**
