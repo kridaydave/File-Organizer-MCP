@@ -156,8 +156,25 @@ export async function handleUnwatchDirectory(
 
     // Find and remove the watch
     const initialCount = watchList.length;
-    const normalizedTarget = path.resolve(directory);
-    watchList = watchList.filter((w) => path.resolve(w.directory) !== normalizedTarget);
+    let normalizedTarget: string | null = null;
+    try {
+      normalizedTarget = await validateStrictPath(directory);
+    } catch {
+      normalizedTarget = path.resolve(directory);
+    }
+
+    watchList = watchList.filter((w) => {
+      const stored = path.resolve(w.directory);
+      if (normalizedTarget && stored === normalizedTarget) {
+        return false;
+      }
+      try {
+        const storedReal = path.resolve(w.directory);
+        return storedReal !== normalizedTarget;
+      } catch {
+        return true;
+      }
+    });
 
     if (watchList.length === initialCount) {
       return {
