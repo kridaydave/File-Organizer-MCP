@@ -101,10 +101,21 @@ export class RenamingService {
                         );
                     newBasename = split.join(frRule.replace);
                   } else {
-                    newBasename = newBasename.replace(
-                      frRule.find,
-                      frRule.replace,
-                    );
+                    if (frRule.case_sensitive) {
+                      newBasename = newBasename.replace(
+                        frRule.find,
+                        frRule.replace,
+                      );
+                    } else {
+                      const regex = new RegExp(
+                        escapeRegExp(frRule.find),
+                        "i",
+                      );
+                      newBasename = newBasename.replace(
+                        regex,
+                        frRule.replace,
+                      );
+                    }
                   }
                 }
                 break;

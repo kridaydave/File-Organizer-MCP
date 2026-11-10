@@ -195,5 +195,37 @@ describe('RenamingService', () => {
             expect(preview[0].conflict).toBe(false);
             expect(preview[0].new).toContain('FILE.TXT');
         });
+
+        it('should do case-insensitive non-global find_replace for plain strings', async () => {
+            const files = [path.join('test', 'Hello.txt')];
+            const rules = [{
+                type: 'find_replace',
+                find: 'hello',
+                replace: 'bye',
+                use_regex: false,
+                case_sensitive: false,
+                global: false
+            }];
+
+            const preview = await service.applyRenameRules(files, rules);
+            expect(preview[0].new).toBe(path.join('test', 'bye.txt'));
+            expect(preview[0].willChange).toBe(true);
+        });
+
+        it('should do case-insensitive global find_replace for plain strings', async () => {
+            const files = [path.join('test', 'HelloHELLO.txt')];
+            const rules = [{
+                type: 'find_replace',
+                find: 'hello',
+                replace: 'bye',
+                use_regex: false,
+                case_sensitive: false,
+                global: true
+            }];
+
+            const preview = await service.applyRenameRules(files, rules);
+            expect(preview[0].new).toBe(path.join('test', 'byebye.txt'));
+            expect(preview[0].willChange).toBe(true);
+        });
     });
 });
