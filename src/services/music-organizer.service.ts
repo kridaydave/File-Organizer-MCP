@@ -203,6 +203,11 @@ export class MusicOrganizerService {
       .replace(/[\x00-\x1F]/g, "") // Remove control characters
       .trim();
 
+    // Prevent directory traversal
+    if (sanitized === "." || sanitized === ".." || sanitized === "") {
+      return "Unknown";
+    }
+
     // Prevent Windows reserved names
     const nameWithoutExt = sanitized.split(".")[0] ?? "";
     if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(nameWithoutExt)) {
@@ -243,7 +248,12 @@ export class MusicOrganizerService {
       case "genre/artist":
         const genre = metadata.genre?.trim() || "Unknown Genre";
         const sanitizedGenre = this.sanitizeFilename(genre);
-        destDir = path.join(config.targetDir, sanitizedGenre, artist);
+        // Prevent directory traversal in genre as well
+        if (sanitizedGenre === "." || sanitizedGenre === ".." || sanitizedGenre === "") {
+          destDir = path.join(config.targetDir, "Unknown Genre", artist);
+        } else {
+          destDir = path.join(config.targetDir, sanitizedGenre, artist);
+        }
         break;
       case "flat":
         destDir = config.targetDir;
@@ -252,7 +262,16 @@ export class MusicOrganizerService {
         destDir = path.join(config.targetDir, artist, album);
     }
 
-    return path.join(destDir, filename);
+    const destinationPath = path.join(destDir, filename);
+    const resolvedDest = path.resolve(destinationPath);
+    const resolvedTarget = path.resolve(config.targetDir);
+    if (!isSubPath(resolvedTarget, resolvedDest) && resolvedDest !== resolvedTarget) {
+      // Fallback to target root with sanitized filename
+      const safeFilename = this.sanitizeFilename(path.basename(filename)) + path.extname(filename);
+      return path.join(resolvedTarget, safeFilename);
+    }
+
+    return destinationPath;
   }
 
   /**

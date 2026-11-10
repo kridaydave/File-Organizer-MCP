@@ -5,6 +5,7 @@
 
 import fs from "fs/promises";
 import path from "path";
+import os from "os";
 import { MusicOrganizerService } from "../../../src/services/music-organizer.service.js";
 import {
   setupLoggerMocks,
@@ -206,6 +207,12 @@ describe("MusicOrganizerService", () => {
       expect(service.sanitizeFilename("  song name  ")).toBe("song name");
     });
 
+    it("should prevent directory traversal", () => {
+      expect(service.sanitizeFilename("..")).toBe("Unknown");
+      expect(service.sanitizeFilename(".")).toBe("Unknown");
+      expect(service.sanitizeFilename("")).toBe("Unknown");
+    });
+
     it("should preserve valid characters", () => {
       expect(service.sanitizeFilename("Song - Name (2023) [Live].mp3")).toBe(
         "Song - Name (2023) [Live].mp3",
@@ -280,6 +287,37 @@ describe("MusicOrganizerService", () => {
       expect(destPath).toBe(
         path.join("/target", "Test Album", "Test Song.mp3"),
       );
+    });
+
+    it("should prevent directory traversal with artist ..", () => {
+      const tmp = os.tmpdir();
+      const targetDirTest = path.join(tmp, "music-org-test-target");
+      const metadata = {
+        filePath: path.join(tmp, "song.mp3"),
+        format: "MP3",
+        hasEmbeddedArtwork: false,
+        extractedAt: new Date(),
+        title: "Test Song",
+        artist: "..",
+        album: "Album",
+      };
+
+      const config = {
+        sourceDir: tmp,
+        targetDir: targetDirTest,
+        structure: "artist/album" as const,
+        filenamePattern: "{title}" as const,
+      };
+
+      const destPath = service.getDestinationPath(metadata, config);
+      const resolvedDest = path.resolve(destPath);
+      const resolvedTarget = path.resolve(targetDirTest);
+      expect(
+        resolvedDest.startsWith(resolvedTarget + path.sep) ||
+          resolvedDest === path.join(resolvedTarget, "Test Song.mp3") ||
+          resolvedDest.startsWith(resolvedTarget),
+      ).toBe(true);
+      expect(resolvedDest.includes(path.join("..", "Album"))).toBe(false);
     });
 
     it("should create genre/artist structure", () => {
