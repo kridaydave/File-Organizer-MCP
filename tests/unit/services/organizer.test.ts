@@ -193,8 +193,15 @@ describe("OrganizerService", () => {
       await fs.mkdir(docsDir, { recursive: true });
       const destFile = path.join(docsDir, "source.txt");
 
-      // Make source directory read-only so unlink fails
-      await fs.chmod(testDir, 0o555);
+      const originalUnlink = fs.unlink;
+      let unlinkCallCount = 0;
+      (fs as any).unlink = async (p: any) => {
+        if (String(p) === String(srcFile)) {
+          unlinkCallCount++;
+          throw new Error("Simulated unlink failure");
+        }
+        return originalUnlink(p);
+      };
 
       const files: FileWithSize[] = [
         {
@@ -212,10 +219,7 @@ describe("OrganizerService", () => {
           conflictStrategy: "overwrite",
         });
       } finally {
-        // Restore permissions for cleanup
-        try {
-          await fs.chmod(testDir, 0o755);
-        } catch {}
+        (fs as any).unlink = originalUnlink;
       }
 
       // Unlink should have failed, so operation should error
