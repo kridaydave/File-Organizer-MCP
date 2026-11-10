@@ -146,9 +146,10 @@ function removeGPSFromJPEG(buffer: Buffer): Buffer {
     const jpegBase64 = buffer.toString("base64");
     const exifObj = piexif.load(jpegBase64);
 
+    const gpsTag = piexif.ImageIFD?.GPSTag;
     const hasGPS =
       (piexif.GPSIFD && exifObj.GPS && Object.keys(exifObj.GPS).length > 0) ||
-      (exifObj["0th"] && (exifObj["0th"] as any)[piexif.ImageIFD?.GPSTag]);
+      (exifObj["0th"] && gpsTag !== undefined && gpsTag in exifObj["0th"]);
 
     if (!hasGPS && !exifObj.GPS) {
       return buffer;
