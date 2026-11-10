@@ -259,20 +259,25 @@ const HEIC_SIGNATURE: FileSignature = {
   description: "High Efficiency Image Container",
   validator: (buffer: Buffer) => {
     if (buffer.length < 12) return false;
-    if (buffer.slice(4, 8).toString() !== "ftyp") return false;
+    // Accept if ftyp is at offset 4
+    if (buffer.slice(4, 8).toString() === "ftyp") {
+      const brand = buffer.slice(8, 12).toString();
+      if (["heic", "heix", "heim", "heis", "hevc", "hev1", "mif1", "msf1", "avci", "avcs"].includes(brand)) {
+        return true;
+      }
+    }
+    // Also check if brand appears after ftyp anywhere
+    if (buffer.includes(Buffer.from("ftyp"))) {
+      const idx = buffer.indexOf(Buffer.from("ftyp"));
+      if (idx + 8 <= buffer.length) {
+        const brand = buffer.slice(idx + 4, idx + 8).toString();
+        if (["heic", "heix", "heim", "heis", "hevc", "hev1", "mif1", "msf1", "avci", "avcs"].includes(brand)) {
+          return true;
+        }
+      }
+    }
     const brand = buffer.slice(8, 12).toString();
-    return [
-      "heic",
-      "heix",
-      "heim",
-      "heis",
-      "hevc",
-      "hev1",
-      "mif1",
-      "msf1",
-      "avci",
-      "avcs",
-    ].includes(brand);
+    return ["heic", "heix", "heim", "heis", "hevc", "hev1", "mif1", "msf1", "avci", "avcs"].includes(brand);
   },
 };
 

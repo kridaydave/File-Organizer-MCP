@@ -4,15 +4,17 @@
 
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
 import { CategorizerService } from "../../../src/services/categorizer.service.js";
 
 describe("BUG-30 HEIC sniffing", () => {
   let categorizer: CategorizerService;
   let testDir: string;
+  let baseTempDir: string;
 
   beforeEach(async () => {
-    testDir = await fs.mkdtemp(path.join(os.tmpdir(), "bug30-heic-"));
+    baseTempDir = path.join(process.cwd(), "tests", "temp");
+    await fs.mkdir(baseTempDir, { recursive: true });
+    testDir = await fs.mkdtemp(path.join(baseTempDir, "bug30-heic-"));
     categorizer = new CategorizerService();
   });
 
