@@ -19,6 +19,7 @@ import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handle
 import { logger } from "../utils/logger.js";
 import { readFile } from "../core/io/read-file.js";
 import { formatBytes } from "../utils/formatters.js";
+import { FileOrganizerError } from "../errors.js";
 import * as path from "path";
 import * as fs from "fs/promises";
 
@@ -218,6 +219,9 @@ async function readTextFile(
     }
     return text;
   } catch (error) {
+    if (error instanceof FileOrganizerError && error.code === "E_FILE_TOO_LARGE") {
+      return undefined;
+    }
     return `[Access denied or unreadable: ${sanitizeErrorMessage(error instanceof Error ? error : String(error))}]`;
   }
 }
@@ -302,7 +306,10 @@ export async function handleBatchReadFiles(
       try {
         // Read content for text files
         if (include_content && contentType === "text") {
-          result.content = await readTextFile(file.path, maxSizeBytes);
+          const content = await readTextFile(file.path, maxSizeBytes);
+          if (content !== undefined) {
+            result.content = content;
+          }
         }
 
         // Read metadata for all files (especially important for media)

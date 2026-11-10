@@ -134,11 +134,17 @@ export const BatchReadFilesInputSchema = z
       .describe("Include subdirectories in the batch read"),
     max_files: z
       .number()
+      .int()
+      .min(1)
+      .max(1000)
       .optional()
       .default(50)
       .describe("Maximum number of files to process (safety limit)"),
     max_file_size_mb: z
       .number()
+      .int()
+      .min(1)
+      .max(100)
       .optional()
       .default(10)
       .describe(
