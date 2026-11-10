@@ -5,6 +5,7 @@
  * @module tools/file-analysis
  */
 
+import fs from "fs/promises";
 import type {
   ToolDefinition,
   ToolResponse,
@@ -13,8 +14,9 @@ import type {
 } from "../types.js";
 import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
-import { createErrorResponse } from "../utils/error-handler.js";
+import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
 import { formatBytes } from "../utils/formatters.js";
+import { ValidationError } from "../types.js";
 import {
   FindLargestFilesInputSchema,
   type FindLargestFilesInput,
@@ -74,6 +76,31 @@ export async function handleFindLargestFiles(
 
     const { directory, include_subdirs, top_n, response_format } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
+    if (!validatedPath) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text" as const,
+            text: sanitizeErrorMessage(`Error: Invalid or forbidden source path: ${directory}`),
+          },
+        ],
+      };
+    }
+
+    try {
+      const stats = await fs.stat(validatedPath);
+      if (!stats.isDirectory()) {
+        throw new ValidationError("Path is not a directory");
+      }
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === "ENOENT") {
+        throw new ValidationError(`Directory does not exist: ${directory}`);
+      }
+      throw error;
+    }
+
     const scanner = new FileScannerService();
     const files = await scanner.getAllFiles(validatedPath, include_subdirs);
 
