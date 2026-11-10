@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { CategorizerService } from "../../../src/services/categorizer.service.js";
+import { CategorizerService } from "../../../../src/services/categorizer.service.js";
 
 describe("getCategoryByContent disguised executable as .txt", () => {
   let testDir: string;
@@ -31,7 +31,7 @@ describe("getCategoryByContent disguised executable as .txt", () => {
     const result = await categorizer.getCategoryByContent(filePath);
 
     expect(result.category).toBe("Suspicious");
-    expect(result.warnings.some((w) => w.includes("CRITICAL"))).toBe(true);
+    expect(result.warnings.some((w: string) => w.includes("CRITICAL"))).toBe(true);
     categorizer.destroy();
   });
 });
