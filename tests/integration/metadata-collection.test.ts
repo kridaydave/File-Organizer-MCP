@@ -327,6 +327,7 @@ describe("Photo Collection Tests", () => {
       structure: "flat",
       filenamePattern: "{title}",
       stripGPS: true,
+      copyInsteadOfMove: true,
     });
 
     expect(result.success).toBe(true);
