@@ -24,6 +24,20 @@ describe('Security Repro Suite (Refactored)', () => {
                 .rejects
                 .toThrow(/Windows reserved name/);
         });
+
+        it('should block intermediate reserved component CON', async () => {
+            const badPath = path.join(os.homedir(), 'Desktop', 'CON', 'file.txt');
+            await expect(validateStrictPath(badPath))
+                .rejects
+                .toThrow(/Windows reserved name/);
+        });
+
+        it('should block reserved name with trailing space', async () => {
+            const badPath = path.join(os.homedir(), 'Desktop', 'CON ');
+            await expect(validateStrictPath(badPath))
+                .rejects
+                .toThrow(/Windows reserved name/);
+        });
     });
 
     describe('Test 2: Max Depth Limit', () => {

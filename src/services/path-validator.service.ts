@@ -269,13 +269,22 @@ export async function validatePathBase(
   }
 
   // Layer 3.5: Block Windows Reserved Names (CON, PRN, AUX, NUL, COM1-9, LPT1-9)
-  const baseName = path.basename(expandedPath).toUpperCase();
-  // Check exact match or name with extension (e.g. CON.txt is also invalid on Windows)
-  const nameWithoutExt = baseName.split(".")[0] ?? "";
-  if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(nameWithoutExt)) {
-    throw new ValidationError(
-      `Path contains Windows reserved name: ${baseName}`,
-    );
+  // Check ALL path components (not just basename) for reserved names
+  const pathComponents = expandedPath.split(/[\\/]/);
+  for (const component of pathComponents) {
+    if (!component) {
+      continue;
+    }
+    // Windows trims trailing spaces and periods from filenames
+    const trimmed = component.replace(/[ .]+$/, "");
+    const upperName = trimmed.toUpperCase();
+    // Check exact match or name with extension (e.g. CON.txt is also invalid on Windows)
+    const nameWithoutExt = upperName.split(".")[0] ?? "";
+    if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(nameWithoutExt)) {
+      throw new ValidationError(
+        `Path contains Windows reserved name: ${component}`,
+      );
+    }
   }
 
   // Layer 4: Resolve to an absolute path
