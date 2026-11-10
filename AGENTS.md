@@ -110,7 +110,7 @@ An empty directory is a bad test. Seed with real shapes, but keep them in the sa
 
 ## How it works
 
-Client sends a JSON-RPC tool call over stdio → `src/server.ts` creates the MCP server and registers `TOOLS` from `src/mcp/registry.ts` (name → handler map) → handler validates with Zod (`src/schemas/*`) then `validateStrictPath` (`src/services/path-validator.service.ts:357`) → calls a service (`scan`, `categorize`, `organize`, `hash`, `rollback`) → formats `ToolResponse` (`src/mcp/types.ts:8`) → server returns it. Services are pure and stateless; per-request `ctx` carries config and history logger. Side effects (history, backups, rollback manifests) are file-backed, not in memory.
+Client sends a JSON-RPC tool call over stdio → `src/server.ts` creates the MCP server and registers `TOOLS` from `src/mcp/registry.ts` (name → handler map) → handler validates with Zod (`src/schemas/*`) then `validateStrictPath` (`src/services/path-validator.service.ts:378`) → calls a service (`scan`, `categorize`, `organize`, `hash`, `rollback`) → formats `ToolResponse` (`src/mcp/types.ts:8`) → server returns it. Services are pure and stateless; per-request `ctx` carries config and history logger. Side effects (history, backups, rollback manifests) are file-backed, not in memory.
 
 Full tour: `ARCHITECTURE.md` + `docs/FRAMEWORK.md`.
 
