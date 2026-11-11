@@ -145,9 +145,6 @@ const TEXT_EXTENSIONS = new Set([
   ".conf",
   ".config",
   ".properties",
-  ".pdf",
-  ".docx",
-  ".doc", // These need special handling but contain text
 ]);
 
 // Media file extensions (metadata only)
