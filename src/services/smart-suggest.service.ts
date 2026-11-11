@@ -415,8 +415,12 @@ export class SmartSuggestService {
     let mismatches = 0;
     const total = files.length;
 
-    if (dirName.includes("image") || dirName.includes("photo")) {
-      const imageExts = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg"];
+    if (
+      dirName.includes("image") ||
+      dirName.includes("photo") ||
+      dirName.includes("picture")
+    ) {
+      const imageExts = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg", "heic", "heif", "raw", "cr2", "nef", "tiff", "tif"];
       for (const [ext, count] of extCounts) {
         if (!imageExts.includes(ext)) mismatches += count;
       }
