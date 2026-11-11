@@ -222,7 +222,19 @@ async function readTextFile(
     if (error instanceof FileOrganizerError && error.code === "E_FILE_TOO_LARGE") {
       return undefined;
     }
-    return `[Access denied or unreadable: ${sanitizeErrorMessage(error instanceof Error ? error : String(error))}]`;
+    if (error instanceof Error) {
+      if (error.code === "E_FILE_TOO_LARGE") {
+        return undefined;
+      }
+      if (error.message && error.message.toLowerCase().includes("exceeds")) {
+        return undefined;
+      }
+    }
+    const errStr = error instanceof Error ? error.message : String(error);
+    if (errStr.toLowerCase().includes("exceeds") && errStr.toLowerCase().includes("limit")) {
+      return undefined;
+    }
+    return `[Access denied or unreadable: ${sanitizeErrorMessage(errStr)}]`;
   }
 }
 
@@ -306,9 +318,26 @@ export async function handleBatchReadFiles(
       try {
         // Read content for text files
         if (include_content && contentType === "text") {
-          const content = await readTextFile(file.path, maxSizeBytes);
-          if (content !== undefined) {
-            result.content = content;
+          if (file.size > maxSizeBytes) {
+            // Oversize file - metadata only, no content
+          } else {
+            const content = await readTextFile(file.path, maxSizeBytes);
+            if (content !== undefined) {
+              if (
+                typeof content === "string" &&
+                content.includes("exceeds") &&
+                content.includes("limit")
+              ) {
+                // Oversize file - metadata only, no content
+              } else if (
+                typeof content === "string" &&
+                content.toLowerCase().includes("e_file_too_large")
+              ) {
+                // Oversize file - metadata only, no content
+              } else {
+                result.content = content;
+              }
+            }
           }
         }
 
