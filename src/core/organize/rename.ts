@@ -448,17 +448,21 @@ function escapeRegExp(string: string) {
 
 function toCamelCase(str: string) {
   return str
+    .replace(/[_-]+([a-zA-Z0-9])/g, (_, __, letter) => letter.toUpperCase())
     .replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) => {
       return index === 0 ? word.toLowerCase() : word.toUpperCase();
     })
+    .replace(/[_-]/g, "")
     .replace(/\s+/g, "");
 }
 
 function toPascalCase(str: string) {
   return str
+    .replace(/[_-]+([a-zA-Z0-9])/g, (_, __, letter) => letter.toUpperCase())
     .replace(/(?:^\w|[A-Z]|\b\w)/g, (word) => {
       return word.toUpperCase();
     })
+    .replace(/[_-]/g, "")
     .replace(/\s+/g, "");
 }
 
