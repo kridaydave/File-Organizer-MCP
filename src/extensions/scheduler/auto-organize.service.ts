@@ -435,10 +435,19 @@ export class AutoOrganizeService {
       return false;
     }
 
+    // Resolve to canonical key for consistency with runOrganization
+    let resolvedDirectory: string;
+    try {
+      resolvedDirectory = await validateStrictPath(directory);
+    } catch (error) {
+      logger.error(`Directory not in watch list: ${directory}`);
+      return false;
+    }
+
     // Prevent concurrent runs
-    if (this.runningDirectories.has(directory)) {
+    if (this.runningDirectories.has(resolvedDirectory)) {
       logger.warn(
-        `Previous run still active for ${directory}, skipping triggerNow`,
+        `Previous run still active for ${resolvedDirectory}, skipping triggerNow`,
       );
       return false;
     }
@@ -562,9 +571,18 @@ export class AutoOrganizeService {
           continue;
         }
 
+        // Resolve to canonical key for consistency with runOrganization
+        let resolvedDirectory: string;
+        try {
+          resolvedDirectory = await validateStrictPath(directory);
+        } catch (error) {
+          logger.warn(`[${directory}] Failed to validate path for catchup check:`, error);
+          continue;
+        }
+
         // Get last run time from state
         const lastRunTime =
-          this.stateService?.getLastRunTime(directory) ?? null;
+          this.stateService?.getLastRunTime(resolvedDirectory) ?? null;
 
         // Check if catchup is needed
         const shouldRun = await this.shouldRunOnStartup(watch, lastRunTime);
@@ -591,9 +609,17 @@ export class AutoOrganizeService {
     for (const watch of watchesToRun) {
       const directory = watch.directory;
 
-      // Skip if directory is already being processed
-      if (this.runningDirectories.has(directory)) {
-        logger.debug(`[${directory}] Already running, skipping catchup`);
+      try {
+        // Resolve to canonical key for consistency with runOrganization
+        const resolvedDirectory = await validateStrictPath(directory);
+
+        // Skip if directory is already being processed
+        if (this.runningDirectories.has(resolvedDirectory)) {
+          logger.debug(`[${directory}] Already running, skipping catchup`);
+          continue;
+        }
+      } catch (error) {
+        logger.warn(`[${directory}] Failed to validate path for catchup:`, error);
         continue;
       }
 

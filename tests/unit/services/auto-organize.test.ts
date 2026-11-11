@@ -478,4 +478,88 @@ describe('AutoOrganizeService', () => {
       service.stop();
     });
   });
+
+  describe('BUG-57 symlinked watch directories', () => {
+    let realDir: string;
+    let symlinkDir: string;
+
+    beforeEach(async () => {
+      realDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bug57-real-'));
+      const symlinkBase = await fs.mkdtemp(path.join(os.tmpdir(), 'bug57-linkbase-'));
+      symlinkDir = path.join(symlinkBase, 'link-to-real');
+      await fs.symlink(realDir, symlinkDir);
+    });
+
+    afterEach(async () => {
+      try {
+        await fs.rm(realDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+      try {
+        await fs.rm(path.dirname(symlinkDir), { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+      jest.restoreAllMocks();
+    });
+
+    it('should find state written via symlink path when looking up via missed schedule logic', async () => {
+      const { AutoOrganizeService } =
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
+      const { SchedulerStateService } = await import('../../../src/extensions/scheduler/scheduler-state.service.js');
+      const { validateStrictPath } = await import('../../../src/services/path-validator.service.js');
+
+      const watches: WatchConfig[] = [
+        {
+          directory: symlinkDir,
+          schedule: '0 9 * * *',
+          rules: { auto_organize: true, catchup_mode: 'smart' },
+        },
+      ];
+      const mockConfig = { watchList: watches };
+
+      const stateFile = path.join(os.tmpdir(), `scheduler-state-bug57-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+      const stateService = new SchedulerStateService(stateFile);
+      await stateService.initialize();
+
+      const service = new AutoOrganizeService(
+        new FileScannerService(),
+        new OrganizerService(),
+        () => mockConfig,
+        stateService
+      );
+      await service.initialize();
+
+      // Write state as runOrganization would (under validated/realpath)
+      const validatedDirectory = await validateStrictPath(symlinkDir);
+      await stateService.setLastRunTime(validatedDirectory, new Date(Date.now() - 25 * 60 * 60 * 1000), '0 9 * * *');
+
+      // Mock shouldCatchup to indicate it was missed if looked up correctly
+      const cronUtils = await import('../../../src/utils/cron-utils.js');
+      const shouldCatchupSpy = jest.spyOn(cronUtils, 'shouldCatchup').mockReturnValue(true);
+
+      const runOrgSpy = jest.spyOn(service as any, 'runOrganization').mockResolvedValue(undefined);
+
+      // Look up the way missed-schedule path does
+      await service.runMissedSchedules();
+
+      // If lookup uses raw symlink path incorrectly, it won't find state -> may trigger catchup
+      // With fix, it finds state using resolved key -> shouldCatchup called with correct lookup
+      expect(shouldCatchupSpy).toHaveBeenCalled();
+      const lastRunArg = shouldCatchupSpy.mock.calls[0][1];
+      expect(lastRunArg).not.toBeNull();
+
+      shouldCatchupSpy.mockRestore();
+      runOrgSpy.mockRestore();
+      service.stop();
+      try {
+        await fs.rm(stateFile, { force: true });
+      } catch {
+        // ignore
+      }
+    });
+  });
 });
