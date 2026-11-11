@@ -10,6 +10,7 @@
  */
 
 import path from "path";
+import fs from "fs/promises";
 import cron from "node-cron";
 import type { ToolResponse } from "../../types.js";
 import { validateStrictPath } from "../../services/path-validator.service.js";
@@ -156,25 +157,63 @@ export async function handleUnwatchDirectory(
 
     // Find and remove the watch
     const initialCount = watchList.length;
-    let normalizedTarget: string | null = null;
+
+    // Resolve target to realpath like add does
+    let targetReal: string | null = null;
     try {
-      normalizedTarget = await validateStrictPath(directory);
+      targetReal = await validateStrictPath(directory);
     } catch {
-      normalizedTarget = path.resolve(directory);
+      try {
+        targetReal = await fs.realpath(directory);
+      } catch {
+        targetReal = path.resolve(directory);
+      }
+    }
+    try {
+      targetReal = await fs.realpath(targetReal);
+    } catch {
+      // keep as is
     }
 
-    watchList = watchList.filter((w) => {
-      const stored = path.resolve(w.directory);
-      if (normalizedTarget && stored === normalizedTarget) {
-        return false;
-      }
+    const filtered: typeof watchList = [];
+    for (const w of watchList) {
+      let shouldRemove = false;
       try {
-        const storedReal = path.resolve(w.directory);
-        return storedReal !== normalizedTarget;
+        // Try to resolve stored the same way
+        let storedReal = w.directory;
+        try {
+          storedReal = await validateStrictPath(w.directory);
+        } catch {
+          try {
+            storedReal = await fs.realpath(w.directory);
+          } catch {
+            storedReal = path.resolve(w.directory);
+          }
+        }
+        try {
+          storedReal = await fs.realpath(storedReal);
+        } catch {
+          // ignore
+        }
+
+        if (targetReal && storedReal && targetReal === storedReal) {
+          shouldRemove = true;
+        } else if (targetReal) {
+          // Also compare lexical normalized forms as fallback
+          if (path.resolve(targetReal) === path.resolve(storedReal)) {
+            shouldRemove = true;
+          } else if (path.resolve(targetReal) === path.resolve(w.directory)) {
+            shouldRemove = true;
+          }
+        }
       } catch {
-        return true;
+        // If comparison fails, don't remove
       }
-    });
+      if (!shouldRemove) {
+        filtered.push(w);
+      }
+    }
+    watchList = filtered;
 
     if (watchList.length === initialCount) {
       return {
