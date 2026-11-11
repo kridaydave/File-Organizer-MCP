@@ -108,6 +108,17 @@ describe('FileScannerService', () => {
             expect(results[0].name).toBe('normal.txt');
         });
 
+        it('should ignore skipped directories case-insensitively (BUG-78)', async () => {
+            await createFile('normal.txt');
+            await createFile('Node_Modules/package.json');
+            await createFile('NODE_MODULES/secret.txt');
+
+            const results = await fileScanner.scanDirectory(testDir, { includeSubdirs: true });
+
+            expect(results.length).toBe(1);
+            expect(results[0].name).toBe('normal.txt');
+        });
+
         it('should respect maxFiles limit', async () => {
             const smallScanner = new FileScannerService(2); // Max 2 files
             await createFile('file1.txt');
