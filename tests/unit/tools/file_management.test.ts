@@ -170,8 +170,50 @@ describe('File Management Tools', () => {
 
         it('should handle empty rules array', async () => {
             const result = await handleSetCustomRules({ rules: [] });
-
+ 
             expect(result.content[0].text).toContain('No valid Custom Rules');
+        });
+
+        it('should return JSON output when response_format is json', async () => {
+            const customRules = {
+                rules: [
+                    {
+                        category: 'ProjectFiles',
+                        extensions: ['vue', 'svelte'],
+                        priority: 10
+                    }
+                ],
+                response_format: 'json'
+            };
+
+            const result = await handleSetCustomRules(customRules);
+
+            expect(result.content).toBeDefined();
+            expect(result.content[0].type).toBe('text');
+            const jsonData = JSON.parse(result.content[0].text);
+            expect(jsonData.success).toBe(true);
+            expect(jsonData.appliedCount).toBe(1);
+            expect(result.structuredContent).toBeDefined();
+        });
+
+        it('should return markdown output when response_format is markdown', async () => {
+            const customRules = {
+                rules: [
+                    {
+                        category: 'WebDev',
+                        extensions: ['html', 'css'],
+                        priority: 5
+                    }
+                ],
+                response_format: 'markdown'
+            };
+
+            const result = await handleSetCustomRules(customRules);
+
+            expect(result.content).toBeDefined();
+            expect(result.content[0].type).toBe('text');
+            expect(result.content[0].text).toContain('Applied');
+            expect(result.content[0].text).toContain('custom organization rules');
         });
     });
 });
