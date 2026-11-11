@@ -143,6 +143,18 @@ export function getNextRunTime(
   next.setUTCSeconds(0);
   next.setUTCMilliseconds(0);
 
+  // Handle every-minute pattern: "* * * * *"
+  if (
+    components.minute === "*" &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    next.setUTCMinutes(next.getUTCMinutes() + 1);
+    return next;
+  }
+
   // Handle step values (e.g., */30 for every 30 minutes)
   if (
     typeof components.minute === "string" &&
@@ -235,6 +247,18 @@ export function getPreviousRunTime(
   const prev = new Date(fromDate.getTime());
   prev.setUTCSeconds(0);
   prev.setUTCMilliseconds(0);
+
+  // Handle every-minute pattern: "* * * * *"
+  if (
+    components.minute === "*" &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    prev.setUTCMinutes(prev.getUTCMinutes() - 1);
+    return prev;
+  }
 
   // Handle step values (e.g., */30 for every 30 minutes)
   if (

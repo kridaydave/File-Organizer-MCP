@@ -83,6 +83,19 @@ describe('cron-utils', () => {
       expect(nextRun).toBeInstanceOf(Date);
       expect(nextRun.getTime()).toBeGreaterThan(baseTime.getTime());
     });
+
+    it('should calculate next run for every-minute cron (* * * * *)', () => {
+      const baseTime = new Date('2026-02-08T10:30:45.123Z');
+      const nextRun = getNextRunTime('* * * * *', baseTime);
+
+      // Should be next minute with seconds/ms reset
+      expect(nextRun.getUTCDate()).toBe(baseTime.getUTCDate());
+      expect(nextRun.getUTCHours()).toBe(10);
+      expect(nextRun.getUTCMinutes()).toBe(31);
+      expect(nextRun.getUTCSeconds()).toBe(0);
+      expect(nextRun.getUTCMilliseconds()).toBe(0);
+      expect(nextRun.getTime()).toBe(baseTime.getTime() + 60 * 1000);
+    });
   });
 
   describe('getPreviousRunTime', () => {
@@ -143,6 +156,18 @@ describe('cron-utils', () => {
       expect(prevRun).toBeInstanceOf(Date);
       expect(prevRun.getTime()).toBeLessThan(baseTime.getTime());
     });
+
+    it('should calculate previous run for every-minute cron (* * * * *)', () => {
+      const baseTime = new Date('2026-02-08T10:30:45.123Z');
+      const prevRun = getPreviousRunTime('* * * * *', baseTime);
+
+      // Should be previous minute with seconds/ms reset
+      expect(prevRun.getUTCHours()).toBe(10);
+      expect(prevRun.getUTCMinutes()).toBe(29);
+      expect(prevRun.getUTCSeconds()).toBe(0);
+      expect(prevRun.getUTCMilliseconds()).toBe(0);
+      expect(prevRun.getTime()).toBe(baseTime.getTime() - 60 * 1000);
+    });
   });
 
   describe('shouldCatchup', () => {
@@ -198,6 +223,20 @@ describe('cron-utils', () => {
       // Should not need catchup since we ran at the expected time (with buffer)
       const result = shouldCatchup('0 9 * * *', lastRunTime, currentTime);
       // Result depends on exact timing; with 1 second buffer, should be false
+      expect(result).toBe(false);
+    });
+
+    it('should return true for every-minute schedule when a minute was missed', () => {
+      const currentTime = new Date('2026-02-08T10:05:30.000Z');
+      const lastRunTime = new Date('2026-02-08T10:03:00.000Z'); // missed 10:04
+      const result = shouldCatchup('* * * * *', lastRunTime, currentTime);
+      expect(result).toBe(true);
+    });
+
+    it('should return false for every-minute schedule when ran within last minute', () => {
+      const currentTime = new Date('2026-02-08T10:05:30.000Z');
+      const lastRunTime = new Date('2026-02-08T10:05:00.000Z');
+      const result = shouldCatchup('* * * * *', lastRunTime, currentTime);
       expect(result).toBe(false);
     });
 
