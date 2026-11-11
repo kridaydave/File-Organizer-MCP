@@ -397,7 +397,7 @@ describe("PhotoOrganizerService", () => {
               buf[0] = 0x25;
               buf[1] = 0x88;
             }
-            return { bytesRead: 2 };
+            return { bytesRead: 2, buffer: buf };
           },
           close: jest.fn(),
         }));
