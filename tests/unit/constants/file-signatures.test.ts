@@ -246,8 +246,21 @@ describe("File Signatures Database", () => {
       const classBuffer = Buffer.from([0xca, 0xfe, 0xba, 0xbe]);
       const result = matchSignature(classBuffer);
       expect(result).toBeDefined();
-      // Both JAVA_CLASS and MACHO_FAT use CAFEBABE magic number
-      expect(["JAVA_CLASS", "MACHO_FAT", "CLASS"].includes(result?.type || "")).toBe(true);
+      expect(result?.type).toBe("JAVA_CLASS");
+    });
+
+    it("should match Mach-O fat binary as MACHO_FAT", () => {
+      const fatBuffer = Buffer.alloc(28);
+      fatBuffer.writeUInt32BE(0xcafebabe, 0);
+      fatBuffer.writeUInt32BE(1, 4);
+      fatBuffer.writeUInt32BE(0x01000007, 8);
+      fatBuffer.writeUInt32BE(0x80000003, 12);
+      fatBuffer.writeUInt32BE(0, 16);
+      fatBuffer.writeUInt32BE(28, 20);
+      fatBuffer.writeUInt32BE(12, 24);
+      const result = matchSignature(fatBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_FAT");
     });
 
     it("should return null for unknown signatures", () => {
