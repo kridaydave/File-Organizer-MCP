@@ -4,7 +4,6 @@
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import {
   handleWatchDirectory,
@@ -24,7 +23,7 @@ describe('BUG-59: unwatch via original symlink path', () => {
       originalConfig = fs.readFileSync(configPath, 'utf-8');
     }
 
-    const base = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'bug59-'));
+    const base = await fs.promises.mkdtemp(path.join(process.cwd(), 'tests', 'temp', 'bug59-'));
     realDir = path.join(base, 'real');
     symlinkDir = path.join(base, 'link');
     await fs.promises.mkdir(realDir, { recursive: true });
