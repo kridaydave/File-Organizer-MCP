@@ -261,6 +261,27 @@ describe("File Signatures Database", () => {
       expect(result).toBeNull();
     });
 
+    it("should detect XML declaration as XML not SVG", () => {
+      const xmlBuffer = Buffer.from('<?xml version="1.0"?>\n<config></config>');
+      const result = matchSignature(xmlBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("XML");
+    });
+
+    it("should detect SVG files with xml declaration as SVG", () => {
+      const svgBuffer = Buffer.from('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+      const result = matchSignature(svgBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("SVG");
+    });
+
+    it("should detect SVG files without xml declaration as SVG", () => {
+      const svgBuffer = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+      const result = matchSignature(svgBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("SVG");
+    });
+
     it("should respect maxReadBytes option", () => {
       const largeBuffer = Buffer.alloc(10000);
       // Put PNG signature at position 100 (past 50 byte limit)

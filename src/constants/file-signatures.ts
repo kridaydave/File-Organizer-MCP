@@ -254,8 +254,10 @@ const SVG_SIGNATURE: FileSignature = {
   category: "Image",
   description: "Scalable Vector Graphics",
   validator: (buffer: Buffer) => {
-    const content = buffer.toString("utf-8", 0, Math.min(buffer.length, 1000));
-    return content.includes("<svg") || content.includes("<?xml");
+    const content = buffer
+      .toString("utf-8", 0, Math.min(buffer.length, 1000))
+      .toLowerCase();
+    return content.includes("<svg");
   },
 };
 
