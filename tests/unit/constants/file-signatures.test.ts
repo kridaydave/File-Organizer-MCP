@@ -405,10 +405,31 @@ describe("File Signatures Database", () => {
     it("should detect JSON files or code files", () => {
       const jsonBuffer = Buffer.from('{"key": "value", "nested": {"arr": [1,2]}}');
       const result = matchSignature(jsonBuffer);
-      // JSON detection may vary by implementation
-      if (result) {
-        expect(["JSON", "JS", "UNKNOWN"].includes(result.type) || result.category === "Code").toBe(true);
-      }
+      expect(result?.type).toBe("JSON");
+    });
+
+    it("should detect JSON arrays correctly (BUG-31)", () => {
+      const jsonBuffer = Buffer.from('[{"key": "value"}]');
+      const result = matchSignature(jsonBuffer);
+      expect(result?.type).toBe("JSON");
+    });
+
+    it("should detect XML files correctly (BUG-31)", () => {
+      const xmlBuffer = Buffer.from('<?xml version="1.0" encoding="UTF-8"?><root></root>');
+      const result = matchSignature(xmlBuffer);
+      expect(result?.type).toBe("XML");
+    });
+
+    it("should still detect HTML files correctly", () => {
+      const htmlBuffer = Buffer.from("<!DOCTYPE html><html><body></body></html>");
+      const result = matchSignature(htmlBuffer);
+      expect(result?.type).toBe("HTML");
+    });
+
+    it("should still detect CSS files correctly", () => {
+      const cssBuffer = Buffer.from("body { color: red; background: blue; }");
+      const result = matchSignature(cssBuffer);
+      expect(result?.type).toBe("CSS");
     });
 
     it("should detect TypeScript files or code files", () => {

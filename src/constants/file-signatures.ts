@@ -579,11 +579,12 @@ const HTML_SIGNATURE: FileSignature = {
     const content = buffer
       .toString("utf-8", 0, Math.min(buffer.length, 1000))
       .toLowerCase();
-    return (
-      content.startsWith("<!doctype") ||
-      content.startsWith("<html") ||
-      content.startsWith("<?xml")
-    );
+    const trimmed = content.trim();
+    if (trimmed.startsWith("<?xml")) {
+      // Only match XML declaration if it's XHTML (has html doctype or html tag)
+      return trimmed.includes("<!doctype html") || trimmed.includes("<html");
+    }
+    return trimmed.startsWith("<!doctype") || trimmed.startsWith("<html");
   },
 };
 
@@ -596,6 +597,11 @@ const CSS_SIGNATURE: FileSignature = {
   description: "Cascading Style Sheets",
   validator: (buffer: Buffer) => {
     const content = buffer.toString("utf-8", 0, Math.min(buffer.length, 500));
+    const trimmed = content.trim();
+    // Avoid matching JSON objects/arrays
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      return false;
+    }
     // Simple heuristic: looks for CSS-like patterns
     return /\{[^}]*:[^}]*\}/.test(content) && !content.includes("<");
   },
