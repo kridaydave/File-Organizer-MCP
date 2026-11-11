@@ -110,6 +110,15 @@ export class OrganizerService {
     let consecutiveErrors = 0;
     let processedCount = 0;
 
+    const existsOnDisk = async (p: string): Promise<boolean> => {
+      try {
+        await fs.access(p);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
     for (const file of files) {
       // BUG-003 FIX: Check if we've hit the error threshold
       if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
@@ -155,27 +164,44 @@ export class OrganizerService {
         let hasConflict = false;
         const conflictResolution: ConflictStrategy = conflictStrategy;
 
-        // BUG-TOCTOU-FIX: Don't check disk for file existence here - use "act-then-handle-error" pattern
-        // Only check against batch-internal collisions (plannedDestinations) since those are guaranteed
-        // Disk-based conflicts will be handled at execution time with proper EEXIST error handling
-        if (plannedDestinations.has(destPath)) {
-          hasConflict = true;
-
-          // Perform Rename Simulation if needed (only against batch collisions)
-          if (conflictResolution === "rename") {
-            const ext = path.extname(destPath);
-            const base = path.basename(destPath, ext);
+        if (conflictResolution === "rename") {
+          const ext = path.extname(destPath);
+          const sourceBase = path.basename(file.path, path.extname(file.path));
+          const originalBase = path.basename(destPath, ext);
+          if (
+            plannedDestinations.has(destPath) ||
+            (await existsOnDisk(destPath))
+          ) {
+            hasConflict = true;
+            let startCounter = 1;
+            if (originalBase.startsWith(`${sourceBase}_`)) {
+              const suffix = originalBase.slice(sourceBase.length + 1);
+              if (/^\d+$/.test(suffix)) {
+                startCounter = parseInt(suffix, 10) + 1;
+              }
+            } else if (originalBase !== sourceBase && /^\d+$/.test(originalBase)) {
+              startCounter = parseInt(originalBase, 10) + 1;
+            }
+            let counter = startCounter;
+            while (
+              plannedDestinations.has(destPath) ||
+              (await existsOnDisk(destPath))
+            ) {
+              destPath = path.join(destFolder, `${sourceBase}_${counter}${ext}`);
+              counter++;
+              if (counter > 10000) break;
+            }
+          } else if (plannedDestinations.has(destPath)) {
+            hasConflict = true;
             let counter = 1;
-            const originalBase = base;
-            // Only check against planned destinations in batch (not disk)
+            const base = originalBase;
             while (plannedDestinations.has(destPath)) {
-              destPath = path.join(
-                destFolder,
-                `${originalBase}_${counter}${ext}`,
-              );
+              destPath = path.join(destFolder, `${base}_${counter}${ext}`);
               counter++;
             }
           }
+        } else if (plannedDestinations.has(destPath)) {
+          hasConflict = true;
         }
 
         plannedDestinations.add(destPath);
