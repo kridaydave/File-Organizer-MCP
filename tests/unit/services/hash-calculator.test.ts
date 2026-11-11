@@ -5,6 +5,8 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import { HashCalculatorService } from '../../../src/core/hash/hasher.js';
+import { CONFIG } from '../../../src/core/config/defaults.js';
+import { AccessDeniedError } from '../../../src/types.js';
 
 describe('HashCalculatorService', () => {
     let hashService: HashCalculatorService;
@@ -12,11 +14,14 @@ describe('HashCalculatorService', () => {
 
     beforeEach(async () => {
         testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-hash-'));
+        CONFIG.paths.customAllowed = [testDir];
         hashService = new HashCalculatorService();
     });
 
     afterEach(async () => {
+        CONFIG.paths.customAllowed = [];
         try {
+            await new Promise((resolve) => setTimeout(resolve, 100));
             await fs.rm(testDir, { recursive: true, force: true });
         } catch (error) {
             console.error('Cleanup error:', error);
@@ -64,5 +69,23 @@ describe('HashCalculatorService', () => {
         expect(duplicates[0].count).toBe(2);
         expect(duplicates[0].files.map(f => f.name)).toContain('file1.txt');
         expect(duplicates[0].files.map(f => f.name)).toContain('file2.txt');
+    });
+
+    it('rejects symlink pointing outside allowed roots when hashing by string path', async () => {
+        const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-hash-outside-'));
+        const outsideFile = path.join(outsideDir, 'secret.txt');
+        await fs.writeFile(outsideFile, 'top-secret');
+
+        const symlinkPath = path.join(testDir, 'link-to-outside.txt');
+        try {
+            await fs.symlink(outsideFile, symlinkPath);
+        } catch {
+            await fs.rm(outsideDir, { recursive: true, force: true });
+            return;
+        }
+
+        await expect(hashService.calculateHash(symlinkPath)).rejects.toThrow(AccessDeniedError);
+
+        await fs.rm(outsideDir, { recursive: true, force: true });
     });
 });

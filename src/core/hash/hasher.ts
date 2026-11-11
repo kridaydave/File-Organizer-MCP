@@ -11,16 +11,19 @@ import type { FileWithSize, DuplicateGroup } from "../../types.js";
 import { CONFIG } from "../../config.js";
 import { formatBytes } from "../../utils/formatters.js";
 import { logger } from "../../utils/logger.js";
+import { PathValidatorService } from "../../services/path-validator.service.js";
 
 /**
  * Hash Calculator Service - file hashing and duplicate detection
  */
 export class HashCalculatorService {
   private readonly maxFileSize: number;
+  private readonly pathValidator: PathValidatorService;
 
-  constructor(maxFileSize = 100 * 1024 * 1024) {
+  constructor(maxFileSize = 100 * 1024 * 1024, pathValidator?: PathValidatorService) {
     // 100MB default
     this.maxFileSize = maxFileSize;
+    this.pathValidator = pathValidator ?? new PathValidatorService();
   }
 
   /**
@@ -37,12 +40,18 @@ export class HashCalculatorService {
 
     let size: number;
     let stream: ReadStream | undefined;
+    let ownedHandle: fs.FileHandle | undefined;
 
     try {
       if (typeof fileInput === "string") {
-        const stats = await fs.stat(fileInput);
+        ownedHandle = await this.pathValidator.openAndValidateFile(fileInput);
+        const stats = await ownedHandle.stat();
         size = stats.size;
-        stream = createReadStream(fileInput, { highWaterMark: 64 * 1024 });
+        stream = ownedHandle.createReadStream({
+          start: 0,
+          highWaterMark: 64 * 1024,
+          autoClose: false,
+        });
       } else {
         const stats = await fileInput.stat();
         size = stats.size;
@@ -79,6 +88,13 @@ export class HashCalculatorService {
           stream!.once("close", () => resolve());
           setTimeout(() => resolve(), 100);
         });
+      }
+      if (ownedHandle) {
+        try {
+          await ownedHandle.close();
+        } catch {
+          // Ignore close errors
+        }
       }
     }
   }
