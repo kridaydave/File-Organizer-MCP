@@ -223,7 +223,7 @@ async function readTextFile(
       return undefined;
     }
     if (error instanceof Error) {
-      if (error.code === "E_FILE_TOO_LARGE") {
+      if ("code" in error && error.code === "E_FILE_TOO_LARGE") {
         return undefined;
       }
       if (error.message && error.message.toLowerCase().includes("exceeds")) {
