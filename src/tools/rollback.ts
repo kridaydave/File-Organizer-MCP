@@ -76,6 +76,7 @@ export async function handleUndoLastOperation(
     const result = await rollbackService.rollback(targetId!);
     const sanitizedResult = {
       ...result,
+      manifest_id: targetId,
       errors: result.errors.map((e) => sanitizeErrorMessage(e)),
     };
     const hasFailures = sanitizedResult.failed > 0;
