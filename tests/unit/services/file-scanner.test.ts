@@ -125,7 +125,7 @@ describe('FileScannerService', () => {
             await createFile('file2.txt');
             await createFile('file3.txt');
 
-            await expect(smallScanner.scanDirectory(testDir)).rejects.toThrow('Maximum file limit');
+            await expect(smallScanner.scanDirectory(testDir!)).rejects.toThrow('Maximum file limit');
         });
     });
 
