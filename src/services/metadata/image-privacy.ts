@@ -144,15 +144,60 @@ export function findEXIFSegment(
 function removeGPSFromJPEG(buffer: Buffer): Buffer {
   try {
     const jpegBase64 = buffer.toString("base64");
+    let piexifParsed = false;
+    let hadGPS = false;
+
+    // Check if there's an APP1 EXIF segment
+    let hasApp1Exif = false;
+    try {
+      let offset = 2;
+      while (offset < buffer.length - 4) {
+        if (buffer[offset] !== 0xff) {
+          offset++;
+          continue;
+        }
+        const marker = buffer[offset + 1];
+        if (marker === undefined || marker === 0xff) {
+          offset++;
+          continue;
+        }
+        if (marker === 0xe1) {
+          const identifierEnd = offset + 4;
+          if (
+            identifierEnd + 6 <= buffer.length &&
+            buffer.toString("ascii", identifierEnd, identifierEnd + 4) === "Exif"
+          ) {
+            hasApp1Exif = true;
+            break;
+          }
+          if (offset + 3 >= buffer.length) break;
+          const length = buffer.readUInt16BE(offset + 2);
+          offset += 2 + length;
+          continue;
+        } else if (marker === 0xd9 || marker === 0xda) {
+          break;
+        } else if (marker >= 0xd0 && marker <= 0xfe) {
+          if (offset + 3 >= buffer.length) break;
+          const length = buffer.readUInt16BE(offset + 2);
+          offset += 2 + length;
+          continue;
+        } else {
+          offset += 2;
+        }
+      }
+    } catch {}
+
     try {
       const exifObj = piexif.load(jpegBase64);
+      piexifParsed = true;
 
       const gpsTag = piexif.ImageIFD?.GPSTag;
-      const hasGPS =
+      hadGPS =
         (piexif.GPSIFD && exifObj.GPS && Object.keys(exifObj.GPS).length > 0) ||
-        (exifObj["0th"] && gpsTag !== undefined && gpsTag in exifObj["0th"]);
+        (exifObj["0th"] && gpsTag !== undefined && gpsTag in exifObj["0th"]) ||
+        Boolean(exifObj.GPS);
 
-      if (hasGPS || exifObj.GPS) {
+      if (hadGPS) {
         delete exifObj.GPS;
 
         if (exifObj["0th"] && piexif.ImageIFD?.GPSTag !== undefined) {
@@ -170,20 +215,34 @@ function removeGPSFromJPEG(buffer: Buffer): Buffer {
           }
           return result;
         } catch {
-          // Fall through to aggressive removal
+          // Fall through to aggressive removal only if we know GPS was present
         }
       }
     } catch {
-      // piexifjs couldn't parse; fall through to aggressive removal
+      // piexifjs couldn't parse
+      piexifParsed = false;
     }
 
-    // If piexifjs can't reliably remove GPS, remove all EXIF/metadata to guarantee no GPS remains
-    try {
-      const stripped = removeAllMetadataFromJPEG(buffer);
-      return stripped;
-    } catch {
-      return buffer;
+    // Only do aggressive removal if we had evidence of GPS that needs removal
+    // or if there's an APP1 EXIF segment that piexifjs couldn't parse (possible GPS hidden)
+    if (hadGPS || (hasApp1Exif && !piexifParsed)) {
+      try {
+        const stripped = removeAllMetadataFromJPEG(buffer);
+        // If stripping would corrupt the file badly, return original
+        if (stripped.length < 4) {
+          return buffer;
+        }
+        // Make sure we didn't truncate drastically
+        if (stripped.length < buffer.length * 0.5 && buffer.length > 10000) {
+          return buffer;
+        }
+        return stripped;
+      } catch {
+        return buffer;
+      }
     }
+
+    return buffer;
   } catch {
     return buffer;
   }
@@ -194,44 +253,65 @@ function removeGPSFromJPEG(buffer: Buffer): Buffer {
  * keeping SOI/DQT/SOF/SOS/EOI structure intact.
  */
 function removeAllMetadataFromJPEG(buffer: Buffer): Buffer {
-  const chunks: Buffer[] = [];
-  chunks.push(Buffer.from([0xff, 0xd8])); // SOI
+  try {
+    const chunks: Buffer[] = [];
+    chunks.push(Buffer.from([0xff, 0xd8])); // SOI
 
-  let i = 2;
-  while (i < buffer.length - 1) {
-    if (buffer[i] !== 0xff) {
-      i++;
-      continue;
-    }
+    let i = 2;
+    while (i < buffer.length - 1) {
+      if (buffer[i] !== 0xff) {
+        i++;
+        continue;
+      }
 
-    const marker = buffer[i + 1];
-    if (marker === undefined) {
-      i++;
-      continue;
-    }
+      const marker = buffer[i + 1];
+      if (marker === undefined) {
+        i++;
+        continue;
+      }
 
-    // Skip APP0-APP15 and COM markers entirely
-    if ((marker >= 0xe0 && marker <= 0xef) || marker === 0xfe) {
+      // Skip APP0-APP15 and COM markers entirely
+      if ((marker >= 0xe0 && marker <= 0xef) || marker === 0xfe) {
+        if (i + 3 >= buffer.length) break;
+        const len = ((buffer[i + 2] ?? 0) << 8) | (buffer[i + 3] ?? 0);
+        if (len < 2) break;
+        i += 2 + len;
+        continue;
+      }
+
+      if (marker === 0xda) {
+        // SOS: keep everything from here to EOF (scan data + EOI)
+        chunks.push(buffer.subarray(i));
+        break;
+      }
+
+      // EOI and RST markers have no length
+      if (marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
+        chunks.push(buffer.subarray(i, Math.min(i + 2, buffer.length)));
+        i += 2;
+        if (marker === 0xd9) break;
+        continue;
+      }
+
+      if (i + 3 >= buffer.length) break;
       const len = ((buffer[i + 2] ?? 0) << 8) | (buffer[i + 3] ?? 0);
-      i += 2 + len;
-      continue;
+      if (len < 2) break;
+      const end = Math.min(i + 2 + len, buffer.length);
+      chunks.push(buffer.subarray(i, end));
+      i = end;
+
+      if (marker === 0xd9) break; // EOI
     }
 
-    if (marker === 0xda) {
-      // SOS: keep everything from here to EOF (scan data + EOI)
-      chunks.push(buffer.subarray(i));
-      break;
+    const result = Buffer.concat(chunks);
+    // Never truncate to empty or suspiciously small if we started with a valid JPEG
+    if (result.length < 4 && buffer.length >= 4) {
+      return buffer;
     }
-
-    const len = ((buffer[i + 2] ?? 0) << 8) | (buffer[i + 3] ?? 0);
-    const end = Math.min(i + 2 + len, buffer.length);
-    chunks.push(buffer.subarray(i, end));
-    i = end;
-
-    if (marker === 0xd9) break; // EOI
+    return result;
+  } catch {
+    return buffer;
   }
-
-  return Buffer.concat(chunks);
 }
 
 /** Create a copy of the image with GPS data stripped. */
