@@ -244,39 +244,42 @@ export class HistoryLoggerService {
     } = query;
 
     const allEntries: HistoryEntry[] = [];
-    const lockAcquired = await this.tryAcquireLock();
 
     try {
-      const filesToRead = [this.historyFilePath];
-      for (let i = 1; i <= this.config.maxBackupFiles; i++) {
-        filesToRead.push(
-          path.join(this.config.dataDir, `operations.${i}.jsonl`),
-        );
-      }
+      await this.acquireLock();
 
-      for (const file of filesToRead) {
-        const content = await fs.readFile(file, "utf-8").catch(() => "");
-        if (!content) continue;
+      try {
+        const filesToRead = [this.historyFilePath];
+        for (let i = 1; i <= this.config.maxBackupFiles; i++) {
+          filesToRead.push(
+            path.join(this.config.dataDir, `operations.${i}.jsonl`),
+          );
+        }
 
-        const lines = content.split("\n").filter((line) => line.trim());
+        for (const file of filesToRead) {
+          const content = await fs.readFile(file, "utf-8").catch(() => "");
+          if (!content) continue;
 
-        for (const line of lines) {
-          try {
-            const entry = JSON.parse(line) as HistoryEntry;
-            allEntries.push(entry);
-          } catch (error) {
-            logger.debug(
-              `Skipped corrupted history line: ${(error as Error).message}`,
-            );
+          const lines = content.split("\n").filter((line) => line.trim());
+
+          for (const line of lines) {
+            try {
+              const entry = JSON.parse(line) as HistoryEntry;
+              allEntries.push(entry);
+            } catch (error) {
+              logger.debug(
+                `Skipped corrupted history line: ${(error as Error).message}`,
+              );
+            }
           }
         }
-      }
-    } catch (error) {
-      logger.error("Failed to read history file:", error);
-    } finally {
-      if (lockAcquired) {
+      } catch (error) {
+        logger.error("Failed to read history file:", error);
+      } finally {
         await this.releaseLock();
       }
+    } catch (error) {
+      logger.error("Failed to acquire history lock for reading:", error);
     }
 
     let filtered = allEntries;

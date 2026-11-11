@@ -546,6 +546,49 @@ also invalid
     });
   });
 
+  describe("BUG-51 concurrent rotation duplicates", () => {
+    it("read concurrent with rotation returns no duplicate entries", async () => {
+      const os = await import("os");
+      const testDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "history-bug51-"),
+      );
+
+      try {
+        const smallService = new HistoryLoggerService({
+          dataDir: testDir,
+          maxFileSizeBytes: 200,
+          maxBackupFiles: 5,
+          lockTimeoutMs: 2000,
+        });
+        const readerService = new HistoryLoggerService({
+          dataDir: testDir,
+          maxFileSizeBytes: 200,
+          maxBackupFiles: 5,
+          lockTimeoutMs: 2000,
+        });
+        await smallService.init();
+        await readerService.init();
+
+        for (let i = 0; i < 30; i++) {
+          await smallService.log(
+            sampleEntry({ durationMs: 10, details: `entry-${i}-` + "x".repeat(30) }),
+          );
+        }
+
+        const [history1, history2] = await Promise.all([
+          readerService.getHistory({ limit: 1000 }),
+          readerService.getHistory({ limit: 1000 }),
+        ]);
+
+        const all = history1.entries.concat(history2.entries);
+        const ids = all.map((e) => e.id);
+        expect(new Set(ids).size).toBe(ids.length);
+      } finally {
+        await fs.rm(testDir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe("init()", () => {
     it("should create data directory on init", async () => {
       const newDir = path.join(dataDir, "nested", "directory");
