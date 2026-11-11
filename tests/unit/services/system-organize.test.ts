@@ -768,4 +768,60 @@ describe("SystemOrganizeService", () => {
       expect(service.categorizeFile("movie.mkv")).toBe("Videos");
     });
   });
+
+  describe("dryRun", () => {
+    beforeEach(() => {
+      jest.spyOn(service as any, "validateSourceDir").mockResolvedValue({
+        valid: true,
+        normalizedPath: mockSystemDirs.downloads,
+      });
+      jest
+        .spyOn(service as any, "determineSystemDestination")
+        .mockResolvedValue({
+          destination: path.join(mockSystemDirs.downloads, "Organized", "Music"),
+          useLocalFallback: true,
+        });
+      mockAccess.mockResolvedValue(undefined);
+      jest.clearAllMocks();
+    });
+
+    it("should not create directories in dry run", async () => {
+      mockReaddir.mockResolvedValue([
+        { name: "song.mp3", isFile: () => true, isDirectory: () => false },
+      ]);
+      mockStat.mockResolvedValue({
+        isFile: () => true,
+        size: 1000,
+        mtime: new Date(),
+      });
+
+      const result = await service.systemOrganize({
+        sourceDir: mockSystemDirs.downloads,
+        dryRun: true,
+      });
+
+      expect(mockMkdir).not.toHaveBeenCalled();
+      expect(mockRename).not.toHaveBeenCalled();
+      expect(mockCopyFile).not.toHaveBeenCalled();
+    });
+
+    it("should create directories in real run", async () => {
+      mockReaddir.mockResolvedValue([
+        { name: "song.mp3", isFile: () => true, isDirectory: () => false },
+      ]);
+      mockStat.mockResolvedValue({
+        isFile: () => true,
+        size: 1000,
+        mtime: new Date(),
+      });
+      mockAccess.mockRejectedValue(new Error("ENOENT"));
+
+      const result = await service.systemOrganize({
+        sourceDir: mockSystemDirs.downloads,
+        dryRun: false,
+      });
+
+      expect(mockMkdir).toHaveBeenCalled();
+    });
+  });
 });
