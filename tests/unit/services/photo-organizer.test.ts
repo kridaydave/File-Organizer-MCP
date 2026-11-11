@@ -302,6 +302,29 @@ describe("PhotoOrganizerService", () => {
         expect(result.organizedFiles).toBe(1);
         expect(result.errors).toHaveLength(1);
         expect(result.errors[0].file).toBe(path.join(sourceDir, "photo1.jpg"));
+        expect(result.success).toBe(false);
+      }),
+    );
+
+    it(
+      "returns success false when all per-file actions fail",
+      withMockedLogger(async (_logger: MockLogger) => {
+        mockReaddir.mockResolvedValue([
+          { name: "photo1.jpg", isFile: () => true },
+          { name: "photo2.jpg", isFile: () => true },
+        ]);
+        mockRename.mockRejectedValue(new Error("permission denied"));
+
+        const result = await service.organize({
+          sourceDir,
+          targetDir,
+          dateFormat: "YYYY/MM/DD",
+          dryRun: false,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.organizedFiles).toBe(0);
+        expect(result.errors).toHaveLength(2);
       }),
     );
   });

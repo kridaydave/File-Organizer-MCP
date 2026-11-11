@@ -274,6 +274,7 @@ export class PhotoOrganizerService {
         errors: result.errors.length,
         strippedGPS: result.strippedGPSFiles,
       });
+      result.success = result.errors.length === 0;
     } catch (error) {
       result.success = false;
       const errorMsg = error instanceof Error ? error.message : String(error);
