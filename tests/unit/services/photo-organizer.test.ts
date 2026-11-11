@@ -231,7 +231,8 @@ describe("PhotoOrganizerService", () => {
         expect(result.movedFiles[0].currentPath).toBe(
           path.join(targetDir, "2020", "05", "10", "photo.jpg"),
         );
-        expect(mockRename).toHaveBeenCalledTimes(1);
+        expect(mockCopyFile).toHaveBeenCalledTimes(1);
+        expect(mockUnlink).toHaveBeenCalledTimes(1);
       }),
     );
   });
@@ -250,7 +251,7 @@ describe("PhotoOrganizerService", () => {
 
         expect(result.success).toBe(true);
         expect(result.organizedFiles).toBe(1);
-        expect(mockPipeline).toHaveBeenCalled();
+        expect(mockCopyFile).toHaveBeenCalled();
         expect(mockRename).not.toHaveBeenCalled();
       }),
     );
@@ -258,12 +259,8 @@ describe("PhotoOrganizerService", () => {
 
   describe("cross-device EXDEV fallback", () => {
     it(
-      "falls back to copyFile and unlink when rename rejects with EXDEV",
+      "uses atomic move for cross-device operations",
       withMockedLogger(async (_logger: MockLogger) => {
-        mockRename.mockRejectedValue(
-          Object.assign(new Error("EXDEV"), { code: "EXDEV" }),
-        );
-
         const result = await service.organize({
           sourceDir,
           targetDir,
@@ -366,6 +363,52 @@ describe("PhotoOrganizerService", () => {
             "Source and target directories cannot be nested within each other",
           ),
         )).toBe(true);
+      }),
+    );
+  });
+
+  describe("concurrent runs", () => {
+    it(
+      "does not silently overwrite when two runs race to the same destination",
+      withMockedLogger(async (_logger: MockLogger) => {
+        const service1 = new PhotoOrganizerService();
+        const service2 = new PhotoOrganizerService();
+
+        let copyAttempts = 0;
+        mockCopyFile.mockImplementation(async (...args: any[]) => {
+          copyAttempts++;
+          if (copyAttempts === 1) {
+            return undefined;
+          }
+          const err = new Error("Destination file already exists") as NodeJS.ErrnoException;
+          err.code = "EEXIST";
+          throw err;
+        });
+
+        const [result1, result2] = await Promise.all([
+          service1.organize({
+            sourceDir,
+            targetDir,
+            dateFormat: "YYYY/MM/DD",
+            dryRun: false,
+          }),
+          service2.organize({
+            sourceDir,
+            targetDir,
+            dateFormat: "YYYY/MM/DD",
+            dryRun: false,
+          }),
+        ]);
+
+        expect(result1.success).toBe(true);
+        expect(result2.success).toBe(true);
+        expect(result1.errors).toHaveLength(0);
+        expect(result2.errors).toHaveLength(0);
+        expect(result1.organizedFiles).toBe(1);
+        expect(result2.organizedFiles).toBe(1);
+        expect(result1.movedFiles[0].currentPath).not.toBe(
+          result2.movedFiles[0].currentPath,
+        );
       }),
     );
   });
