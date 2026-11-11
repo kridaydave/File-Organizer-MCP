@@ -15,12 +15,15 @@ import { logger } from "../../utils/logger.js";
 import {
   startAutoOrganizeScheduler,
   stopAutoOrganizeScheduler,
+  reloadAutoOrganizeScheduler,
 } from "./auto-organize.service.js";
 import {
   handleWatchDirectory,
   handleUnwatchDirectory,
   handleListWatches,
 } from "./watch-manager.js";
+import fs from "fs";
+import { getUserConfigPath } from "../../core/config/paths.js";
 
 function text(response: { content: Array<{ text?: string }> }): string {
   return response.content.map((c) => c.text ?? "").join("\n");
@@ -76,7 +79,6 @@ async function run(): Promise<void> {
   if (result.taskCount === 0) {
     logger.info("No watches configured. Add one with:");
     logger.info('  file-organizer-watch add <directory> "<cron>"');
-    process.exit(0);
   }
 
   const shutdown = (signal: string): void => {
@@ -89,6 +91,35 @@ async function run(): Promise<void> {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   if (process.platform === "win32") {
     process.on("SIGBREAK", () => shutdown("SIGBREAK"));
+  }
+  process.on("SIGHUP", () => {
+    logger.info("Received SIGHUP, reloading watches...");
+    try {
+      reloadAutoOrganizeScheduler();
+    } catch (error) {
+      logger.error("Failed to reload watches:", error);
+    }
+  });
+
+  // Watch config file for changes to reload tasks automatically
+  try {
+    const configPath = getUserConfigPath();
+    let reloadTimeout: NodeJS.Timeout | null = null;
+    fs.watch(configPath, () => {
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      reloadTimeout = setTimeout(() => {
+        logger.info("Config changed, reloading watches...");
+        try {
+          reloadAutoOrganizeScheduler();
+        } catch (error) {
+          logger.error("Failed to reload watches:", error);
+        }
+      }, 200);
+    });
+  } catch (error) {
+    logger.debug("Failed to watch config file for changes:", error);
   }
 
   // node-cron holds the event loop; this is just a safety net.

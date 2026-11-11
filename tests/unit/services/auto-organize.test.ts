@@ -478,4 +478,48 @@ describe('AutoOrganizeService', () => {
       service.stop();
     });
   });
+
+  describe('BUG-84: removing a watch stops the running daemon', () => {
+    it('should stop tasks for removed watches after reload', async () => {
+      const { AutoOrganizeService } =
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
+      const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
+      const fsPromises = await import('fs/promises');
+      const os = await import('os');
+      const path = await import('path');
+
+      const testDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'bug84-'));
+      try {
+        const watches: WatchConfig[] = [
+          {
+            directory: testDir,
+            schedule: '*/5 * * * *',
+            rules: { auto_organize: true },
+          },
+        ];
+        const mockConfig: { watchList: WatchConfig[] } = { watchList: watches };
+        const service = new AutoOrganizeService(
+          new FileScannerService(),
+          new OrganizerService(),
+          () => mockConfig
+        );
+
+        const reloadResult = service.reloadTasks();
+        expect(reloadResult.taskCount).toBe(1);
+        expect(service.getTaskCount()).toBe(1);
+        expect(service.getWatchedDirectories()).toContain(testDir);
+
+        mockConfig.watchList = [];
+        const reloadResult2 = service.reloadTasks();
+        expect(reloadResult2.taskCount).toBe(0);
+        expect(service.getTaskCount()).toBe(0);
+        expect(service.getWatchedDirectories()).not.toContain(testDir);
+
+        service.stop();
+      } finally {
+        await fsPromises.rm(testDir, { recursive: true, force: true });
+      }
+    });
+  });
 });
