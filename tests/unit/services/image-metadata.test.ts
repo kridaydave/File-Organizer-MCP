@@ -122,6 +122,18 @@ describe("ImageMetadataService", () => {
     if (options.orientation) {
       entryInfos.push({ tag: 0x0112, type: 3, count: 1, value: options.orientation }); // Orientation
     }
+    if (options.exposureTime !== undefined) {
+      // ExposureTime is tag 0x829A, type 5 (RATIONAL), count 1
+      entryInfos.push({
+        tag: 0x829a,
+        type: 5,
+        count: 1,
+        data: createRational(
+          options.exposureTime.numerator ?? 0,
+          options.exposureTime.denominator ?? 1,
+        ),
+      });
+    }
 
     const numEntries = entryInfos.length + (options.gpsData ? 1 : 0);
     const ifd0Offset = 8;
@@ -614,6 +626,28 @@ describe("ImageMetadataService", () => {
       const metadata = await service.extract(filePath);
 
       expect(metadata.format).toBe("JPEG");
+    });
+
+    it("should not produce 1/Infinity for zero or invalid exposure time (BUG-86)", async () => {
+      const zeroFile = await createMockJPEG("zero-exposure.jpg", {
+        exposureTime: { numerator: 0, denominator: 1 },
+      });
+      const zeroMeta = await service.extract(zeroFile);
+      expect(zeroMeta.shutterSpeed).toBeUndefined();
+      expect(zeroMeta.shutterSpeed).not.toBe("1/Infinity");
+
+      const negativeFile = await createMockJPEG("neg-exposure.jpg", {
+        exposureTime: { numerator: -1, denominator: 1 },
+      });
+      const negativeMeta = await service.extract(negativeFile);
+      expect(negativeMeta.shutterSpeed).toBeUndefined();
+
+      const invalidFile = await createMockJPEG("invalid-exposure.jpg", {
+        exposureTime: { numerator: 1, denominator: 0 },
+      });
+      const invalidMeta = await service.extract(invalidFile);
+      expect(invalidMeta.shutterSpeed).toBeUndefined();
+      expect(invalidMeta.shutterSpeed).not.toBe("1/Infinity");
     });
 
     it("should handle TIFF images", async () => {

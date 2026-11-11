@@ -8,11 +8,25 @@ import { findEXIFSegment } from "./image-privacy.js";
 import type { ImageMetadata, ImageMetadataOptions } from "./types.js";
 
 /** Format a duration of seconds as `N"` or `1/N`. */
-function formatShutterSpeed(exposureTimeSeconds: number): string {
+function formatShutterSpeed(exposureTimeSeconds: number): string | undefined {
+  if (
+    !Number.isFinite(exposureTimeSeconds) ||
+    exposureTimeSeconds <= 0
+  ) {
+    return undefined;
+  }
   if (exposureTimeSeconds >= 1) {
     return `${Math.round(exposureTimeSeconds)}"`;
   }
-  return `1/${Math.round(1 / exposureTimeSeconds)}`;
+  const denominator = 1 / exposureTimeSeconds;
+  if (!Number.isFinite(denominator)) {
+    return undefined;
+  }
+  const rounded = Math.round(denominator);
+  if (rounded <= 0) {
+    return undefined;
+  }
+  return `1/${rounded}`;
 }
 
 /** Scan JPEG SOF0/SOF2 markers for image dimensions. */
@@ -130,7 +144,10 @@ export async function parseJPEGMetadata(
     metadata.software = tags.Software as string | undefined;
 
     if (typeof tags.ExposureTime === "number") {
-      metadata.shutterSpeed = formatShutterSpeed(tags.ExposureTime);
+      const shutterSpeed = formatShutterSpeed(tags.ExposureTime);
+      if (shutterSpeed !== undefined) {
+        metadata.shutterSpeed = shutterSpeed;
+      }
     }
     if (typeof tags.Flash === "number") {
       metadata.flash = (tags.Flash & 0x01) !== 0;
