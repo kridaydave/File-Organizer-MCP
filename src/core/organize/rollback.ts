@@ -214,86 +214,117 @@ export class RollbackService {
           (action.type === "move" || action.type === "rename") &&
           action.currentPath
         ) {
-          // Undo Move/Rename: Move currentPath -> originalPath
-          // TOCTOU-safe: Try the operation directly, handle ENOENT
           try {
-            await fs.access(action.currentPath);
-          } catch {
-            throw new Error(`Current file not found: ${action.currentPath}`);
-          }
-
-          await fs.mkdir(path.dirname(action.originalPath), {
-            recursive: true,
-          });
-
-          // TOCTOU-safe: Use safeAtomicMove (handles exclusive copy, case-only renames, and unlink cleanup)
-          try {
-            await safeAtomicMove(action.currentPath, action.originalPath);
-          } catch (e) {
-            if ((e as NodeJS.ErrnoException).code === "EEXIST") {
-              throw new Error(
-                `Destination already exists, would overwrite: ${action.originalPath}`,
-                { cause: e },
-              );
-            }
-            throw e;
-          }
-
-          // Track successful move for potential recovery
-          completedActions.push({
-            action,
-            stage: "move",
-            paths: { from: action.currentPath, to: action.originalPath },
-          });
-
-          // 2. Restore the overwritten file if it exists
-          if (action.overwrittenBackupPath) {
-            // TOCTOU-safe: Try restore directly, handle errors
+            // Undo Move/Rename: Move currentPath -> originalPath
+            // TOCTOU-safe: Try the operation directly, handle ENOENT
             try {
-              await safeAtomicMove(action.overwrittenBackupPath, action.currentPath);
+              await fs.access(action.currentPath);
+            } catch {
+              results.errors.push(
+                `Current file not found: ${action.currentPath}`,
+              );
+              results.failed++;
+              continue;
+            }
+
+            try {
+              await fs.mkdir(path.dirname(action.originalPath), {
+                recursive: true,
+              });
+            } catch (e) {
+              results.errors.push(
+                `Failed to prepare undo for ${action.originalPath}: ${(e as Error).message}`,
+              );
+              results.failed++;
+              continue;
+            }
+
+            // TOCTOU-safe: Use safeAtomicMove (handles exclusive copy, case-only renames, and unlink cleanup)
+            try {
+              await safeAtomicMove(action.currentPath, action.originalPath);
             } catch (e) {
               const err = e as NodeJS.ErrnoException;
-              if (err.code === "ENOENT") {
+              if (err.code === "EEXIST") {
                 results.errors.push(
-                  `Critical: Original file backup missing: ${action.overwrittenBackupPath}`,
+                  `Destination already exists, would overwrite: ${action.originalPath}`,
                 );
-
-                // Attempt to recover: revert the move operation
-                try {
-                  await safeAtomicMove(action.originalPath, action.currentPath);
-                  results.errors.push(
-                    `Recovered: Reverted move for ${action.originalPath} -> ${action.currentPath}`,
-                  );
-                } catch (recoveryError) {
-                  results.errors.push(
-                    `CRITICAL: Partial rollback state - file at ${action.originalPath}, expected at ${action.currentPath}. Recovery failed: ${(recoveryError as Error).message}`,
-                  );
-                }
-
                 results.failed++;
                 continue;
               }
-              if (err.code === "EEXIST") {
-                throw new Error(
-                  `Cannot restore backup, destination occupied: ${action.currentPath}`,
-                  { cause: e },
-                );
-              }
-              throw e;
+              results.errors.push(
+                `Failed to undo ${action.type} for ${action.originalPath}: ${(e as Error).message}`,
+              );
+              results.failed++;
+              continue;
             }
 
-            // Track successful restore
+            // Track successful move for potential recovery
             completedActions.push({
               action,
-              stage: "restore",
-              paths: {
-                from: action.overwrittenBackupPath,
-                to: action.currentPath,
-              },
+              stage: "move",
+              paths: { from: action.currentPath, to: action.originalPath },
             });
-          }
 
-          results.success++;
+            // 2. Restore the overwritten file if it exists
+            if (action.overwrittenBackupPath) {
+              // TOCTOU-safe: Try restore directly, handle errors
+              try {
+                await safeAtomicMove(action.overwrittenBackupPath, action.currentPath);
+              } catch (e) {
+                const err = e as NodeJS.ErrnoException;
+                if (err.code === "ENOENT") {
+                  results.errors.push(
+                    `Critical: Original file backup missing: ${action.overwrittenBackupPath}`,
+                  );
+
+                  // Attempt to recover: revert the move operation
+                  try {
+                    await safeAtomicMove(action.originalPath, action.currentPath);
+                    results.errors.push(
+                      `Recovered: Reverted move for ${action.originalPath} -> ${action.currentPath}`,
+                    );
+                  } catch (recoveryError) {
+                    results.errors.push(
+                      `CRITICAL: Partial rollback state - file at ${action.originalPath}, expected at ${action.currentPath}. Recovery failed: ${(recoveryError as Error).message}`,
+                    );
+                  }
+
+                  results.failed++;
+                  continue;
+                }
+                if (err.code === "EEXIST") {
+                  results.errors.push(
+                    `Cannot restore backup, destination occupied: ${action.currentPath}`,
+                  );
+                  results.failed++;
+                  continue;
+                }
+                results.errors.push(
+                  `Failed to restore backup for ${action.originalPath}: ${(e as Error).message}`,
+                );
+                results.failed++;
+                continue;
+              }
+
+              // Track successful restore
+              completedActions.push({
+                action,
+                stage: "restore",
+                paths: {
+                  from: action.overwrittenBackupPath,
+                  to: action.currentPath,
+                },
+              });
+            }
+
+            results.success++;
+          } catch (e) {
+            results.errors.push(
+              `Failed to undo ${action.type} for ${action.originalPath || action.currentPath || "unknown"}: ${(e as Error).message}`,
+            );
+            results.failed++;
+            continue;
+          }
         } else if (action.type === "copy" && action.currentPath) {
           // Undo Copy: Delete the copied file (currentPath)
           try {
