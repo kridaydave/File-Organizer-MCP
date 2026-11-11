@@ -66,7 +66,22 @@ export async function readFile(
   options: ReadFileOptions = {},
 ): Promise<ReadFileResult> {
   const encoding = options.encoding === undefined ? "utf-8" : options.encoding;
-  const maxBytes = Math.min(options.maxBytes ?? DEFAULT_MAX_BYTES, MAX_BYTES_CAP);
+  if (typeof options.maxBytes === "number") {
+    if (
+      !Number.isFinite(options.maxBytes) ||
+      !Number.isInteger(options.maxBytes) ||
+      options.maxBytes <= 0
+    ) {
+      throw new FileOrganizerError(
+        "maxBytes must be a positive integer",
+        "E_READ_MAX_BYTES",
+      );
+    }
+  }
+  const maxBytes =
+    typeof options.maxBytes === "number"
+      ? Math.min(options.maxBytes, MAX_BYTES_CAP)
+      : DEFAULT_MAX_BYTES;
   const offset = options.offset ?? 0;
 
   if (!Number.isInteger(offset) || offset < 0) {
