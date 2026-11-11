@@ -129,4 +129,48 @@ describe('FileScannerService', () => {
             expect(results[0]).not.toHaveProperty('extension'); // FileWithSize vs FileInfo (FileInfo has extension)
         });
     });
+
+    describe('maxDepth validation', () => {
+        it('should accept maxDepth 75 for scanDirectory', async () => {
+            await createFile('level1/level2/file.txt');
+            const results = await fileScanner.scanDirectory(testDir, {
+                includeSubdirs: true,
+                maxDepth: 75,
+            });
+            expect(results.length).toBe(1);
+        });
+
+        it('should accept maxDepth 100 for scanDirectory', async () => {
+            await createFile('file.txt');
+            const results = await fileScanner.scanDirectory(testDir, {
+                includeSubdirs: true,
+                maxDepth: 100,
+            });
+            expect(results.length).toBe(1);
+        });
+
+        it('should reject maxDepth 101 for scanDirectory', async () => {
+            await expect(
+                fileScanner.scanDirectory(testDir, { includeSubdirs: true, maxDepth: 101 }),
+            ).rejects.toThrow(/Invalid maxDepth/);
+        });
+
+        it('should accept maxDepth 75 for getAllFiles', async () => {
+            await createFile('level1/file.txt');
+            const results = await fileScanner.getAllFiles(testDir, true, 75);
+            expect(results.length).toBe(1);
+        });
+
+        it('should accept maxDepth 100 for getAllFiles', async () => {
+            await createFile('file.txt');
+            const results = await fileScanner.getAllFiles(testDir, true, 100);
+            expect(results.length).toBe(1);
+        });
+
+        it('should reject maxDepth 101 for getAllFiles', async () => {
+            await expect(
+                fileScanner.getAllFiles(testDir, true, 101),
+            ).rejects.toThrow(/Invalid maxDepth/);
+        });
+    });
 });
