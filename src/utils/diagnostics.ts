@@ -13,6 +13,7 @@ import {
   getUserConfigPath,
   UserConfig,
 } from "../config.js";
+import { parseJsonc } from "../tui/client-detector.js";
 
 // ANSI color helper for CLI diagnostic output
 const chalk = {
@@ -279,7 +280,7 @@ async function checkConfigFile(): Promise<DiagnosticResult> {
     // Validate JSON
     let config: UserConfig;
     try {
-      config = JSON.parse(configData) as UserConfig;
+      config = parseJsonc(configData) as UserConfig;
     } catch (parseError) {
       return {
         name: "Configuration File",
