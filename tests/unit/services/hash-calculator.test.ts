@@ -65,4 +65,24 @@ describe('HashCalculatorService', () => {
         expect(duplicates[0].files.map(f => f.name)).toContain('file1.txt');
         expect(duplicates[0].files.map(f => f.name)).toContain('file2.txt');
     });
+
+    it('should detect duplicates when caller supplies mismatched sizes', async () => {
+        const file1 = path.join(testDir, 'file1.txt');
+        const file2 = path.join(testDir, 'file2.txt');
+
+        await fs.writeFile(file1, 'identical');
+        await fs.writeFile(file2, 'identical'); // duplicate content
+
+        const files = [
+            { name: 'file1.txt', path: file1, size: 12345, modified: new Date() },
+            { name: 'file2.txt', path: file2, size: 54321, modified: new Date() }
+        ];
+
+        const duplicates = await hashService.findDuplicates(files);
+
+        expect(duplicates.length).toBe(1);
+        expect(duplicates[0].count).toBe(2);
+        expect(duplicates[0].files.map(f => f.name)).toContain('file1.txt');
+        expect(duplicates[0].files.map(f => f.name)).toContain('file2.txt');
+    });
 });

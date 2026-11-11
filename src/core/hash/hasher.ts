@@ -94,13 +94,22 @@ export class HashCalculatorService {
     const startTime = Date.now();
     const timeoutMs = options.timeoutMs ?? 30000; // 30s default timeout
 
-    // Step 1: Pre-group by file size to avoid hashing files with unique byte counts
+    // Step 1: Pre-group by actual file size to avoid hashing files with unique byte counts
     const sizeGroups = new Map<number, FileWithSize[]>();
     for (const file of files) {
-      if (file.size <= 0 || file.size > this.maxFileSize) continue;
-      const group = sizeGroups.get(file.size) ?? [];
-      group.push(file);
-      sizeGroups.set(file.size, group);
+      try {
+        const stats = await fs.stat(file.path);
+        const realSize = stats.size;
+        if (realSize <= 0 || realSize > this.maxFileSize) continue;
+        if (realSize !== file.size) {
+          file.size = realSize;
+        }
+        const group = sizeGroups.get(realSize) ?? [];
+        group.push(file);
+        sizeGroups.set(realSize, group);
+      } catch (error) {
+        logger.error(`Error stating ${file.name}: ${(error as Error).message}`);
+      }
     }
 
     // Step 2: Only hash files that share identical byte length with at least one other file
