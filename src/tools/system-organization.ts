@@ -18,6 +18,7 @@ import { SystemOrganizeService } from "../services/system-organize.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { SystemOrganizationInputSchema } from "../schemas/organize.js";
 import { logger } from "../utils/logger.js";
+import { createRequestContext, type ToolContext } from "../mcp/context.js";
 
 const VALID_SOURCE_DIRS = ["Downloads", "Desktop", "Temp"];
 const VALID_SOURCE_NAMES = ["downloads", "desktop", "temp"];
@@ -95,8 +96,7 @@ export const systemOrganizationToolDefinition: ToolDefinition = {
       conflict_strategy: {
         type: "string",
         enum: ["skip", "rename", "overwrite"],
-        description: "How to handle file conflicts",
-        default: "rename",
+        description: "How to handle file conflicts. Uses config default if not specified",
       },
       dry_run: {
         type: "boolean",
@@ -128,6 +128,7 @@ export const systemOrganizationToolDefinition: ToolDefinition = {
 
 export async function handleSystemOrganization(
   args: Record<string, unknown>,
+  ctx: ToolContext = createRequestContext(),
 ): Promise<ToolResponse> {
   try {
     const parsed = SystemOrganizationInputSchema.safeParse(args);
@@ -154,6 +155,9 @@ export async function handleSystemOrganization(
       copy_instead_of_move,
       response_format,
     } = parsed.data;
+
+    const effectiveConflictStrategy =
+      conflict_strategy ?? ctx.config.conflictStrategy ?? "rename";
 
     const resolvedSource = resolveSourceDir(source_dir);
 
@@ -186,7 +190,7 @@ export async function handleSystemOrganization(
       createSubfolders: create_subfolders,
       fallbackToLocal: fallback_to_local,
       localFallbackPrefix: local_fallback_prefix,
-      conflictStrategy: conflict_strategy,
+      conflictStrategy: effectiveConflictStrategy,
       dryRun: dry_run,
       copyInsteadOfMove: copy_instead_of_move,
     });
