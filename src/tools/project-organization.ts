@@ -299,13 +299,34 @@ export async function handleOrganizeByProject(
 ${Object.entries(result.structure)
   .map(
     ([folder, fileNames]) =>
-      `- **${escapeMarkdown(folder)}**: ${fileNames.length} file(s)\n  ${fileNames.map((f) => `  - \`${escapeMarkdown(f)}\``).join("\n")}`,
+      (() => {
+        const fmt = (s: string) => {
+          const content = escapeMarkdown(s, { inCodeSpan: true });
+          const ticks = content.match(/`+/g);
+          const maxTicks = ticks ? Math.max(...ticks.map((t) => t.length)) : 0;
+          const delim = "`".repeat(maxTicks + 1 || 1);
+          const pad = content.startsWith("`") || content.endsWith("`") ? " " : "";
+          return `${delim}${pad}${content}${pad}${delim}`;
+        };
+        return `- **${escapeMarkdown(folder)}**: ${fileNames.length} file(s)\n  ${fileNames.map((f) => `  - ${fmt(f)}`).join("\n")}`;
+      })(),
   )
   .join("\n")}
 
 ${
   result.errors.length > 0
-    ? `**Errors:**\n${result.errors.map((e) => `- \`${escapeMarkdown(e.file)}\`: ${escapeMarkdown(e.error)}`).join("\n")}`
+    ? (() => {
+        const fmt = (s: string) => {
+          const content = escapeMarkdown(s, { inCodeSpan: true });
+          const ticks = content.match(/`+/g);
+          const maxTicks = ticks ? Math.max(...ticks.map((t) => t.length)) : 0;
+          const delim = "`".repeat(maxTicks + 1 || 1);
+          const pad = content.startsWith("`") || content.endsWith("`") ? " " : "";
+          return `${delim}${pad}${content}${pad}${delim}`;
+        };
+        return `**Errors:**\n${result.errors.map((e) => `- ${fmt(e.file)}: ${escapeMarkdown(e.error)}`).join("\n")}`;
+      })()
+    : ""`,
     : ""
 }`;
 
