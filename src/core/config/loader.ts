@@ -112,7 +112,11 @@ export function loadCustomAllowedDirs(): string[] {
   try {
     const config = loadUserConfig();
     if (Array.isArray(config.customAllowedDirectories)) {
-      return config.customAllowedDirectories.filter((dir: string) => {
+      return config.customAllowedDirectories.filter((dir: unknown) => {
+        if (typeof dir !== "string") {
+          logger.error(`Warning: Custom directory entry must be a string: ${String(dir)}`);
+          return false;
+        }
         try {
           const expandedDir = dir.startsWith("~") ? path.join(os.homedir(), dir.slice(1)) : dir;
           const stats = fs.lstatSync(expandedDir);
