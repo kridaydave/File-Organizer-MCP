@@ -83,6 +83,23 @@ describe('cron-utils', () => {
       expect(nextRun).toBeInstanceOf(Date);
       expect(nextRun.getTime()).toBeGreaterThan(baseTime.getTime());
     });
+
+    it('should handle hour ranges like 9-17', () => {
+      const baseTime = new Date('2026-02-08T15:00:00.000Z');
+      const nextRun = getNextRunTime('0 9-17 * * *', baseTime);
+      expect(nextRun.getUTCHours()).toBe(16);
+      expect(nextRun.getUTCMinutes()).toBe(0);
+    });
+
+    it('should resolve day-of-month expressions to a real date', () => {
+      const baseTime = new Date('2026-02-08T10:00:00.000Z');
+      const nextRun = getNextRunTime('0 9 1 * *', baseTime);
+      expect(nextRun).toBeInstanceOf(Date);
+      expect(isNaN(nextRun.getTime())).toBe(false);
+      expect(nextRun.getUTCMinutes()).toBe(0);
+      expect(nextRun.getUTCHours()).toBe(9);
+      expect(nextRun.getUTCDate()).toBe(1);
+    });
   });
 
   describe('getPreviousRunTime', () => {
