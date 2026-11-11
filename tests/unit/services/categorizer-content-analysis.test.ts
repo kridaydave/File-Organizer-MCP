@@ -255,6 +255,18 @@ describe("CategorizerService with Content Analysis", () => {
 
       expect(result.warnings.length).toBeGreaterThan(0);
     });
+
+    it("should detect double extension on long basenames", async () => {
+      const content = "content";
+      const longName = "a".repeat(1005) + ".pdf.exe";
+      const filePath = await createFile(longName, content);
+
+      const result = await categorizer.getCategoryByContent(filePath);
+
+      expect(result.warnings.some((w) => w.includes("Double extension"))).toBe(
+        true,
+      );
+    });
   });
 
   describe("validateFileType", () => {

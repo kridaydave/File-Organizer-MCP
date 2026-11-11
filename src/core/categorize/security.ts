@@ -112,9 +112,6 @@ export function hasDoubleExtension(fileName: string): boolean {
   const startTime = Date.now();
 
   const name = path.basename(fileName).toLowerCase();
-  if (name.length > 1000) {
-    return false;
-  }
 
   const result =
     /\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|txt|zip|rar)\.(exe|bat|cmd|scr|pif|com|msi|sh)$/i.test(
