@@ -5,6 +5,7 @@
 
 import fs from "fs/promises";
 import * as fsSync from "fs";
+import crypto from "crypto";
 import { logger } from "../../utils/logger.js";
 import type { CategoryName } from "../../types.js";
 import type { ContentCategoryResult } from "./content.js";
@@ -20,7 +21,7 @@ export class ContentAnalysisCache {
   private promises: Map<string, Promise<CategoryName>> = new Map();
   private results: Map<string, CategoryName> = new Map();
   private timestamps: Map<string, number> = new Map();
-  private fileStats: Map<string, { mtimeMs: number; size: number }> = new Map();
+  private fileStats: Map<string, { mtimeMs: number; size: number; hash?: string }> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(
@@ -89,19 +90,39 @@ export class ContentAnalysisCache {
     this.stopCleanupInterval();
   }
 
-  private async getFileStats(filePath: string): Promise<{ mtimeMs: number; size: number } | undefined> {
+  private async getFileHash(filePath: string): Promise<string | undefined> {
     try {
-      const stat = await fs.stat(filePath);
-      return { mtimeMs: stat.mtimeMs, size: stat.size };
+      const fileBuffer = await fs.readFile(filePath);
+      return crypto.createHash("sha256").update(fileBuffer).digest("hex");
     } catch {
       return undefined;
     }
   }
 
-  private getFileStatsSync(filePath: string): { mtimeMs: number; size: number } | undefined {
+  private getFileHashSync(filePath: string): string | undefined {
+    try {
+      const fileBuffer = fsSync.readFileSync(filePath);
+      return crypto.createHash("sha256").update(fileBuffer).digest("hex");
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async getFileStats(filePath: string): Promise<{ mtimeMs: number; size: number; hash?: string } | undefined> {
+    try {
+      const stat = await fs.stat(filePath);
+      const hash = await this.getFileHash(filePath);
+      return { mtimeMs: stat.mtimeMs, size: stat.size, hash };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private getFileStatsSync(filePath: string): { mtimeMs: number; size: number; hash?: string } | undefined {
     try {
       const stat = fsSync.statSync(filePath);
-      return { mtimeMs: stat.mtimeMs, size: stat.size };
+      const hash = this.getFileHashSync(filePath);
+      return { mtimeMs: stat.mtimeMs, size: stat.size, hash };
     } catch {
       return undefined;
     }
@@ -115,6 +136,12 @@ export class ContentAnalysisCache {
     const currentStats = this.getFileStatsSync(filePath);
     if (!currentStats) {
       return true;
+    }
+    if (cachedStats.hash && currentStats.hash) {
+      if (cachedStats.hash !== currentStats.hash) {
+        return true;
+      }
+      return false;
     }
     if (
       currentStats.mtimeMs !== cachedStats.mtimeMs ||
@@ -133,6 +160,12 @@ export class ContentAnalysisCache {
     const currentStats = await this.getFileStats(filePath);
     if (!currentStats) {
       return true;
+    }
+    if (cachedStats.hash && currentStats.hash) {
+      if (cachedStats.hash !== currentStats.hash) {
+        return true;
+      }
+      return false;
     }
     if (
       currentStats.mtimeMs !== cachedStats.mtimeMs ||
@@ -155,14 +188,23 @@ export class ContentAnalysisCache {
 
     const analysisPromise = (async (): Promise<CategoryName> => {
       try {
+        let initialStats: { mtimeMs: number; size: number } | undefined;
+        try {
+          initialStats = await this.getFileStats(filePath);
+        } catch {
+          initialStats = undefined;
+        }
         const result = await this.analyze(filePath);
 
         if (result.confidence >= 0.7) {
           const stats = await this.getFileStats(filePath);
+          // Use initial stats if they exist to detect if file changed during analysis
+          // Store the stats from when analysis started for consistent validation
+          const statsToStore = initialStats ?? stats;
           this.results.set(key, result.category);
           this.timestamps.set(key, Date.now());
-          if (stats) {
-            this.fileStats.set(key, stats);
+          if (statsToStore) {
+            this.fileStats.set(key, statsToStore);
           }
           logger.info("Content analysis updated category", {
             filePath,
