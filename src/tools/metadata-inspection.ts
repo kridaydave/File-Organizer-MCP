@@ -194,7 +194,9 @@ export async function handleInspectMetadata(
           category as CategoryName,
         );
         if (subpath) {
-          result.organizationPath = path.join(category, subpath, fileName);
+          // "/" and not path.join: this string is reported to the caller, so
+          // a Windows client has to read the same thing a Linux one does.
+          result.organizationPath = `${category}/${subpath}/${fileName}`;
         }
       } catch (metadataError) {
         result.warnings?.push(

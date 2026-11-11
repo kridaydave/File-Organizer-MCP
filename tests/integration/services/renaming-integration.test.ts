@@ -51,8 +51,10 @@ describe('RenamingService Integration', () => {
     // 1. Preview
     const preview = await service.applyRenameRules(files, rules);
     expect(preview).toHaveLength(2);
-    expect(preview[0].new).toContain('test-version1.txt');
-    expect(preview[0].willChange).toBe(true);
+    const [firstPreview] = preview;
+    if (!firstPreview) throw new Error('Expected a preview entry for the first file');
+    expect(firstPreview.new).toContain('test-version1.txt');
+    expect(firstPreview.willChange).toBe(true);
 
     // 2. Execute
     const result = await service.executeRename(preview);
@@ -124,7 +126,9 @@ describe('RenamingService Integration', () => {
 
     const preview = await service.applyRenameRules(files, rules);
     // Preview MUST show conflict because b.txt exists
-    expect(preview[0].conflict).toBe(true);
+    const [conflictPreview] = preview;
+    if (!conflictPreview) throw new Error('Expected a preview entry for a.txt');
+    expect(conflictPreview.conflict).toBe(true);
 
     // Try executing anyway (should skip)
     const result = await service.executeRename(preview);
@@ -161,7 +165,9 @@ describe('RenamingService Integration', () => {
     // Find manifest
     const manifests = await rollbackService.listManifests();
     expect(manifests.length).toBeGreaterThan(0);
-    const latestId = manifests[0].id;
+    const [latestManifest] = manifests;
+    if (!latestManifest) throw new Error('Expected at least one rollback manifest');
+    const latestId = latestManifest.id;
 
     // Rollback
     const rollbackResult = await rollbackService.rollback(latestId);

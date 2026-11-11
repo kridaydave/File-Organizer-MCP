@@ -3,6 +3,7 @@
  *
  * Executes all security gate tests:
  * 1. Path Traversal Fuzzing
+ * 1b. Property-Based Path Fuzzing (fast-check, generative)
  * 2. TOCTOU Race Condition Tests
  * 3. Sensitive File Access Tests
  * 4. Static Analysis
@@ -14,6 +15,7 @@
  */
 
 import { runFuzzing } from "./path-traversal-fuzz.js";
+import { runPropertyFuzz } from "./property-fuzz.js";
 import { runTOCTOUTests } from "./toctou-test.js";
 import { runSensitiveFileTests } from "./sensitive-file-test.js";
 import { runStaticAnalysis } from "./static-analysis.js";
@@ -275,6 +277,7 @@ async function runAllGates(): Promise<number> {
 
   // Run all gates
   await runGate("Path Traversal Fuzzing", runFuzzing);
+  await runGate("Property-Based Path Fuzzing", runPropertyFuzz);
   await runGate("TOCTOU Race Condition Tests", runTOCTOUTests);
   await runGate("Sensitive File Access Tests", runSensitiveFileTests);
   await runGate("Static Analysis", runStaticAnalysis);

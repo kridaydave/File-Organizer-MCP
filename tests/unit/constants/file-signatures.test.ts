@@ -14,6 +14,7 @@ import {
   detectExtensionMismatch,
   FileSignature,
 } from "../../../src/constants/file-signatures.js";
+import { required } from "../../helpers/safe-index.js";
 
 describe("File Signatures Database", () => {
   describe("Database Integrity", () => {
@@ -507,13 +508,15 @@ describe("File Signatures Database", () => {
 
       for (const ext of commonExts) {
         expect(EXTENSION_TO_SIGNATURE[ext]).toBeDefined();
-        expect(EXTENSION_TO_SIGNATURE[ext].length).toBeGreaterThan(0);
+        expect(required(EXTENSION_TO_SIGNATURE[ext], ext).length).toBeGreaterThan(
+          0,
+        );
       }
     });
 
     it("should map multiple types for ambiguous extensions", () => {
       // .gif maps to both GIF87 and GIF89
-      expect(EXTENSION_TO_SIGNATURE[".gif"].length).toBe(2);
+      expect(required(EXTENSION_TO_SIGNATURE[".gif"], ".gif").length).toBe(2);
     });
   });
 

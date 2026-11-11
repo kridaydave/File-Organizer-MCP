@@ -8,7 +8,7 @@
 import fs from "fs/promises";
 import crypto from "crypto";
 import { HashCalculatorService } from "./hasher.js";
-import type { FileWithSize, DuplicateGroup } from "../../types.js";
+import type { FileWithSize, SkippedFile } from "../../types.js";
 import { fileExists } from "../../utils/file-utils.js";
 import { logger } from "../../utils/logger.js";
 import path from "path";
@@ -43,10 +43,56 @@ export interface AnalyzedDuplicateGroup {
   wasted_space_bytes: number;
 }
 
+/**
+ * Scored duplicate groups plus the files the scan could not compare.
+ * A caller that ignores `skipped` is reporting a partial analysis as complete.
+ */
+export interface DuplicateAnalysis {
+  groups: AnalyzedDuplicateGroup[];
+  skipped: SkippedFile[];
+  skipped_bytes: number;
+}
+
+/**
+ * Which copy of a duplicate group survives a delete. Unlike
+ * `RecommendationStrategy`, these name the survivor outright rather than
+ * blending path depth and location quality into a score — a dry-run that says
+ * "newest survives" has to mean exactly that.
+ */
+export type KeepStrategy = "newest" | "oldest" | "keep_first";
+
+export interface DeletionPreviewGroup {
+  hash: string;
+  size_bytes: number;
+  file_count: number;
+  /** The single copy that would survive. */
+  keep: string;
+  /** Every other copy in the group, which a delete would remove. */
+  would_delete: string[];
+  wasted_space_bytes: number;
+}
+
+export interface DeletionPreview {
+  keep_strategy: KeepStrategy;
+  groups: DeletionPreviewGroup[];
+  /** Flat, de-duplicated list ready to hand straight to a delete call. */
+  files_to_delete: string[];
+  total_would_delete: number;
+  total_wasted_space_bytes: number;
+  skipped: SkippedFile[];
+  skipped_bytes: number;
+}
+
 export interface DeletionResult {
   deleted: string[];
   failed: { path: string; error: string }[];
   manifestPath?: string;
+  /**
+   * Files whose surviving-copy check used a sampled identity (size + first and
+   * last 64KB) because the file is over the hashing size cap. Non-empty means
+   * the check was weaker than a full-content comparison.
+   */
+  partiallyVerified?: string[];
 }
 
 import { safeAtomicMove } from "../io/atomic-move.js";
@@ -65,21 +111,24 @@ export class DuplicateFinderService {
   }
 
   /**
-   * Find duplicates and score them for recommendation
+   * Find duplicates and rank each copy by how likely it is the one to keep.
+   *
+   * The scan's `skipped` list is passed through untouched rather than dropped,
+   * because a caller recommending deletions from these groups must be able to
+   * tell the user which files the recommendation is blind to.
+   *
+   * @param files - Candidate files, typically from a recursive scan
+   * @param strategy - Which signal decides the "keep" recommendation
+   * @param options - Forwarded scan options, e.g. the timeout budget
    */
   async findWithScoring(
     files: FileWithSize[],
     strategy: RecommendationStrategy = "best_location",
     options: { timeoutMs?: number } = {},
-  ): Promise<AnalyzedDuplicateGroup[]> {
-    // Explicitly filter out 0-byte (empty) files from duplicate detection
-    const nonZeroFiles = files.filter((file) => file.size > 0);
-    const duplicates = await this.hashCalculator.findDuplicates(
-      nonZeroFiles,
-      options,
-    );
+  ): Promise<DuplicateAnalysis> {
+    const scan = await this.hashCalculator.findDuplicates(files, options);
 
-    return duplicates
+    const groups = scan.groups
       .filter((group) => group.size_bytes > 0)
       .map((group) => {
       const scoredFiles = group.files.map((file) =>
@@ -112,6 +161,112 @@ export class DuplicateFinderService {
         wasted_space_bytes: group.size_bytes * (group.files.length - 1),
       };
     });
+
+    return {
+      groups,
+      skipped: scan.skipped,
+      skipped_bytes: scan.skipped_bytes,
+    };
+  }
+
+  /**
+   * Decide what a delete would remove, without touching anything.
+   *
+   * This is the dry-run twin of `deleteFiles`: it groups the scan the same way
+   * and passes the scan's `skipped` list through untouched, so a caller showing
+   * the user "nothing will be deleted" can still say which files the answer is
+   * blind to.
+   *
+   * @param files - Candidate files, typically from a recursive scan
+   * @param keepStrategy - Which copy of each group survives
+   * @param options - Forwarded scan options, e.g. the timeout budget
+   */
+  async previewDeletion(
+    files: FileWithSize[],
+    keepStrategy: KeepStrategy = "newest",
+    options: { timeoutMs?: number } = {},
+  ): Promise<DeletionPreview> {
+    const scan = await this.hashCalculator.findDuplicates(files, options);
+
+    const groups = scan.groups
+      .filter((group) => group.size_bytes > 0)
+      .map((group) => {
+        // Group order is scan order, which follows fs.readdir and differs
+        // between filesystems. Sorting by path once here makes keep_first and
+        // the date-strategy tie-break produce the same survivor on every OS
+        // instead of whichever copy the scan happened to see first. Byte-order
+        // comparison, not localeCompare: the answer must not depend on locale.
+        const files = [...group.files].sort((a, b) =>
+          a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+        );
+        const keepIndex = this.pickSurvivor(files, keepStrategy);
+        return {
+          hash: group.hash,
+          size_bytes: group.size_bytes,
+          file_count: group.count,
+          keep: files[keepIndex]?.path ?? "",
+          would_delete: files
+            .filter((_, i) => i !== keepIndex)
+            .map((f) => f.path),
+          wasted_space_bytes: group.size_bytes * (group.count - 1),
+        };
+      });
+
+    return {
+      keep_strategy: keepStrategy,
+      groups,
+      files_to_delete: [...new Set(groups.flatMap((g) => g.would_delete))],
+      total_would_delete: groups.reduce(
+        (sum, g) => sum + g.would_delete.length,
+        0,
+      ),
+      total_wasted_space_bytes: groups.reduce(
+        (sum, g) => sum + g.wasted_space_bytes,
+        0,
+      ),
+      skipped: scan.skipped,
+      skipped_bytes: scan.skipped_bytes,
+    };
+  }
+
+  /**
+   * Index of the copy that survives. A tie keeps the earlier file, so the
+   * answer is stable for a given scan order instead of shuffling between runs.
+   */
+  private pickSurvivor(files: FileWithSize[], strategy: KeepStrategy): number {
+    let bestIndex = 0;
+    let best = files[0];
+    for (let i = 1; i < files.length; i++) {
+      const candidate = files[i];
+      if (!candidate || !best) continue;
+      if (this.outranks(candidate, best, strategy)) {
+        bestIndex = i;
+        best = candidate;
+      }
+    }
+    return bestIndex;
+  }
+
+  /** Whether `candidate` should survive over `incumbent` under `strategy`. */
+  private outranks(
+    candidate: FileWithSize,
+    incumbent: FileWithSize,
+    strategy: KeepStrategy,
+  ): boolean {
+    if (strategy === "keep_first") {
+      // Scan order is the whole rule, and the incumbent already won it.
+      return false;
+    }
+
+    const a = candidate.modified?.getTime();
+    const b = incumbent.modified?.getTime();
+    if (a === undefined || b === undefined) {
+      // A file with no timestamp cannot win a date comparison, so it survives
+      // only if nothing better is in the group.
+      return b === undefined;
+    }
+
+    return strategy === "newest" ? a > b : a < b;
   }
 
   /**
@@ -198,7 +353,12 @@ export class DuplicateFinderService {
    * @param filesToDelete - Array of file paths to delete
    * @param options - Deletion options
    * @param options.createBackupManifest - Create backup and rollback manifest (default: true)
-   * @param options.autoVerify - Automatically verify duplicates exist before deletion (default: false, WARNING: disabling verification may cause data loss)
+   * @param options.autoVerify - Verify a surviving copy exists before deleting (default: false at
+   *   this layer, true via the MCP tool). The scan walks each file's parent and grandparent
+   *   directory recursively, plus `candidateDirectories`, subject to the scanner's depth, file
+   *   count and skip rules; a copy kept outside those roots looks like a last copy and the
+   *   deletion is refused.
+   * @param options.candidateDirectories - Extra directories to search for surviving copies
    */
   async deleteFiles(
     filesToDelete: string[],
@@ -245,11 +405,13 @@ export class DuplicateFinderService {
     }
 
     const rollbackActions: RollbackAction[] = [];
+    // Files confirmed readable, tracked by the identity method used to read them.
+    let filesToProcess: string[] = [];
+    const sampledPaths = new Set<string>();
 
     // 2. Verify files are accessible and can be hashed (basic safety checks)
     // Note: We trust that user has identified duplicates via analyze_duplicates
     // We just ensure files exist, are readable, and pass security validation
-    let filesToProcess: string[] = [];
     for (const filePath of uniquePaths) {
       let handle: fs.FileHandle | undefined;
       try {
@@ -261,8 +423,15 @@ export class DuplicateFinderService {
         const validator = this.pathValidator;
         handle = await validator.openAndValidateFile(filePath);
 
-        // Verify file can be read/hashed
-        await this.hashCalculator.calculateHash(handle);
+        // Verify the file can actually be read. Oversized files fall back to a
+        // sampled identity rather than being refused outright, so a large
+        // duplicate can still be deleted; the weaker check is reported back.
+        const identity = await this.hashCalculator.calculateContentIdentity(
+          handle,
+        );
+        if (identity.method === "sampled") {
+          sampledPaths.add(filePath);
+        }
 
         filesToProcess.push(filePath);
       } catch (error) {
@@ -290,6 +459,9 @@ export class DuplicateFinderService {
 
       // Only proceed with valid files
       filesToProcess = verification.valid;
+      for (const path of verification.sampled) {
+        sampledPaths.add(path);
+      }
     }
 
     // 3. Delete (Move to Backup) - only process files that passed validation
@@ -334,12 +506,26 @@ export class DuplicateFinderService {
       result.manifestPath = manifestId;
     }
 
+    // Only report files that were actually deleted. `sampledPaths` also holds
+    // survivors that were scanned during verification, and listing those would
+    // read as though they were removed.
+    const deletedSampled = result.deleted.filter((p) => sampledPaths.has(p));
+    if (deletedSampled.length > 0) {
+      result.partiallyVerified = deletedSampled;
+    }
+
     return result;
   }
 
   /**
-   * Verify that duplicates exist for files being deleted
-   * Scans parent directories to ensure at least one copy remains
+   * Verify that a surviving copy exists for each file being deleted.
+   *
+   * Roots are each file's parent and grandparent directory plus
+   * `candidateDirectories`, and each root is walked recursively by the scanner,
+   * so a copy in a subfolder of the parent is found. The scanner's own limits
+   * apply: `maxScanDepth` levels, `maxFilesPerOperation` files, and dot-entries
+   * plus SKIP_DIRECTORIES are skipped. Files over the hashing cap are compared
+   * by size and sampled content and are reported back as `sampled`.
    *
    * @param filesToDelete - Files that will be deleted
    * @param candidateDirectories - Optional additional directories to scan
@@ -348,9 +534,14 @@ export class DuplicateFinderService {
   private async verifyDuplicatesExist(
     filesToDelete: string[],
     candidateDirectories: string[] = [],
-  ): Promise<{ valid: string[]; invalid: { path: string; error: string }[] }> {
+  ): Promise<{
+    valid: string[];
+    invalid: { path: string; error: string }[];
+    sampled: Set<string>;
+  }> {
     const valid: string[] = [];
     const invalid: { path: string; error: string }[] = [];
+    const sampled = new Set<string>();
 
     // Collect all directories to scan
     const dirsToScan = new Set<string>(candidateDirectories);
@@ -376,12 +567,17 @@ export class DuplicateFinderService {
           try {
             const validator = this.pathValidator;
             handle = await validator.openAndValidateFile(file.path);
-            const hash = await this.hashCalculator.calculateHash(handle);
-
-            if (!hashToFiles.has(hash)) {
-              hashToFiles.set(hash, []);
+            const identity = await this.hashCalculator.calculateContentIdentity(
+              handle,
+            );
+            if (identity.method === "sampled") {
+              sampled.add(file.path);
             }
-            hashToFiles.get(hash)!.push(file.path);
+
+            if (!hashToFiles.has(identity.digest)) {
+              hashToFiles.set(identity.digest, []);
+            }
+            hashToFiles.get(identity.digest)!.push(file.path);
           } catch (error) {
             logger.debug(
               `Skipping file during verification: ${file.path}`,
@@ -414,9 +610,14 @@ export class DuplicateFinderService {
       try {
         const validator = this.pathValidator;
         handle = await validator.openAndValidateFile(filePath);
-        const hash = await this.hashCalculator.calculateHash(handle);
+        const identity = await this.hashCalculator.calculateContentIdentity(
+          handle,
+        );
+        if (identity.method === "sampled") {
+          sampled.add(filePath);
+        }
 
-        const remainingCopies = hashToFiles.get(hash) || [];
+        const remainingCopies = hashToFiles.get(identity.digest) || [];
 
         if (remainingCopies.length === 0) {
           invalid.push({
@@ -446,6 +647,6 @@ export class DuplicateFinderService {
       }
     }
 
-    return { valid, invalid };
+    return { valid, invalid, sampled };
   }
 }

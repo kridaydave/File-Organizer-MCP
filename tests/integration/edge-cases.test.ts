@@ -1,13 +1,29 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { OrganizerService } from '../../src/core/organize/organizer.js';
-import { FileScannerService } from '../../src/core/scan/scanner.js';
+
+import { isolateRollbackStorage } from '../helpers/rollback-storage.js';
+
+/**
+ * Private rollback storage.
+ *
+ * Every organize here moves real files and therefore writes a manifest through
+ * the default `getRollbackDirectory()`, which under jest is one directory shared
+ * by every worker. Those manifests decide which manifest is globally newest, so
+ * a no-id undo in another file can restore this file's batch. The redirect is
+ * registered before the modules under test are imported, so they are dynamic.
+ */
+const storage = await isolateRollbackStorage('fom-edge-cases-');
+
+const { OrganizerService } = await import('../../src/core/organize/organizer.js');
+const { FileScannerService } = await import('../../src/core/scan/scanner.js');
 
 describe('OrganizerService Edge Cases', () => {
   let testDir: string;
-  let organizer: OrganizerService;
-  let scanner: FileScannerService;
+  // The classes arrive through a dynamic import, so the binding is a value and
+  // not a type name. `InstanceType` reads the instance back off the constructor.
+  let organizer: InstanceType<typeof OrganizerService>;
+  let scanner: InstanceType<typeof FileScannerService>;
 
   beforeEach(async () => {
     testDir = path.resolve('./test-edge-cases');
@@ -19,6 +35,10 @@ describe('OrganizerService Edge Cases', () => {
 
   afterEach(async () => {
     await fs.rm(testDir, { recursive: true, force: true });
+  });
+
+  afterAll(async () => {
+    await storage.remove();
   });
 
   it('should handle files with reserved Windows names', async () => {

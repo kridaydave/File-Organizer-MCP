@@ -10,19 +10,27 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
 import { DuplicateFinderService } from "../core/hash/duplicate-finder.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import { formatBytes } from "../utils/formatters.js";
+import { formatBytes, renderSkippedNotice } from "../utils/formatters.js";
 import {
   AnalyzeDuplicatesInputSchema,
   DeleteDuplicatesInputSchema,
+  PreviewDeleteDuplicatesInputSchema,
 } from "../schemas/scan.js";
+import {
+  analyzeDuplicatesOutputJsonSchema,
+  deleteDuplicatesOutputJsonSchema,
+  previewDeleteDuplicatesOutputJsonSchema,
+} from "../schemas/output.js";
 
 export {
   AnalyzeDuplicatesInputSchema,
   DeleteDuplicatesInputSchema,
+  PreviewDeleteDuplicatesInputSchema,
 } from "../schemas/scan.js";
 export type {
   AnalyzeDuplicatesInput,
   DeleteDuplicatesInput,
+  PreviewDeleteDuplicatesInput,
 } from "../schemas/scan.js";
 export const analyzeDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_analyze_duplicates",
@@ -47,6 +55,40 @@ export const analyzeDuplicatesToolDefinition: ToolDefinition = {
     },
     required: ["directory"],
   },
+  outputSchema: analyzeDuplicatesOutputJsonSchema,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+};
+
+export const previewDeleteDuplicatesToolDefinition: ToolDefinition = {
+  name: "file_organizer_preview_delete_duplicates",
+  title: "Preview Duplicate Deletion",
+  description:
+    "Dry-run for file_organizer_delete_duplicates. Groups duplicates and names the single copy that would survive under the keep_strategy you pick (newest, oldest, or keep_first), plus the flat list of files that would be deleted. Read-only: nothing is moved or removed. Pass files_to_delete to file_organizer_delete_duplicates to act on it. Files the scan could not compare are listed under skipped, so a 'nothing to delete' answer can still be partial.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      directory: { type: "string", description: "Full path to the directory" },
+      keep_strategy: {
+        type: "string",
+        enum: ["newest", "oldest", "keep_first"],
+        default: "newest",
+        description:
+          'Which copy of each group survives: "newest" (most recently modified), "oldest", or "keep_first" (first found by the scan)',
+      },
+      response_format: {
+        type: "string",
+        enum: ["json", "markdown"],
+        default: "markdown",
+      },
+    },
+    required: ["directory"],
+  },
+  outputSchema: previewDeleteDuplicatesOutputJsonSchema,
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,
@@ -59,12 +101,25 @@ export const deleteDuplicatesToolDefinition: ToolDefinition = {
   name: "file_organizer_delete_duplicates",
   title: "Delete Duplicate Files",
   description:
-    "Permanently deletes specified duplicate files. DESTRUCTIVE. Verifies hash/size before deletion.",
+    "Deletes specified duplicate files. DESTRUCTIVE. Every candidate is hashed and checked against surviving copies before anything is removed. The search walks each candidate's parent and grandparent directory recursively, plus any candidate_directories you pass, up to 10 levels deep and 10000 files, skipping dot-entries and node_modules/.git/__pycache__/.venv; a copy kept outside those roots is not found and the deletion is refused, so pass its directory if the surviving copy lives elsewhere. Files over the hashing size cap are checked by size plus sampled content, which is weaker than a full hash and is reported as partially verified. Deleted files go to a recoverable backup dir; pass the returned manifest_id to file_organizer_undo_last_operation to restore them.",
   inputSchema: {
     type: "object",
     properties: {
       files_to_delete: { type: "array", items: { type: "string" } },
       create_backup_manifest: { type: "boolean", default: true },
+      verify_before_delete: {
+        type: "boolean",
+        default: true,
+        description:
+          "Hash each candidate and refuse to delete a file with no surviving copy in the searched directories (default true)",
+      },
+      candidate_directories: {
+        type: "array",
+        items: { type: "string" },
+        default: [],
+        description:
+          "Extra directories to search for surviving copies during verification, walked the same way as the candidate's parent and grandparent. Without these, only those two roots are searched recursively, so a copy kept in an unrelated directory is not found and the deletion is refused.",
+      },
       response_format: {
         type: "string",
         enum: ["json", "markdown"],
@@ -73,6 +128,7 @@ export const deleteDuplicatesToolDefinition: ToolDefinition = {
     },
     required: ["files_to_delete"],
   },
+  outputSchema: deleteDuplicatesOutputJsonSchema,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -105,10 +161,11 @@ export async function handleAnalyzeDuplicates(
     const duplicateFinder = new DuplicateFinderService(); // Stateless service is fine
 
     const files = await scanner.getAllFiles(validatedPath, true); // Recursive? User usually expects deep dupes
-    const analyzed = await duplicateFinder.findWithScoring(
+    const analysis = await duplicateFinder.findWithScoring(
       files,
       recommendation_strategy,
     );
+    const analyzed = analysis.groups;
 
     const summary = {
       total_duplicate_groups: analyzed.length,
@@ -123,6 +180,8 @@ export async function handleAnalyzeDuplicates(
       total_wasted_space_readable: formatBytes(
         analyzed.reduce((sum, g) => sum + g.wasted_space_bytes, 0),
       ),
+      not_analyzed_files: analysis.skipped.length,
+      not_analyzed_bytes: analysis.skipped_bytes,
     };
 
     if (response_format === "json") {
@@ -131,15 +190,29 @@ export async function handleAnalyzeDuplicates(
           {
             type: "text",
             text: JSON.stringify(
-              { summary, duplicate_groups: analyzed },
+              {
+                summary,
+                duplicate_groups: analyzed,
+                skipped: analysis.skipped,
+              },
               null,
               2,
             ),
           },
         ],
-        structuredContent: { summary, duplicate_groups: analyzed },
+        structuredContent: {
+          summary,
+          duplicate_groups: analyzed,
+          skipped: analysis.skipped,
+        },
       };
     }
+
+    const skippedNotice = renderSkippedNotice(
+      analysis.skipped,
+      analysis.skipped_bytes,
+      "the analysis above is partial.",
+    );
 
     const markdown = `### Duplicate Analysis for \`${directory}\`
 **Strategy:** ${recommendation_strategy}
@@ -161,9 +234,102 @@ ${g.files
   .join("\n")}
 `,
   )
-  .join("\n")}
+  .join("\n")}${skippedNotice ? `\n${skippedNotice}` : ""}
 `;
-    return { content: [{ type: "text", text: markdown }] };
+    return {
+      content: [{ type: "text", text: markdown }],
+      structuredContent: {
+        summary,
+        duplicate_groups: analyzed,
+        skipped: analysis.skipped,
+      },
+    };
+  } catch (error) {
+    return createErrorResponse(error);
+  }
+}
+
+export async function handlePreviewDeleteDuplicates(
+  args: Record<string, unknown>,
+): Promise<ToolResponse> {
+  try {
+    const parsed = PreviewDeleteDuplicatesInputSchema.safeParse(args);
+    if (!parsed.success) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const { directory, keep_strategy, response_format } = parsed.data;
+    const validatedPath = await validateStrictPath(directory);
+
+    const scanner = new FileScannerService();
+    const duplicateFinder = new DuplicateFinderService(); // Stateless service is fine
+
+    // Recursive, matching analyze_duplicates: duplicates usually sit in
+    // subfolders and a shallow scan would under-report them.
+    const files = await scanner.getAllFiles(validatedPath, true);
+    const preview = await duplicateFinder.previewDeletion(files, keep_strategy);
+
+    const output = {
+      dry_run: true,
+      keep_strategy: preview.keep_strategy,
+      summary: {
+        total_duplicate_groups: preview.groups.length,
+        total_files_to_delete: preview.total_would_delete,
+        total_wasted_space_bytes: preview.total_wasted_space_bytes,
+        total_wasted_space_readable: formatBytes(
+          preview.total_wasted_space_bytes,
+        ),
+        not_analyzed_files: preview.skipped.length,
+        not_analyzed_bytes: preview.skipped_bytes,
+      },
+      duplicate_groups: preview.groups,
+      files_to_delete: preview.files_to_delete,
+      skipped: preview.skipped,
+    };
+
+    if (response_format === "json") {
+      return {
+        content: [{ type: "text", text: JSON.stringify(output, null, 2) }],
+        structuredContent: output as unknown as Record<string, unknown>,
+      };
+    }
+
+    const skippedNotice = renderSkippedNotice(
+      preview.skipped,
+      preview.skipped_bytes,
+      "the preview above is partial.",
+    );
+
+    const markdown = `### Deletion Preview for \`${directory}\`
+**Keep Strategy:** ${preview.keep_strategy}
+**Would Delete:** ${output.summary.total_files_to_delete} files
+**Wasted Space:** ${output.summary.total_wasted_space_readable}
+**Duplicate Groups:** ${output.summary.total_duplicate_groups}
+${preview.groups
+  .map(
+    (g, i) => `
+#### Group ${i + 1} (${formatBytes(g.size_bytes)})
+**Keep:** \`${g.keep}\`
+**Would Delete:**
+${g.would_delete.map((f) => `- \`${f}\``).join("\n")}
+`,
+  )
+  .join("\n")}
+🔎 **Dry run:** nothing was deleted. Pass \`files_to_delete\` to \`file_organizer_delete_duplicates\` to act on this.${skippedNotice ? `\n${skippedNotice}` : ""}
+`;
+
+    return {
+      content: [{ type: "text", text: markdown }],
+      structuredContent: output as unknown as Record<string, unknown>,
+    };
   } catch (error) {
     return createErrorResponse(error);
   }
@@ -186,12 +352,21 @@ export async function handleDeleteDuplicates(
       };
     }
 
-    const { files_to_delete, create_backup_manifest, response_format } =
-      parsed.data;
+    const {
+      files_to_delete,
+      create_backup_manifest,
+      verify_before_delete,
+      candidate_directories,
+      response_format,
+    } = parsed.data;
     const duplicateFinder = new DuplicateFinderService();
 
+    // Verification is on by default: this tool hands paths to a filesystem
+    // mutation, and an unverified delete can take the last copy of a file.
     const result = await duplicateFinder.deleteFiles(files_to_delete, {
       createBackupManifest: create_backup_manifest,
+      autoVerify: verify_before_delete,
+      candidateDirectories: candidate_directories,
     });
 
     const output = {
@@ -199,6 +374,9 @@ export async function handleDeleteDuplicates(
       failed_count: result.failed.length,
       deleted_files: result.deleted,
       failures: result.failed,
+      verified: verify_before_delete,
+      manifest_id: result.manifestPath ?? null,
+      partially_verified_files: result.partiallyVerified ?? [],
     };
     const hasFailures = output.failed_count > 0;
 
@@ -213,11 +391,15 @@ export async function handleDeleteDuplicates(
     const markdown = `### Deletion Report
 ✅ **Deleted:** ${output.deleted_count} files
 ❌ **Failed:** ${output.failed_count} files
+${output.verified ? "🔎 **Verified:** each file was hashed and confirmed to have a surviving copy" : "⚠️ **Unverified:** deletion ran without confirming a surviving copy exists"}
 
+${output.partially_verified_files.length > 0 ? `\n🟡 **Partially verified:** ${output.partially_verified_files.length} file(s) exceed the hashing size cap, so their surviving-copy check compared size plus the first and last 64KB rather than the full content. Treat this as a weaker check, not proof of equality.\n` : ""}
+${output.manifest_id ? `↩️ **Recoverable:** pass manifest_id \`${output.manifest_id}\` to \`file_organizer_undo_last_operation\` to restore the deleted files.\n` : ""}
 ${output.failures.length > 0 ? `**Failures:**\n${output.failures.map((f) => `- ${f.path}: ${f.error}`).join("\n")}` : ""}
 `;
     return {
       content: [{ type: "text", text: markdown }],
+      structuredContent: output as unknown as Record<string, unknown>,
       ...(hasFailures && { isError: true }),
     };
   } catch (error) {

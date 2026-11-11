@@ -20,6 +20,20 @@ import type {
 // Test data store - will be cleared before each test
 const testHistoryData: HistoryEntry[] = [];
 
+/**
+ * Index into an entry list and fail loudly when the slot is empty, so a
+ * missing entry surfaces as a test failure rather than an undefined value.
+ */
+function entryAt(entries: readonly HistoryEntry[], index: number): HistoryEntry {
+  const entry = entries[index];
+  if (entry === undefined) {
+    throw new Error(
+      `expected an entry at index ${index}, but the array holds ${entries.length}`,
+    );
+  }
+  return entry;
+}
+
 function applyPrivacyMode(
   entries: HistoryEntry[],
   mode: "full" | "redacted" | "none",
@@ -202,8 +216,8 @@ describe("View History Tool - Integration Tests", () => {
       const output = result.structuredContent as {
         entries: HistoryEntry[];
       };
-      expect(output.entries[0].operation).toBe("second_op");
-      expect(output.entries[1].operation).toBe("first_op");
+      expect(entryAt(output.entries, 0).operation).toBe("second_op");
+      expect(entryAt(output.entries, 1).operation).toBe("first_op");
     });
   });
 
@@ -271,7 +285,7 @@ describe("View History Tool - Integration Tests", () => {
       };
       expect(output.entries).toHaveLength(1);
       expect(output.total).toBe(1);
-      expect(output.entries[0].source).toBe("scheduled");
+      expect(entryAt(output.entries, 0).source).toBe("scheduled");
     });
 
     it("should combine multiple filters", async () => {
@@ -389,7 +403,7 @@ describe("View History Tool - Integration Tests", () => {
         total: number;
       };
       expect(output.entries).toHaveLength(1);
-      expect(output.entries[0].operation).toBe("new_op");
+      expect(entryAt(output.entries, 0).operation).toBe("new_op");
     });
 
     it("should filter by until parameter", async () => {
@@ -411,7 +425,7 @@ describe("View History Tool - Integration Tests", () => {
         total: number;
       };
       expect(output.entries).toHaveLength(1);
-      expect(output.entries[0].operation).toBe("first_op");
+      expect(entryAt(output.entries, 0).operation).toBe("first_op");
     });
 
     it("should combine since and until for date range", async () => {
@@ -440,7 +454,7 @@ describe("View History Tool - Integration Tests", () => {
         total: number;
       };
       expect(output.entries).toHaveLength(1);
-      expect(output.entries[0].operation).toBe("in_range");
+      expect(entryAt(output.entries, 0).operation).toBe("in_range");
     });
   });
 
@@ -462,7 +476,7 @@ describe("View History Tool - Integration Tests", () => {
       const output = result.structuredContent as {
         entries: HistoryEntry[];
       };
-      const entry = output.entries[0];
+      const entry = entryAt(output.entries, 0);
       expect(entry.details).toContain("C:\\Users\\test\\file.txt");
       expect(entry.error?.message).toContain("C:\\path\\to\\file");
     });
@@ -484,7 +498,7 @@ describe("View History Tool - Integration Tests", () => {
       const output = result.structuredContent as {
         entries: HistoryEntry[];
       };
-      const entry = output.entries[0];
+      const entry = entryAt(output.entries, 0);
       expect(entry.details).not.toContain("C:\\Users\\test");
       expect(entry.details).toContain("[REDACTED]");
       expect(entry.error?.message).toContain("[REDACTED]");
@@ -510,7 +524,7 @@ describe("View History Tool - Integration Tests", () => {
       const output = result.structuredContent as {
         entries: HistoryEntry[];
       };
-      const entry = output.entries[0];
+      const entry = entryAt(output.entries, 0);
       expect(entry.operation).toBe("test_op");
       expect(entry.status).toBe("success");
       expect(entry.durationMs).toBeDefined();
@@ -660,7 +674,7 @@ describe("View History Tool - Integration Tests", () => {
         entries: HistoryEntry[];
       };
       expect(output.entries).toHaveLength(1);
-      expect(output.entries[0].operation).toBe("minimal_op");
+      expect(entryAt(output.entries, 0).operation).toBe("minimal_op");
     });
 
     it("should handle large number of entries", async () => {

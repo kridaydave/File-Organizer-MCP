@@ -1,0 +1,16 @@
+[Unit]
+Description=Run the File Organizer MCP sweep on a calendar
+Documentation=https://github.com/kridaydave/File-Organizer-MCP
+
+[Timer]
+# Weekdays at 09:05. systemd accepts a cron expression here, so the schedule
+# reads the same as the crontab.example recipe.
+OnCalendar=Mon..Fri 09:05
+# Spread the start over a window so a fleet of machines does not hit the same
+# filesystem at the same second.
+RandomizedDelaySec=10m
+# Catch up once after a laptop was asleep, rather than skipping the day.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

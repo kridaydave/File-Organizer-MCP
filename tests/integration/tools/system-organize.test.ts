@@ -102,6 +102,64 @@ describe("System Organization Tool - Integration Tests", () => {
 
       expect(result.content[0].text).not.toContain("source_dir must be one of");
     });
+
+    it("accepts a subdirectory of Downloads reached through a second spelling", async () => {
+      // One directory can have two spellings: macOS os.tmpdir() is
+      // /var/folders/... while its realpath is /private/var/folders/..., and
+      // Windows short names spell a directory RUNNER~1 where the long name is
+      // runneradmin. Matching only the typed spelling turned a directory that
+      // really was inside Downloads into "source_dir must be one of".
+      //
+      // The gate reads os.homedir(), so the sandbox home has to be the home
+      // for this test — otherwise Downloads would not be one of the roots.
+      const sandboxHome = path.join(baseTempDir, "sandbox-home");
+      const downloads = path.join(sandboxHome, "Downloads");
+      await fs.mkdir(downloads, { recursive: true });
+      const viaLink = path.join(sandboxHome, "downloads-alias");
+      await fs.symlink(downloads, viaLink, "dir");
+      const q3 = path.join(downloads, "Q3");
+      await fs.mkdir(q3, { recursive: true });
+
+      const realHomedir = os.homedir;
+      os.homedir = () => sandboxHome;
+      try {
+        const result = await handleSystemOrganization({
+          source_dir: path.join(viaLink, "Q3"),
+          dry_run: true,
+        });
+
+        expect(result.content[0].text).not.toContain(
+          "source_dir must be one of",
+        );
+      } finally {
+        os.homedir = realHomedir;
+      }
+    });
+
+    it("still rejects a directory whose name merely starts with an allowed root", async () => {
+      // The canonical comparison must not become a substring match: a sibling
+      // directory spelled "...-decoy" stays rejected.
+      const sandboxHome = path.join(baseTempDir, "sandbox-home-2");
+      const downloads = path.join(sandboxHome, "Downloads");
+      await fs.mkdir(downloads, { recursive: true });
+      const decoy = `${downloads}-decoy`;
+      await fs.mkdir(decoy, { recursive: true });
+
+      const realHomedir = os.homedir;
+      os.homedir = () => sandboxHome;
+      try {
+        const result = await handleSystemOrganization({
+          source_dir: decoy,
+          dry_run: true,
+        });
+
+        expect(result.content[0].text).toContain(
+          "source_dir must be one of: Downloads, Desktop, Temp",
+        );
+      } finally {
+        os.homedir = realHomedir;
+      }
+    });
   });
 
   describe("Dry Run Mode", () => {
@@ -144,6 +202,36 @@ describe("System Organization Tool - Integration Tests", () => {
 
       expect(result.content[0].text).toContain("DRY RUN MODE");
       expect(result.content[0].text).toContain("No files were actually moved");
+    });
+
+    it("should not name a manifest id that no run wrote", async () => {
+      // A dry run moves nothing, so it writes no manifest, yet it used to mint
+      // a random UUID and print it as an undo handle. An agent that pasted that
+      // id into undo_last_operation got manifest-not-found for an operation
+      // that had never run.
+      const sandboxHome = path.join(baseTempDir, "dry-run-home");
+      const downloads = path.join(sandboxHome, "Downloads");
+      await fs.mkdir(downloads, { recursive: true });
+      await fs.writeFile(path.join(downloads, "song.mp3"), "audio");
+
+      const realHomedir = os.homedir;
+      os.homedir = () => sandboxHome;
+      try {
+        const result = await handleSystemOrganization({
+          source_dir: "Downloads",
+          dry_run: true,
+          use_system_dirs: false,
+          response_format: "json",
+        });
+
+        const structured = result.structuredContent as
+          | { undoManifest?: { manifestId?: string; operations?: unknown[] } }
+          | undefined;
+        expect(structured?.undoManifest?.operations).toHaveLength(1);
+        expect(structured?.undoManifest?.manifestId).toBeUndefined();
+      } finally {
+        os.homedir = realHomedir;
+      }
     });
 
     it("should include file categorization in dry run output", async () => {
@@ -479,7 +567,7 @@ describe("System Organization Tool - Integration Tests", () => {
   });
 
   describe("Undo Manifest", () => {
-    it("should create undo manifest for operations", async () => {
+    it("should return the planned operations for a real run", async () => {
       await fs.writeFile(path.join(testDownloadsDir, "file.mp3"), "audio");
 
       const service = new SystemOrganizeService();
@@ -489,9 +577,12 @@ describe("System Organization Tool - Integration Tests", () => {
         useSystemDirs: false,
       });
 
-      expect(result.undoManifest).toBeDefined();
+      // The service plans the operations; it does not write the manifest. The
+      // id belongs to the handler, which is the only layer that creates one, so
+      // asserting it here would pin the placeholder this call no longer makes.
+      // tests/unit/services/v5-regressions.test.ts proves the handler's id
+      // resolves to a manifest on disk.
       expect(result.undoManifest?.operations).toHaveLength(1);
-      expect(result.undoManifest?.manifestId).toBeDefined();
     });
 
     it("should include undo manifest even in dry run mode", async () => {

@@ -68,8 +68,12 @@ describe("Logger Mocking Examples", () => {
 
       const infoLogs = mockLogger.getInfoLogs();
       expect(infoLogs).toHaveLength(2);
-      expect(infoLogs[0].message).toBe("Starting data processing");
-      expect(infoLogs[1].message).toBe("Processing completed");
+      const [startLog, completionLog] = infoLogs;
+      if (!startLog || !completionLog) {
+        throw new Error("expected two info logs");
+      }
+      expect(startLog.message).toBe("Starting data processing");
+      expect(completionLog.message).toBe("Processing completed");
     });
 
     it("should capture warning logs", async () => {
@@ -77,7 +81,9 @@ describe("Logger Mocking Examples", () => {
 
       const warnLogs = mockLogger.getWarnLogs();
       expect(warnLogs).toHaveLength(1);
-      expect(warnLogs[0].message).toBe("Empty data provided");
+      const [warnLog] = warnLogs;
+      if (!warnLog) throw new Error("expected one warning log");
+      expect(warnLog.message).toBe("Empty data provided");
     });
 
     it("should capture error logs", async () => {
@@ -85,8 +91,10 @@ describe("Logger Mocking Examples", () => {
 
       const errorLogs = mockLogger.getErrorLogs();
       expect(errorLogs).toHaveLength(1);
-      expect(errorLogs[0].message).toBe("Processing failed");
-      expect(errorLogs[0].context?.error).toBeDefined();
+      const [errorLog] = errorLogs;
+      if (!errorLog) throw new Error("expected one error log");
+      expect(errorLog.message).toBe("Processing failed");
+      expect(errorLog.context?.error).toBeDefined();
     });
 
     it("should verify specific log messages", async () => {
@@ -273,11 +281,13 @@ describe("Advanced Logger Mocking Patterns", () => {
       const logs = logger.getLogs();
 
       expect(logs).toHaveLength(1);
-      expect(logs[0].timestamp).toBeInstanceOf(Date);
-      expect(logs[0].timestamp.getTime()).toBeGreaterThanOrEqual(
+      const [onlyLog] = logs;
+      if (!onlyLog) throw new Error("expected one log");
+      expect(onlyLog.timestamp).toBeInstanceOf(Date);
+      expect(onlyLog.timestamp.getTime()).toBeGreaterThanOrEqual(
         beforeTime.getTime(),
       );
-      expect(logs[0].timestamp.getTime()).toBeLessThanOrEqual(
+      expect(onlyLog.timestamp.getTime()).toBeLessThanOrEqual(
         afterTime.getTime(),
       );
     });

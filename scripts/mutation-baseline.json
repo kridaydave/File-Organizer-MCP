@@ -1,0 +1,4 @@
+{
+  "minScore": 23.5,
+  "note": "Floor for the mutation gate over src/services/path-validator.service.ts (see stryker.conf.json). Observed 23.89 on the first run (86 killed, 201 survived, 108 no-coverage, 11 timeout; suite: jest.mutation.config.cjs). The floor exists to catch score drops, not to declare the suite good: the no-coverage count is the real backlog. Raise minScore only in a commit that says which survivors were killed and how."
+}

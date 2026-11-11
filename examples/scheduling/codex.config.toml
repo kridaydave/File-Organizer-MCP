@@ -1,0 +1,21 @@
+# Codex MCP config — append to ~/.codex/config.toml
+# (or a project-scoped .codex/config.toml in a trusted project).
+#
+# `codex mcp add file-organizer -- npx -y file-organizer-mcp` writes the same
+# three keys. The keys below are the ones a scheduled scan+preview sweep needs:
+# a longer tool timeout for a big tree, and unattended approval for read-only
+# tools only. `codex mcp list` shows the server after a restart.
+#
+# Drive it with:
+#   codex exec --sandbox read-only \
+#     "Scan ~/Downloads and preview the organization plan. Do not move anything."
+
+[mcp_servers.file-organizer]
+command = "npx"
+args = ["-y", "file-organizer-mcp"]
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+enabled = true
+# scan_directory and preview_organization both declare readOnlyHint, so they
+# run without a prompt; anything else from this server still asks.
+default_tools_approval_mode = "writes"

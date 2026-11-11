@@ -53,7 +53,11 @@ describe('File Scanning Tool', () => {
 
             expect(result.content[0].type).toBe('text');
             const jsonData = JSON.parse(result.content[0].text);
-            expect(jsonData.directory).toBe(testDir);
+            // The tool reports the validated path, which resolveSymlinks has
+            // realpath'd. Compare canonical forms or this is wrong wherever the
+            // checkout is reached through a symlink (macOS /var -> /private/var)
+            // or a Windows 8.3 short name (RUNNER~1 -> runneradmin).
+            expect(jsonData.directory).toBe(await fs.realpath(testDir));
             expect(jsonData.total_count).toBe(1);
             expect(jsonData.items).toHaveLength(1);
         });

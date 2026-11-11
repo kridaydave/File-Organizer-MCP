@@ -11,8 +11,11 @@
 import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import { minimatch } from "minimatch";
 import { logger } from "../utils/logger.js";
 import { getHistoryDirectory } from "../core/config/paths.js";
+import { loadUserConfig } from "../core/config/loader.js";
+import { ValidationError } from "../types.js";
 
 export interface HistoryEntry {
   id: string;
@@ -25,6 +28,16 @@ export interface HistoryEntry {
   filesSkipped?: number;
   details?: string;
   error?: { message: string; code?: string };
+  /** Paths this operation touched, when the caller knows them. Path-glob
+   *  filters match against these; entries without them never match a glob. */
+  paths?: string[];
+  /**
+   * Rollback manifest this operation wrote, when it wrote one. It is the id
+   * `undo_last_operation` accepts, which is the only way to undo this entry
+   * specifically rather than whatever ran last. Not a path, so privacy_mode
+   * leaves it alone.
+   */
+  manifestId?: string;
 }
 
 export interface HistoryQuery {
@@ -38,6 +51,11 @@ export interface HistoryQuery {
   privacyMode?: "full" | "redacted" | "none";
 }
 
+export interface HistorySearchQuery extends HistoryQuery {
+  /** Glob matched against the paths an entry recorded. */
+  pathGlob?: string;
+}
+
 export interface HistoryResult {
   entries: HistoryEntry[];
   total: number;
@@ -47,14 +65,21 @@ export interface HistoryResult {
 interface HistoryLoggerConfig {
   dataDir: string;
   maxFileSizeBytes: number;
-  maxBackupFiles: number;
+  /**
+   * Omitted means "read `historyLogging.keepRotatedFiles` from the user
+   * config". Set it to pin the number, as a caller that owns its own
+   * storage does, so the value cannot be read off the machine's config.
+   */
+  maxBackupFiles?: number;
   lockTimeoutMs: number;
 }
+
+/** Rotations kept and read back when the config sets no preference. */
+const DEFAULT_KEEP_ROTATED_FILES = 5;
 
 const DEFAULT_CONFIG: HistoryLoggerConfig = {
   dataDir: getHistoryDirectory(),
   maxFileSizeBytes: 10 * 1024 * 1024,
-  maxBackupFiles: 5,
   lockTimeoutMs: 5000,
 };
 
@@ -73,6 +98,34 @@ export class HistoryLoggerService {
     this.historyFilePath = path.join(this.config.dataDir, "operations.jsonl");
     this.lockFilePath = path.join(this.config.dataDir, "operations.lock");
     this.writeQueue = Promise.resolve();
+  }
+
+  /**
+   * How many `operations.N.jsonl` files survive a rotation, and how many a
+   * search reads back.
+   *
+   * Read from the user config on every use rather than frozen at construction,
+   * because the module-level `historyLogger` is built before any config is
+   * loaded and `createRequestContext` already re-reads config per request. An
+   * explicit constructor value wins, so a caller with its own storage is not
+   * affected by what the machine's config happens to say.
+   *
+   * Each caller reads it once per operation and reuses the number, so one
+   * rotation or one search is one config parse rather than one per file.
+   *
+   * A value that is not a finite number is ignored rather than coerced, so a
+   * typo (`"five"`, `null`) falls back to the default instead of producing a
+   * read loop that never runs or one that scans forever.
+   */
+  private get maxBackupFiles(): number {
+    if (this.config.maxBackupFiles !== undefined) {
+      return this.config.maxBackupFiles;
+    }
+    const configured = loadUserConfig().historyLogging?.keepRotatedFiles;
+    if (typeof configured !== "number" || !Number.isFinite(configured)) {
+      return DEFAULT_KEEP_ROTATED_FILES;
+    }
+    return Math.max(0, Math.floor(configured));
   }
 
   async init(): Promise<void> {
@@ -97,6 +150,10 @@ export class HistoryLoggerService {
   /**
    * Append one entry immediately. Serialized through writeQueue so concurrent
    * callers can't interleave lock/append cycles within this process.
+   *
+   * Rejects when the entry was not appended (lock timeout, append error) so a
+   * dropped record can never read as a written one. writeQueue still stays
+   * alive after a rejection — only this caller sees the failure.
    */
   async log(entry: Omit<HistoryEntry, "id" | "timestamp">): Promise<void> {
     await this.init();
@@ -114,6 +171,12 @@ export class HistoryLoggerService {
     await append;
   }
 
+  /**
+   * Append one entry. Rethrows whatever the append failed with, including a
+   * lock timeout, so the caller can tell a written record from a dropped one.
+   * Callers whose own work must not fail on history wrap this in try/catch
+   * (src/server.ts does); callers that need the record for undo must not.
+   */
   private async appendEntry(entry: HistoryEntry): Promise<void> {
     try {
       await this.acquireLock();
@@ -125,7 +188,10 @@ export class HistoryLoggerService {
         if ((error as { code?: string }).code === "ENOSPC") {
           logger.warn("Disk full, attempting retry once");
           await new Promise((resolve) => setTimeout(resolve, 1000));
-          await fs.appendFile(this.historyFilePath, JSON.stringify(entry) + "\n");
+          await fs.appendFile(
+            this.historyFilePath,
+            JSON.stringify(entry) + "\n",
+          );
         } else {
           throw error;
         }
@@ -134,6 +200,7 @@ export class HistoryLoggerService {
       }
     } catch (error) {
       logger.error("Failed to write history entry:", error);
+      throw error;
     }
   }
 
@@ -208,7 +275,19 @@ export class HistoryLoggerService {
 
       logger.info("Rotating history file", { currentSize: stat.size });
 
-      for (let i = this.config.maxBackupFiles - 1; i >= 1; i--) {
+      // Read once. The getter parses the user config, and this critical section
+      // holds the history lock, so a second read per shifted file is time spent
+      // holding the lock for nothing.
+      const keep = this.maxBackupFiles;
+
+      if (keep <= 0) {
+        // Nothing to retain: truncate in place instead of leaving an
+        // operations.1.jsonl that no search will ever read.
+        await fs.truncate(this.historyFilePath, 0);
+        return;
+      }
+
+      for (let i = keep - 1; i >= 1; i--) {
         const rotatedPath = (n: number) =>
           path.join(this.config.dataDir, `operations.${n}.jsonl`);
         try {
@@ -227,7 +306,17 @@ export class HistoryLoggerService {
     }
   }
 
+  /** Flat, newest-first read. Same as searchHistory without a path glob. */
   async getHistory(query: HistoryQuery = {}): Promise<HistoryResult> {
+    return this.searchHistory(query);
+  }
+
+  /**
+   * The one history read path: getHistory() delegates here so every caller
+   * shares one read, filter, paginate, and privacy pass. Every filter is
+   * optional and combinable.
+   */
+  async searchHistory(query: HistorySearchQuery = {}): Promise<HistoryResult> {
     if (!this.initialized) {
       await this.init();
     }
@@ -238,17 +327,27 @@ export class HistoryLoggerService {
       operation,
       status,
       source,
+      pathGlob,
       limit = 100,
       offset = 0,
       privacyMode = "full",
     } = query;
 
+    // Compiled once: an unparseable glob is a caller error, not a bad entry.
+    // `!== undefined` rather than truthy, so an empty pattern fails loudly
+    // instead of silently dropping the filter.
+    const matchesPathGlob =
+      pathGlob === undefined ? null : compilePathGlob(pathGlob);
+
     const allEntries: HistoryEntry[] = [];
     const lockAcquired = await this.tryAcquireLock();
 
     try {
+      // Read once, not once per candidate file. With a large configured count
+      // the getter's config parse would come to dominate the read it bounds.
+      const maxBackupFiles = this.maxBackupFiles;
       const filesToRead = [this.historyFilePath];
-      for (let i = 1; i <= this.config.maxBackupFiles; i++) {
+      for (let i = 1; i <= maxBackupFiles; i++) {
         filesToRead.push(
           path.join(this.config.dataDir, `operations.${i}.jsonl`),
         );
@@ -296,6 +395,9 @@ export class HistoryLoggerService {
     if (source) {
       filtered = filtered.filter((e) => e.source === source);
     }
+    if (matchesPathGlob) {
+      filtered = filtered.filter((e) => matchesPathGlob(e.paths ?? []));
+    }
 
     const total = filtered.length;
     const paged = filtered
@@ -328,6 +430,7 @@ export class HistoryLoggerService {
 
       return {
         ...entry,
+        paths: entry.paths?.map((p) => this.redactPaths(p)),
         details: entry.details ? this.redactPaths(entry.details) : undefined,
         error: entry.error
           ? { message: this.redactPaths(entry.error.message) }
@@ -346,6 +449,57 @@ export class HistoryLoggerService {
     );
     return redacted;
   }
+}
+
+/**
+ * Build a predicate that decides whether an entry's recorded paths match a
+ * glob. One pattern is tried three ways so callers can write whichever is
+ * natural: the full stored path, that path with Windows separators folded to
+ * "/", and the bare filename.
+ *
+ * @throws {ValidationError} When the pattern is not a parseable glob.
+ */
+function compilePathGlob(pattern: string): (paths: string[]) => boolean {
+  if (pattern.length === 0) {
+    throw new ValidationError("path_glob cannot be empty", {
+      field: "path_glob",
+      constraint: "min_length",
+    });
+  }
+
+  // minimatch reports an unparseable pattern as false; older shapes throw.
+  // Both are a caller error, never a reason to return the whole history.
+  //
+  // An absolute Windows path is a valid thing to pass here and an invalid glob:
+  // minimatch reads `\` as an escape, so `C:\Users\me` compiles to a pattern
+  // that matches nothing, and a caller that just wanted one directory's rows
+  // gets zero results instead of an error. Patterns that are not absolute
+  // Windows paths keep their backslashes, because there `\` really is an escape.
+  const normalisedPattern = /^(?:[A-Za-z]:\\|\\\\)/.test(pattern)
+    ? pattern.replace(/\\/g, "/")
+    : pattern;
+
+  let compiled: RegExp | false;
+  try {
+    compiled = minimatch.makeRe(normalisedPattern, { dot: true });
+  } catch {
+    compiled = false;
+  }
+  if (!compiled) {
+    throw new ValidationError("path_glob is not a valid glob pattern", {
+      field: "path_glob",
+      constraint: "glob_syntax",
+    });
+  }
+  const matches = (candidate: string): boolean => compiled.test(candidate);
+
+  return (paths) =>
+    paths.some((p) => {
+      if (matches(p)) return true;
+      const posix = p.replace(/\\/g, "/");
+      if (posix !== p && matches(posix)) return true;
+      return matches(path.posix.basename(posix));
+    });
 }
 
 export const historyLogger = new HistoryLoggerService();

@@ -1,0 +1,30 @@
+{
+  "description": "Scenario coverage ledger for scripts/verify/scenarios. A registered tool must either appear in a scenario step or carry an explicit waiver with a reason. 'covered' is not listed here: it is derived from the scenarios themselves, so a deleted scenario cannot leave a stale claim behind. tests/unit/verify-scenario-coverage.test.ts enforces both directions.",
+  "waived": {
+    "file_organizer_analyze_duplicates": "duplicate deep-analysis; covered once find_duplicate_files joins a dedicated duplicates scenario",
+    "file_organizer_batch_read_files": "reader batching over multiple paths; needs a multi-file fixture policy decision",
+    "file_organizer_batch_rename": "writes many files with a collision matrix; scenario waits on a seeded rename fixture",
+    "file_organizer_delete_duplicates": "destructive deletion; scenario must first prove preview_delete_duplicates",
+    "file_organizer_disk_usage_by_category": "report-only aggregation; no state to prove beyond isError",
+    "file_organizer_export_config": "writes a config report to a user-chosen path; report-path sandbox policy not settled",
+    "file_organizer_export_report": "same report-path policy as export_config (see AGENTS.md rule 3 leak classes)",
+    "file_organizer_find_broken_symlinks": "needs seeded broken symlinks, which the fixtures do not create",
+    "file_organizer_find_empty_directories": "seeded tree has no empty directories, so the scenario could only assert the vacuous zero",
+    "file_organizer_find_largest_files": "report-only aggregation; no state to prove beyond isError",
+    "file_organizer_inspect_metadata": "EXIF fixtures are unit-test territory; the seeded sandbox has no real JPEG EXIF",
+    "file_organizer_organize_by_date": "requires two non-nested allowed directories (see skill Coverage section); sandbox layout change pending",
+    "file_organizer_organize_by_project": "project detection needs recognizable project markers not in the fixtures",
+    "file_organizer_organize_music": "music metadata organizer; seeded fixtures have no audio files",
+    "file_organizer_organize_photos": "photo organizer; seeded fixtures have no real image metadata",
+    "file_organizer_organizer_digest": "digest aggregates history; needs a settled history shape to assert on",
+    "file_organizer_preview_delete_duplicates": "destructive-family preview; pairs with delete_duplicates scenario",
+    "file_organizer_quarantine_files": "moves files into quarantine storage; rollback of quarantine needs a fixture decision",
+    "file_organizer_restore_quarantine": "requires quarantine_files to have run first",
+    "file_organizer_search_history": "searches operations.jsonl written by organize; joins the next organize-scenario pass",
+    "file_organizer_sensitive_scan": "analyzes only JPEG/TIFF; reports skipped on default fixtures (skill Coverage section)",
+    "file_organizer_set_custom_rules": "replaces persisted custom rules; needs a rules fixture and restore story",
+    "file_organizer_smart_suggest": "suggestion engine output is advisory; no stable contract to assert yet",
+    "file_organizer_system_organize": "organizes well-known system folders; intentionally refuses sandbox roots",
+    "file_organizer_find_old_files": "report-only aggregation; age filtering is pinned by unit tests"
+  }
+}

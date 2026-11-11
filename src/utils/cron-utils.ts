@@ -5,6 +5,13 @@
  * Utilities for parsing cron expressions and calculating run times.
  * Supports common cron patterns (hourly, daily, weekly) with fallback
  * heuristics for complex patterns.
+ *
+ * Every calculation in this file runs in LOCAL time, because that is how
+ * node-cron interprets a schedule: `0 9 * * *` fires at 9am wall-clock time,
+ * whatever timezone the machine is set to. These functions used the setUTC*
+ * family, so they disagreed with the scheduler by the machine's UTC offset
+ * (issue #99). A test suite that only ever ran in UTC is why that survived —
+ * tests/unit/utils/cron-utils.test.ts pins a non-UTC offset now.
  */
 
 /**
@@ -12,13 +19,31 @@
  * Format: second(optional) minute hour day-of-month month day-of-week
  * or: minute hour day-of-month month day-of-week
  */
+type CronField = number | "*/n" | "*";
+
 interface CronComponents {
-  minute: number | "*/n" | "*";
-  hour: number | "*/n" | "*";
-  dayOfMonth: number | "*/n" | "*";
-  month: number | "*/n" | "*";
-  dayOfWeek: number | "*/n" | "*";
+  minute: CronField;
+  hour: CronField;
+  dayOfMonth: CronField;
+  month: CronField;
+  dayOfWeek: CronField;
 }
+
+/**
+ * A field that names one value ("0 9 * * *") as opposed to a wildcard or a
+ * step. The pattern branches below all need this, and `field !== "*"` is not
+ * it: a step passes that test and then reaches `setHours` with a step string,
+ * which is an Invalid Date and throws on the first `toISOString()`.
+ */
+const isConcrete = (field: CronField): field is number =>
+  typeof field === "number";
+
+/** A step field: `*` followed by `/2`, and so on. */
+const isStepped = (field: CronField): field is "*/n" =>
+  typeof field === "string" && field.startsWith("*/");
+
+/** The `n` in `*` `/n`. Only call it on a field `isStepped` accepted. */
+const stepOf = (step: "*/n"): number => parseInt(step.slice(2), 10);
 
 /**
  * Parse a cron expression into its components
@@ -140,73 +165,107 @@ export function getNextRunTime(
   }
 
   const next = new Date(fromDate.getTime());
-  next.setUTCSeconds(0);
-  next.setUTCMilliseconds(0);
+  next.setSeconds(0);
+  next.setMilliseconds(0);
 
   // Handle step values (e.g., */30 for every 30 minutes)
-  if (
-    typeof components.minute === "string" &&
-    components.minute.startsWith("*/")
-  ) {
-    const step = parseInt(components.minute.slice(2), 10);
-    const currentMinute = next.getUTCMinutes();
+  if (isStepped(components.minute)) {
+    const step = stepOf(components.minute);
+    const currentMinute = next.getMinutes();
     const nextMinute = Math.ceil((currentMinute + 1) / step) * step;
 
     if (nextMinute >= 60) {
-      next.setUTCHours(next.getUTCHours() + 1);
-      next.setUTCMinutes(0);
+      next.setHours(next.getHours() + 1);
+      next.setMinutes(0);
     } else {
-      next.setUTCMinutes(nextMinute);
+      next.setMinutes(nextMinute);
     }
     return next;
   }
 
-  // Handle hourly pattern: "0 * * * *"
+  // Handle hour steps: "0 */2 * * *" (on the hour, every other hour). The
+  // interval fallback below gets the spacing right and the time wrong: at
+  // 15:10 it answers 17:10, where the schedule fires at 16:00.
   if (
-    components.minute !== "*" &&
+    isConcrete(components.minute) &&
+    isStepped(components.hour) &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    const step = stepOf(components.hour);
+    next.setMinutes(components.minute);
+    const remainder = next.getHours() % step;
+    if (remainder !== 0) {
+      next.setHours(next.getHours() + (step - remainder));
+    }
+    if (next.getTime() <= fromDate.getTime()) {
+      next.setHours(next.getHours() + step);
+    }
+    return next;
+  }
+
+  // Handle "* * * * *" — every minute. The pattern branches below all require
+  // a concrete minute, so without this the schedule fell through to the
+  // 1-day interval fallback and a watch firing every minute would be reported
+  // as one that runs once a day.
+  if (
+    components.minute === "*" &&
     components.hour === "*" &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    next.setUTCMinutes(components.minute as number);
+    next.setMinutes(next.getMinutes() + 1);
+    return next;
+  }
+
+  // Handle hourly pattern: "0 * * * *"
+  if (
+    isConcrete(components.minute) &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    next.setMinutes(components.minute);
     if (next.getTime() <= fromDate.getTime()) {
-      next.setUTCHours(next.getUTCHours() + 1);
+      next.setHours(next.getHours() + 1);
     }
     return next;
   }
 
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
-    components.minute !== "*" &&
-    components.hour !== "*" &&
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    next.setUTCMinutes(components.minute as number);
-    next.setUTCHours(components.hour as number);
+    next.setMinutes(components.minute);
+    next.setHours(components.hour);
     if (next.getTime() <= fromDate.getTime()) {
-      next.setUTCDate(next.getUTCDate() + 1);
+      next.setDate(next.getDate() + 1);
     }
     return next;
   }
 
   // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
   if (
-    components.minute !== "*" &&
-    components.hour !== "*" &&
-    components.dayOfWeek !== "*" &&
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
+    isConcrete(components.dayOfWeek) &&
     components.dayOfMonth === "*"
   ) {
-    next.setUTCMinutes(components.minute as number);
-    next.setUTCHours(components.hour as number);
-    const targetDay = components.dayOfWeek as number;
-    const currentDay = next.getUTCDay();
+    next.setMinutes(components.minute);
+    next.setHours(components.hour);
+    const targetDay = components.dayOfWeek;
+    const currentDay = next.getDay();
     const daysUntilTarget = (targetDay - currentDay + 7) % 7;
-    next.setUTCDate(next.getUTCDate() + daysUntilTarget);
+    next.setDate(next.getDate() + daysUntilTarget);
     if (next.getTime() <= fromDate.getTime()) {
-      next.setUTCDate(next.getUTCDate() + 7);
+      next.setDate(next.getDate() + 7);
     }
     return next;
   }
@@ -233,81 +292,114 @@ export function getPreviousRunTime(
   }
 
   const prev = new Date(fromDate.getTime());
-  prev.setUTCSeconds(0);
-  prev.setUTCMilliseconds(0);
+  prev.setSeconds(0);
+  prev.setMilliseconds(0);
 
   // Handle step values (e.g., */30 for every 30 minutes)
-  if (
-    typeof components.minute === "string" &&
-    components.minute.startsWith("*/")
-  ) {
-    const step = parseInt(components.minute.slice(2), 10);
-    const currentMinute = prev.getUTCMinutes();
+  if (isStepped(components.minute)) {
+    const step = stepOf(components.minute);
+    const currentMinute = prev.getMinutes();
     const prevMinute = Math.floor(currentMinute / step) * step;
 
     if (prevMinute < 0) {
-      prev.setUTCHours(prev.getUTCHours() - 1);
-      prev.setUTCMinutes(60 - step);
+      prev.setHours(prev.getHours() - 1);
+      prev.setMinutes(60 - step);
     } else {
-      prev.setUTCMinutes(prevMinute);
+      prev.setMinutes(prevMinute);
     }
     if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCMinutes(prev.getUTCMinutes() - step);
-      if (prev.getUTCMinutes() < 0) {
-        prev.setUTCHours(prev.getUTCHours() - 1);
-        prev.setUTCMinutes(60 + prev.getUTCMinutes());
+      prev.setMinutes(prev.getMinutes() - step);
+      if (prev.getMinutes() < 0) {
+        prev.setHours(prev.getHours() - 1);
+        prev.setMinutes(60 + prev.getMinutes());
       }
+    }
+    return prev;
+  }
+
+  // Handle hour steps: "0 */2 * * *"; mirrors getNextRunTime's branch.
+  if (
+    isConcrete(components.minute) &&
+    isStepped(components.hour) &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    const step = stepOf(components.hour);
+    prev.setMinutes(components.minute);
+    const remainder = prev.getHours() % step;
+    if (remainder !== 0) {
+      prev.setHours(prev.getHours() - remainder);
+    }
+    if (prev.getTime() >= fromDate.getTime()) {
+      prev.setHours(prev.getHours() - step);
+    }
+    return prev;
+  }
+
+  // Handle "* * * * *" — every minute; mirrors getNextRunTime's branch. The
+  // seconds were zeroed above, so an fromDate that lands exactly on a minute
+  // boundary steps back one minute to stay strictly in the past.
+  if (
+    components.minute === "*" &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    if (prev.getTime() >= fromDate.getTime()) {
+      prev.setMinutes(prev.getMinutes() - 1);
     }
     return prev;
   }
 
   // Handle hourly pattern: "0 * * * *"
   if (
-    components.minute !== "*" &&
+    isConcrete(components.minute) &&
     components.hour === "*" &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    prev.setUTCMinutes(components.minute as number);
+    prev.setMinutes(components.minute);
     if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCHours(prev.getUTCHours() - 1);
+      prev.setHours(prev.getHours() - 1);
     }
     return prev;
   }
 
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
-    components.minute !== "*" &&
-    components.hour !== "*" &&
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    prev.setUTCMinutes(components.minute as number);
-    prev.setUTCHours(components.hour as number);
+    prev.setMinutes(components.minute);
+    prev.setHours(components.hour);
     if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCDate(prev.getUTCDate() - 1);
+      prev.setDate(prev.getDate() - 1);
     }
     return prev;
   }
 
   // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
   if (
-    components.minute !== "*" &&
-    components.hour !== "*" &&
-    components.dayOfWeek !== "*" &&
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
+    isConcrete(components.dayOfWeek) &&
     components.dayOfMonth === "*"
   ) {
-    prev.setUTCMinutes(components.minute as number);
-    prev.setUTCHours(components.hour as number);
-    const targetDay = components.dayOfWeek as number;
-    const currentDay = prev.getUTCDay();
+    prev.setMinutes(components.minute);
+    prev.setHours(components.hour);
+    const targetDay = components.dayOfWeek;
+    const currentDay = prev.getDay();
     const daysDiff = currentDay - targetDay;
     const daysToSubtract = daysDiff >= 0 ? daysDiff : daysDiff + 7;
-    prev.setUTCDate(prev.getUTCDate() - daysToSubtract);
+    prev.setDate(prev.getDate() - daysToSubtract);
     if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCDate(prev.getUTCDate() - 7);
+      prev.setDate(prev.getDate() - 7);
     }
     return prev;
   }

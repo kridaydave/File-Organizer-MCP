@@ -4,16 +4,30 @@
  * project clustering scaling, and media error recovery.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, afterAll } from '@jest/globals';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-import { validateArchiveEntries, sanitizeEntryName } from '../../../src/security/archive-validator.js';
-import { ManifestIntegrityService } from '../../../src/core/organize/manifest-integrity.js';
-import { detectProjects } from '../../../src/core/detect/project.js';
-import { RollbackService } from '../../../src/core/organize/rollback.js';
-import { CONFIG } from '../../../src/core/config/defaults.js';
+import { first } from '../../helpers/safe-index.js';
+
+import { isolateRollbackStorage } from '../../helpers/rollback-storage.js';
+
+/**
+ * Private rollback storage.
+ *
+ * The rollback test below creates and then rolls back a manifest. Doing that in
+ * the shared worktree directory means this suite holds `manifests.lock` against
+ * every other worker, and leaves a manifest behind that a no-id undo elsewhere
+ * can pick as the globally newest one. Both are the #108 hazard.
+ */
+const storage = await isolateRollbackStorage('fom-adv-audit-2-');
+
+const { validateArchiveEntries, sanitizeEntryName } = await import('../../../src/security/archive-validator.js');
+const { ManifestIntegrityService } = await import('../../../src/core/organize/manifest-integrity.js');
+const { detectProjects } = await import('../../../src/core/detect/project.js');
+const { RollbackService } = await import('../../../src/core/organize/rollback.js');
+const { CONFIG } = await import('../../../src/core/config/defaults.js');
 
 describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
   let tempDir: string;
@@ -27,6 +41,10 @@ describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
     CONFIG.paths.customAllowed = [];
     await new Promise((resolve) => setTimeout(resolve, 100));
     await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  afterAll(async () => {
+    await storage.remove();
   });
 
   describe('1. Archive Security & Decompression Bomb Prevention', () => {
@@ -72,6 +90,7 @@ describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
         id: crypto.randomUUID(),
         description: 'Test Operation',
         timestamp: Date.now(),
+        version: '1.0',
         actions: [
           {
             type: 'move',
@@ -91,7 +110,7 @@ describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
         ...manifest,
         actions: [
           {
-            ...manifest.actions[0]!,
+            ...first(manifest.actions),
             currentPath: path.join(tempDir, 'Documents', 'hacked.txt'),
           },
         ],
@@ -104,7 +123,7 @@ describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
 
   describe('3. Rollback Failure Recovery & Resiliency', () => {
     it('handles rollback gracefully when current file has been deleted externally', async () => {
-      const rollback = new RollbackService();
+      const rollback = new RollbackService(storage.rollbackDir);
       const originalPath = path.join(tempDir, 'orig.txt');
       const currentPath = path.join(tempDir, 'Documents', 'orig.txt');
 
@@ -119,9 +138,13 @@ describe('Adversarial Deep Audit Suite 2 - Engine & Security Stress', () => {
       ]);
 
       const result = await rollback.rollback(manifestId);
-      expect(result.failed).toBe(1);
+      // Already gone is skipped, not failed: the undo had nothing to move back,
+      // and a pass whose files were deleted by hand is not a broken undo. It is
+      // still not a success, so `success` stays 0 and nothing is invented.
+      expect(result.failed).toBe(0);
+      expect(result.skipped).toBe(1);
       expect(result.success).toBe(0);
-      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors).toEqual([]);
     });
   });
 

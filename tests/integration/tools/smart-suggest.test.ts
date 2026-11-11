@@ -6,6 +6,15 @@ import {
 } from "../../utils/logger-mock.js";
 import { handleSmartSuggest } from "../../../src/tools/smart-suggest.js";
 
+type Metric = { score: number; details: string };
+type Metrics = {
+  fileTypeEntropy: Metric;
+  namingConsistency: Metric;
+  depthBalance: Metric;
+  duplicateRatio: Metric;
+  misplacedFiles: Metric;
+};
+
 describe("Smart Suggest Tool - Integration Tests", () => {
   let testDir: string;
   let baseTempDir: string;
@@ -75,10 +84,7 @@ describe("Smart Suggest Tool - Integration Tests", () => {
       });
 
       const output = result.structuredContent as Record<string, unknown>;
-      const metrics = output.metrics as Record<
-        string,
-        { score: number; details: string }
-      >;
+      const metrics = output.metrics as Metrics;
 
       expect(metrics).toBeDefined();
       expect(metrics.fileTypeEntropy).toBeDefined();
@@ -103,10 +109,7 @@ describe("Smart Suggest Tool - Integration Tests", () => {
       });
 
       const output = result.structuredContent as Record<string, unknown>;
-      const metrics = output.metrics as Record<
-        string,
-        { score: number; details: string }
-      >;
+      const metrics = output.metrics as Metrics;
 
       expect(metrics.fileTypeEntropy.details).toBeDefined();
       expect(metrics.namingConsistency.details).toBeDefined();
@@ -190,9 +193,10 @@ describe("Smart Suggest Tool - Integration Tests", () => {
       }>;
 
       if (suggestions.length > 0) {
-        expect(suggestions[0].priority).toBeDefined();
-        expect(["high", "medium", "low"]).toContain(suggestions[0].priority);
-        expect(suggestions[0].message).toBeDefined();
+        const [first] = suggestions;
+        expect(first?.priority).toBeDefined();
+        expect(["high", "medium", "low"]).toContain(first?.priority);
+        expect(first?.message).toBeDefined();
       }
     });
 
@@ -221,8 +225,9 @@ describe("Smart Suggest Tool - Integration Tests", () => {
         suggestedTool?: string;
       }>;
 
-      if (suggestions.length > 0 && suggestions[0].suggestedTool) {
-        expect(typeof suggestions[0].suggestedTool).toBe("string");
+      const [first] = suggestions;
+      if (first?.suggestedTool) {
+        expect(typeof first.suggestedTool).toBe("string");
       }
     });
   });
@@ -417,7 +422,7 @@ describe("Smart Suggest Tool - Integration Tests", () => {
       });
 
       const output = result.structuredContent as Record<string, unknown>;
-      const metrics = output.metrics as Record<string, { score: number }>;
+      const metrics = output.metrics as Pick<Metrics, "duplicateRatio">;
       expect(metrics.duplicateRatio.score).toBeLessThan(100);
     });
 
@@ -433,7 +438,7 @@ describe("Smart Suggest Tool - Integration Tests", () => {
       });
 
       const output = result.structuredContent as Record<string, unknown>;
-      const metrics = output.metrics as Record<string, { score: number }>;
+      const metrics = output.metrics as Pick<Metrics, "duplicateRatio">;
       expect(metrics.duplicateRatio.score).toBe(75);
     });
   });

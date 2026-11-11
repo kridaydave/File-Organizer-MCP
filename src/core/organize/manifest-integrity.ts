@@ -13,6 +13,27 @@ import { getHistoryDirectory } from "../config/paths.js";
 
 const SECRET_SEED = "FileOrganizerMCP-v3.5.0";
 
+/**
+ * Manifest file names are the manifest id, so the id is validated before it is
+ * ever joined onto the storage directory.
+ */
+export const MANIFEST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Where a manifest action left the file, and so the path whose content is the
+ * result of that action. A delete moved the file into the backup directory
+ * instead of a category, so the backup copy is what has to be rehashed.
+ *
+ * The writer (recording a hash) and the reader (comparing one) must agree on
+ * this, so it lives with the manifest types rather than in either of them.
+ */
+export function manifestActionTarget(
+  action: RollbackAction,
+): string | undefined {
+  return action.type === "delete" ? action.backupPath : action.currentPath;
+}
+
 function getMachineSecret(): string {
   try {
     const configDir = getHistoryDirectory();

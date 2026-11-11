@@ -1,0 +1,142 @@
+name: Nightly Verification
+
+# The layers CI cannot afford on every push: the security gates on all three
+# OSes (CI runs them on Ubuntu only), the verify-harness scenarios on all three
+# OSes, and the mutation gate. A red nightly on main opens an issue; that is
+# the gate for scheduled work.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  security-gates:
+    name: Security gates on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      # CI runs the fuzzing/TOCTOU/sensitive gates on one lane only, so a
+      # platform-specific escape (8.3 short names, /private/var, path case)
+      # waits until it is merged. This job refuses to wait that long.
+      - name: Run security gates
+        run: npm run test:security:gates
+
+  scenarios:
+    name: Verify scenarios on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      # The scenarios drive the real built server through the organize/undo
+      # loop; on Windows and macOS every path a tool reports is native-form,
+      # so this is where the rule-3 leak classes meet the real platforms.
+      - name: Run verify scenarios
+        run: npm run verify:scenarios
+
+  mutation:
+    name: Mutation gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Stryker orchestrates under bun; its jest workers still need node with
+      # the vm-modules flag, which bun inherits via NODE_OPTIONS.
+      - name: Run mutation testing
+        env:
+          NODE_OPTIONS: "--experimental-vm-modules"
+        run: npm run test:mutation
+
+  # Aggregates the jobs above the same way CI's `check` does, and turns a red
+  # nightly into an issue so the failure is a task, not a scrollback.
+  nightly:
+    name: Nightly result
+    if: ${{ always() }}
+    needs: [security-gates, scenarios, mutation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Require every job to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if echo "$RESULTS" | jq -e 'all(to_entries[]; .value.result == "success")' > /dev/null; then
+            echo "Nightly verification passed."
+            exit 0
+          fi
+          FAILED=$(echo "$RESULTS" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')
+          gh issue create \
+            --title "Nightly verification failed: $FAILED" \
+            --body "Scheduled nightly run ${{ github.run_id }} on commit ${{ github.sha }} failed: $FAILED. [Run log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" \
+            --label "nightly-failure" || \
+          echo "Issue creation failed (label missing or rate limit); the run log above is the record."
+          exit 1

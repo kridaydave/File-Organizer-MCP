@@ -48,13 +48,6 @@ export const CATEGORIES: Record<CategoryName, readonly string[]> = {
 } as const;
 
 /**
- * All category names as an array
- */
-export const CATEGORY_NAMES: readonly CategoryName[] = Object.keys(
-  CATEGORIES,
-) as CategoryName[];
-
-/**
  * Get category for a file extension
  * @param extension - File extension (with dot, e.g., '.pdf')
  * @returns Category name

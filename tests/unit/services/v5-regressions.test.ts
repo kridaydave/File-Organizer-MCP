@@ -7,33 +7,50 @@ import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { DuplicateFinderService } from '../../../src/core/hash/duplicate-finder.js';
-import { RenamingService } from '../../../src/core/organize/rename.js';
-import { ManifestIntegrityService } from '../../../src/core/organize/manifest-integrity.js';
-import { assertNotSensitive } from '../../../src/core/io/sensitive-files.js';
-import { isPathBlocked } from '../../../src/utils/path-security.js';
-import { PathValidatorService } from '../../../src/services/path-validator.service.js';
-import { handleListFiles } from '../../../src/tools/file-listing.js';
-import { handleScanDirectory } from '../../../src/tools/file-scanning.js';
-import { handleCategorizeByType } from '../../../src/tools/file-categorization.js';
-import { CategorizerService } from '../../../src/services/categorizer.service.js';
-import { isExecutableType } from '../../../src/core/categorize/security.js';
-import { readFile } from '../../../src/core/io/read-file.js';
-import { stripGPSData } from '../../../src/services/metadata/image-privacy.js';
-import { parseJsonc } from '../../../src/tui/client-detector.js';
-import { PhotoOrganizerService } from '../../../src/services/photo-organizer.service.js';
-import { CONFIG } from '../../../src/core/config/defaults.js';
-import { classifySecurity } from '../../../src/core/categorize/security.js';
-import { OrganizerService } from '../../../src/core/organize/organizer.js';
-import { HistoryLoggerService } from '../../../src/services/history-logger.service.js';
-import { PathSchema } from '../../../src/schemas/system.js';
-import { formatBytes } from '../../../src/utils/formatters.js';
-import { safeAtomicMove } from '../../../src/core/io/atomic-move.js';
-import { handleSystemOrganization } from '../../../src/tools/system-organization.js';
-import { handleOrganizePhotos } from '../../../src/tools/photo-organization.js';
-import { handleOrganizeMusic } from '../../../src/tools/music-organization.js';
-import { RollbackService } from '../../../src/core/organize/rollback.js';
-import type { FileWithSize } from '../../../src/types.js';
+import {
+  expectNoDuplicateGroups,
+  expectAllSkippedFor,
+} from '../skipped-file-assertions.js';
+import { isolateRollbackStorage } from '../../helpers/rollback-storage.js';
+import type { FileWithSize, RollbackManifest } from '../../../src/types.js';
+
+/**
+ * Private rollback storage.
+ *
+ * The tools below build their own RollbackService off getRollbackDirectory(),
+ * which under jest is one directory shared by every worker. Manifests written
+ * there decide which manifest is globally newest, so a no-id undo in another
+ * file can restore this file's batch. The redirect must be registered before
+ * the modules under test are imported, which is why they are dynamic below.
+ */
+const storage = await isolateRollbackStorage('fom-v5-regressions-');
+
+const { DuplicateFinderService } = await import('../../../src/core/hash/duplicate-finder.js');
+const { RenamingService } = await import('../../../src/core/organize/rename.js');
+const { ManifestIntegrityService } = await import('../../../src/core/organize/manifest-integrity.js');
+const { assertNotSensitive } = await import('../../../src/core/io/sensitive-files.js');
+const { isPathBlocked } = await import('../../../src/utils/path-security.js');
+const { PathValidatorService } = await import('../../../src/services/path-validator.service.js');
+const { handleListFiles } = await import('../../../src/tools/file-listing.js');
+const { handleScanDirectory } = await import('../../../src/tools/file-scanning.js');
+const { handleCategorizeByType } = await import('../../../src/tools/file-categorization.js');
+const { CategorizerService } = await import('../../../src/services/categorizer.service.js');
+const { isExecutableType } = await import('../../../src/core/categorize/security.js');
+const { readFile } = await import('../../../src/core/io/read-file.js');
+const { stripGPSData } = await import('../../../src/services/metadata/image-privacy.js');
+const { parseJsonc } = await import('../../../src/tui/client-detector.js');
+const { PhotoOrganizerService } = await import('../../../src/services/photo-organizer.service.js');
+const { CONFIG } = await import('../../../src/core/config/defaults.js');
+const { classifySecurity } = await import('../../../src/core/categorize/security.js');
+const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
+const { HistoryLoggerService } = await import('../../../src/services/history-logger.service.js');
+const { PathSchema } = await import('../../../src/schemas/system.js');
+const { formatBytes } = await import('../../../src/utils/formatters.js');
+const { safeAtomicMove } = await import('../../../src/core/io/atomic-move.js');
+const { handleSystemOrganization } = await import('../../../src/tools/system-organization.js');
+const { handleOrganizePhotos } = await import('../../../src/tools/photo-organization.js');
+const { handleOrganizeMusic } = await import('../../../src/tools/music-organization.js');
+const { RollbackService } = await import('../../../src/core/organize/rollback.js');
 
 describe('v5 Critical Regressions Gate', () => {
   let tempDir: string;
@@ -58,16 +75,19 @@ describe('v5 Critical Regressions Gate', () => {
       await fs.writeFile(empty3, '');
 
       const files: FileWithSize[] = [
-        { path: empty1, name: '__init__.py', size: 0, extension: '.py' },
-        { path: empty2, name: '.gitkeep', size: 0, extension: '' },
-        { path: empty3, name: 'empty.txt', size: 0, extension: '.txt' },
+        { path: empty1, name: '__init__.py', size: 0 },
+        { path: empty2, name: '.gitkeep', size: 0 },
+        { path: empty3, name: 'empty.txt', size: 0 },
       ];
 
       const finder = new DuplicateFinderService();
-      const result = await finder.findWithScoring(files, 'newest');
+      const { groups, skipped } = await finder.findWithScoring(files, 'newest');
 
-      // 0-byte files should not form duplicate groups or be recommended for deletion
-      expect(result).toHaveLength(0);
+      // 0-byte files should not form duplicate groups or be recommended for
+      // deletion ...but they must be reported as skipped, never silently
+      // dropped.
+      expectNoDuplicateGroups(groups);
+      expectAllSkippedFor(skipped, 'empty_file', 3);
     });
   });
 
@@ -81,7 +101,7 @@ describe('v5 Critical Regressions Gate', () => {
 
       const renamer = new RenamingService();
       const previews = await renamer.applyRenameRules([fileLower], [
-        { type: 'case', casing: 'upper' },
+        { type: 'case', conversion: 'uppercase' },
       ]);
 
       await renamer.executeRename(previews, false);
@@ -103,7 +123,7 @@ describe('v5 Critical Regressions Gate', () => {
       const renamer = new RenamingService();
 
       const preview = await renamer.applyRenameRules([file], [
-        { type: 'case', casing: 'upper' },
+        { type: 'case', conversion: 'uppercase' },
       ]);
 
       expect(preview).toHaveLength(1);
@@ -129,7 +149,7 @@ describe('v5 Critical Regressions Gate', () => {
       ];
 
       const hash = service1.computeHash(actions, timestamp);
-      const manifestBase = {
+      const manifestBase: Omit<RollbackManifest, 'signature'> = {
         id: 'test-manifest-1',
         version: '1.0',
         timestamp,
@@ -197,7 +217,7 @@ describe('v5 Critical Regressions Gate', () => {
   describe('6. File Classification & Security Screening Regressions', () => {
     it('does not flag JPEG and MPEG files as executables or suspicious', async () => {
       const validator = new PathValidatorService(tempDir, [tempDir]);
-      const categorizer = new CategorizerService(validator);
+      const categorizer = new CategorizerService([], validator);
 
       const jpegPath = path.join(tempDir, 'photo.jpg');
       const jpegHeader = Buffer.concat([
@@ -230,7 +250,7 @@ describe('v5 Critical Regressions Gate', () => {
 
     it('does not misclassify catalog.pdf, prescription.pdf, contest_entry.jpg as Logs/Scripts/Tests during content categorization', async () => {
       const validator = new PathValidatorService(tempDir, [tempDir]);
-      const categorizer = new CategorizerService(validator);
+      const categorizer = new CategorizerService([], validator);
 
       const catalogPdf = path.join(tempDir, 'catalog.pdf');
       const prescriptionPdf = path.join(tempDir, 'prescription.pdf');
@@ -300,7 +320,7 @@ describe('v5 Critical Regressions Gate', () => {
 
     it('handles invalid EXIF dates gracefully without producing "NaN/NaN"', () => {
       const photoService = new PhotoOrganizerService();
-      const invalidDate = new Date(NaN);
+      const invalidDate = { instant: new Date(NaN), source: 'exif' as const };
 
       const folderNameYMD = photoService.getDateFolderName(invalidDate, 'YYYY/MM/DD', 'Unknown Date');
       expect(folderNameYMD).toBe('Unknown Date');
@@ -378,7 +398,7 @@ describe('v5 Critical Regressions Gate', () => {
       await fs.writeFile(pngWithTxtExt, pngHeader);
 
       const files: FileWithSize[] = [
-        { path: pngWithTxtExt, name: 'image_named_txt.txt', size: pngHeader.length, extension: '.txt' },
+        { path: pngWithTxtExt, name: 'image_named_txt.txt', size: pngHeader.length },
       ];
 
       const validator = new PathValidatorService(tempDir, [tempDir]);
@@ -388,7 +408,8 @@ describe('v5 Critical Regressions Gate', () => {
 
       // Without content analysis it would be Documents/Text, with content analysis it detects Images
       expect(plan.moves.length).toBe(1);
-      expect(plan.moves[0].destination).toContain('Images');
+      const [firstMove] = plan.moves;
+      expect(firstMove?.destination).toContain('Images');
     });
   });
 
@@ -420,7 +441,13 @@ describe('v5 Critical Regressions Gate', () => {
 
   describe('14. Rotated History Reading in HistoryLoggerService', () => {
     it('reads entries from both operations.jsonl and rotated operations.1.jsonl', async () => {
-      const historyLogger = new HistoryLoggerService({ dataDir: tempDir });
+      // Pinned. Unset, the count is read off the machine's config, and this
+      // test reads operations.1.jsonl, so a `keepRotatedFiles: 0` machine
+      // would turn it red for a reason that has nothing to do with the code.
+      const historyLogger = new HistoryLoggerService({
+        dataDir: tempDir,
+        maxBackupFiles: 1,
+      });
       await historyLogger.init();
 
       const entry1 = {
@@ -476,7 +503,6 @@ describe('v5 Critical Regressions Gate', () => {
           path: alreadyOrganizedFile,
           name: 'report.pdf',
           size: 17,
-          extension: '.pdf',
         },
       ];
 
@@ -486,8 +512,8 @@ describe('v5 Critical Regressions Gate', () => {
       // The plan should not schedule unnecessary move for already-organized file
       expect(plan.moves.length).toBe(0);
 
-      // Execute organize on the plan
-      const result = await organizer.organize(tempDir, plan, { conflictStrategy: 'rename' });
+      // Execute organize on the same input files
+      const result = await organizer.organize(tempDir, files, { conflictStrategy: 'rename' });
       expect(result.errors).toHaveLength(0);
 
       // Verify the original file is intact and no _1.pdf was created
@@ -577,8 +603,11 @@ describe('v5 Critical Regressions Gate', () => {
         const undoManifest = structured.undoManifest as { manifestId: string } | undefined;
         expect(undoManifest?.manifestId).toBeDefined();
 
-        // Verify the manifest actually exists on disk and is readable via RollbackService
-        const rollbackService = new RollbackService();
+        // Verify the manifest actually exists on disk and is readable via RollbackService.
+        // The tool wrote it into this file's private rollback directory (see the
+        // redirect at the top of the file), so read that one rather than the
+        // worktree-wide directory every other worker writes manifests into.
+        const rollbackService = new RollbackService(storage.rollbackDir);
         const manifests = await rollbackService.listManifests();
         const found = manifests.find((m) => m.id === undoManifest?.manifestId);
         expect(found).toBeDefined();
@@ -610,7 +639,7 @@ describe('v5 Critical Regressions Gate', () => {
         const photoStructured = photoRes.structuredContent as Record<string, unknown>;
         expect(photoStructured.manifestId).toBeDefined();
 
-        const rollbackService = new RollbackService();
+        const rollbackService = new RollbackService(storage.rollbackDir);
         const manifests = await rollbackService.listManifests();
         const foundPhotoManifest = manifests.find((m) => m.id === photoStructured.manifestId);
         expect(foundPhotoManifest).toBeDefined();
@@ -630,6 +659,7 @@ describe('v5 Critical Regressions Gate', () => {
       const res = await photoService.organize({
         sourceDir: tempDir,
         targetDir: path.join(tempDir, 'out'),
+        dateFormat: 'YYYY-MM-DD',
         stripGPS: true,
         dryRun: false,
       });
