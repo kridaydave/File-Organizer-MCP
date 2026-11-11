@@ -326,7 +326,6 @@ ${
         };
         return `**Errors:**\n${result.errors.map((e) => `- ${fmt(e.file)}: ${escapeMarkdown(e.error)}`).join("\n")}`;
       })()
-    : ""`,
     : ""
 }`;
 
