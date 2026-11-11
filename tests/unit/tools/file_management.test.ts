@@ -44,6 +44,13 @@ describe('File Management Tools', () => {
             expect(jsonData.categories).toHaveProperty('Videos');
             expect(jsonData.categories).toHaveProperty('Code');
         });
+
+        it('should return error for invalid response_format', async () => {
+            const result = await handleGetCategories({ response_format: 'xml' } as any);
+
+            expect(result.isError).toBe(true);
+            expect(result.content[0].text).toContain('Error');
+        });
     });
 
     describe('handleSetCustomRules', () => {

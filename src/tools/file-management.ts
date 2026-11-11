@@ -85,12 +85,19 @@ export async function handleGetCategories(
 ): Promise<ToolResponse> {
   try {
     const parsed = GetCategoriesInputSchema.safeParse(args);
-    // default args is empty, so it should pass if we handle undefined?
-    // Zod merge might make it strict.
+    if (!parsed.success) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
+          },
+        ],
+        isError: true,
+      };
+    }
 
-    const response_format = parsed.success
-      ? parsed.data.response_format
-      : "markdown";
+    const response_format = parsed.data.response_format;
 
     const categories = { ...CATEGORIES }; // Static defaults
     // Custom rules affect categorization results, not the category list.
