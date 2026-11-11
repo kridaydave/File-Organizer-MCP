@@ -71,6 +71,7 @@ export class DuplicateFinderService {
     files: FileWithSize[],
     strategy: RecommendationStrategy = "best_location",
     options: { timeoutMs?: number } = {},
+    autoSelectKeep: boolean = true,
   ): Promise<AnalyzedDuplicateGroup[]> {
     // Explicitly filter out 0-byte (empty) files from duplicate detection
     const nonZeroFiles = files.filter((file) => file.size > 0);
@@ -96,6 +97,18 @@ export class DuplicateFinderService {
           size_bytes: group.size_bytes,
           file_count: 0,
           files: [],
+          recommended_keep: "",
+          recommended_delete: [],
+          wasted_space_bytes: 0,
+        };
+      }
+
+      if (!autoSelectKeep) {
+        return {
+          hash: group.hash,
+          size_bytes: group.size_bytes,
+          file_count: group.files.length,
+          files: scoredFiles,
           recommended_keep: "",
           recommended_delete: [],
           wasted_space_bytes: 0,

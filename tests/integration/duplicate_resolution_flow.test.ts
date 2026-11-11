@@ -56,4 +56,32 @@ describe('Integration: Duplicate Resolution Flow', () => {
         // 6. Verify Backups (deletion creates backup by default)
         // We can't easily guess the backup path timestamp, but we can assume success based on output.
     });
+
+    it('should respect auto_select_keep flag in analyze_duplicates', async () => {
+        const content = 'duplicate content';
+        const file1 = path.join(testDir, 'a.txt');
+        const file2 = path.join(testDir, 'b.txt');
+        await fs.writeFile(file1, content);
+        await fs.writeFile(file2, content);
+
+        const resultTrue = await handleAnalyzeDuplicates({
+            directory: testDir,
+            auto_select_keep: true,
+            response_format: 'json',
+        });
+        const resultFalse = await handleAnalyzeDuplicates({
+            directory: testDir,
+            auto_select_keep: false,
+            response_format: 'json',
+        });
+
+        const parsedTrue = JSON.parse((resultTrue.content[0] as any).text);
+        const parsedFalse = JSON.parse((resultFalse.content[0] as any).text);
+
+        expect(parsedTrue.duplicate_groups.length).toBe(1);
+        expect(parsedFalse.duplicate_groups.length).toBe(1);
+        expect(parsedTrue.duplicate_groups[0].recommended_delete.length).toBe(1);
+        expect(parsedFalse.duplicate_groups[0].recommended_delete.length).toBe(0);
+        expect(parsedFalse.duplicate_groups[0].recommended_keep).toBe('');
+    });
 });
