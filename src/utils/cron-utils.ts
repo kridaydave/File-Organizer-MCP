@@ -70,13 +70,23 @@ function parseCronExpression(expression: string): CronComponents | null {
     }
     // Handle step values with ranges like 1-10/2
     if (field.includes("/")) {
-      const [rangePart, stepPart] = field.split("/");
+      const partsSlash = field.split("/");
+      const rangePart = partsSlash[0];
+      const stepPart = partsSlash[1];
+      if (typeof rangePart !== "string" || typeof stepPart !== "string") {
+        return "*";
+      }
       const step = parseInt(stepPart, 10);
       if (!isNaN(step) && rangePart === "*") {
         return `*/${step}` as "*/n";
       }
       if (!isNaN(step) && rangePart.includes("-")) {
-        const [startStr, endStr] = rangePart.split("-");
+        const rangeSplit = rangePart.split("-");
+        const startStr = rangeSplit[0];
+        const endStr = rangeSplit[1];
+        if (typeof startStr !== "string" || typeof endStr !== "string") {
+          return "*";
+        }
         const start = parseInt(startStr, 10);
         const end = parseInt(endStr, 10);
         if (!isNaN(start) && !isNaN(end)) {
@@ -101,7 +111,12 @@ function parseCronExpression(expression: string): CronComponents | null {
     }
     // Handle ranges like 9-17
     if (field.includes("-")) {
-      const [startStr, endStr] = field.split("-");
+      const rangeSplit = field.split("-");
+      const startStr = rangeSplit[0];
+      const endStr = rangeSplit[1];
+      if (typeof startStr !== "string" || typeof endStr !== "string") {
+        return "*";
+      }
       const start = parseInt(startStr, 10);
       const end = parseInt(endStr, 10);
       if (!isNaN(start) && !isNaN(end)) {
@@ -269,25 +284,15 @@ function getMinimumIntervalMs(expression: string): number {
   const isDaily =
     components.minute !== "*" &&
     components.hour !== "*" &&
-    components.hour !== (components.hour === "*" ? "*" : components.hour) && // hour is specific or range
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     (components.dayOfWeek === "*" || components.dayOfWeek === undefined);
-  // More specific checks
-  const hourIsSpecific =
-    components.hour === "*" ||
-    (typeof components.hour === "string" && components.hour.startsWith("*/"))
-      ? false
-      : components.hour !== "*";
   const minuteIsSpecific =
     components.minute !== "*" &&
-    !(typeof components.minute === "string" && components.minute.startsWith("*/"));
-  const isDailyBetter =
-    minuteIsSpecific &&
-    components.hour !== "*" &&
-    !(typeof components.hour === "string" && components.hour.startsWith("*/")) &&
-    components.dayOfMonth === "*" &&
-    (components.dayOfWeek === "*" || typeof components.dayOfWeek === "string" && (components.dayOfWeek as string) === "*");
+    !(typeof components.minute === "string" && (components.minute as string).startsWith("*/"));
+  const hourIsStep = typeof components.hour === "string" && (components.hour as string).startsWith("*/");
+  const hourIsWildcard = components.hour === "*";
+  const hourIsSpecific = !hourIsWildcard && !hourIsStep && typeof components.hour !== "object"; // number case
   const isWeekly =
     components.minute !== "*" &&
     components.hour !== "*" &&
@@ -331,8 +336,10 @@ export function getNextRunTime(
   // Helper to get a specific value from a field (for backward compat)
   const getFieldValue = (field: CronField): number | null => {
     if (typeof field === "number") return field;
-    if (typeof field === "object" && field.type === "list" && field.values.length === 1)
-      return field.values[0];
+    if (typeof field === "object" && field.type === "list" && field.values.length === 1) {
+      const v = field.values[0];
+      return typeof v === "number" ? v : null;
+    }
     return null;
   };
 
@@ -483,11 +490,13 @@ export function getNextRunTime(
         const sorted = [...components.hour.values].sort((a,b)=>a-b);
         // find next > currentHour or first if none
         for (const h of sorted) {
-          if (h > currentHour) { next.setUTCHours(h); return next; }
-          if (h === currentHour && next.getTime() > fromDate.getTime()) { next.setUTCHours(h); return next; }
+          if (typeof h === "number" && h > currentHour) { next.setUTCHours(h); return next; }
+          if (typeof h === "number" && h === currentHour && next.getTime() > fromDate.getTime()) { next.setUTCHours(h); return next; }
         }
         next.setUTCDate(next.getUTCDate() + 1);
-        next.setUTCHours(sorted[0]);
+        if (typeof sorted[0] === "number") {
+          next.setUTCHours(sorted[0]);
+        }
         return next;
       } else if (typeof components.hour === "number") {
         next.setUTCHours(components.hour);
@@ -629,11 +638,13 @@ export function getNextRunTime(
       const currentDom = next.getUTCDate();
       const sorted = [...components.dayOfMonth.values].sort((a,b)=>a-b);
       for (const d of sorted) {
-        if (d > currentDom) { next.setUTCDate(d); return next; }
-        if (d === currentDom && next.getTime() > fromDate.getTime()) { next.setUTCDate(d); return next; }
+        if (typeof d === "number" && d > currentDom) { next.setUTCDate(d); return next; }
+        if (typeof d === "number" && d === currentDom && next.getTime() > fromDate.getTime()) { next.setUTCDate(d); return next; }
       }
       next.setUTCMonth(next.getUTCMonth() + 1);
-      next.setUTCDate(sorted[0]);
+      if (typeof sorted[0] === "number") {
+        next.setUTCDate(sorted[0]);
+      }
       return next;
     } else if (typeof components.dayOfMonth === "object" && components.dayOfMonth.type === "range") {
       const currentDom = next.getUTCDate();
@@ -684,8 +695,10 @@ export function getPreviousRunTime(
 
   const getFieldValue = (field: CronField): number | null => {
     if (typeof field === "number") return field;
-    if (typeof field === "object" && field.type === "list" && field.values.length === 1)
-      return field.values[0];
+    if (typeof field === "object" && field.type === "list" && field.values.length === 1) {
+      const v = field.values[0];
+      return typeof v === "number" ? v : null;
+    }
     return null;
   };
 
@@ -778,10 +791,12 @@ export function getPreviousRunTime(
         } else if (typeof components.hour === "object" && components.hour.type === "list") {
           const sorted = [...components.hour.values].sort((a,b)=>b-a);
           for (const h of sorted) {
-            if (h < currentHour) { prev.setUTCHours(h); return prev; }
+            if (typeof h === "number" && h < currentHour) { prev.setUTCHours(h); return prev; }
           }
           prev.setUTCDate(prev.getUTCDate() - 1);
-          prev.setUTCHours(sorted[0]);
+          if (typeof sorted[0] === "number") {
+            prev.setUTCHours(sorted[0]);
+          }
           return prev;
         } else if (typeof components.hour === "number") {
           prev.setUTCHours(components.hour);
@@ -819,10 +834,13 @@ export function getPreviousRunTime(
       } else if (typeof components.hour === "object" && components.hour.type === "list") {
         const sorted = [...components.hour.values].sort((a,b)=>b-a);
         for (const h of sorted) {
-          if (h < currentHour) { prev.setUTCHours(h); return prev; }
+          if (typeof h === "number" && h < currentHour) { prev.setUTCHours(h); return prev; }
         }
         prev.setUTCDate(prev.getUTCDate() - 1);
-        prev.setUTCHours(sorted[sorted.length-1]);
+        const last = sorted[sorted.length-1];
+        if (typeof last === "number") {
+          prev.setUTCHours(last);
+        }
         return prev;
       }
     }
@@ -985,12 +1003,22 @@ export function isValidCronExpression(expression: string): boolean {
     }
     // Handle step with range like 1-10/2
     if (field.includes("/")) {
-      const [rangePart, stepPart] = field.split("/");
+      const partsSlash = field.split("/");
+      const rangePart = partsSlash[0];
+      const stepPart = partsSlash[1];
+      if (typeof rangePart !== "string" || typeof stepPart !== "string") {
+        return false;
+      }
       const step = parseInt(stepPart, 10);
       if (isNaN(step) || step <= 0 || step > max) return false;
       if (rangePart === "*") return true;
       if (rangePart.includes("-")) {
-        const [s, e] = rangePart.split("-");
+        const rangeSplit = rangePart.split("-");
+        const s = rangeSplit[0];
+        const e = rangeSplit[1];
+        if (typeof s !== "string" || typeof e !== "string") {
+          return false;
+        }
         const start = parseInt(s, 10);
         const end = parseInt(e, 10);
         return !isNaN(start) && !isNaN(end) && start >= min && end <= max && start <= end;
@@ -1008,7 +1036,12 @@ export function isValidCronExpression(expression: string): boolean {
           continue;
         }
         if (v.includes("-")) {
-          const [s, e] = v.split("-");
+          const rangeSplit = v.split("-");
+          const s = rangeSplit[0];
+          const e = rangeSplit[1];
+          if (typeof s !== "string" || typeof e !== "string") {
+            return false;
+          }
           const start = parseInt(s, 10);
           const end = parseInt(e, 10);
           if (isNaN(start) || isNaN(end) || start < min || end > max || start > end) return false;
@@ -1021,7 +1054,12 @@ export function isValidCronExpression(expression: string): boolean {
     }
     // Handle ranges like 9-17
     if (field.includes("-")) {
-      const [s, e] = field.split("-");
+      const rangeSplit = field.split("-");
+      const s = rangeSplit[0];
+      const e = rangeSplit[1];
+      if (typeof s !== "string" || typeof e !== "string") {
+        return false;
+      }
       const start = parseInt(s, 10);
       const end = parseInt(e, 10);
       if (isNaN(start) || isNaN(end)) return false;
