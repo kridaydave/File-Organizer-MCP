@@ -6,7 +6,7 @@ import { FileInfo } from '../../../src/types.js';
 
 describe('FileScannerService', () => {
     let fileScanner: FileScannerService;
-    let testDir: string;
+    let testDir!: string;
     let baseTempDir: string;
 
     beforeEach(async () => {
