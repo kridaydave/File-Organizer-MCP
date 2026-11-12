@@ -125,7 +125,7 @@ describe('Rollback Service', () => {
         const firstResult = await rollbackService.rollback(manifestId);
         expect(firstResult.failed).toBeGreaterThan(0);
         // Manifest should remain for retry
-        expect(await fs.access(path.join(testDir, `${manifestId}.json`)).then(() => true).catch(() => false)).toBe(false);
+        expect(await fs.access(path.join(testDir, `${manifestId}.json`)).then(() => true).catch(() => false)).toBe(true);
         // With our testDir as storage, manifest is in testDir
     });
 
