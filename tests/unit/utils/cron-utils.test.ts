@@ -18,10 +18,10 @@ describe('cron-utils', () => {
       const baseTime = new Date('2026-02-08T10:30:00.000Z');
       const nextRun = getNextRunTime('0 * * * *', baseTime);
 
-      // Should be at 11:00
-      expect(nextRun.getUTCHours()).toBe(11);
-      expect(nextRun.getUTCMinutes()).toBe(0);
-      expect(nextRun.getUTCDate()).toBe(baseTime.getUTCDate());
+      // Should be at next hour:00 in local time
+      expect(nextRun.getHours()).toBe((baseTime.getHours() + 1) % 24);
+      expect(nextRun.getMinutes()).toBe(0);
+      expect(nextRun.getDate()).toBe(baseTime.getHours() + 1 >= 24 ? baseTime.getDate() + 1 : baseTime.getDate());
     });
 
     it('should calculate next run for daily cron', () => {
@@ -29,9 +29,9 @@ describe('cron-utils', () => {
       const nextRun = getNextRunTime('0 9 * * *', baseTime);
 
       // Should be next day at 9:00 since we passed 9:00
-      expect(nextRun.getUTCDate()).toBe(9);
-      expect(nextRun.getUTCHours()).toBe(9);
-      expect(nextRun.getUTCMinutes()).toBe(0);
+      expect(nextRun.getDate()).toBe(9);
+      expect(nextRun.getHours()).toBe(9);
+      expect(nextRun.getMinutes()).toBe(0);
     });
 
     it('should calculate next run for daily cron when still before scheduled time', () => {
@@ -39,9 +39,9 @@ describe('cron-utils', () => {
       const nextRun = getNextRunTime('0 9 * * *', baseTime);
 
       // Should be same day at 9:00
-      expect(nextRun.getUTCDate()).toBe(8);
-      expect(nextRun.getUTCHours()).toBe(9);
-      expect(nextRun.getUTCMinutes()).toBe(0);
+      expect(nextRun.getDate()).toBe(8);
+      expect(nextRun.getHours()).toBe(9);
+      expect(nextRun.getMinutes()).toBe(0);
     });
 
     it('should calculate next run for weekly cron', () => {
@@ -50,9 +50,9 @@ describe('cron-utils', () => {
       const nextRun = getNextRunTime('0 9 * * 0', baseTime);
 
       // Should be next Sunday at 9:00
-      expect(nextRun.getUTCDay()).toBe(0);
-      expect(nextRun.getUTCHours()).toBe(9);
-      expect(nextRun.getUTCMinutes()).toBe(0);
+      expect(nextRun.getDay()).toBe(0);
+      expect(nextRun.getHours()).toBe(9);
+      expect(nextRun.getMinutes()).toBe(0);
       // Since baseTime is already Sunday after 9am, next run is next week
       expect(nextRun.getTime()).toBeGreaterThan(baseTime.getTime());
     });
@@ -62,8 +62,8 @@ describe('cron-utils', () => {
       const nextRun = getNextRunTime('*/30 * * * *', baseTime);
 
       // Should be at 10:30
-      expect(nextRun.getUTCHours()).toBe(10);
-      expect(nextRun.getUTCMinutes()).toBe(30);
+      expect(nextRun.getHours()).toBe(10);
+      expect(nextRun.getMinutes()).toBe(30);
     });
 
     it('should handle step values crossing hour boundary', () => {
@@ -71,8 +71,8 @@ describe('cron-utils', () => {
       const nextRun = getNextRunTime('*/30 * * * *', baseTime);
 
       // Should be at 11:00
-      expect(nextRun.getUTCHours()).toBe(11);
-      expect(nextRun.getUTCMinutes()).toBe(0);
+      expect(nextRun.getHours()).toBe(11);
+      expect(nextRun.getMinutes()).toBe(0);
     });
 
     it('should return valid date for invalid cron (fallback)', () => {
@@ -91,8 +91,8 @@ describe('cron-utils', () => {
       const prevRun = getPreviousRunTime('0 * * * *', baseTime);
 
       // Should be at 10:00
-      expect(prevRun.getUTCHours()).toBe(10);
-      expect(prevRun.getUTCMinutes()).toBe(0);
+      expect(prevRun.getHours()).toBe(10);
+      expect(prevRun.getMinutes()).toBe(0);
     });
 
     it('should calculate previous run for daily cron', () => {
@@ -100,9 +100,9 @@ describe('cron-utils', () => {
       const prevRun = getPreviousRunTime('0 9 * * *', baseTime);
 
       // Should be today at 9:00 since we passed 9:00
-      expect(prevRun.getUTCDate()).toBe(8);
-      expect(prevRun.getUTCHours()).toBe(9);
-      expect(prevRun.getUTCMinutes()).toBe(0);
+      expect(prevRun.getDate()).toBe(8);
+      expect(prevRun.getHours()).toBe(9);
+      expect(prevRun.getMinutes()).toBe(0);
     });
 
     it('should calculate previous run for daily cron before scheduled time', () => {
@@ -110,9 +110,9 @@ describe('cron-utils', () => {
       const prevRun = getPreviousRunTime('0 9 * * *', baseTime);
 
       // Should be yesterday at 9:00
-      expect(prevRun.getUTCDate()).toBe(7);
-      expect(prevRun.getUTCHours()).toBe(9);
-      expect(prevRun.getUTCMinutes()).toBe(0);
+      expect(prevRun.getDate()).toBe(7);
+      expect(prevRun.getHours()).toBe(9);
+      expect(prevRun.getMinutes()).toBe(0);
     });
 
     it('should calculate previous run for weekly cron', () => {
@@ -121,9 +121,9 @@ describe('cron-utils', () => {
       const prevRun = getPreviousRunTime('0 9 * * 0', baseTime);
 
       // Should be today at 9:00 (Sunday)
-      expect(prevRun.getUTCDay()).toBe(0);
-      expect(prevRun.getUTCHours()).toBe(9);
-      expect(prevRun.getUTCMinutes()).toBe(0);
+      expect(prevRun.getDay()).toBe(0);
+      expect(prevRun.getHours()).toBe(9);
+      expect(prevRun.getMinutes()).toBe(0);
     });
 
     it('should calculate previous run for step values', () => {
@@ -131,8 +131,8 @@ describe('cron-utils', () => {
       const prevRun = getPreviousRunTime('*/30 * * * *', baseTime);
 
       // Should be at 10:30
-      expect(prevRun.getUTCHours()).toBe(10);
-      expect(prevRun.getUTCMinutes()).toBe(30);
+      expect(prevRun.getHours()).toBe(10);
+      expect(prevRun.getMinutes()).toBe(30);
     });
 
     it('should return valid date for invalid cron (fallback)', () => {
@@ -275,3 +275,26 @@ describe('cron-utils', () => {
     });
   });
 });
+
+  describe('BUG-54 catchup uses local time', () => {
+    it('should use local time for catchup boundaries', () => {
+      const originalTZ = process.env.TZ;
+      try {
+        process.env.TZ = 'Australia/Sydney';
+        // Schedule at 09:00 local time
+        const cronExpression = '0 9 * * *';
+        // Current time is 10:00 local on the same day
+        const currentTime = new Date('2026-02-08T10:00:00');
+        // Last run was today at 09:30 local (after scheduled run)
+        const lastRunTime = new Date('2026-02-08T09:30:00');
+        const result = shouldCatchup(cronExpression, lastRunTime, currentTime);
+        expect(result).toBe(false);
+      } finally {
+        if (originalTZ === undefined) {
+          delete process.env.TZ;
+        } else {
+          process.env.TZ = originalTZ;
+        }
+      }
+    });
+  });
