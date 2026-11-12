@@ -377,7 +377,7 @@ describe("PhotoOrganizerService", () => {
         let copyAttempts = 0;
         mockCopyFile.mockImplementation(async () => {
           copyAttempts++;
-          if (copyAttempts === 1) {
+          if (copyAttempts === 1 || copyAttempts === 3) {
             return undefined;
           }
           const err = new Error("Destination file already exists") as NodeJS.ErrnoException;
