@@ -156,9 +156,9 @@ export class PhotoOrganizerService {
       for (const photo of photosWithMetadata) {
         try {
           const targetPath = await this.getTargetPath(photo, config);
-          const finalTargetPath = await this.resolveCollision(targetPath, usedPaths);
+          let finalTargetPath = await this.resolveCollision(targetPath, usedPaths);
           usedPaths.add(finalTargetPath);
-          const targetDir = path.dirname(finalTargetPath);
+          let targetDir = path.dirname(finalTargetPath);
 
           if (dryRun) {
             // Dry run: just track the structure
@@ -205,6 +205,7 @@ export class PhotoOrganizerService {
                         copyInsteadOfMove: true,
                       });
                       finalTargetPath = currentTarget;
+                      targetDir = path.dirname(finalTargetPath);
                       break;
                     } catch (retryErr) {
                       const rerr = retryErr as NodeJS.ErrnoException;
@@ -292,6 +293,7 @@ export class PhotoOrganizerService {
                         },
                       );
                       finalTargetPath = currentTarget;
+                      targetDir = path.dirname(finalTargetPath);
                       if (!config.copyInsteadOfMove && moveRes.rollbackAction) {
                         result.movedFiles.push({
                           originalPath: photo.path,
