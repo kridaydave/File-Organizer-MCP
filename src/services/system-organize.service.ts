@@ -138,34 +138,13 @@ export class SystemOrganizeService {
 
     for (const [key, dirPath] of Object.entries(dirs)) {
       try {
-        const validated = await this.pathValidator.validatePath(dirPath, {
-          requireExists: true,
-        });
+        // Safety-only validation: the dir may not exist yet and gets
+        // created on demand by the organizer.
+        const validated = await this.pathValidator.validatePath(dirPath);
         validatedDirs[key as keyof SystemDirs] = validated;
-      } catch (error) {
-        // If validation fails, do not use the raw unvalidated path
-        try {
-          const [lstatRes, statRes] = await Promise.all([
-            fs.lstat(dirPath).catch(() => null),
-            fs.stat(dirPath).catch(() => null),
-          ]);
-          if (lstatRes?.isSymbolicLink()) {
-            validatedDirs[key as keyof SystemDirs] = "";
-            continue;
-          }
-          if (statRes?.isDirectory()) {
-            const home = os.homedir();
-            const resolved = path.resolve(dirPath);
-            const resolvedHome = path.resolve(home);
-            if (
-              resolved.startsWith(resolvedHome + path.sep) ||
-              resolved === resolvedHome
-            ) {
-              validatedDirs[key as keyof SystemDirs] = resolved;
-              continue;
-            }
-          }
-        } catch {}
+      } catch {
+        // A failed validation makes the dir unusable; never fall back to
+        // the raw unvalidated path.
         validatedDirs[key as keyof SystemDirs] = "";
       }
     }

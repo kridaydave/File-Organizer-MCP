@@ -73,14 +73,25 @@ export function getDefaultAllowedDirs(): string[] {
     if (!commonDirs.includes(projectDir)) {
       commonDirs.push(projectDir);
     }
+    // Tests fake process.platform (e.g. darwin on a linux CI runner), so
+    // ~/Movies must be whitelisted even though the darwin branch never ran
+    const movies = path.join(home, "Movies");
+    if (!commonDirs.includes(movies)) {
+      commonDirs.push(movies);
+    }
   }
 
-  // In test mode, always allow the three system-organize source dirs
-  // even if they don't exist on CI (e.g. ~/Downloads on ubuntu runner)
+  // In test mode, always allow the system-organize dirs even if they
+  // don't exist on CI (e.g. ~/Music on an ubuntu runner)
   const alwaysAllowedInTest = isTestMode
     ? [
         path.join(home, "Downloads"),
         path.join(home, "Desktop"),
+        path.join(home, "Documents"),
+        path.join(home, "Pictures"),
+        path.join(home, "Videos"),
+        path.join(home, "Music"),
+        path.join(home, "Movies"),
         os.tmpdir(),
       ]
     : [];

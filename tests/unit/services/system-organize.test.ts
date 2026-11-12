@@ -6,6 +6,7 @@
 import { jest, describe, it, expect, beforeEach } from "@jest/globals";
 import path from "path";
 import os from "os";
+import fsSync from "fs";
 
 jest.unstable_mockModule("fs/promises", () => ({
   default: {
@@ -30,6 +31,9 @@ jest.unstable_mockModule("fs/promises", () => ({
     lstat: jest
       .fn<() => Promise<any>>()
       .mockResolvedValue({ isSymbolicLink: () => false }),
+    // Real resolution: the production validator awaits fs.realpath in its
+    // symlink layer; omitting it here crashed validation for valid paths
+    realpath: jest.fn((p: string) => fsSync.realpathSync(p)),
   },
 }));
 
