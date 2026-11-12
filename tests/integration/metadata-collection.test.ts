@@ -323,6 +323,7 @@ describe("Photo Collection Tests", () => {
       targetDir,
       dateFormat: "YYYY-MM-DD",
       stripGPS: true,
+      copyInsteadOfMove: true,
     });
 
     expect(result.success).toBe(true);
