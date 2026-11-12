@@ -450,7 +450,9 @@ function toCamelCase(str: string) {
   // Handle snake_case, kebab-case, spaces
   const parts = str.split(/[_\-\s]+/).filter(Boolean);
   if (parts.length === 0) return str;
-  const first = parts[0].toLowerCase();
+  const firstPart = parts[0];
+  if (!firstPart) return str;
+  const first = firstPart.toLowerCase();
   const rest = parts.slice(1).map((part) => {
     if (!part) return part;
     return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
