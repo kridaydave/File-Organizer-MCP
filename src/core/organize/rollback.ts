@@ -72,6 +72,12 @@ export class RollbackService {
     description: string,
     actions: RollbackAction[],
   ): Promise<string> {
+    const validTypes = new Set(["move", "copy", "delete", "rename"]);
+    for (const action of actions) {
+      if (!validTypes.has(action.type)) {
+        throw new Error(`Invalid action type: ${action.type}`);
+      }
+    }
     await this.ensureStorage();
 
     const id = randomUUID();
@@ -361,6 +367,18 @@ export class RollbackService {
               );
             }
             throw e;
+          } else {
+            results.failed++;
+            results.errors.push(
+              `Unknown action type: ${(action as RollbackAction).type}`,
+            );
+            continue;
+          } else {
+            results.failed++;
+            results.errors.push(
+              `Unknown action type: ${(action as RollbackAction).type}`,
+            );
+            continue;
           }
         }
       }

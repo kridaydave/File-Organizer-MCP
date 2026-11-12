@@ -92,4 +92,30 @@ describe('Rollback Service', () => {
             await fs.rm(externalDir, { recursive: true, force: true }).catch(() => { });
         }
     });
+
+    it('should report failure and keep manifest for unknown action types', async () => {
+        const src = path.join(testDir, 'source.txt');
+        const dest = path.join(testDir, 'dest.txt');
+        await fs.writeFile(src, 'content');
+        await fs.rename(src, dest);
+
+        const manifestId = await rollbackService.createManifest('Test unknown action', [
+            {
+                type: 'bogus' as any,
+                originalPath: src,
+                currentPath: dest,
+                timestamp: Date.now()
+            }
+        ]);
+
+        const result = await rollbackService.rollback(manifestId);
+
+        expect(result.failed).toBeGreaterThan(0);
+        expect(result.success).toBe(0);
+        expect(result.errors.length).toBeGreaterThan(0);
+
+        // Manifest should be kept (not deleted)
+        const manifestPath = path.join(testDir, `${manifestId}.json`);
+        expect(await fs.access(manifestPath).then(() => true).catch(() => false)).toBe(true);
+    });
 });
