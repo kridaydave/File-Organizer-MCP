@@ -320,25 +320,25 @@ export async function handleBatchReadFiles(
         if (include_content && contentType === "text") {
           if (file.size > maxSizeBytes) {
             // Oversize file - metadata only, no content
+            delete (result as any).content;
           } else {
             const content = await readTextFile(file.path, maxSizeBytes);
             if (content !== undefined) {
               if (
                 typeof content === "string" &&
-                content.includes("exceeds") &&
-                content.includes("limit")
+                ((content.includes("exceeds") && content.includes("limit")) ||
+                  content.toLowerCase().includes("e_file_too_large") ||
+                  content.toLowerCase().includes("access denied or unreadable"))
               ) {
-                // Oversize file - metadata only, no content
-              } else if (
-                typeof content === "string" &&
-                content.toLowerCase().includes("e_file_too_large")
-              ) {
-                // Oversize file - metadata only, no content
+                // Oversize or error file - metadata only, no content
+                delete (result as any).content;
               } else {
                 result.content = content;
               }
             }
           }
+        } else {
+          delete (result as any).content;
         }
 
         // Read metadata for all files (especially important for media)
@@ -435,13 +435,20 @@ export async function handleBatchReadFiles(
             }
           } else {
             // For text and other files, get basic metadata
-            const stats = await fs.stat(file.path);
-            result.metadata = {
-              type: contentType,
-              created: stats.birthtime.toISOString(),
-              modified: stats.mtime.toISOString(),
-              size: stats.size,
-            };
+            try {
+              const stats = await fs.stat(file.path);
+              result.metadata = {
+                type: contentType,
+                created: stats.birthtime ? stats.birthtime.toISOString() : stats.mtime?.toISOString(),
+                modified: stats.mtime ? stats.mtime.toISOString() : undefined,
+                size: stats.size,
+              };
+            } catch {
+              result.metadata = {
+                type: contentType,
+                size: file.size,
+              };
+            }
           }
         }
       } catch (error) {

@@ -13,7 +13,18 @@ describe("BUG-43: batch file reader bounds and oversize handling", () => {
   let testDir: string;
 
   beforeEach(async () => {
-    testDir = await fs.mkdtemp(path.join(os.tmpdir(), "bug43-"));
+    // Use cwd or tests/sandbox if available, fallback to tmpdir
+    const baseDir = process.cwd();
+    try {
+      testDir = await fs.mkdtemp(path.join(baseDir, "bug43-"));
+    } catch {
+      try {
+        await fs.mkdir(path.join(baseDir, "tests", "sandbox"), { recursive: true });
+        testDir = await fs.mkdtemp(path.join(baseDir, "tests", "sandbox", "bug43-"));
+      } catch {
+        testDir = await fs.mkdtemp(path.join(os.tmpdir(), "bug43-"));
+      }
+    }
   });
 
   afterEach(async () => {
