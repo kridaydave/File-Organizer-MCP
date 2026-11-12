@@ -285,7 +285,7 @@ describe("PhotoOrganizerService", () => {
           { name: "photo1.jpg", isFile: () => true },
           { name: "photo2.jpg", isFile: () => true },
         ]);
-        mockRename
+        mockCopyFile
           .mockRejectedValueOnce(new Error("disk full"))
           .mockResolvedValue(undefined);
 
@@ -375,7 +375,7 @@ describe("PhotoOrganizerService", () => {
         const service2 = new PhotoOrganizerService();
 
         let copyAttempts = 0;
-        mockCopyFile.mockImplementation(async (...args: any[]) => {
+        mockCopyFile.mockImplementation(async () => {
           copyAttempts++;
           if (copyAttempts === 1) {
             return undefined;
@@ -406,9 +406,13 @@ describe("PhotoOrganizerService", () => {
         expect(result2.errors).toHaveLength(0);
         expect(result1.organizedFiles).toBe(1);
         expect(result2.organizedFiles).toBe(1);
-        expect(result1.movedFiles[0].currentPath).not.toBe(
-          result2.movedFiles[0].currentPath,
-        );
+        expect(result1.movedFiles.length).toBeGreaterThan(0);
+        expect(result2.movedFiles.length).toBeGreaterThan(0);
+        const moved1 = result1.movedFiles[0];
+        const moved2 = result2.movedFiles[0];
+        expect(moved1?.currentPath).toBeDefined();
+        expect(moved2?.currentPath).toBeDefined();
+        expect(moved1?.currentPath).not.toBe(moved2?.currentPath);
       }),
     );
   });
