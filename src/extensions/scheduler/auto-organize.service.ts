@@ -180,9 +180,8 @@ export class AutoOrganizeService {
           this.tasks.delete(existingKey);
         }
         logger.debug(
-          `Skipping duplicate watch entry for resolved directory: ${resolvedDirectory}`,
+          `Replacing duplicate watch entry for resolved directory: ${resolvedDirectory}`,
         );
-        continue;
       }
 
       seenDirectories.set(resolvedDirectory, watch.directory);
