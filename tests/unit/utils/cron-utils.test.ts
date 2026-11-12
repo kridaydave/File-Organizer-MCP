@@ -94,7 +94,9 @@ describe('cron-utils', () => {
       expect(nextRun.getUTCMinutes()).toBe(31);
       expect(nextRun.getUTCSeconds()).toBe(0);
       expect(nextRun.getUTCMilliseconds()).toBe(0);
-      expect(nextRun.getTime()).toBe(baseTime.getTime() + 60 * 1000);
+      expect(nextRun.getTime()).toBe(
+        new Date('2026-02-08T10:31:00.000Z').getTime(),
+      );
     });
   });
 
@@ -166,7 +168,9 @@ describe('cron-utils', () => {
       expect(prevRun.getUTCMinutes()).toBe(29);
       expect(prevRun.getUTCSeconds()).toBe(0);
       expect(prevRun.getUTCMilliseconds()).toBe(0);
-      expect(prevRun.getTime()).toBe(baseTime.getTime() - 60 * 1000);
+      expect(prevRun.getTime()).toBe(
+        new Date('2026-02-08T10:29:00.000Z').getTime(),
+      );
     });
   });
 
