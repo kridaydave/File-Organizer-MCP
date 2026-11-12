@@ -1,5 +1,6 @@
 import { jest } from "@jest/globals";
 import path from "path";
+import type { FileHandle } from "fs/promises";
 import {
   withMockedLogger,
   type MockLogger,
@@ -131,7 +132,30 @@ describe("PhotoOrganizerService", () => {
     mockUtimes.mockResolvedValue(undefined);
     mockReadFile.mockResolvedValue(Buffer.from([0xff, 0xd8]));
     mockPipeline.mockResolvedValue(undefined);
-    mockOpen.mockResolvedValue({ read: mockRead, close: jest.fn() });
+    const createMockFileHandle = (): FileHandle => {
+      const mockHandle: Partial<FileHandle> = {
+        fd: 1,
+        read: mockRead,
+        close: jest.fn(async () => undefined),
+        readFile: jest.fn(async () => Buffer.from([])),
+        write: jest.fn(async () => ({ bytesWritten: 0, buffer: Buffer.from([]) })),
+        writeFile: jest.fn(async () => undefined),
+        stat: jest.fn(async () => ({}) as any),
+        truncate: jest.fn(async () => undefined),
+        sync: jest.fn(async () => undefined),
+        datasync: jest.fn(async () => undefined),
+        chown: jest.fn(async () => undefined),
+        chmod: jest.fn(async () => undefined),
+        utimes: jest.fn(async () => undefined),
+        readv: jest.fn(async () => ({ bytesRead: 0, buffers: [] })),
+        writev: jest.fn(async () => ({ bytesWritten: 0, buffers: [] })),
+        appendFile: jest.fn(async () => undefined),
+        createReadStream: jest.fn(() => ({}) as any),
+        createWriteStream: jest.fn(() => ({}) as any),
+      };
+      return mockHandle as FileHandle;
+    };
+    mockOpen.mockResolvedValue(createMockFileHandle());
     mockRead.mockResolvedValue({ bytesRead: 0 });
 
     service = new PhotoOrganizerService();
@@ -391,16 +415,35 @@ describe("PhotoOrganizerService", () => {
         mockReaddir.mockResolvedValue([
           { name: "photo.png", isFile: () => true },
         ]);
-        mockOpen.mockImplementation(async () => ({
-          read: async (buf: Buffer) => {
-            if (buf.length > 1) {
-              buf[0] = 0x25;
-              buf[1] = 0x88;
-            }
-            return { bytesRead: 2, buffer: buf };
-          },
-          close: jest.fn(),
-        }));
+        mockOpen.mockImplementation(async () => {
+          const mockHandle: Partial<FileHandle> = {
+            fd: 1,
+            read: async (buf: Buffer, offset?: number, length?: number, position?: number) => {
+              if (buf.length > 1) {
+                buf[0] = 0x25;
+                buf[1] = 0x88;
+              }
+              return { bytesRead: 2, buffer: buf };
+            },
+            close: jest.fn(async () => undefined),
+            readFile: jest.fn(async () => Buffer.from([])),
+            write: jest.fn(async () => ({ bytesWritten: 0, buffer: Buffer.from([]) })),
+            writeFile: jest.fn(async () => undefined),
+            stat: jest.fn(async () => ({}) as any),
+            truncate: jest.fn(async () => undefined),
+            sync: jest.fn(async () => undefined),
+            datasync: jest.fn(async () => undefined),
+            chown: jest.fn(async () => undefined),
+            chmod: jest.fn(async () => undefined),
+            utimes: jest.fn(async () => undefined),
+            readv: jest.fn(async () => ({ bytesRead: 0, buffers: [] })),
+            writev: jest.fn(async () => ({ bytesWritten: 0, buffers: [] })),
+            appendFile: jest.fn(async () => undefined),
+            createReadStream: jest.fn(() => ({}) as any),
+            createWriteStream: jest.fn(() => ({}) as any),
+          };
+          return mockHandle as FileHandle;
+        });
 
         // copyWithoutGPS will read via mocked core/io/readFile returning JPEG header,
         // but stripGPSFromBuffer will see it's not a JPEG? Let us look - our mocked readFile
