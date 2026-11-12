@@ -396,12 +396,18 @@ export class RollbackService {
               results.errors.push(
                 `Recovered move: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
               );
+              if (results.success > 0) {
+                results.success--;
+              }
             } else if (completed.stage === "restore") {
               // Revert the restore: move back from current to backup location
               await safeAtomicMove(completed.paths.to, completed.paths.from, { overwrite: true });
               results.errors.push(
                 `Recovered restore: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
               );
+              if (results.success > 0) {
+                results.success--;
+              }
             } else if (completed.stage === "copy") {
               // Revert copy undo: recreate the copied file (would require backup, but we don't have it)
               // Note: We can't fully recover copy operation undo, since we don't have the file content
@@ -414,6 +420,9 @@ export class RollbackService {
               results.errors.push(
                 `Recovered delete: Reverted ${completed.paths.to}`,
               );
+              if (results.success > 0) {
+                results.success--;
+              }
             }
           } catch (recoveryError) {
             results.errors.push(
