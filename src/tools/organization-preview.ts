@@ -58,6 +58,12 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
         description:
           "How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified",
       },
+      use_content_analysis: {
+        type: "boolean",
+        description:
+          "Analyze file content for accurate type detection and security (slower)",
+        default: false,
+      },
     },
     required: ["directory"],
   },
@@ -92,6 +98,7 @@ export async function handlePreviewOrganization(
       show_conflicts_only,
       response_format,
       conflict_strategy,
+      use_content_analysis,
     } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
 
@@ -109,6 +116,7 @@ export async function handlePreviewOrganization(
       validatedPath,
       files,
       effectiveConflictStrategy,
+      use_content_analysis ?? false,
     );
 
     const output = {

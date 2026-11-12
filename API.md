@@ -327,12 +327,13 @@ file_organizer_organize_files({
 
 ### Parameters
 
-| Parameter             | Type    | Description                                                                                            | Default    |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------------------ | ---------- |
-| `directory`           | string  | Full path to the directory                                                                             | -          |
-| `show_conflicts_only` | boolean | -                                                                                                      | false      |
-| `response_format`     | string  | -                                                                                                      | 'markdown' |
-| `conflict_strategy`   | string  | How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified | -          |
+| Parameter              | Type    | Description                                                                                            | Default    |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------------------ | ---------- |
+| `directory`            | string  | Full path to the directory                                                                             | -          |
+| `show_conflicts_only`  | boolean | -                                                                                                      | false      |
+| `response_format`      | string  | -                                                                                                      | 'markdown' |
+| `conflict_strategy`    | string  | How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified | -          |
+| `use_content_analysis` | boolean | Analyze file content for accurate type detection and security (slower)                                 | false      |
 
 ### Example
 
@@ -342,6 +343,7 @@ file_organizer_preview_organization({
   show_conflicts_only: true,
   response_format: "value",
   conflict_strategy: "value",
+  use_content_analysis: false,
 });
 ```
 

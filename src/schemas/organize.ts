@@ -58,6 +58,13 @@ export const PreviewOrganizationInputSchema = z
       .describe(
         "How to handle file conflicts for preview. Uses config default if not specified",
       ),
+    use_content_analysis: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Analyze file content for accurate type detection and security (slower)",
+      ),
   })
   .merge(CommonParamsSchema);
 
