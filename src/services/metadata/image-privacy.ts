@@ -426,7 +426,10 @@ function removeGPSManually(buffer: Buffer): Buffer | null {
     writeU16(newTiff, ifd0Offset, entries.length);
     // Write remaining entries
     for (let i = 0; i < entries.length; i++) {
-      entries[i].copy(newTiff, ifd0Offset + 2 + i * 12);
+      const entry = entries[i];
+      if (entry) {
+        entry.copy(newTiff, ifd0Offset + 2 + i * 12);
+      }
     }
     // Zero out the rest of old entries area
     const oldEntriesEnd = ifd0Offset + 2 + entryCount * 12;
