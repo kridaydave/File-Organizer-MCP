@@ -576,7 +576,8 @@ export class AutoOrganizeService {
         try {
           resolvedDirectory = await validateStrictPath(directory);
         } catch (error) {
-          logger.warn(`[${directory}] Failed to validate path for catchup check:`, error);
+          const message = error instanceof Error ? error.message : String(error);
+          logger.warn(`[${directory}] Failed to validate path for catchup check: ${message}`);
           continue;
         }
 
@@ -619,7 +620,8 @@ export class AutoOrganizeService {
           continue;
         }
       } catch (error) {
-        logger.warn(`[${directory}] Failed to validate path for catchup:`, error);
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`[${directory}] Failed to validate path for catchup: ${message}`);
         continue;
       }
 
