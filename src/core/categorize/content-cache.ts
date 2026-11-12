@@ -188,23 +188,14 @@ export class ContentAnalysisCache {
 
     const analysisPromise = (async (): Promise<CategoryName> => {
       try {
-        let initialStats: { mtimeMs: number; size: number } | undefined;
-        try {
-          initialStats = await this.getFileStats(filePath);
-        } catch {
-          initialStats = undefined;
-        }
         const result = await this.analyze(filePath);
 
         if (result.confidence >= 0.7) {
           const stats = await this.getFileStats(filePath);
-          // Use initial stats if they exist to detect if file changed during analysis
-          // Store the stats from when analysis started for consistent validation
-          const statsToStore = initialStats ?? stats;
           this.results.set(key, result.category);
           this.timestamps.set(key, Date.now());
-          if (statsToStore) {
-            this.fileStats.set(key, statsToStore);
+          if (stats) {
+            this.fileStats.set(key, stats);
           }
           logger.info("Content analysis updated category", {
             filePath,
