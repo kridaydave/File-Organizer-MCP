@@ -201,8 +201,30 @@ export class AutoOrganizeService {
     }
 
     // Create cron tasks for each watch config
+    const seenDirectories = new Map<string, string>();
     for (const watch of watchList) {
       if (!watch.rules.auto_organize) continue;
+
+      const resolvedDirectory = path.resolve(watch.directory);
+
+      if (seenDirectories.has(resolvedDirectory)) {
+        const existingKey = seenDirectories.get(resolvedDirectory)!;
+        const existingTask = this.tasks.get(existingKey);
+        if (existingTask) {
+          try {
+            existingTask.stop();
+          } catch (error) {
+            logger.error("Error stopping duplicate auto-organize task:", error);
+          }
+          this.tasks.delete(existingKey);
+        }
+        logger.debug(
+          `Skipping duplicate watch entry for resolved directory: ${resolvedDirectory}`,
+        );
+        continue;
+      }
+
+      seenDirectories.set(resolvedDirectory, watch.directory);
 
       try {
         if (!existsSync(watch.directory)) {
@@ -249,6 +271,14 @@ export class AutoOrganizeService {
           { noOverlap: true },
         );
 
+        const oldTask = this.tasks.get(watch.directory);
+        if (oldTask) {
+          try {
+            oldTask.stop();
+          } catch (error) {
+            logger.error("Error stopping old auto-organize task:", error);
+          }
+        }
         this.tasks.set(watch.directory, task);
         logger.info(
           `Scheduled "${watch.directory}" with cron: ${watch.schedule}`,
