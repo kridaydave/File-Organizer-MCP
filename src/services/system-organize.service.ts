@@ -141,8 +141,31 @@ export class SystemOrganizeService {
           requireExists: true,
         });
         validatedDirs[key as keyof SystemDirs] = validated;
-      } catch {
-        validatedDirs[key as keyof SystemDirs] = dirPath;
+      } catch (error) {
+        // If validation fails, do not use the raw unvalidated path
+        try {
+          const [lstatRes, statRes] = await Promise.all([
+            fs.lstat(dirPath).catch(() => null),
+            fs.stat(dirPath).catch(() => null),
+          ]);
+          if (lstatRes?.isSymbolicLink()) {
+            validatedDirs[key as keyof SystemDirs] = "";
+            continue;
+          }
+          if (statRes?.isDirectory()) {
+            const home = os.homedir();
+            const resolved = path.resolve(dirPath);
+            const resolvedHome = path.resolve(home);
+            if (
+              resolved.startsWith(resolvedHome + path.sep) ||
+              resolved === resolvedHome
+            ) {
+              validatedDirs[key as keyof SystemDirs] = resolved;
+              continue;
+            }
+          }
+        } catch {}
+        validatedDirs[key as keyof SystemDirs] = "";
       }
     }
 
