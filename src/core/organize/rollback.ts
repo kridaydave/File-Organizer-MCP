@@ -367,18 +367,6 @@ export class RollbackService {
               );
             }
             throw e;
-          } else {
-            results.failed++;
-            results.errors.push(
-              `Unknown action type: ${(action as RollbackAction).type}`,
-            );
-            continue;
-          } else {
-            results.failed++;
-            results.errors.push(
-              `Unknown action type: ${(action as RollbackAction).type}`,
-            );
-            continue;
           }
         }
       }
