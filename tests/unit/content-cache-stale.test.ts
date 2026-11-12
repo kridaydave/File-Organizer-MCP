@@ -1,6 +1,5 @@
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
 import { CategorizerService } from "../../src/services/categorizer.service.js";
 
 describe("Content cache staleness (BUG-32)", () => {
@@ -8,7 +7,10 @@ describe("Content cache staleness (BUG-32)", () => {
   let testDir: string;
 
   beforeEach(async () => {
-    testDir = await fs.mkdtemp(path.join(os.tmpdir(), "bug32-test-"));
+    // Inside the project so the path validator allows content sniffing
+    const baseDir = path.join(process.cwd(), "tests", "temp");
+    await fs.mkdir(baseDir, { recursive: true });
+    testDir = await fs.mkdtemp(path.join(baseDir, "bug32-test-"));
     categorizer = new CategorizerService();
   });
 
@@ -29,7 +31,6 @@ describe("Content cache staleness (BUG-32)", () => {
     expect(first).toBe("Documents");
 
     await fs.writeFile(filePath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-    await new Promise((resolve) => setTimeout(resolve, 10));
     const second = await categorizer.waitForContentAnalysis(path.basename(filePath), filePath);
     expect(second).toBe("Images");
   });
