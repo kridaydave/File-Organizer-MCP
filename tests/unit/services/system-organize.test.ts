@@ -360,6 +360,39 @@ describe("SystemOrganizeService", () => {
       expect(result.useLocalFallback).toBe(true);
     });
 
+    it("should throw when system dir not writable and fallbackToLocal is false", async () => {
+      const error = new Error("EACCES") as NodeJS.ErrnoException;
+      error.code = "EACCES";
+      mockAccess.mockRejectedValue(error);
+
+      await expect(
+        service.determineSystemDestination(
+          "Music",
+          true,
+          mockSystemDirs.downloads,
+          "Organized",
+          true,
+          false,
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("should throw when system dir has insufficient space and fallbackToLocal is false", async () => {
+      mockAccess.mockResolvedValue(undefined);
+      mockStatfs.mockResolvedValue({ bsize: 4096, bfree: 1000 });
+
+      await expect(
+        service.determineSystemDestination(
+          "Music",
+          true,
+          mockSystemDirs.downloads,
+          "Organized",
+          true,
+          false,
+        ),
+      ).rejects.toThrow();
+    });
+
     it("should create organized folder with category name", async () => {
       const result = await service.determineSystemDestination(
         "Music",
@@ -704,6 +737,37 @@ describe("SystemOrganizeService", () => {
       );
 
       expect(result.useLocalFallback).toBe(true);
+    });
+
+    it("should not fallback to local when fallbackToLocal is false and system dir is unusable", async () => {
+      jest.spyOn(service as any, "validateSourceDir").mockResolvedValue({
+        valid: true,
+        normalizedPath: mockSystemDirs.downloads,
+      });
+      mockReaddir.mockResolvedValue([
+        { name: "song.mp3", isFile: () => true, isDirectory: () => false },
+      ]);
+      mockStat.mockResolvedValue({
+        isFile: () => true,
+        size: 1000,
+        mtime: new Date(),
+      });
+
+      const eaccesError = new Error("EACCES") as NodeJS.ErrnoException;
+      eaccesError.code = "EACCES";
+      mockAccess.mockRejectedValue(eaccesError);
+
+      const result = await service.systemOrganize({
+        sourceDir: mockSystemDirs.downloads,
+        useSystemDirs: true,
+        fallbackToLocal: false,
+        dryRun: true,
+      });
+
+      expect(result.failed).toBe(1);
+      expect(result.organizedLocally).toBe(0);
+      expect(result.movedToSystem).toBe(0);
+      expect(result.details.length).toBe(0);
     });
   });
 

@@ -270,6 +270,7 @@ export class SystemOrganizeService {
     sourceDir: string,
     localFallbackPrefix = "Organized",
     createSubfolders = true,
+    fallbackToLocal = true,
   ): Promise<{
     destination: string;
     useLocalFallback: boolean;
@@ -278,22 +279,70 @@ export class SystemOrganizeService {
     const systemDirKey = CATEGORY_TO_SYSTEM_DIR[category];
 
     if (!useSystemDirs || !systemDirKey) {
-      return this.determineLocalFallback(sourceDir, category, localFallbackPrefix, createSubfolders);
+      if (!fallbackToLocal && useSystemDirs && systemDirKey) {
+        throw new Error(
+          `System directory for category ${category} is not available and fallbackToLocal is false`,
+        );
+      }
+      if (!fallbackToLocal && useSystemDirs && !systemDirKey) {
+        throw new Error(
+          `No system directory mapping for category ${category} and fallbackToLocal is false`,
+        );
+      }
+      if (!fallbackToLocal && !useSystemDirs) {
+        // When not using system dirs, we go to local fallback by design
+        return this.determineLocalFallback(
+          sourceDir,
+          category,
+          localFallbackPrefix,
+          createSubfolders,
+        );
+      }
+      return this.determineLocalFallback(
+        sourceDir,
+        category,
+        localFallbackPrefix,
+        createSubfolders,
+      );
     }
 
     const systemDir = systemDirs[systemDirKey];
     if (!systemDir) {
-      return this.determineLocalFallback(sourceDir, category, localFallbackPrefix, createSubfolders);
+      if (!fallbackToLocal) {
+        throw new Error(
+          `System directory for category ${category} is not available and fallbackToLocal is false`,
+        );
+      }
+      logger.warn(`System directory not available, using local fallback`, {
+        category,
+        reason: "System directory not configured",
+      });
+      return this.determineLocalFallback(
+        sourceDir,
+        category,
+        localFallbackPrefix,
+        createSubfolders,
+      );
     }
 
     const writeCheck = await this.canWriteToDirectory(systemDir);
     if (!writeCheck.writable || !writeCheck.hasSpace) {
+      if (!fallbackToLocal) {
+        throw new Error(
+          `System directory for category ${category} is not writable and fallbackToLocal is false: ${writeCheck.reason || "unknown"}`,
+        );
+      }
       logger.warn(`System directory not writable, using local fallback`, {
         category,
         systemDir,
         reason: writeCheck.reason,
       });
-      return this.determineLocalFallback(sourceDir, category, localFallbackPrefix, createSubfolders);
+      return this.determineLocalFallback(
+        sourceDir,
+        category,
+        localFallbackPrefix,
+        createSubfolders,
+      );
     }
 
     return {
@@ -494,6 +543,7 @@ export class SystemOrganizeService {
           normalizedSourceDir,
           localFallbackPrefix,
           createSubfolders,
+          fallbackToLocal,
         );
 
         const targetDir = destResult.destination;
