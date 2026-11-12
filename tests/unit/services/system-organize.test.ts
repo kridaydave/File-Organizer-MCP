@@ -88,11 +88,11 @@ describe("SystemOrganizeService", () => {
       service = new SystemOrganizeService();
       const validatePathSpy = jest
         .spyOn((service as any).pathValidator, "validatePath")
-        .mockImplementation(async (dirPath: string) => {
-          if (dirPath.includes("Music")) {
+        .mockImplementation(async (dirPath: unknown) => {
+          if (typeof dirPath === "string" && dirPath.includes("Music")) {
             throw new Error("Path validation failed");
           }
-          return dirPath;
+          return dirPath as string;
         });
 
       const dirs = await service.getSystemDirectories();
