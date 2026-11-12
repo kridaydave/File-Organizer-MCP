@@ -5,7 +5,6 @@
 
 import fs from "fs/promises";
 import * as fsSync from "fs";
-import crypto from "crypto";
 import { logger } from "../../utils/logger.js";
 import type { CategoryName } from "../../types.js";
 import type { ContentCategoryResult } from "./content.js";
@@ -21,7 +20,7 @@ export class ContentAnalysisCache {
   private promises: Map<string, Promise<CategoryName>> = new Map();
   private results: Map<string, CategoryName> = new Map();
   private timestamps: Map<string, number> = new Map();
-  private fileStats: Map<string, { mtimeMs: number; size: number; hash?: string }> = new Map();
+  private fileStats: Map<string, { mtimeMs: number; size: number }> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(
@@ -90,39 +89,19 @@ export class ContentAnalysisCache {
     this.stopCleanupInterval();
   }
 
-  private async getFileHash(filePath: string): Promise<string | undefined> {
-    try {
-      const fileBuffer = await fs.readFile(filePath);
-      return crypto.createHash("sha256").update(fileBuffer).digest("hex");
-    } catch {
-      return undefined;
-    }
-  }
-
-  private getFileHashSync(filePath: string): string | undefined {
-    try {
-      const fileBuffer = fsSync.readFileSync(filePath);
-      return crypto.createHash("sha256").update(fileBuffer).digest("hex");
-    } catch {
-      return undefined;
-    }
-  }
-
-  private async getFileStats(filePath: string): Promise<{ mtimeMs: number; size: number; hash?: string } | undefined> {
+  private async getFileStats(filePath: string): Promise<{ mtimeMs: number; size: number } | undefined> {
     try {
       const stat = await fs.stat(filePath);
-      const hash = await this.getFileHash(filePath);
-      return { mtimeMs: stat.mtimeMs, size: stat.size, hash };
+      return { mtimeMs: stat.mtimeMs, size: stat.size };
     } catch {
       return undefined;
     }
   }
 
-  private getFileStatsSync(filePath: string): { mtimeMs: number; size: number; hash?: string } | undefined {
+  private getFileStatsSync(filePath: string): { mtimeMs: number; size: number } | undefined {
     try {
       const stat = fsSync.statSync(filePath);
-      const hash = this.getFileHashSync(filePath);
-      return { mtimeMs: stat.mtimeMs, size: stat.size, hash };
+      return { mtimeMs: stat.mtimeMs, size: stat.size };
     } catch {
       return undefined;
     }
@@ -136,12 +115,6 @@ export class ContentAnalysisCache {
     const currentStats = this.getFileStatsSync(filePath);
     if (!currentStats) {
       return true;
-    }
-    if (cachedStats.hash && currentStats.hash) {
-      if (cachedStats.hash !== currentStats.hash) {
-        return true;
-      }
-      return false;
     }
     if (
       currentStats.mtimeMs !== cachedStats.mtimeMs ||
@@ -160,12 +133,6 @@ export class ContentAnalysisCache {
     const currentStats = await this.getFileStats(filePath);
     if (!currentStats) {
       return true;
-    }
-    if (cachedStats.hash && currentStats.hash) {
-      if (cachedStats.hash !== currentStats.hash) {
-        return true;
-      }
-      return false;
     }
     if (
       currentStats.mtimeMs !== cachedStats.mtimeMs ||
