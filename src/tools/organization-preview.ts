@@ -111,20 +111,26 @@ export async function handlePreviewOrganization(
       effectiveConflictStrategy,
     );
 
+    let moves = plan.moves.map((m: OrganizationPlan["moves"][0]) => ({
+      source: m.source,
+      destination: m.destination,
+      category: m.category,
+      conflict: m.hasConflict,
+      conflict_resolution: m.conflictResolution,
+    }));
+
+    if (show_conflicts_only) {
+      moves = moves.filter((m: MoveItem) => m.conflict);
+    }
+
     const output = {
       summary: {
-        total_files: plan.moves.length,
+        total_files: files.length,
         categories_affected: plan.categoryCounts,
         estimated_duration_seconds: plan.estimatedDuration,
         warnings: plan.warnings,
       },
-      moves: plan.moves.map((m: OrganizationPlan["moves"][0]) => ({
-        source: m.source,
-        destination: m.destination,
-        category: m.category,
-        conflict: m.hasConflict,
-        conflict_resolution: m.conflictResolution,
-      })),
+      moves,
       conflicts: plan.conflicts,
       skipped_files: plan.skippedFiles.map(
         (f: { path: string; reason: string }) => ({
@@ -133,10 +139,6 @@ export async function handlePreviewOrganization(
         }),
       ),
     };
-
-    if (show_conflicts_only) {
-      output.moves = output.moves.filter((m: MoveItem) => m.conflict);
-    }
 
     if (response_format === "json") {
       return {
