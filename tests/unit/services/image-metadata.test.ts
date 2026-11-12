@@ -38,6 +38,7 @@ describe("ImageMetadataService", () => {
       cameraMake?: string;
       cameraModel?: string;
       orientation?: number;
+      exposureTime?: { numerator: number; denominator: number };
     } = {},
   ): Promise<string> {
     const filePath = path.join(testDir, fileName);

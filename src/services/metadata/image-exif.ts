@@ -144,9 +144,12 @@ export async function parseJPEGMetadata(
     metadata.software = tags.Software as string | undefined;
 
     if (typeof tags.ExposureTime === "number") {
-      const shutterSpeed = formatShutterSpeed(tags.ExposureTime);
-      if (shutterSpeed !== undefined) {
-        metadata.shutterSpeed = shutterSpeed;
+      const exposureTime = tags.ExposureTime;
+      if (Number.isFinite(exposureTime) && exposureTime > 0) {
+        const shutterSpeed = formatShutterSpeed(exposureTime);
+        if (shutterSpeed !== undefined) {
+          metadata.shutterSpeed = shutterSpeed;
+        }
       }
     }
     if (typeof tags.Flash === "number") {
