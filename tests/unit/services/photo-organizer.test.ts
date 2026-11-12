@@ -1,5 +1,7 @@
 import { jest } from "@jest/globals";
 import path from "path";
+import os from "os";
+import fs from "fs/promises";
 import type { FileHandle } from "fs/promises";
 import {
   withMockedLogger,
@@ -108,9 +110,15 @@ const targetDir = "/organized-target";
 
 describe("PhotoOrganizerService", () => {
   let service: PhotoOrganizerService;
+  let defaultTmpFile: string;
+  let defaultTmpDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+
+    defaultTmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "photo-org-def-"));
+    defaultTmpFile = path.join(defaultTmpDir, "photo.jpg");
+    await fs.writeFile(defaultTmpFile, Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
 
     mockValidatePath.mockImplementation((p: string) => p);
     mockReaddir.mockResolvedValue([{ name: "photo.jpg", isFile: () => true }]);
@@ -132,33 +140,18 @@ describe("PhotoOrganizerService", () => {
     mockUtimes.mockResolvedValue(undefined);
     mockReadFile.mockResolvedValue(Buffer.from([0xff, 0xd8]));
     mockPipeline.mockResolvedValue(undefined);
-    const createMockFileHandle = (): FileHandle => {
-      const mockHandle: Partial<FileHandle> = {
-        fd: 1,
-        read: mockRead,
-        close: jest.fn(async () => undefined),
-        readFile: jest.fn(async () => Buffer.from([])),
-        write: jest.fn(async () => ({ bytesWritten: 0, buffer: Buffer.from([]) })),
-        writeFile: jest.fn(async () => undefined),
-        stat: jest.fn(async () => ({}) as any),
-        truncate: jest.fn(async () => undefined),
-        sync: jest.fn(async () => undefined),
-        datasync: jest.fn(async () => undefined),
-        chown: jest.fn(async () => undefined),
-        chmod: jest.fn(async () => undefined),
-        utimes: jest.fn(async () => undefined),
-        readv: jest.fn(async () => ({ bytesRead: 0, buffers: [] })),
-        writev: jest.fn(async () => ({ bytesWritten: 0, buffers: [] })),
-        appendFile: jest.fn(async () => undefined),
-        createReadStream: jest.fn(() => ({}) as any),
-        createWriteStream: jest.fn(() => ({}) as any),
-      };
-      return mockHandle as FileHandle;
-    };
-    mockOpen.mockResolvedValue(createMockFileHandle());
+    mockOpen.mockImplementation(async () => {
+      return await fs.open(defaultTmpFile, "r");
+    });
     mockRead.mockResolvedValue({ bytesRead: 0 });
 
     service = new PhotoOrganizerService();
+  });
+
+  afterEach(async () => {
+    if (defaultTmpDir) {
+      await fs.rm(defaultTmpDir, { recursive: true, force: true });
+    }
   });
 
   describe("getDateFolderName", () => {
@@ -415,50 +408,30 @@ describe("PhotoOrganizerService", () => {
         mockReaddir.mockResolvedValue([
           { name: "photo.png", isFile: () => true },
         ]);
-        mockOpen.mockImplementation(async () => {
-          const mockHandle: Partial<FileHandle> = {
-            fd: 1,
-            read: async (buf: Buffer, offset?: number, length?: number, position?: number) => {
-              if (buf.length > 1) {
-                buf[0] = 0x25;
-                buf[1] = 0x88;
-              }
-              return { bytesRead: 2, buffer: buf };
-            },
-            close: jest.fn(async () => undefined),
-            readFile: jest.fn(async () => Buffer.from([])),
-            write: jest.fn(async () => ({ bytesWritten: 0, buffer: Buffer.from([]) })),
-            writeFile: jest.fn(async () => undefined),
-            stat: jest.fn(async () => ({}) as any),
-            truncate: jest.fn(async () => undefined),
-            sync: jest.fn(async () => undefined),
-            datasync: jest.fn(async () => undefined),
-            chown: jest.fn(async () => undefined),
-            chmod: jest.fn(async () => undefined),
-            utimes: jest.fn(async () => undefined),
-            readv: jest.fn(async () => ({ bytesRead: 0, buffers: [] })),
-            writev: jest.fn(async () => ({ bytesWritten: 0, buffers: [] })),
-            appendFile: jest.fn(async () => undefined),
-            createReadStream: jest.fn(() => ({}) as any),
-            createWriteStream: jest.fn(() => ({}) as any),
-          };
-          return mockHandle as FileHandle;
-        });
+        const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "photo-org-"));
+        const tmpFile = path.join(tmpDir, "photo.png");
+        const buf = Buffer.alloc(4);
+        buf[0] = 0x25;
+        buf[1] = 0x88;
+        await fs.writeFile(tmpFile, buf);
+        try {
+          mockOpen.mockImplementation(async () => {
+            return await fs.open(tmpFile, "r");
+          });
 
-        // copyWithoutGPS will read via mocked core/io/readFile returning JPEG header,
-        // but stripGPSFromBuffer will see it's not a JPEG? Let us look - our mocked readFile
-        // returns [0xff, 0xd8] which is JPEG. But the actual file is PNG. The bug says
-        // "organize with stripGPS:true on non-JPEG (PNG)..." 
-        const result = await service.organize({
-          sourceDir,
-          targetDir,
-          dateFormat: "YYYY/MM/DD",
-          dryRun: false,
-          stripGPS: true,
-          copyInsteadOfMove: true,
-        });
+          const result = await service.organize({
+            sourceDir,
+            targetDir,
+            dateFormat: "YYYY/MM/DD",
+            dryRun: false,
+            stripGPS: true,
+            copyInsteadOfMove: true,
+          });
 
-        expect(result.strippedGPSFiles).toBe(0);
+          expect(result.strippedGPSFiles).toBe(0);
+        } finally {
+          await fs.rm(tmpDir, { recursive: true, force: true });
+        }
       }),
     );
   });
