@@ -143,7 +143,7 @@ export class SystemOrganizeService {
         });
         validatedDirs[key as keyof SystemDirs] = validated;
       } catch {
-        validatedDirs[key as keyof SystemDirs] = dirPath;
+        validatedDirs[key as keyof SystemDirs] = "";
       }
     }
 
