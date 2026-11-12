@@ -105,6 +105,7 @@ export async function handlePreviewOrganization(
       conflict_strategy ?? ctx.config.conflictStrategy ?? "rename";
 
     const files = await scanner.getAllFiles(validatedPath, false);
+    const totalFilesScanned = files.length;
     const plan = await organizer.generateOrganizationPlan(
       validatedPath,
       files,
@@ -125,7 +126,7 @@ export async function handlePreviewOrganization(
 
     const output = {
       summary: {
-        total_files: files.length,
+        total_files: totalFilesScanned,
         categories_affected: plan.categoryCounts,
         estimated_duration_seconds: plan.estimatedDuration,
         warnings: plan.warnings,
