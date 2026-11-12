@@ -450,6 +450,29 @@ describe("File Signatures Database", () => {
       expect(result?.type).toBe("MP3_RAW");
     });
 
+    it("should detect QuickTime MOV with non-standard ftyp size as MOV", () => {
+      const movBuffer = Buffer.concat([
+        Buffer.from([0x00, 0x00, 0x00, 0x18]), // non-standard size
+        Buffer.from("ftyp"),
+        Buffer.from("qt  "), // QuickTime brand
+        Buffer.from([0x00, 0x00, 0x00, 0x00]),
+      ]);
+      const result = matchSignature(movBuffer);
+      expect(result?.type).toBe("MOV");
+    });
+
+    it("should still detect standard MP4 as MP4", () => {
+      const mp4Buffer = Buffer.concat([
+        Buffer.from([0x00, 0x00, 0x00, 0x18]),
+        Buffer.from("ftyp"),
+        Buffer.from("mp42"),
+        Buffer.from([0x00, 0x00, 0x00, 0x00]),
+        Buffer.from("isom"),
+      ]);
+      const result = matchSignature(mp4Buffer);
+      expect(result?.type).toBe("MP4");
+    });
+
     it("should detect FLAC files", () => {
       const flacBuffer = Buffer.from([0x66, 0x4c, 0x61, 0x43]); // fLaC
       const result = matchSignature(flacBuffer);

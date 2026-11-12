@@ -457,7 +457,13 @@ const MP4_SIGNATURE: FileSignature = {
   validator: (buffer: Buffer) => {
     if (buffer.length < 12) return false;
     // Check for ftyp at offset 4
-    return buffer.slice(4, 8).toString() === "ftyp";
+    if (buffer.slice(4, 8).toString() !== "ftyp") return false;
+    // QuickTime files use brand 'qt  ' and should be detected as MOV
+    const majorBrand = buffer.slice(8, 12).toString();
+    if (majorBrand === "qt  ") {
+      return false;
+    }
+    return true;
   },
 };
 
@@ -484,6 +490,9 @@ const MOV_SIGNATURE: FileSignature = {
     Buffer.from([
       0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20,
     ]), // ftyp qt
+    Buffer.from([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20,
+    ]),
     Buffer.from([
       0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20,
     ]),
