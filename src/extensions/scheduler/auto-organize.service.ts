@@ -11,6 +11,7 @@ import cron, { type ScheduledTask } from "node-cron";
 import fs, { existsSync } from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
+import { resolve } from "path";
 import { FileScannerService } from "../../core/scan/scanner.js";
 import { OrganizerService } from "../../core/organize/organizer.js";
 import {
@@ -165,7 +166,7 @@ export class AutoOrganizeService {
     for (const watch of watchList) {
       if (!watch.rules.auto_organize) continue;
 
-      const resolvedDirectory = path.resolve(watch.directory);
+      const resolvedDirectory = resolve(watch.directory);
 
       if (seenDirectories.has(resolvedDirectory)) {
         const existingKey = seenDirectories.get(resolvedDirectory)!;
