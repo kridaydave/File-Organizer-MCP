@@ -119,7 +119,9 @@ async function run(): Promise<void> {
       }, 200);
     });
   } catch (error) {
-    logger.debug("Failed to watch config file for changes:", error);
+    logger.debug("Failed to watch config file for changes:", {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   // node-cron holds the event loop; this is just a safety net.
