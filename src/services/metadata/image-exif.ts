@@ -10,20 +10,30 @@ import type { ImageMetadata, ImageMetadataOptions } from "./types.js";
 /** Format a duration of seconds as `N"` or `1/N`. */
 function formatShutterSpeed(exposureTimeSeconds: number): string | undefined {
   if (
+    typeof exposureTimeSeconds !== "number" ||
+    Number.isNaN(exposureTimeSeconds) ||
     !Number.isFinite(exposureTimeSeconds) ||
     exposureTimeSeconds <= 0
   ) {
     return undefined;
   }
+  // Avoid producing extremely large values from corrupted data
+  if (exposureTimeSeconds > 3600) {
+    return undefined;
+  }
   if (exposureTimeSeconds >= 1) {
-    return `${Math.round(exposureTimeSeconds)}"`;
+    const rounded = Math.round(exposureTimeSeconds);
+    if (rounded <= 0 || !Number.isFinite(rounded)) {
+      return undefined;
+    }
+    return `${rounded}"`;
   }
   const denominator = 1 / exposureTimeSeconds;
   if (!Number.isFinite(denominator)) {
     return undefined;
   }
   const rounded = Math.round(denominator);
-  if (rounded <= 0) {
+  if (rounded <= 0 || !Number.isFinite(rounded)) {
     return undefined;
   }
   return `1/${rounded}`;
@@ -145,9 +155,14 @@ export async function parseJPEGMetadata(
 
     if (typeof tags.ExposureTime === "number") {
       const exposureTime = tags.ExposureTime;
-      if (Number.isFinite(exposureTime) && exposureTime > 0) {
+      if (
+        Number.isFinite(exposureTime) &&
+        !Number.isNaN(exposureTime) &&
+        exposureTime > 0 &&
+        exposureTime <= 3600
+      ) {
         const shutterSpeed = formatShutterSpeed(exposureTime);
-        if (shutterSpeed !== undefined) {
+        if (shutterSpeed !== undefined && shutterSpeed !== "1/Infinity" && !shutterSpeed.includes("Infinity") && !shutterSpeed.includes("NaN")) {
           metadata.shutterSpeed = shutterSpeed;
         }
       }

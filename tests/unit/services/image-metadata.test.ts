@@ -124,16 +124,24 @@ describe("ImageMetadataService", () => {
       entryInfos.push({ tag: 0x0112, type: 3, count: 1, value: options.orientation }); // Orientation
     }
     if (options.exposureTime !== undefined) {
-      // ExposureTime is tag 0x829A, type 5 (RATIONAL), count 1
-      entryInfos.push({
-        tag: 0x829a,
-        type: 5,
-        count: 1,
-        data: createRational(
-          options.exposureTime.numerator ?? 0,
-          options.exposureTime.denominator ?? 1,
-        ),
-      });
+      const num = options.exposureTime.numerator ?? 0;
+      const den = options.exposureTime.denominator ?? 1;
+      // Use signed rational for negative values, unsigned otherwise
+      if (num < 0) {
+        entryInfos.push({
+          tag: 0x829a,
+          type: 10, // SRATIONAL
+          count: 1,
+          data: createSignedRational(num, den),
+        });
+      } else {
+        entryInfos.push({
+          tag: 0x829a,
+          type: 5, // RATIONAL
+          count: 1,
+          data: createRational(num, den),
+        });
+      }
     }
 
     const numEntries = entryInfos.length + (options.gpsData ? 1 : 0);
@@ -229,8 +237,22 @@ describe("ImageMetadataService", () => {
 
   function createRational(numerator: number, denominator: number): Buffer {
     const buf = Buffer.alloc(8);
-    buf.writeUInt32LE(numerator, 0);
-    buf.writeUInt32LE(denominator, 4);
+    // Write as raw little-endian bytes to allow invalid values for robustness tests
+    buf[0] = numerator & 0xff;
+    buf[1] = (numerator >> 8) & 0xff;
+    buf[2] = (numerator >> 16) & 0xff;
+    buf[3] = (numerator >> 24) & 0xff;
+    buf[4] = denominator & 0xff;
+    buf[5] = (denominator >> 8) & 0xff;
+    buf[6] = (denominator >> 16) & 0xff;
+    buf[7] = (denominator >> 24) & 0xff;
+    return buf;
+  }
+
+  function createSignedRational(numerator: number, denominator: number): Buffer {
+    const buf = Buffer.alloc(8);
+    buf.writeInt32LE(numerator, 0);
+    buf.writeInt32LE(denominator, 4);
     return buf;
   }
 
