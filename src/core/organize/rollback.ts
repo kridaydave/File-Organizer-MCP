@@ -91,7 +91,21 @@ export class RollbackService {
     manifest.signature = signature;
 
     const filePath = path.join(this.storageDir, `${id}.json`);
-    await fs.writeFile(filePath, JSON.stringify(manifest, null, 2));
+    const tempPath = path.join(
+      this.storageDir,
+      `${id}.json.tmp-${randomUUID()}`,
+    );
+    try {
+      await fs.writeFile(tempPath, JSON.stringify(manifest, null, 2));
+      await fs.rename(tempPath, filePath);
+    } catch (error) {
+      try {
+        await fs.unlink(tempPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
 
     logger.info(`Created rollback manifest: ${id} (${actions.length} actions)`);
     return id;

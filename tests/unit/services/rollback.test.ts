@@ -92,4 +92,33 @@ describe('Rollback Service', () => {
             await fs.rm(externalDir, { recursive: true, force: true }).catch(() => { });
         }
     });
+
+    it('writes manifest atomically leaving no truncated JSON on write failure', async () => {
+        const src = path.join(testDir, 'source2.txt');
+        const dest = path.join(testDir, 'dest2.txt');
+        await fs.writeFile(src, 'content');
+        await fs.rename(src, dest);
+
+        const writeFileSpy = jest.spyOn(fs, 'writeFile').mockRejectedValueOnce(new Error('ENOSPC'));
+
+        await expect(
+            rollbackService.createManifest('Atomic test', [
+                {
+                    type: 'move',
+                    originalPath: src,
+                    currentPath: dest,
+                    timestamp: Date.now(),
+                },
+            ]),
+        ).rejects.toThrow();
+
+        writeFileSpy.mockRestore();
+
+        const files = await fs.readdir(testDir);
+        const manifestFiles = files.filter((f) => f.endsWith('.json'));
+        expect(manifestFiles).toHaveLength(0);
+
+        const tempFiles = files.filter((f) => f.includes('.tmp'));
+        expect(tempFiles).toHaveLength(0);
+    });
 });
