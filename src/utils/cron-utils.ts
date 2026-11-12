@@ -256,7 +256,6 @@ export function getPreviousRunTime(
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    prev.setUTCMinutes(prev.getUTCMinutes() - 1);
     return prev;
   }
 

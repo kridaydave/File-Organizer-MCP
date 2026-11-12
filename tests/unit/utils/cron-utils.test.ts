@@ -163,13 +163,13 @@ describe('cron-utils', () => {
       const baseTime = new Date('2026-02-08T10:30:45.123Z');
       const prevRun = getPreviousRunTime('* * * * *', baseTime);
 
-      // Should be previous minute with seconds/ms reset
+      // Should be current minute with seconds/ms reset
       expect(prevRun.getUTCHours()).toBe(10);
-      expect(prevRun.getUTCMinutes()).toBe(29);
+      expect(prevRun.getUTCMinutes()).toBe(30);
       expect(prevRun.getUTCSeconds()).toBe(0);
       expect(prevRun.getUTCMilliseconds()).toBe(0);
       expect(prevRun.getTime()).toBe(
-        new Date('2026-02-08T10:29:00.000Z').getTime(),
+        new Date('2026-02-08T10:30:00.000Z').getTime(),
       );
     });
   });
