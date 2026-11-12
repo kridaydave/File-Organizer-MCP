@@ -447,23 +447,26 @@ function escapeRegExp(string: string) {
 }
 
 function toCamelCase(str: string) {
-  return str
-    .replace(/[_-]+([a-zA-Z0-9])/g, (_, __, letter) => letter.toUpperCase())
-    .replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) => {
-      return index === 0 ? word.toLowerCase() : word.toUpperCase();
-    })
-    .replace(/[_-]/g, "")
-    .replace(/\s+/g, "");
+  // Handle snake_case, kebab-case, spaces
+  const parts = str.split(/[_\-\s]+/).filter(Boolean);
+  if (parts.length === 0) return str;
+  const first = parts[0].toLowerCase();
+  const rest = parts.slice(1).map((part) => {
+    if (!part) return part;
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  });
+  return first + rest.join("");
 }
 
 function toPascalCase(str: string) {
-  return str
-    .replace(/[_-]+([a-zA-Z0-9])/g, (_, __, letter) => letter.toUpperCase())
-    .replace(/(?:^\w|[A-Z]|\b\w)/g, (word) => {
-      return word.toUpperCase();
-    })
-    .replace(/[_-]/g, "")
-    .replace(/\s+/g, "");
+  // Handle snake_case, kebab-case, spaces
+  const parts = str.split(/[_\-\s]+/).filter(Boolean);
+  if (parts.length === 0) return str;
+  const result = parts.map((part) => {
+    if (!part) return part;
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  });
+  return result.join("");
 }
 
 function toSnakeCase(str: string) {
