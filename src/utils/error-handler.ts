@@ -46,7 +46,7 @@ export function sanitizeErrorMessage(error: Error | string): string {
 
   // Replace Unix absolute paths (e.g., /home/user, /var/log)
   sanitized = sanitized.replace(
-    /(?:^|[\s"'(\[{<:=`])(\/(?:[^\s"'()\[\]{}<>\0\r\n`=]+\/)*[^\s"'()\[\]{}<>\0\r\n`=]+)/g,
+    /(?:^|[\s"'(\[{<:=`])(\/(?:[^:\s"'()\[\]{}<>\0\r\n`=]+(?:\s+[^:\s"'()\[\]{}<>\0\r\n`=]+)*)+)/g,
     (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
   );
 
