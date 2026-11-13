@@ -168,6 +168,18 @@ export function getNextRunTime(
   next.setSeconds(0);
   next.setMilliseconds(0);
 
+  // Handle every-minute pattern: "* * * * *"
+  if (
+    components.minute === "*" &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    next.setUTCMinutes(next.getUTCMinutes() + 1);
+    return next;
+  }
+
   // Handle step values (e.g., */30 for every 30 minutes)
   if (isStepped(components.minute)) {
     const step = stepOf(components.minute);
@@ -294,6 +306,17 @@ export function getPreviousRunTime(
   const prev = new Date(fromDate.getTime());
   prev.setSeconds(0);
   prev.setMilliseconds(0);
+
+  // Handle every-minute pattern: "* * * * *"
+  if (
+    components.minute === "*" &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    return prev;
+  }
 
   // Handle step values (e.g., */30 for every 30 minutes)
   if (isStepped(components.minute)) {
