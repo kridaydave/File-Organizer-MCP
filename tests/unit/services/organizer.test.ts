@@ -283,6 +283,42 @@ describe("OrganizerService", () => {
       if (!archiveAction) throw new Error("Expected exactly one organize action");
       expect(path.basename(archiveAction.to)).toBe("archive_001_1.zip");
     });
+
+    it("should show skip conflicts in dry-run matching execution", async () => {
+      const srcFile = path.join(testDir, "pic.jpg");
+      await fs.writeFile(srcFile, "image content");
+
+      const imagesDir = path.join(testDir, "Images");
+      await fs.mkdir(imagesDir, { recursive: true });
+      await fs.writeFile(path.join(imagesDir, "pic.jpg"), "existing");
+
+      const files: FileWithSize[] = [
+        {
+          name: "pic.jpg",
+          path: srcFile,
+          size: 100,
+          modified: new Date(),
+        },
+      ];
+
+      const dryRunResult = await organizer.organize(testDir, files, {
+        dryRun: true,
+        conflictStrategy: "skip",
+      });
+
+      expect(dryRunResult.actions).toHaveLength(0);
+      expect(dryRunResult.skippedFiles?.length).toBe(1);
+      expect(dryRunResult.skippedCount).toBe(1);
+
+      const execResult = await organizer.organize(testDir, files, {
+        dryRun: false,
+        conflictStrategy: "skip",
+      });
+
+      expect(execResult.actions).toHaveLength(0);
+      expect(execResult.skippedFiles?.length).toBe(1);
+      expect(execResult.skippedCount).toBe(1);
+    });
   });
 });
 
