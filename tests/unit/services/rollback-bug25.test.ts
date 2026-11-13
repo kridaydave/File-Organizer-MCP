@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import fs from 'fs/promises';
 import path from 'path';
-import os from 'os';
 import { RollbackService } from '../../../src/core/organize/rollback.js';
 
 describe('Rollback BUG-25', () => {
@@ -9,7 +8,10 @@ describe('Rollback BUG-25', () => {
     let testDir: string;
 
     beforeEach(async () => {
-        testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'rollback-bug25-'));
+        // Rollback gates undo on isPathAllowed, which never allows os.tmpdir();
+        // keep the fixture inside the project like rollback.test.ts does
+        testDir = path.join(process.cwd(), `test-rollback-bug25-${Date.now()}`);
+        await fs.mkdir(testDir, { recursive: true });
         rollbackService = new RollbackService(testDir);
     });
 
