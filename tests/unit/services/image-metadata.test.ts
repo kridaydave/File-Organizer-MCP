@@ -437,6 +437,21 @@ describe("ImageMetadataService", () => {
       expect(results).toHaveLength(2);
       // One should have data, one should be empty/error
     });
+
+    it("should reject concurrency of 0", async () => {
+      const file = await createMockJPEG("test.jpg", {});
+      await expect(service.extractBatch([file], { concurrency: 0 })).rejects.toThrow();
+    });
+
+    it("should reject negative concurrency", async () => {
+      const file = await createMockJPEG("test2.jpg", {});
+      await expect(service.extractBatch([file], { concurrency: -1 })).rejects.toThrow();
+    });
+
+    it("should reject NaN concurrency", async () => {
+      const file = await createMockJPEG("test3.jpg", {});
+      await expect(service.extractBatch([file], { concurrency: NaN })).rejects.toThrow();
+    });
   });
 
   // ==================== PRIVACY TESTS ====================
