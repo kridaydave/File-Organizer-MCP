@@ -69,3 +69,13 @@ describe('Category Security Tests', () => {
         expect(isExecutableDisguisedAsDocument('PE', 'fake.jpg')).toBe(true);
     });
 });
+
+    it('should flag powershell and script extensions as executable', async () => {
+        const { isExecutableExtension } = await import('../../src/core/categorize/security.js');
+        expect(isExecutableExtension('.ps1')).toBe(true);
+        expect(isExecutableExtension('.PS1')).toBe(true);
+        expect(isExecutableExtension('.py')).toBe(true);
+        expect(isExecutableExtension('.pl')).toBe(true);
+        expect(isExecutableExtension('.rb')).toBe(true);
+        expect(isExecutableExtension('.js')).toBe(true);
+    });

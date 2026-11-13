@@ -70,6 +70,23 @@ export function isExecutableExtension(extension: string): boolean {
     ".com",
     ".scr",
     ".pif",
+    ".ps1",
+    ".psm1",
+    ".psd1",
+    ".py",
+    ".pyw",
+    ".pl",
+    ".pm",
+    ".rb",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".vbs",
+    ".vbe",
+    ".jse",
+    ".wsf",
+    ".wsh",
+    ".hta",
   ];
   return exeExtensions.includes(extension.toLowerCase());
 }
