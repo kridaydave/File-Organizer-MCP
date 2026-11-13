@@ -576,6 +576,29 @@ describe('v5 Critical Regressions Gate', () => {
       expect(entries).not.toContain('rename-me.txt');
       expect(await fs.readFile(upper, 'utf8')).toBe('same file');
     });
+
+    it('overwrites a distinct case-colliding destination when overwrite is true', async () => {
+      const probe = path.join(tempDir, 'case-probe-ovr.txt');
+      await fs.writeFile(probe, 'x');
+      const isCaseSensitive = await fs
+        .lstat(path.join(tempDir, 'CASE-PROBE-OVR.txt'))
+        .then(
+          () => false,
+          (err: NodeJS.ErrnoException) => err.code === 'ENOENT',
+        );
+      if (!isCaseSensitive) return;
+
+      const lower = path.join(tempDir, 'src.txt');
+      const upper = path.join(tempDir, 'SRC.txt');
+      await fs.writeFile(lower, 'new content');
+      await fs.writeFile(upper, 'old content');
+
+      const res = await safeAtomicMove(lower, upper, { overwrite: true });
+      expect(res.success).toBe(true);
+      expect(await fs.readFile(upper, 'utf8')).toBe('new content');
+      // source should be moved
+      await expect(fs.access(lower)).rejects.toThrow();
+    });
   });
 
   describe('18. Rollback Manifest ID Sync Across Tools', () => {
