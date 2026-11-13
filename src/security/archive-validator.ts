@@ -208,12 +208,29 @@ export function validateArchiveEntries(
     });
   }
 
-  if (
-    typeof archiveCompressedSize === "number" &&
-    archiveCompressedSize > 0 &&
-    totalUncompressedSize / archiveCompressedSize > maxRatio
-  ) {
-    const errorMsg = `Decompression ratio ${(totalUncompressedSize / archiveCompressedSize).toFixed(1)} exceeds safety limit of ${maxRatio}x`;
+  let effectiveCompressedSize = archiveCompressedSize;
+  if (typeof effectiveCompressedSize !== "number" || effectiveCompressedSize <= 0) {
+    let sumCompressed = 0;
+    let hasCompressed = false;
+    for (const entry of entries) {
+      const c =
+        (entry as any).compressedSize ??
+        (entry as any).compressed ??
+        (entry as any).sizeCompressed;
+      if (typeof c === "number" && c > 0) {
+        sumCompressed += c;
+        hasCompressed = true;
+      }
+    }
+    if (hasCompressed && sumCompressed > 0) {
+      effectiveCompressedSize = sumCompressed;
+    } else {
+      effectiveCompressedSize = 1;
+    }
+  }
+
+  if (totalUncompressedSize / effectiveCompressedSize > maxRatio) {
+    const errorMsg = `Decompression ratio ${(totalUncompressedSize / effectiveCompressedSize).toFixed(1)} exceeds safety limit of ${maxRatio}x`;
     invalidEntries.push({
       valid: false,
       entryName: "",
