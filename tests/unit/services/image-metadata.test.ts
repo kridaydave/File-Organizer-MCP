@@ -353,6 +353,9 @@ describe("ImageMetadataService", () => {
 
       // GPS should not be extracted by default
       expect(metadata.gps).toBeUndefined();
+      expect(metadata.hasGPS).toBe(false);
+      expect(metadata.latitude).toBeUndefined();
+      expect(metadata.longitude).toBeUndefined();
     });
 
     it("should handle images without GPS", async () => {
