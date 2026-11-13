@@ -8,11 +8,35 @@ import { findEXIFSegment } from "./image-privacy.js";
 import type { ImageMetadata, ImageMetadataOptions } from "./types.js";
 
 /** Format a duration of seconds as `N"` or `1/N`. */
-function formatShutterSpeed(exposureTimeSeconds: number): string {
-  if (exposureTimeSeconds >= 1) {
-    return `${Math.round(exposureTimeSeconds)}"`;
+function formatShutterSpeed(exposureTimeSeconds: number): string | undefined {
+  if (
+    typeof exposureTimeSeconds !== "number" ||
+    Number.isNaN(exposureTimeSeconds) ||
+    !Number.isFinite(exposureTimeSeconds) ||
+    exposureTimeSeconds <= 0
+  ) {
+    return undefined;
   }
-  return `1/${Math.round(1 / exposureTimeSeconds)}`;
+  // Avoid producing extremely large values from corrupted data
+  if (exposureTimeSeconds > 3600) {
+    return undefined;
+  }
+  if (exposureTimeSeconds >= 1) {
+    const rounded = Math.round(exposureTimeSeconds);
+    if (rounded <= 0 || !Number.isFinite(rounded)) {
+      return undefined;
+    }
+    return `${rounded}"`;
+  }
+  const denominator = 1 / exposureTimeSeconds;
+  if (!Number.isFinite(denominator)) {
+    return undefined;
+  }
+  const rounded = Math.round(denominator);
+  if (rounded <= 0 || !Number.isFinite(rounded)) {
+    return undefined;
+  }
+  return `1/${rounded}`;
 }
 
 /** Scan JPEG SOF0/SOF2 markers for image dimensions. */
@@ -130,7 +154,18 @@ export async function parseJPEGMetadata(
     metadata.software = tags.Software as string | undefined;
 
     if (typeof tags.ExposureTime === "number") {
-      metadata.shutterSpeed = formatShutterSpeed(tags.ExposureTime);
+      const exposureTime = tags.ExposureTime;
+      if (
+        Number.isFinite(exposureTime) &&
+        !Number.isNaN(exposureTime) &&
+        exposureTime > 0 &&
+        exposureTime <= 3600
+      ) {
+        const shutterSpeed = formatShutterSpeed(exposureTime);
+        if (shutterSpeed !== undefined && shutterSpeed !== "1/Infinity" && !shutterSpeed.includes("Infinity") && !shutterSpeed.includes("NaN")) {
+          metadata.shutterSpeed = shutterSpeed;
+        }
+      }
     }
     if (typeof tags.Flash === "number") {
       metadata.flash = (tags.Flash & 0x01) !== 0;

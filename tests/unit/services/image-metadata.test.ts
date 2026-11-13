@@ -38,6 +38,7 @@ describe("ImageMetadataService", () => {
       cameraMake?: string;
       cameraModel?: string;
       orientation?: number;
+      exposureTime?: { numerator: number; denominator: number };
     } = {},
   ): Promise<string> {
     const filePath = path.join(testDir, fileName);
@@ -121,6 +122,26 @@ describe("ImageMetadataService", () => {
     }
     if (options.orientation) {
       entryInfos.push({ tag: 0x0112, type: 3, count: 1, value: options.orientation }); // Orientation
+    }
+    if (options.exposureTime !== undefined) {
+      const num = options.exposureTime.numerator ?? 0;
+      const den = options.exposureTime.denominator ?? 1;
+      // Use signed rational for negative values, unsigned otherwise
+      if (num < 0) {
+        entryInfos.push({
+          tag: 0x829a,
+          type: 10, // SRATIONAL
+          count: 1,
+          data: createSignedRational(num, den),
+        });
+      } else {
+        entryInfos.push({
+          tag: 0x829a,
+          type: 5, // RATIONAL
+          count: 1,
+          data: createRational(num, den),
+        });
+      }
     }
 
     const numEntries = entryInfos.length + (options.gpsData ? 1 : 0);
@@ -216,8 +237,22 @@ describe("ImageMetadataService", () => {
 
   function createRational(numerator: number, denominator: number): Buffer {
     const buf = Buffer.alloc(8);
-    buf.writeUInt32LE(numerator, 0);
-    buf.writeUInt32LE(denominator, 4);
+    // Write as raw little-endian bytes to allow invalid values for robustness tests
+    buf[0] = numerator & 0xff;
+    buf[1] = (numerator >> 8) & 0xff;
+    buf[2] = (numerator >> 16) & 0xff;
+    buf[3] = (numerator >> 24) & 0xff;
+    buf[4] = denominator & 0xff;
+    buf[5] = (denominator >> 8) & 0xff;
+    buf[6] = (denominator >> 16) & 0xff;
+    buf[7] = (denominator >> 24) & 0xff;
+    return buf;
+  }
+
+  function createSignedRational(numerator: number, denominator: number): Buffer {
+    const buf = Buffer.alloc(8);
+    buf.writeInt32LE(numerator, 0);
+    buf.writeInt32LE(denominator, 4);
     return buf;
   }
 
@@ -616,6 +651,28 @@ describe("ImageMetadataService", () => {
       const metadata = await service.extract(filePath);
 
       expect(metadata.format).toBe("JPEG");
+    });
+
+    it("should not produce 1/Infinity for zero or invalid exposure time (BUG-86)", async () => {
+      const zeroFile = await createMockJPEG("zero-exposure.jpg", {
+        exposureTime: { numerator: 0, denominator: 1 },
+      });
+      const zeroMeta = await service.extract(zeroFile);
+      expect(zeroMeta.shutterSpeed).toBeUndefined();
+      expect(zeroMeta.shutterSpeed).not.toBe("1/Infinity");
+
+      const negativeFile = await createMockJPEG("neg-exposure.jpg", {
+        exposureTime: { numerator: -1, denominator: 1 },
+      });
+      const negativeMeta = await service.extract(negativeFile);
+      expect(negativeMeta.shutterSpeed).toBeUndefined();
+
+      const invalidFile = await createMockJPEG("invalid-exposure.jpg", {
+        exposureTime: { numerator: 1, denominator: 0 },
+      });
+      const invalidMeta = await service.extract(invalidFile);
+      expect(invalidMeta.shutterSpeed).toBeUndefined();
+      expect(invalidMeta.shutterSpeed).not.toBe("1/Infinity");
     });
 
     it("should handle TIFF images", async () => {
