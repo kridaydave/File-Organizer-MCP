@@ -28,6 +28,13 @@ export interface ToolDefinition {
     openWorldHint?: boolean;
   };
   title?: string;
+  outputSchema?: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required?: string[];
+    additionalProperties?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 // ==================== Error Types ====================
