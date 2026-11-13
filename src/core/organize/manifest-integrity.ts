@@ -139,6 +139,10 @@ export class ManifestIntegrityService {
       return { valid: false, error: "Missing manifest signature" };
     }
 
+    if (typeof manifest.signature !== "string") {
+      return { valid: false, error: "Missing manifest signature" };
+    }
+
     const manifestWithoutSignature: Omit<RollbackManifest, "signature"> = {
       id: manifest.id,
       timestamp: manifest.timestamp,

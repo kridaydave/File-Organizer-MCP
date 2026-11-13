@@ -157,6 +157,16 @@ describe('ManifestIntegrityService', () => {
             });
         });
 
+        it('should return invalid for a numeric manifest signature', () => {
+            const service = new ManifestIntegrityService();
+            const manifest = buildValidManifest(service) as { signature: unknown };
+            manifest.signature = 123;
+            expect(service.verifyManifest(manifest as never)).toEqual({
+                valid: false,
+                error: 'Missing manifest signature',
+            });
+        });
+
         it('should return valid for a correctly constructed manifest', () => {
             const service = new ManifestIntegrityService();
             const manifest = buildValidManifest(service);
