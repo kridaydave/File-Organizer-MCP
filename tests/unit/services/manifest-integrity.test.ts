@@ -162,5 +162,12 @@ describe('ManifestIntegrityService', () => {
             const manifest = buildValidManifest(service);
             expect(service.verifyManifest(manifest)).toEqual({ valid: true });
         });
+
+        it('should verify manifests across separate service instances (cross-process stability)', () => {
+            const service1 = new ManifestIntegrityService();
+            const manifest = buildValidManifest(service1);
+            const service2 = new ManifestIntegrityService();
+            expect(service2.verifyManifest(manifest)).toEqual({ valid: true });
+        });
     });
 });
