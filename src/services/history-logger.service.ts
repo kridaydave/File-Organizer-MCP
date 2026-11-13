@@ -159,10 +159,13 @@ export class HistoryLoggerService {
       const stat = await fs.stat(this.lockFilePath).catch(() => null);
 
       if (stat) {
-        // Stale threshold is 2x the wait window: a waiter that polled for the
-        // full lockTimeoutMs must never see the holder's live lock cross the
-        // staleness line at the exact same moment and steal it.
-        const staleAfterMs = this.config.lockTimeoutMs * 2;
+        // Stale threshold is 4x the wait window. One waiter polls for at
+        // most lockTimeoutMs, but sequential waiters (a write that timed out
+        // followed by a read) can push the observed lock age to 2x that, so
+        // the old 2x line got crossed by locks a live process still held.
+        // Crashed locks are still reclaimed well within a test's backdated
+        // 30s against a 5s timeout.
+        const staleAfterMs = this.config.lockTimeoutMs * 4;
         const lockAge = Date.now() - stat.mtimeMs;
         if (lockAge > staleAfterMs) {
           logger.warn("Stale lock detected, removing");
