@@ -179,6 +179,24 @@ describe("SmartSuggestService", () => {
     });
   });
 
+  describe("Misplaced files scoring", () => {
+    it("should count wrong files not wrong extensions for pictures directory", async () => {
+      const files: FileWithSize[] = [
+        { name: "photo.jpg", path: "/Pictures/photo.jpg", size: 100 },
+        ...Array.from({ length: 100 }, (_, i) => ({
+          name: `doc${i}.pdf`,
+          path: `/Pictures/doc${i}.pdf`,
+          size: 100,
+        })),
+      ];
+      mockGetAllFiles.mockResolvedValue(files);
+
+      const report = await service.analyzeHealth("/Pictures");
+
+      expect(report.metrics.misplacedFiles.score).toBeLessThanOrEqual(5);
+    });
+  });
+
   describe("Single file handling", () => {
     it("should return score 100 and Grade A for single file", async () => {
       const files: FileWithSize[] = [
