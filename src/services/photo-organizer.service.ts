@@ -171,9 +171,9 @@ export class PhotoOrganizerService {
       for (const photo of photosWithMetadata) {
         try {
           const targetPath = await this.getTargetPath(photo, config);
-          const finalTargetPath = await this.resolveCollision(targetPath, usedPaths);
+          let finalTargetPath = await this.resolveCollision(targetPath, usedPaths);
           usedPaths.add(finalTargetPath);
-          const targetDir = path.dirname(finalTargetPath);
+          let targetDir = path.dirname(finalTargetPath);
 
           if (dryRun) {
             // Dry run: just track the structure
@@ -201,7 +201,39 @@ export class PhotoOrganizerService {
                 target: finalTargetPath,
               });
             } else {
-              await this.copyFile(photo.path, finalTargetPath);
+              try {
+                await safeAtomicMove(photo.path, finalTargetPath, {
+                  copyInsteadOfMove: true,
+                });
+              } catch (moveErr) {
+                const err = moveErr as NodeJS.ErrnoException;
+                if (err.code === "EEXIST") {
+                  let currentTarget = finalTargetPath;
+                  for (let attempt = 0; attempt < 1000; attempt++) {
+                    currentTarget = await this.resolveCollision(
+                      currentTarget,
+                      usedPaths,
+                    );
+                    usedPaths.add(currentTarget);
+                    try {
+                      await safeAtomicMove(photo.path, currentTarget, {
+                        copyInsteadOfMove: true,
+                      });
+                      finalTargetPath = currentTarget;
+                      targetDir = path.dirname(finalTargetPath);
+                      break;
+                    } catch (retryErr) {
+                      const rerr = retryErr as NodeJS.ErrnoException;
+                      if (rerr.code === "EEXIST") {
+                        continue;
+                      }
+                      throw retryErr;
+                    }
+                  }
+                } else {
+                  throw moveErr;
+                }
+              }
             }
           } else {
             if (config.stripGPS && photo.hasGPS) {
@@ -244,22 +276,58 @@ export class PhotoOrganizerService {
               });
             } else {
               try {
-                await fs.rename(photo.path, finalTargetPath);
-              } catch (renameErr) {
-                const err = renameErr as NodeJS.ErrnoException;
-                if (err.code === "EXDEV") {
-                  await safeAtomicMove(photo.path, finalTargetPath, {
+                const moveRes = await safeAtomicMove(
+                  photo.path,
+                  finalTargetPath,
+                  {
                     copyInsteadOfMove: false,
+                  },
+                );
+                if (!config.copyInsteadOfMove && moveRes.rollbackAction) {
+                  result.movedFiles.push({
+                    originalPath: photo.path,
+                    currentPath: finalTargetPath,
                   });
+                }
+              } catch (moveErr) {
+                const err = moveErr as NodeJS.ErrnoException;
+                if (err.code === "EEXIST") {
+                  let currentTarget = finalTargetPath;
+                  for (let attempt = 0; attempt < 1000; attempt++) {
+                    currentTarget = await this.resolveCollision(
+                      currentTarget,
+                      usedPaths,
+                    );
+                    usedPaths.add(currentTarget);
+                    try {
+                      const moveRes = await safeAtomicMove(
+                        photo.path,
+                        currentTarget,
+                        {
+                          copyInsteadOfMove: false,
+                        },
+                      );
+                      finalTargetPath = currentTarget;
+                      targetDir = path.dirname(finalTargetPath);
+                      if (!config.copyInsteadOfMove && moveRes.rollbackAction) {
+                        result.movedFiles.push({
+                          originalPath: photo.path,
+                          currentPath: finalTargetPath,
+                        });
+                      }
+                      break;
+                    } catch (retryErr) {
+                      const rerr = retryErr as NodeJS.ErrnoException;
+                      if (rerr.code === "EEXIST") {
+                        continue;
+                      }
+                      throw retryErr;
+                    }
+                  }
                 } else {
-                  throw renameErr;
+                  throw moveErr;
                 }
               }
-              // Track moved file for rollback support
-              result.movedFiles.push({
-                originalPath: photo.path,
-                currentPath: finalTargetPath,
-              });
             }
           }
 
