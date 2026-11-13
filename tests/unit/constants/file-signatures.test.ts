@@ -283,6 +283,22 @@ describe("File Signatures Database", () => {
       expect(result).toBeNull();
     });
 
+    it("should match JPEG with APPn markers outside previously listed set (BUG-80)", () => {
+      const jpegApp2Buffer = Buffer.from([0xff, 0xd8, 0xff, 0xe2]);
+      const result = matchSignature(jpegApp2Buffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("JPEG");
+
+      const jpegApp15Buffer = Buffer.from([0xff, 0xd8, 0xff, 0xef]);
+      const resultApp15 = matchSignature(jpegApp15Buffer);
+      expect(resultApp15).toBeDefined();
+      expect(resultApp15?.type).toBe("JPEG");
+
+      const nonJpegBuffer = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
+      const nonJpegResult = matchSignature(nonJpegBuffer);
+      expect(nonJpegResult).toBeNull();
+    });
+
     it("should respect maxReadBytes option", () => {
       const largeBuffer = Buffer.alloc(10000);
       // Put PNG signature at position 100 (past 50 byte limit)
