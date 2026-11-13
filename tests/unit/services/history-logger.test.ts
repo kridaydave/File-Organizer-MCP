@@ -580,9 +580,14 @@ also invalid
           readerService.getHistory({ limit: 1000 }),
         ]);
 
-        const all = history1.entries.concat(history2.entries);
-        const ids = all.map((e) => e.id);
-        expect(new Set(ids).size).toBe(ids.length);
+        // Two reads of the same settled files return the same entries, so
+        // uniqueness is checked per read: an entry appearing twice inside one
+        // read is the rotation race BUG-51 fixed (entry left in the main file
+        // while also shifted into a backup).
+        for (const history of [history1, history2]) {
+          const ids = history.entries.map((e) => e.id);
+          expect(new Set(ids).size).toBe(ids.length);
+        }
       } finally {
         await fs.rm(testDir, { recursive: true, force: true });
       }
