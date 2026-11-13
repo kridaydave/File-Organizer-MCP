@@ -13,9 +13,9 @@ describe("AudioMetadataService", () => {
 
   beforeEach(async () => {
     service = new AudioMetadataService();
-    testDir = await fs.mkdtemp(
-      path.join(process.cwd(), "tests", "temp", "audio-test-"),
-    );
+    const sandboxDir = path.join(process.cwd(), "tests", "sandbox");
+    await fs.mkdir(sandboxDir, { recursive: true });
+    testDir = await fs.mkdtemp(path.join(sandboxDir, "audio-test-"));
   });
 
   afterEach(async () => {
@@ -458,6 +458,40 @@ describe("AudioMetadataService", () => {
       expect(results).toHaveLength(2);
       expect(results[0]?.filePath).toBe(validFile);
       expect(results[1]?.filePath).toBe(invalidFile);
+    });
+
+    it("should report errors for corrupt or nonexistent files via onProgress", async () => {
+      const validFile = path.join(testDir, "valid.mp3");
+      const corruptFile = path.join(testDir, "corrupt.mp3");
+      const missingFile = path.join(testDir, "missing.mp3");
+
+      await fs.writeFile(
+        validFile,
+        Buffer.concat([
+          Buffer.from([
+            0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f,
+          ]),
+          Buffer.alloc(15),
+        ]),
+      );
+      await fs.writeFile(corruptFile, Buffer.from("not an audio file"));
+
+      const progressUpdates: any[] = [];
+      const results = await service.extractBatch(
+        [validFile, corruptFile, missingFile],
+        {
+          onProgress: (update) => {
+            progressUpdates.push({ ...update });
+          },
+        },
+      );
+
+      expect(results).toHaveLength(3);
+      expect(results[0]?.filePath).toBe(validFile);
+      expect(results[1]?.filePath).toBe(corruptFile);
+      expect(results[2]?.filePath).toBe(missingFile);
+      const lastUpdate = progressUpdates[progressUpdates.length - 1];
+      expect(lastUpdate?.errors).toBeGreaterThan(0);
     });
   });
 
