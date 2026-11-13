@@ -7,16 +7,18 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-jest.unstable_mockModule('../../../src/core/config/paths.js', () => {
-  const actual = jest.requireActual('../../../src/core/config/paths.js') as any;
-  return {
-    ...actual,
-    getUserConfigPath: jest.fn(),
-  };
-});
+// Import the real module BEFORE registering the mock — importing the same
+// specifier inside the factory would resolve to the mock and loop forever.
+// jest.requireActual cannot load this ESM module under Node 22.
+const actualPaths = await import('../../../../src/core/config/paths.js');
 
-const { getUserConfigPath } = await import('../../../src/core/config/paths.js');
-const { loadCustomAllowedDirs } = await import('../../../src/core/config/loader.js');
+jest.unstable_mockModule('../../../../src/core/config/paths.js', () => ({
+  ...actualPaths,
+  getUserConfigPath: jest.fn(),
+}));
+
+const { getUserConfigPath } = await import('../../../../src/core/config/paths.js');
+const { loadCustomAllowedDirs } = await import('../../../../src/core/config/loader.js');
 
 describe('loadCustomAllowedDirs - symlink containment (BUG-17)', () => {
   let testDir: string;
