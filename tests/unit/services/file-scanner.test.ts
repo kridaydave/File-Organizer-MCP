@@ -6,7 +6,7 @@ import { FileInfo } from '../../../src/types.js';
 
 describe('FileScannerService', () => {
     let fileScanner: FileScannerService;
-    let testDir: string;
+    let testDir!: string;
     let baseTempDir: string;
 
     beforeEach(async () => {
@@ -112,13 +112,26 @@ describe('FileScannerService', () => {
             expect(onlyResult.name).toBe('normal.txt');
         });
 
+        it('should ignore skipped directories case-insensitively (BUG-78)', async () => {
+            await createFile('normal.txt');
+            await createFile('Node_Modules/package.json');
+            await createFile('NODE_MODULES/secret.txt');
+
+            const results = await fileScanner.scanDirectory(testDir, { includeSubdirs: true });
+
+            expect(results.length).toBe(1);
+            const [onlyResult] = results;
+            if (!onlyResult) throw new Error('Expected exactly one scanned file');
+            expect(onlyResult.name).toBe('normal.txt');
+        });
+
         it('should respect maxFiles limit', async () => {
             const smallScanner = new FileScannerService(2); // Max 2 files
             await createFile('file1.txt');
             await createFile('file2.txt');
             await createFile('file3.txt');
 
-            await expect(smallScanner.scanDirectory(testDir)).rejects.toThrow('Maximum file limit');
+            await expect(smallScanner.scanDirectory(testDir!)).rejects.toThrow('Maximum file limit');
         });
     });
 
