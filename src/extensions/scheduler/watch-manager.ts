@@ -10,6 +10,7 @@
  */
 
 import path from "path";
+import fs from "fs/promises";
 import cron from "node-cron";
 import type { ToolResponse } from "../../types.js";
 import { validateStrictPath } from "../../services/path-validator.service.js";
@@ -156,8 +157,63 @@ export async function handleUnwatchDirectory(
 
     // Find and remove the watch
     const initialCount = watchList.length;
-    const normalizedTarget = path.resolve(directory);
-    watchList = watchList.filter((w) => path.resolve(w.directory) !== normalizedTarget);
+
+    // Resolve target to realpath like add does
+    let targetReal: string | null = null;
+    try {
+      targetReal = await validateStrictPath(directory);
+    } catch {
+      try {
+        targetReal = await fs.realpath(directory);
+      } catch {
+        targetReal = path.resolve(directory);
+      }
+    }
+    try {
+      targetReal = await fs.realpath(targetReal);
+    } catch {
+      // keep as is
+    }
+
+    const filtered: typeof watchList = [];
+    for (const w of watchList) {
+      let shouldRemove = false;
+      try {
+        // Try to resolve stored the same way
+        let storedReal = w.directory;
+        try {
+          storedReal = await validateStrictPath(w.directory);
+        } catch {
+          try {
+            storedReal = await fs.realpath(w.directory);
+          } catch {
+            storedReal = path.resolve(w.directory);
+          }
+        }
+        try {
+          storedReal = await fs.realpath(storedReal);
+        } catch {
+          // ignore
+        }
+
+        if (targetReal && storedReal && targetReal === storedReal) {
+          shouldRemove = true;
+        } else if (targetReal) {
+          // Also compare lexical normalized forms as fallback
+          if (path.resolve(targetReal) === path.resolve(storedReal)) {
+            shouldRemove = true;
+          } else if (path.resolve(targetReal) === path.resolve(w.directory)) {
+            shouldRemove = true;
+          }
+        }
+      } catch {
+        // If comparison fails, don't remove
+      }
+      if (!shouldRemove) {
+        filtered.push(w);
+      }
+    }
+    watchList = filtered;
 
     if (watchList.length === initialCount) {
       return {
