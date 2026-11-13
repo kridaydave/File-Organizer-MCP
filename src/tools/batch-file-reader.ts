@@ -19,6 +19,7 @@ import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handle
 import { logger } from "../utils/logger.js";
 import { readFile } from "../core/io/read-file.js";
 import { formatBytes } from "../utils/formatters.js";
+import { FileOrganizerError } from "../errors.js";
 import * as path from "path";
 import * as fs from "fs/promises";
 
@@ -218,7 +219,22 @@ async function readTextFile(
     }
     return text;
   } catch (error) {
-    return `[Access denied or unreadable: ${sanitizeErrorMessage(error instanceof Error ? error : String(error))}]`;
+    if (error instanceof FileOrganizerError && error.code === "E_FILE_TOO_LARGE") {
+      return undefined;
+    }
+    if (error instanceof Error) {
+      if ("code" in error && error.code === "E_FILE_TOO_LARGE") {
+        return undefined;
+      }
+      if (error.message && error.message.toLowerCase().includes("exceeds")) {
+        return undefined;
+      }
+    }
+    const errStr = error instanceof Error ? error.message : String(error);
+    if (errStr.toLowerCase().includes("exceeds") && errStr.toLowerCase().includes("limit")) {
+      return undefined;
+    }
+    return `[Access denied or unreadable: ${sanitizeErrorMessage(errStr)}]`;
   }
 }
 
@@ -302,7 +318,27 @@ export async function handleBatchReadFiles(
       try {
         // Read content for text files
         if (include_content && contentType === "text") {
-          result.content = await readTextFile(file.path, maxSizeBytes);
+          if (file.size > maxSizeBytes) {
+            // Oversize file - metadata only, no content
+            delete (result as any).content;
+          } else {
+            const content = await readTextFile(file.path, maxSizeBytes);
+            if (content !== undefined) {
+              if (
+                typeof content === "string" &&
+                ((content.includes("exceeds") && content.includes("limit")) ||
+                  content.toLowerCase().includes("e_file_too_large") ||
+                  content.toLowerCase().includes("access denied or unreadable"))
+              ) {
+                // Oversize or error file - metadata only, no content
+                delete (result as any).content;
+              } else {
+                result.content = content;
+              }
+            }
+          }
+        } else {
+          delete (result as any).content;
         }
 
         // Read metadata for all files (especially important for media)
@@ -399,13 +435,20 @@ export async function handleBatchReadFiles(
             }
           } else {
             // For text and other files, get basic metadata
-            const stats = await fs.stat(file.path);
-            result.metadata = {
-              type: contentType,
-              created: stats.birthtime.toISOString(),
-              modified: stats.mtime.toISOString(),
-              size: stats.size,
-            };
+            try {
+              const stats = await fs.stat(file.path);
+              result.metadata = {
+                type: contentType,
+                created: stats.birthtime ? stats.birthtime.toISOString() : stats.mtime?.toISOString(),
+                modified: stats.mtime ? stats.mtime.toISOString() : undefined,
+                size: stats.size,
+              };
+            } catch {
+              result.metadata = {
+                type: contentType,
+                size: file.size,
+              };
+            }
           }
         }
       } catch (error) {
