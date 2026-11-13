@@ -551,19 +551,28 @@ function escapeRegExp(string: string) {
 }
 
 function toCamelCase(str: string) {
-  return str
-    .replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) => {
-      return index === 0 ? word.toLowerCase() : word.toUpperCase();
-    })
-    .replace(/\s+/g, "");
+  // Handle snake_case, kebab-case, spaces
+  const parts = str.split(/[_\-\s]+/).filter(Boolean);
+  if (parts.length === 0) return str;
+  const firstPart = parts[0];
+  if (!firstPart) return str;
+  const first = firstPart.toLowerCase();
+  const rest = parts.slice(1).map((part) => {
+    if (!part) return part;
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  });
+  return first + rest.join("");
 }
 
 function toPascalCase(str: string) {
-  return str
-    .replace(/(?:^\w|[A-Z]|\b\w)/g, (word) => {
-      return word.toUpperCase();
-    })
-    .replace(/\s+/g, "");
+  // Handle snake_case, kebab-case, spaces
+  const parts = str.split(/[_\-\s]+/).filter(Boolean);
+  if (parts.length === 0) return str;
+  const result = parts.map((part) => {
+    if (!part) return part;
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  });
+  return result.join("");
 }
 
 function toSnakeCase(str: string) {
