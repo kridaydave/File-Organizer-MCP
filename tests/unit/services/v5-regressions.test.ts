@@ -3,7 +3,7 @@
  * Ensures all fixes for data safety, security containment, and MCP protocol compliance remain locked.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -556,16 +556,14 @@ describe('v5 Critical Regressions Gate', () => {
     it('returns real persisted rollback manifestId from handleSystemOrganization', async () => {
       const sandboxDir = path.join(process.cwd(), 'tests', 'sandbox', 'v5-system-test');
       // System organize only accepts real system roots (~/Downloads, ~/Desktop,
-      // os.tmpdir() + subdirs). Point HOME/USERPROFILE at the sandbox so the
-      // fixture lands under a genuine Downloads root without touching the
-      // developer's real home directory.
+      // os.tmpdir() + subdirs). Redirect os.homedir at the sandbox so the
+      // fixture resolves to a genuine Downloads root without touching the
+      // developer's real home. Under Jest the native homedir ignores
+      // process.env, so the module function itself is spied.
       const fakeHome = path.join(sandboxDir, 'home');
       const downloadsDir = path.join(fakeHome, 'Downloads');
       const docsDir = path.join(fakeHome, 'Documents');
-      const originalHome = process.env.HOME;
-      const originalUserProfile = process.env.USERPROFILE;
-      process.env.HOME = fakeHome;
-      process.env.USERPROFILE = fakeHome;
+      const homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(fakeHome);
 
       try {
         await fs.mkdir(downloadsDir, { recursive: true });
@@ -592,16 +590,7 @@ describe('v5 Critical Regressions Gate', () => {
         const found = manifests.find((m) => m.id === undoManifest?.manifestId);
         expect(found).toBeDefined();
       } finally {
-        if (originalHome === undefined) {
-          delete process.env.HOME;
-        } else {
-          process.env.HOME = originalHome;
-        }
-        if (originalUserProfile === undefined) {
-          delete process.env.USERPROFILE;
-        } else {
-          process.env.USERPROFILE = originalUserProfile;
-        }
+        homedirSpy.mockRestore();
         await fs.rm(sandboxDir, { recursive: true, force: true }).catch(() => {});
       }
     });
