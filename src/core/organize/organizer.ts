@@ -191,14 +191,6 @@ export class OrganizerService {
               counter++;
               if (counter > 10000) break;
             }
-          } else if (plannedDestinations.has(destPath)) {
-            hasConflict = true;
-            let counter = 1;
-            const base = originalBase;
-            while (plannedDestinations.has(destPath)) {
-              destPath = path.join(destFolder, `${base}_${counter}${ext}`);
-              counter++;
-            }
           }
         } else if (plannedDestinations.has(destPath)) {
           hasConflict = true;
