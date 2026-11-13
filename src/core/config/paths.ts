@@ -106,7 +106,9 @@ export function getDefaultAllowedDirs(): string[] {
  * Get path to user config file
  */
 export function getUserConfigPath(): string {
-  const platform = os.platform();
+  // process.platform, not os.platform(): under Jest only the former sees a
+  // faked platform, and the XDG test relies on that.
+  const platform = process.platform;
   const home = os.homedir();
 
   if (platform === "win32") {
