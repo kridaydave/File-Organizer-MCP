@@ -96,7 +96,9 @@ describe('file_organizer_batch_rename Tool', () => {
     it('should report invalid paths in mixed batch for both json and markdown', async () => {
         const validFile = path.join(testDir, 'VALID.txt');
         await fs.writeFile(validFile, 'content');
-        const invalidFile = path.join(testDir, '..', 'outside.txt');
+        // Above cwd: outside the allowed-directories whitelist on every
+        // platform, so path validation must reject it without leaking it.
+        const invalidFile = path.join(process.cwd(), '..', 'outside.txt');
 
         const markdownResult = await handleBatchRename({
             files: [validFile, invalidFile],
