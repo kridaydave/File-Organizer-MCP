@@ -224,6 +224,53 @@ describe("OrganizerService", () => {
       }
     });
 
+    it("should clean up copied destination when unlink fails in overwrite mode (BUG-27)", async () => {
+      const srcFile = path.join(testDir, "source.txt");
+      await fs.writeFile(srcFile, "source-content");
+
+      const docsDir = path.join(testDir, "Documents");
+      await fs.mkdir(docsDir, { recursive: true });
+      const destFile = path.join(docsDir, "source.txt");
+
+      const originalUnlink = fs.unlink;
+      let unlinkCallCount = 0;
+      (fs as any).unlink = async (p: any) => {
+        if (String(p) === String(srcFile)) {
+          unlinkCallCount++;
+          throw new Error("Simulated unlink failure");
+        }
+        return originalUnlink(p);
+      };
+
+      const files: FileWithSize[] = [
+        {
+          name: "source.txt",
+          path: srcFile,
+          size: 14,
+          modified: new Date(),
+        },
+      ];
+
+      let result;
+      try {
+        result = await organizer.organize(testDir, files, {
+          dryRun: false,
+          conflictStrategy: "overwrite",
+        });
+      } finally {
+        (fs as any).unlink = originalUnlink;
+      }
+
+      // Unlink should have failed, so operation should error
+      expect(result!.errors.length).toBeGreaterThan(0);
+
+      // Source file should still exist (unlink failed)
+      await expect(fs.access(srcFile)).resolves.toBeUndefined();
+
+      // Destination should NOT have been left behind (cleaned up)
+      await expect(fs.access(destFile)).rejects.toThrow();
+    });
+
     it("should correctly rename files with numeric suffixes on conflict", async () => {
       const srcFile = path.join(testDir, "invoice_2024.pdf");
       await fs.writeFile(srcFile, "invoice 2024 content");
