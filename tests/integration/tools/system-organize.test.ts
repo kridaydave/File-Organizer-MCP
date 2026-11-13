@@ -16,6 +16,24 @@ describe("System Organization Tool - Integration Tests", () => {
   let testTempDir: string;
   let homeDir: string;
 
+  const ORIGINAL_ENV: Record<string, string | undefined> = {
+    HOME: process.env.HOME,
+    USERPROFILE: process.env.USERPROFILE,
+    TMPDIR: process.env.TMPDIR,
+    TMP: process.env.TMP,
+    TEMP: process.env.TEMP,
+  };
+
+  function restoreEnv(): void {
+    for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+
   beforeEach(async () => {
     setupLoggerMocks();
 
@@ -23,9 +41,20 @@ describe("System Organization Tool - Integration Tests", () => {
     baseTempDir = path.join(process.cwd(), "tests", "temp", "system-organize");
     await fs.mkdir(baseTempDir, { recursive: true });
 
-    testDownloadsDir = path.join(baseTempDir, "Downloads");
-    testDesktopDir = path.join(baseTempDir, "Desktop");
-    testTempDir = path.join(baseTempDir, "Temp");
+    // System organize only accepts real system roots (~/Downloads, ~/Desktop,
+    // os.tmpdir() + subdirs). Redirect HOME/USERPROFILE/TMPDIR at the fixture
+    // tree so every source here is a genuine system root, without touching the
+    // developer's real home directory.
+    const fakeHome = path.join(baseTempDir, "home");
+    testDownloadsDir = path.join(fakeHome, "Downloads");
+    testDesktopDir = path.join(fakeHome, "Desktop");
+    testTempDir = path.join(fakeHome, "Temp");
+
+    process.env.HOME = fakeHome;
+    process.env.USERPROFILE = fakeHome;
+    process.env.TMPDIR = testTempDir;
+    process.env.TMP = testTempDir;
+    process.env.TEMP = testTempDir;
 
     await fs.mkdir(testDownloadsDir, { recursive: true });
     await fs.mkdir(testDesktopDir, { recursive: true });
@@ -33,6 +62,7 @@ describe("System Organization Tool - Integration Tests", () => {
   });
 
   afterEach(async () => {
+    restoreEnv();
     try {
       await new Promise((resolve) => setTimeout(resolve, 100));
       await fs.rm(baseTempDir, { recursive: true, force: true });

@@ -555,8 +555,17 @@ describe('v5 Critical Regressions Gate', () => {
   describe('18. Rollback Manifest ID Sync Across Tools', () => {
     it('returns real persisted rollback manifestId from handleSystemOrganization', async () => {
       const sandboxDir = path.join(process.cwd(), 'tests', 'sandbox', 'v5-system-test');
-      const downloadsDir = path.join(sandboxDir, 'Downloads');
-      const docsDir = path.join(sandboxDir, 'Documents');
+      // System organize only accepts real system roots (~/Downloads, ~/Desktop,
+      // os.tmpdir() + subdirs). Point HOME/USERPROFILE at the sandbox so the
+      // fixture lands under a genuine Downloads root without touching the
+      // developer's real home directory.
+      const fakeHome = path.join(sandboxDir, 'home');
+      const downloadsDir = path.join(fakeHome, 'Downloads');
+      const docsDir = path.join(fakeHome, 'Documents');
+      const originalHome = process.env.HOME;
+      const originalUserProfile = process.env.USERPROFILE;
+      process.env.HOME = fakeHome;
+      process.env.USERPROFILE = fakeHome;
 
       try {
         await fs.mkdir(downloadsDir, { recursive: true });
@@ -583,6 +592,16 @@ describe('v5 Critical Regressions Gate', () => {
         const found = manifests.find((m) => m.id === undoManifest?.manifestId);
         expect(found).toBeDefined();
       } finally {
+        if (originalHome === undefined) {
+          delete process.env.HOME;
+        } else {
+          process.env.HOME = originalHome;
+        }
+        if (originalUserProfile === undefined) {
+          delete process.env.USERPROFILE;
+        } else {
+          process.env.USERPROFILE = originalUserProfile;
+        }
         await fs.rm(sandboxDir, { recursive: true, force: true }).catch(() => {});
       }
     });
