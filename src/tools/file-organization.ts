@@ -189,7 +189,17 @@ ${result.actions
   .slice(0, 20)
   .map(
     (a) =>
-      `- Moved \`${escapeMarkdown(a.file)}\` → \`${escapeMarkdown(a.to)}\``,
+      (() => {
+        const fmt = (s: string) => {
+          const content = escapeMarkdown(s, { inCodeSpan: true });
+          const ticks = content.match(/`+/g);
+          const maxTicks = ticks ? Math.max(...ticks.map((t) => t.length)) : 0;
+          const delim = "`".repeat(maxTicks + 1 || 1);
+          const pad = content.startsWith("`") || content.endsWith("`") ? " " : "";
+          return `${delim}${pad}${content}${pad}${delim}`;
+        };
+        return `- Moved ${fmt(a.file)} → ${fmt(a.to)}`;
+      })(),
   )
   .join("\n")}
 ${result.actions.length > 20 ? `\n*(...and ${result.actions.length - 20} more actions)*` : ""}
