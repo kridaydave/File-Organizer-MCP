@@ -51,6 +51,28 @@ describe('RenamingService', () => {
     });
 
     describe('applyRenameRules', () => {
+        it('converts snake_case to camelCase and PascalCase with kebab-case input', async () => {
+            const files = [path.join('test', 'my_file_name.txt')];
+            const camelPreview = await service.applyRenameRules(files, [{
+                type: 'case',
+                conversion: 'camelCase'
+            }]);
+            expect(camelPreview[0].new).toBe(path.join('test', 'myFileName.txt'));
+
+            const pascalPreview = await service.applyRenameRules(files, [{
+                type: 'case',
+                conversion: 'PascalCase'
+            }]);
+            expect(pascalPreview[0].new).toBe(path.join('test', 'MyFileName.txt'));
+
+            const kebabFiles = [path.join('test', 'my-file-name.txt')];
+            const kebabCamel = await service.applyRenameRules(kebabFiles, [{
+                type: 'case',
+                conversion: 'camelCase'
+            }]);
+            expect(kebabCamel[0].new).toBe(path.join('test', 'myFileName.txt'));
+        });
+
         it('should handle find and replace rules', async () => {
             const files = [path.join('test', 'hello-world.txt')];
             const rules = [{
