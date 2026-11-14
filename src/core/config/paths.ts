@@ -75,14 +75,14 @@ export function getDefaultAllowedDirs(): string[] {
     }
   }
 
-  // In test mode, always allow the three system-organize source dirs
-  // even if they don't exist on CI (e.g. ~/Downloads on ubuntu runner)
+  // In test mode, always allow the system-organize source dirs even if they
+  // don't exist on CI (e.g. ~/Downloads on ubuntu runner). A bypass only
+  // spares a directory the existence filter would drop, so anything meant to
+  // be allowed has to already be a candidate above: an entry here that is not
+  // a candidate is inert, and it reads as allowed when it is not. That is how
+  // os.tmpdir() came to be listed here while never being allowed.
   const alwaysAllowedInTest = isTestMode
-    ? [
-        path.join(home, "Downloads"),
-        path.join(home, "Desktop"),
-        os.tmpdir(),
-      ]
+    ? [path.join(home, "Downloads"), path.join(home, "Desktop")]
     : [];
 
   // Only return directories that actually exist and are not symlinks
@@ -103,49 +103,53 @@ export function getDefaultAllowedDirs(): string[] {
 }
 
 /**
- * Get path to user config file
+ * Get the platform config directory that holds config.json, operations.jsonl,
+ * rollbacks and backups.
+ *
+ * All four state locations derive from this one function. When config.json and
+ * the rest resolved independently, setting XDG_CONFIG_HOME moved the history and
+ * rollback dirs while leaving config.json in the real home directory, so a
+ * sandboxed run could still read the developer's allow-list. One base path means
+ * one env var relocates all of it.
+ *
+ * macOS keeps its own convention rather than honoring XDG_CONFIG_HOME: the
+ * platform convention is ~/Library/Application Support, and a user who sets
+ * XDG_CONFIG_HOME on a Mac expects Linux-style paths in their shell tooling, not
+ * in an app's config.
  */
-export function getUserConfigPath(): string {
+export function getConfigDirectory(): string {
   const platform = os.platform();
   const home = os.homedir();
 
   if (platform === "win32") {
-    // Windows: %APPDATA%\file-organizer-mcp\config.json
     const appData =
       process.env.APPDATA || path.join(home, "AppData", "Roaming");
-    return path.join(appData, "file-organizer-mcp", "config.json");
-  } else if (platform === "darwin") {
-    // macOS: ~/Library/Application Support/file-organizer-mcp/config.json
+    return path.join(appData, "file-organizer-mcp");
+  }
+  if (platform === "darwin") {
     return path.join(
       home,
       "Library",
       "Application Support",
       "file-organizer-mcp",
-      "config.json",
     );
-  } else {
-    // Linux: ~/.config/file-organizer-mcp/config.json
-    return path.join(home, ".config", "file-organizer-mcp", "config.json");
   }
+  const basePath = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
+  return path.join(basePath, "file-organizer-mcp");
+}
+
+/**
+ * Get path to user config file
+ */
+export function getUserConfigPath(): string {
+  return path.join(getConfigDirectory(), "config.json");
 }
 
 /**
  * Get the history directory path
  */
 export function getHistoryDirectory(): string {
-  const platform = process.platform;
-  const home = os.homedir();
-
-  let basePath: string;
-  if (platform === "win32") {
-    basePath = process.env.APPDATA || path.join(home, "AppData", "Roaming");
-  } else if (platform === "darwin") {
-    basePath = path.join(home, "Library", "Application Support");
-  } else {
-    basePath = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
-  }
-
-  return path.join(basePath, "file-organizer-mcp");
+  return getConfigDirectory();
 }
 
 /**
@@ -170,6 +174,23 @@ export function getRollbackDirectory(): string {
     return path.join(process.cwd(), ".file-organizer-rollbacks");
   }
   return path.join(getHistoryDirectory(), "rollbacks");
+}
+
+/** Name of the quarantine area created inside a directory being quarantined. */
+export const QUARANTINE_DIR_NAME = ".file-organizer-quarantine";
+
+/**
+ * Quarantine root for a source directory: a hidden child of that directory.
+ *
+ * It lives inside the source on purpose. The source has already passed
+ * validateStrictPath, so the child inherits the same allowed-dir grant and the
+ * quarantine area needs no extra configuration from the user. A location under
+ * the OS config dir cannot serve here: that dir is outside the allowed dirs on
+ * Linux, and it is blocked outright on macOS (/Library/Application Support)
+ * and Windows (AppData\Roaming), so validateStrictPath would refuse it.
+ */
+export function getQuarantineDirectory(sourceDirectory: string): string {
+  return path.join(sourceDirectory, QUARANTINE_DIR_NAME);
 }
 
 /**

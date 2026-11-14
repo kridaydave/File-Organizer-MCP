@@ -14,6 +14,7 @@ import {
   detectExtensionMismatch,
   FileSignature,
 } from "../../../src/constants/file-signatures.js";
+import { required } from "../../helpers/safe-index.js";
 
 describe("File Signatures Database", () => {
   describe("Database Integrity", () => {
@@ -242,12 +243,46 @@ describe("File Signatures Database", () => {
       expect(result?.type).toBe("EXE");
     });
 
+    it("should match Mach-O 64-bit little-endian binaries (BUG-06)", () => {
+      const macho64LeBuffer = Buffer.from([0xcf, 0xfa, 0xed, 0xfe]);
+      const result = matchSignature(macho64LeBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_64");
+    });
+
+    it("should match Mach-O 32-bit little-endian binaries", () => {
+      const macho32LeBuffer = Buffer.from([0xce, 0xfa, 0xed, 0xfe]);
+      const result = matchSignature(macho32LeBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_32");
+    });
+
+    it("should detect Mach-O little-endian as executable content (BUG-06)", () => {
+      const macho64LeBuffer = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]);
+      const result = matchSignature(macho64LeBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_64");
+    });
+
     it("should match Java class files or Mach-O (both use CAFEBABE)", () => {
       const classBuffer = Buffer.from([0xca, 0xfe, 0xba, 0xbe]);
       const result = matchSignature(classBuffer);
       expect(result).toBeDefined();
-      // Both JAVA_CLASS and MACHO_FAT use CAFEBABE magic number
-      expect(["JAVA_CLASS", "MACHO_FAT", "CLASS"].includes(result?.type || "")).toBe(true);
+      expect(result?.type).toBe("JAVA_CLASS");
+    });
+
+    it("should match Mach-O fat binary as MACHO_FAT", () => {
+      const fatBuffer = Buffer.alloc(28);
+      fatBuffer.writeUInt32BE(0xcafebabe, 0);
+      fatBuffer.writeUInt32BE(1, 4);
+      fatBuffer.writeUInt32BE(0x01000007, 8);
+      fatBuffer.writeUInt32BE(0x80000003, 12);
+      fatBuffer.writeUInt32BE(0, 16);
+      fatBuffer.writeUInt32BE(28, 20);
+      fatBuffer.writeUInt32BE(12, 24);
+      const result = matchSignature(fatBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_FAT");
     });
 
     it("should return null for unknown signatures", () => {
@@ -259,6 +294,43 @@ describe("File Signatures Database", () => {
     it("should return null for empty buffer", () => {
       const result = matchSignature(Buffer.alloc(0));
       expect(result).toBeNull();
+    });
+
+    it("should detect XML declaration as XML not SVG", () => {
+      const xmlBuffer = Buffer.from('<?xml version="1.0"?>\n<config></config>');
+      const result = matchSignature(xmlBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("XML");
+    });
+
+    it("should detect SVG files with xml declaration as SVG", () => {
+      const svgBuffer = Buffer.from('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+      const result = matchSignature(svgBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("SVG");
+    });
+
+    it("should detect SVG files without xml declaration as SVG", () => {
+      const svgBuffer = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+      const result = matchSignature(svgBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("SVG");
+    });
+
+    it("should match JPEG with APPn markers outside previously listed set (BUG-80)", () => {
+      const jpegApp2Buffer = Buffer.from([0xff, 0xd8, 0xff, 0xe2]);
+      const result = matchSignature(jpegApp2Buffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("JPEG");
+
+      const jpegApp15Buffer = Buffer.from([0xff, 0xd8, 0xff, 0xef]);
+      const resultApp15 = matchSignature(jpegApp15Buffer);
+      expect(resultApp15).toBeDefined();
+      expect(resultApp15?.type).toBe("JPEG");
+
+      const nonJpegBuffer = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
+      const nonJpegResult = matchSignature(nonJpegBuffer);
+      expect(nonJpegResult).toBeNull();
     });
 
     it("should respect maxReadBytes option", () => {
@@ -405,10 +477,31 @@ describe("File Signatures Database", () => {
     it("should detect JSON files or code files", () => {
       const jsonBuffer = Buffer.from('{"key": "value", "nested": {"arr": [1,2]}}');
       const result = matchSignature(jsonBuffer);
-      // JSON detection may vary by implementation
-      if (result) {
-        expect(["JSON", "JS", "UNKNOWN"].includes(result.type) || result.category === "Code").toBe(true);
-      }
+      expect(result?.type).toBe("JSON");
+    });
+
+    it("should detect JSON arrays correctly (BUG-31)", () => {
+      const jsonBuffer = Buffer.from('[{"key": "value"}]');
+      const result = matchSignature(jsonBuffer);
+      expect(result?.type).toBe("JSON");
+    });
+
+    it("should detect XML files correctly (BUG-31)", () => {
+      const xmlBuffer = Buffer.from('<?xml version="1.0" encoding="UTF-8"?><root></root>');
+      const result = matchSignature(xmlBuffer);
+      expect(result?.type).toBe("XML");
+    });
+
+    it("should still detect HTML files correctly", () => {
+      const htmlBuffer = Buffer.from("<!DOCTYPE html><html><body></body></html>");
+      const result = matchSignature(htmlBuffer);
+      expect(result?.type).toBe("HTML");
+    });
+
+    it("should still detect CSS files correctly", () => {
+      const cssBuffer = Buffer.from("body { color: red; background: blue; }");
+      const result = matchSignature(cssBuffer);
+      expect(result?.type).toBe("CSS");
     });
 
     it("should detect TypeScript files or code files", () => {
@@ -448,6 +541,29 @@ describe("File Signatures Database", () => {
       const mp3Buffer = Buffer.from([0xff, 0xfb]); // MPEG frame
       const result = matchSignature(mp3Buffer);
       expect(result?.type).toBe("MP3_RAW");
+    });
+
+    it("should detect QuickTime MOV with non-standard ftyp size as MOV", () => {
+      const movBuffer = Buffer.concat([
+        Buffer.from([0x00, 0x00, 0x00, 0x18]), // non-standard size
+        Buffer.from("ftyp"),
+        Buffer.from("qt  "), // QuickTime brand
+        Buffer.from([0x00, 0x00, 0x00, 0x00]),
+      ]);
+      const result = matchSignature(movBuffer);
+      expect(result?.type).toBe("MOV");
+    });
+
+    it("should still detect standard MP4 as MP4", () => {
+      const mp4Buffer = Buffer.concat([
+        Buffer.from([0x00, 0x00, 0x00, 0x18]),
+        Buffer.from("ftyp"),
+        Buffer.from("mp42"),
+        Buffer.from([0x00, 0x00, 0x00, 0x00]),
+        Buffer.from("isom"),
+      ]);
+      const result = matchSignature(mp4Buffer);
+      expect(result?.type).toBe("MP4");
     });
 
     it("should detect FLAC files", () => {
@@ -507,13 +623,15 @@ describe("File Signatures Database", () => {
 
       for (const ext of commonExts) {
         expect(EXTENSION_TO_SIGNATURE[ext]).toBeDefined();
-        expect(EXTENSION_TO_SIGNATURE[ext].length).toBeGreaterThan(0);
+        expect(required(EXTENSION_TO_SIGNATURE[ext], ext).length).toBeGreaterThan(
+          0,
+        );
       }
     });
 
     it("should map multiple types for ambiguous extensions", () => {
       // .gif maps to both GIF87 and GIF89
-      expect(EXTENSION_TO_SIGNATURE[".gif"].length).toBe(2);
+      expect(required(EXTENSION_TO_SIGNATURE[".gif"], ".gif").length).toBe(2);
     });
   });
 

@@ -125,6 +125,3 @@ export const SECURITY_LIMITS = {
     CLEANUP: "cleanup",
   },
 } as const;
-
-export type SecurityPhase =
-  (typeof SECURITY_LIMITS.phases)[keyof typeof SECURITY_LIMITS.phases];
