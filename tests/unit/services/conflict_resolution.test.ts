@@ -1,13 +1,35 @@
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, afterAll } from "@jest/globals";
 import fs from "fs/promises";
 import path from "path";
-import { OrganizerService } from "../../../src/core/organize/organizer.js";
-import { FileScannerService } from "../../../src/core/scan/scanner.js";
+
+import { isolateRollbackStorage } from "../../helpers/rollback-storage.js";
+
+/**
+ * Private rollback storage.
+ *
+ * Every conflict strategy here runs an apply-path organize, which writes a
+ * manifest through the default `getRollbackDirectory()`. Under jest that is one
+ * directory shared by every worker, so these manifests decide which manifest is
+ * globally newest and a no-id undo elsewhere can restore this file's batch.
+ * The redirect is registered before the modules under test are imported, which
+ * is why they are dynamic below.
+ */
+const storage = await isolateRollbackStorage("fom-conflict-");
+
+const { OrganizerService } = await import(
+  "../../../src/core/organize/organizer.js"
+);
+const { FileScannerService } = await import(
+  "../../../src/core/scan/scanner.js"
+);
 
 describe("Conflict Resolution Strategies", () => {
   let testDir: string;
-  let organizer: OrganizerService;
-  let scanner: FileScannerService;
+  // The classes arrive through a dynamic import, so the binding is a value and
+  // not a type name. `InstanceType` reads the instance back off the constructor
+  // instead of naming a type that no longer exists in this scope.
+  let organizer: InstanceType<typeof OrganizerService>;
+  let scanner: InstanceType<typeof FileScannerService>;
 
   beforeEach(async () => {
     testDir = path.join(process.cwd(), `test-conflict-${Date.now()}`);
@@ -18,6 +40,10 @@ describe("Conflict Resolution Strategies", () => {
 
   afterEach(async () => {
     await fs.rm(testDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  afterAll(async () => {
+    await storage.remove();
   });
 
   it("should rename acting file on conflict (default)", async () => {
@@ -46,10 +72,12 @@ describe("Conflict Resolution Strategies", () => {
     });
 
     expect(result.actions).toHaveLength(1);
-    expect(result.actions[0].to).toMatch(/document_1\.txt$/);
+    const [renamedAction] = result.actions;
+    if (!renamedAction) throw new Error("Expected exactly one rename action");
+    expect(renamedAction.to).toMatch(/document_1\.txt$/);
 
     // Verify file exists
-    const movedCtx = await fs.readFile(result.actions[0].to, "utf8");
+    const movedCtx = await fs.readFile(renamedAction.to, "utf8");
     expect(movedCtx).toBe("content");
   });
 
@@ -97,10 +125,12 @@ describe("Conflict Resolution Strategies", () => {
     });
 
     expect(result.actions).toHaveLength(1);
-    expect(result.actions[0].to).toMatch(/test\.txt$/); // No rename
+    const [overwrittenAction] = result.actions;
+    if (!overwrittenAction) throw new Error("Expected exactly one move action");
+    expect(overwrittenAction.to).toMatch(/test\.txt$/); // No rename
 
     // Verify content overwritten
-    const destContent = await fs.readFile(result.actions[0].to, "utf8");
+    const destContent = await fs.readFile(overwrittenAction.to, "utf8");
     expect(destContent).toBe("new content");
 
     // Verify backup logic? Backup dir should contain old content.

@@ -255,6 +255,17 @@ describe("CategorizerService with Content Analysis", () => {
 
       expect(result.warnings.length).toBeGreaterThan(0);
     });
+
+    it("should detect double extension on long basenames", async () => {
+      const longName = "a".repeat(1005) + ".pdf.exe";
+      const filePath = path.join(testDir, longName);
+
+      const result = await categorizer.classifySecurity(filePath);
+
+      expect(result.isSuspicious).toBe(true);
+      expect(result.threatLevel).toBe("high");
+      expect(result.reason).toContain("Double extension");
+    });
   });
 
   describe("validateFileType", () => {
