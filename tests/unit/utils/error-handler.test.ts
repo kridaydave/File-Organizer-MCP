@@ -48,6 +48,24 @@ describe("sanitizeErrorMessage", () => {
   it("accepts a plain string", () => {
     expect(sanitizeErrorMessage("/home/user/file.txt")).toBe("[PATH]");
   });
+
+  it("redacts Unix paths with spaces without leaking tail", () => {
+    const message =
+      "Failed to open file at /home/kriday/My Documents/secret.pdf: permission denied";
+    const sanitized = sanitizeErrorMessage(message);
+    expect(sanitized).not.toContain("secret.pdf");
+    expect(sanitized).not.toContain("Documents/");
+    expect(sanitized).toContain("[PATH]");
+  });
+
+  it("redacts Windows paths with spaces without leaking tail", () => {
+    const message =
+      "Failed to open file at C:\\Users\\John Doe\\secret.pdf: permission denied";
+    const sanitized = sanitizeErrorMessage(message);
+    expect(sanitized).not.toContain("secret.pdf");
+    expect(sanitized).not.toContain("John Doe");
+    expect(sanitized).toContain("[PATH]");
+  });
 });
 
 describe("createErrorResponse", () => {
