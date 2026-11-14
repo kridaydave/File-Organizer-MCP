@@ -956,6 +956,19 @@ export class RollbackService {
         // is a state an undo can be retried from.
         await lease.assertStillOwns();
 
+        // Unknown action types must fail, not silently succeed. The manifest
+        // is already on disk, so count the failure here and keep it.
+        const validActionTypes: ReadonlySet<string> = new Set([
+          "move",
+          "copy",
+          "delete",
+          "rename",
+        ]);
+        if (!validActionTypes.has(action.type)) {
+          results.failed++;
+          results.errors.push(`Unknown action type: ${action.type}`);
+          continue;
+        }
         // Validate paths before operations
         if (
           action.originalPath &&

@@ -251,4 +251,32 @@ describe('Rollback Service', () => {
         expect(manifests.length).toBe(1);
         expect(manifests.map((m) => m.id)).toStrictEqual([manifestId]);
     });
+
+    it('should report failure and keep manifest for unknown action types', async () => {
+        const src = path.join(testDir, 'source-unknown.txt');
+        const dest = path.join(testDir, 'dest-unknown.txt');
+        await fs.writeFile(src, 'content');
+        await fs.rename(src, dest);
+
+        // The manifest is written first and the bad type is rejected when the
+        // undo runs, which is where an unknown action would otherwise be counted
+        // as a success without touching anything.
+        const manifestId = await rollbackService.createManifest('Test unknown action', [
+            {
+                type: 'bogus' as never,
+                originalPath: src,
+                currentPath: dest,
+                timestamp: Date.now(),
+            },
+        ]);
+
+        const result = await rollbackService.rollback(manifestId);
+
+        expect(result.failed).toBeGreaterThan(0);
+        expect(result.success).toBe(0);
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(
+            await fs.access(path.join(testDir, `${manifestId}.json`)).then(() => true).catch(() => false),
+        ).toBe(true);
+    });
 });
