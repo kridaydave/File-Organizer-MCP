@@ -286,6 +286,16 @@ export async function handleBatchRename(
       md += `- **Failed:** ${result.statistics.failed}\n`;
       md += `- **Skipped:** ${result.statistics.skipped}\n\n`;
 
+      if (result.successes.length > 0) {
+        md += `#### Renamed Files\n`;
+        md += `| Original | New | Status |\n|---|---|---|\n`;
+        for (const s of result.successes.slice(0, 50)) {
+          md += `| \`${path.basename(s.original)}\` | \`${path.basename(s.new)}\` | ✅ Renamed |\n`;
+        }
+        if (result.successes.length > 50) md += `| ... | ... | ... |\n`;
+        md += `\n`;
+      }
+
       if (result.errors.length > 0) {
         md += `**Errors:**\n${result.errors.map((e) => `- ${e}`).join("\n")}\n`;
       }
