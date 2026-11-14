@@ -1,0 +1,6 @@
+#!/bin/sh
+# Fires after rebase (including `git pull --rebase`) and `git commit --amend`.
+# pre-commit does not run during `git rebase --continue`, so a rebase
+# resolution is only observable here, after the fact. The rewritten old..new
+# sha pairs arrive on stdin and are passed through to the guard.
+node scripts/check-resolution-guards.cjs post-rewrite

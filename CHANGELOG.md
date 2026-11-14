@@ -1,5 +1,341 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **The legacy rollback migration could store a manifest nobody verified.**
+  `migrateLegacyStorage` verified a legacy manifest by reading it, then copied
+  the file by path, so anything able to write to the launch directory could
+  replace the contents in between and get an unverified file carried into this
+  install's rollback history. It copied the bytes it had just checked instead of
+  re-reading the path, so what lands in storage is what verification approved.
+  Raised by CodeRabbit on #114.
+- **The output-schema suite passed because of where the checkout sits.**
+  Its fixture lived in `tests/temp`, which is inside the repository, so it passed
+  path validation by accident on any machine whose checkout is under a home
+  directory the allow-list names (`~/Code` and friends). Move the checkout and the
+  suite breaks; on CI it was passing for a reason that had nothing to do with the
+  contracts it checks. The fixture is now in `os.tmpdir()` and whitelists its own
+  root through `CONFIG.paths.customAllowed`, the way the other suites that need a
+  temp directory already do. **No behavior change** to the tools.
+
+- **The temp directory was never allowed under jest, and the code said it was.**
+  `getDefaultAllowedDirs` carries a bypass for directories that may be absent on
+  a CI runner, and `os.tmpdir()` was listed in it. A bypass only spares a
+  directory the existence filter would drop; it cannot add one that was never a
+  candidate. `os.tmpdir()` was not a candidate, so it was never in the allow-list
+  on any machine while reading as always-allowed. Every test needing a `mkdtemp`
+  fixture has been widening `CONFIG.paths.customAllowed` by hand to compensate.
+  The dead entry is gone and the comment now states what a bypass can and cannot
+  do, so the next reader does not repeat it. **No behavior change:** the
+  allow-list under test mode is exactly what it was. Tests that need a temp
+  directory must keep whitelisting their own root.
+- **An integration test no longer undoes another worker's batch.**
+  `full_organization_flow` organized with `dry_run: false` and then called
+  `undo_last_operation` with no `manifest_id`, which takes the globally newest
+  manifest. Under jest every worker writes manifests into one shared directory,
+  so the undo restored whichever batch another test file finished last and the
+  assertions against its own directory saw an empty tree. The test now owns its
+  rollback and config storage and names the manifest its own organize returned.
+  No user-facing behavior changed; the bug was in the test.
+- **Every test that moves files owns its rollback storage.** The fix above was
+  per-file, which stops one suite perturbing another and leaves the shared
+  directory itself in place. Under jest `getRollbackDirectory()` returns
+  `<cwd>/.file-organizer-rollbacks` for every worker, so two suites rolling back
+  still serialized against each other on `manifests.lock` for no reason, and any
+  test that undoes without naming a `manifest_id` is still one interleaving away
+  from restoring a stranger's batch. `tests/helpers/rollback-storage.ts` redirects
+  config, history, rollback and backup storage at a per-suite temp root, and the
+  nine suites that write manifests now use it. A new
+  `rollback-storage-isolation.test.ts` reads `getRollbackDirectory()` at runtime
+  and fails if the redirect does not hold, including when a newer foreign
+  manifest sits in the shared directory. Mutation-checked by turning the helper
+  into a pass-through: all three go red.
+
+### Changed
+
+- **The watch tools are reachable from the MCP server again.**
+  `file_organizer_watch_directory`, `file_organizer_unwatch_directory`,
+  `file_organizer_list_watches` and a new read-only
+  `file_organizer_watch_status` are registered once more, so an agent can see and
+  edit a schedule without shelling out to the CLI. They call the same handlers
+  the CLI does. Scheduled work still runs in its own process: an MCP server holds
+  no timer, so `file-organizer-watch once` under cron/systemd remains the way a
+  pass actually happens.
+
+- **`watch_status` reports a pass history, not a heartbeat.** For each watch it
+  gives the cron, the next run in local time, and one of four liveness states:
+  `never_run`, `ok`, `stale` (last pass older than the schedule interval), or
+  `unknown` (the schedule no longer parses, or the newest record is an error).
+  Liveness is inferred from the last recorded pass plus `scheduler-state.json`,
+  and the evidence is reported alongside it, so a quiet folder and a dead timer
+  are distinguishable. Nothing writes on a tick, which is why there is still no
+  pidfile.
+
+- **Next-run times are computed in local time.** `getNextRunTime` and
+  `getPreviousRunTime` used the `setUTC*` family while `node-cron` fires on wall
+  clock, so every expression that was not a midnight-UTC one came back off by the
+  machine's UTC offset. They are also wired to their first caller here, so the
+  offset would have been visible in `watch_status` rather than in a test.
+
+- **`tsc` is out of the build.** Type checking is `bun check` and emitting is
+  `bun build`, which took `npm run build` from 6.9s and ~390MB of resident
+  memory to 3.5s and ~123MB, and `typecheck:tests` from 7.6s and ~428MB to
+  4.4s and ~137MB. `bun check` reports the same errors off the same
+  `tsconfig.json`, and it does not emit, so `scripts/build.mjs` walks `src/` and
+  `scripts/`, drops what `tsconfig.json` excludes, and hands the rest to
+  `bun build --no-bundle`. That keeps tsc's per-file layout, so relative `.js`
+  specifiers still resolve. `npm run build` type checks before emitting, so a
+  type error still fails it.
+- **The published package no longer ships `.d.ts` files or source maps.** Bun's
+  transpiler emits neither. Nothing read them: `package.json` declares no
+  `types`, so no TypeScript consumer resolved them, and no entrypoint passes
+  `--enable-source-maps`, so a stack trace was never mapped back to TypeScript.
+  **No runtime behavior change.**
+- **`tsconfig.json` now sets `"types": ["node"]` and `noEmit`.** Bun's checker
+  does not pull in every package under `@types/` the way `tsc` does, so without
+  the explicit list every `Buffer` and `process` is an error. `noEmit` means a
+  stray `tsc` invocation type checks instead of writing `.js` next to sources.
+- **Bun is a build dependency.** CI installs it with `oven-sh/setup-bun@v2` in
+  the three jobs that build. Dependency installs stay on `npm`, so
+  `package-lock.json` remains the only lockfile.
+- **`npm run build:watch` is gone.** `bun build --no-bundle` accepts `--watch`
+  and ignores it (verified on 1.4.3), so the script would have started, built
+  once, and emitted nothing after that. `npm run build` and `npm run dev` are
+  unchanged.
+- **`npm run test:phase1` is gone.** It ran `dist/tests/test-phase1.js`, and no
+  `test-phase1` source exists in the tree, so it failed on every invocation. It
+  was never in CI and nothing documented it.
+
+- **The watch daemon runs the same pass as `once`.** The daemon had its own
+  copy of a sweep, so a scheduled directory was organized by different code from
+  the cron path, and the daemon wrote no history and no rollback handle. There is
+  now one pass: a daemon tick and `file-organizer-watch once --apply` produce
+  the same history row, carry the same manifest id, and honour the same
+  conflict strategy. A scheduled pass is now undoable by id.
+- **Custom categorization rules now reach the daemon.** The daemon built its
+  organizer without the configured `customRules`, so a scheduled directory was
+  categorized by the built-in extension map alone while a manual organize of the
+  same directory used the user's rules.
+- **A scheduled sweep waits for the file to settle.** The daemon now defaults to
+  `min_file_age_minutes: 60` and `max_files_per_run: 300` when a watch does not
+  set them. Previously a watch with neither rule swept every file on the next
+  tick and with no cap, so a folder that accumulated files overnight could move
+  all of them in one pass. **This changes behavior for existing watch configs
+  that never set either rule:** a newly downloaded file is now left alone for an
+  hour, and a backlog larger than 300 files is worked through over several ticks.
+  Set either rule explicitly on a watch to keep the old behavior; `0` disables
+  the filter.
+- **Those limits follow the directory now, not the daemon.** A crontab line
+  running `file-organizer-watch once --apply --source scheduled` over a
+  registered directory swept it unfiltered, so the same folder was filtered by
+  the built-in daemon and not by an OS timer. The rule lives in the shared pass
+  and keys on `--source`: a scheduled pass over a watched directory picks up that
+  watch's limits, and a pass run by hand is still never filtered, because the
+  person running it can see the folder. **No behavior change for a manual pass or
+  for a directory that was never registered with `watch add`.**
+- **Cron and systemd are documented as the primary scheduling path.** The README
+  now leads with an OS timer driving `once`, and describes the built-in daemon as
+  the fallback for a machine with no timer, adding catchup on startup.
+
+- **Two ticks of the same watch could run on top of each other.** The daemon
+  refused a second pass over a directory already being processed, which meant an
+  overlap was silently skipped rather than prevented. The guard now sits on the
+  cron task itself, so a tick that fires while the previous one is still moving
+  files is dropped by the scheduler instead of racing it. Different directories
+  still sweep in parallel.
+- **A manual or catchup pass can race a cron tick over the same directory.** The
+  in-flight guard used to only stop overlapping cron ticks; now `triggerNow` and
+  `runMissedSchedules` also check it, so any concurrent entry point is skipped
+  instead of racing the same sources and destinations.
+
+- **The verify harness wrote the sandbox allow-list into the real user config.**
+  `ensureSandbox` resolved the config directory from the ambient
+  `XDG_CONFIG_HOME` while the server it spawns resolves it from the sandbox root,
+  so on a machine where that variable is set the two disagreed. The harness
+  created and rewrote `~/.config/file-organizer-mcp/config.json`, which is the one
+  thing the skill promises never to touch, and every `--sandbox` call failed with
+  "outside allowed directories" because the server looked for a config.json that
+  was never written. The default sandbox only worked because it was reading the
+  real home's allow-list back. Config resolution now derives from the sandbox
+  root alone on every platform, mirroring the environment handed to the server.
+  The Windows branch had the same defect in one line, `process.env.APPDATA`,
+  which wins on a GitHub runner: every Windows invocation refused to start at the
+  containment guard. macOS was already correct.
+- **The verify harness silently dropped every `--arg key=value`.** Arguments were
+  collected into a map keyed by the literal string `arg`, so `--arg
+  files=[...]` reached the tool as `{arg: "files=[...]"}` and the tool answered
+  with a missing-field error that read like a product bug. Being a map, a repeated
+  key also overwrote the earlier value despite the docs calling it repeatable.
+  Pairs are now collected in order and applied after the plain flags, so `--arg`
+  wins over a bare `--key value` for the same name.
+- **The legacy rollback migration copied in manifests it had not verified.** On
+  first run in a new config dir, `RollbackService` copied every `.json` out of
+  `.file-organizer-rollbacks` in the directory the server was launched from. That
+  directory belongs to no particular install, so anything in it became undo
+  history: another install's manifests, a test run's leftovers, or a file anyone
+  with write access to the launch directory chose to drop there. Copying
+  unsigned manifests in is the thing the manifest signature exists to prevent.
+  Two other symptoms came from the same cause. A sandbox started from a
+  directory holding a `.file-organizer-rollbacks` inherited manifests it never
+  wrote, so it stopped being hermetic, and `undo_last_operation` with no id
+  picked the newest of those and answered "possible tampering detected" instead
+  of undoing anything. Migration now verifies each manifest's signature first and
+  leaves the rest where they are rather than deleting someone else's file. The
+  count skipped is logged.
+- **An unsigned manifest could be listed as an undo target.** `listManifests`
+  parsed every file in the rollback directory with no signature check, so once
+  manifest ids were shown to a user, a manifest file nobody signed became a
+  value they could paste back into `undo_last_operation`. The list now carries a
+  `signatureValid` flag per entry and keeps unverified files visible rather than
+  hiding them, so tampering stays evidence instead of becoming a silent gap.
+  `getManifest` remains the only path that hands manifest paths to a caller, and
+  a newer unverified manifest still blocks an out-of-order undo rather than
+  being ignored.
+- **Two undoes of the same manifest could both succeed.** `RollbackService`
+  read a manifest, acted on every path in it, and deleted the file with nothing
+  holding other processes off, so two undoes racing the same manifest both
+  passed the read and both unlinked. The read-apply-delete cycle now runs under
+  a `manifests.lock` in the rollback directory, a lock of its own rather than a
+  share of the history lock, so exactly one undo wins and the loser is told the
+  manifest is spent.
+- **That lock gave up halfway through a long undo.** A lock older than twice the
+  wait window is treated as abandoned, which is right for the history lock
+  because its critical section is a single `appendFile`, and wrong here: an undo
+  moves every file a manifest names and takes as long as that takes. Past the
+  window a second undo would reclaim the directory and both would spend the same
+  batch of moves. A holder now renews its lock while it works and checks it
+  between files, so an operation that outlives the window keeps the directory and
+  one that is reclaimed anyway stops before it touches the next file.
+- **A lock failure was reported as "another undo is stuck".** Every filesystem
+  error while taking the lock read as contention, so a read-only config
+  directory, a missing one, or a full disk surfaced after the full wait window as
+  a message about a process that did not exist. Those errors now report their
+  own cause, and `removeManifest` creates the rollback directory before locking
+  so a fresh install fails with the real error.
+- **Two waiters could both take over one dead lock.** Reclaiming a stale lock
+  read its age and then unlinked it, and a waiter that lost the create race would
+  delete the replacement the winner had just written. Reclaiming is now a rename
+  to a private name and the moved file is read back before it is dropped, so only
+  one waiter reaches the create and a lock that was not the one judged stale is
+  put back rather than dropped.
+- **A malformed `manifest_id` read as a lookup failure.** The field was a bare
+  `z.string()`, so a typo travelled to the filesystem and came back as "manifest
+  not found", which reads like a real undo-history problem. It is validated as a
+  UUID at the schema layer and in the tool's hand-written JSON schema, in both
+  `undo_last_operation` and `verify_integrity`.
+- **A pass that moved files had no undo handle in history.** `runOrganizePass`
+  logged the moves and then wrote a history row with no `manifestId`, so a
+  scheduled pass offered no id to hand
+  `file_organizer_undo_last_operation`, and `view_history`'s Undo Manifest
+  column was a dash. The organizer was already writing the manifest for the
+  moves it executed, so the pass now asks for that id and puts it on the row.
+  A pass that moved nothing still writes no id, and a manifest write that
+  fails is reported in the pass's `errors` instead of silently dropping the
+  handle. The files themselves were never beyond recovery, because the undo
+  tool falls back to the newest manifest on disk; what was missing was a row
+  that named the pass.
+
+- **A photo taken just after midnight was filed under the previous month** —
+  two readers of the EXIF date disagreed about the calendar.
+  `MetadataService.getMetadataSubpath` read it in the local calendar while
+  `getDateFolderName` and `dateFolder()` read it in UTC, so on any machine behind
+  UTC a photo taken in the first hours of a day was filed under the previous
+  month, and a New Year's Eve photo under the previous year.
+  `file_organizer_inspect_metadata` reported `Images/2024/04/midnight.jpg` for a
+  photo whose EXIF reads `2024:05:01 00:30`. Both readers now use UTC. The
+  folder is derived from the source of the date: EXIF is read in UTC, and the
+  `birthtime` fallback stays in local time because a filesystem timestamp is a
+  true instant rather than a camera wall clock. `getDateFolderName` takes the
+  date paired with its source (`PhotoDate`) so the two cannot be passed apart,
+  which is the shape `dateFolder()` already uses.
+
+- **A dry run reported an undo handle for work it never did** — the system
+  organizer minted a random manifest id whether or not anything ran, so a
+  `dry_run: true` response (and its markdown) named an "Undo Information /
+  Manifest ID" that pointed at no manifest on disk. Pasting that id into
+  `undo_last_operation` returned "Manifest not found" for an operation that had
+  never run. The service now plans operations without minting an id, and the id
+  is reported only once the handler has written the manifest that owns it.
+- **Duplicate detection no longer hides the files it skipped** — files over the
+  100MB hashing cap were dropped with a bare `continue` and no record, so the
+  largest and most expensive-to-miss files (videos, ISOs) were the ones silently
+  excluded while the tool still reported success. `findDuplicates` and
+  `findWithScoring` now return a `skipped` array (path, size, reason, plain-English
+  detail) plus `skipped_bytes`, and both duplicate tools surface it in the
+  markdown and JSON output. A partial analysis is no longer presented as an
+  exhaustive one. Empty files, over-cap files, unreadable files, and files
+  dropped to a scan timeout are all reported.
+- **`autoVerify` is reachable from MCP** — `handleDeleteDuplicates` never passed
+  the flag, so the "is this the last copy?" gate was dead code from the tool
+  surface and the tool would permanently unlink a file with no surviving copy.
+  Verification now defaults to on. The tool also reports `verified` and returns
+  `manifest_id` in its response, which it previously withheld, so a caller had no
+  way to reach the undo tool for a deletion it had just performed.
+- **Oversized duplicates could never be deleted** — the delete path hashed every
+  candidate, and `calculateHash` throws above the 100MB cap, so a large video or
+  ISO was always refused with "Cannot verify: File exceeds maximum size for
+  hashing" even when a genuine copy existed. Oversized files now fall back to a
+  size + first/last 64KB identity. Because that is a weaker check than a full
+  hash, affected deletions are listed in `partially_verified_files` and flagged in
+  the markdown report rather than being presented as fully verified.
+- **Documentation drift** — README claimed Node 18 while `package.json` requires
+  Node 20, and the README tool list was missing `file_organizer_organize_by_project`
+  (21 listed against 22 registered). A new `docs-tool-list.test.ts` guard reads
+  the real registry and fails when the README list, the headline tool counts, or
+  the documented Node version disagree with the code.
+- **`triggerNow` now reports what actually happened.** It returned a `boolean`
+  that was `false` only when the directory was not in the watch list, and `true`
+  for both "a pass ran" and "a pass was skipped because one was already in
+  flight", so a caller asking whether the request was honoured was told yes
+  when the in-flight guard had dropped the pass. `runOrganization` and
+  `triggerNow` return a `PassOutcome` instead: `ran`, or `skipped` with a
+  `not-watched` or `in-flight` reason and the directory it refers to. The
+  serialization guard itself is unchanged; only what gets reported about it is.
+
+### Added
+
+- **`undo_last_operation` can walk back through a stack of passes.**
+  `cascade: true` with a `manifest_id` undoes that pass and every pass made after
+  it, newest first, instead of refusing on the first overlap. Each step is the
+  ordinary single-manifest undo, verified before it runs and deleted on success,
+  so by the time the older pass runs nothing newer exists to collide with. The
+  walk stops at the first step that fails: the passes below it are left untouched
+  rather than undone out of order, and the response says how far it got. Files a
+  manifest names that are already gone are skipped and counted, never failed.
+
+- **A refusal is an answer, not an error.** An undo blocked by a newer pass still
+  moves nothing, but it comes back with `refused: true` and `isError: false`, so
+  an MCP client does not log it and retry something that cannot succeed. A
+  genuine mid-batch failure still sets `isError`. The undo output carries
+  `skipped`, `passes` and `refused` alongside `success` and `failed`, and a
+  cascade writes one history row per pass it spent, so `view_history` keeps the
+  per-pass detail the summary collapses.
+
+- **`file_organizer_organize_by_date`** - sorts any file into `YYYY/MM` folders
+  (`YYYY/MM/DD` and `YYYY` too). Photos take their folder from EXIF
+  `DateTimeOriginal` (`CreateDate` when that is absent); every other file uses its
+  modification time. `date_source` selects `auto` (EXIF, else mtime), `exif`
+  (EXIF only), or `mtime`. Each moved file reports the source that chose its
+  folder, so an EXIF-to-mtime fallback is never silent, and files with no usable
+  date stay where they are and are listed instead of landing in an
+  "Unknown Date" bucket. `dry_run` defaults to `true`, an occupied destination is
+  de-duplicated as `name (1).ext` rather than overwritten, and every performed
+  move is recorded in a rollback manifest for `file_organizer_undo_last_operation`.
+- `file_organizer_delete_duplicates` accepts `verify_before_delete` (default
+  `true`) and `candidate_directories`, for when a surviving copy lives outside
+  the searched parent directories.
+- **`file_organizer_search_history`** — filter the operation history by path
+  glob (`path_glob`), date range (`from`/`to`), operation type, status, or
+  source. Every filter is optional and the ones supplied combine, so a long
+  history stays queryable. It reads the same history as
+  `file_organizer_view_history`, which is unchanged; both now go through one
+  `HistoryLoggerService.searchHistory()` read. Path-glob matching needs paths
+  on the entry, so history entries gained an optional `paths` array — recorded
+  for the directory a tool call touched and for the single organize pass — and
+  `privacy_mode` redacts or drops it like the rest of the path-bearing fields.
+
 ## [5.0.0] - 2026-08-22
 
 ### Added
