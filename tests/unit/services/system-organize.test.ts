@@ -6,6 +6,7 @@
 import { jest, describe, it, expect, beforeEach } from "@jest/globals";
 import path from "path";
 import os from "os";
+import fsSync from "fs";
 
 jest.unstable_mockModule("fs/promises", () => ({
   default: {
@@ -30,6 +31,9 @@ jest.unstable_mockModule("fs/promises", () => ({
     lstat: jest
       .fn<() => Promise<any>>()
       .mockResolvedValue({ isSymbolicLink: () => false }),
+    // Real resolution: the production validator awaits fs.realpath in its
+    // symlink layer; omitting it here crashed validation for valid paths
+    realpath: jest.fn((p: string) => fsSync.realpathSync(p)),
   },
 }));
 
@@ -84,6 +88,23 @@ describe("SystemOrganizeService", () => {
   });
 
   describe("getSystemDirectories", () => {
+    it("should treat symlinked or unusable system directories as unusable", async () => {
+      service = new SystemOrganizeService();
+      const validatePathSpy = jest
+        .spyOn((service as any).pathValidator, "validatePath")
+        .mockImplementation(async (dirPath: unknown) => {
+          if (typeof dirPath === "string" && dirPath.includes("Music")) {
+            throw new Error("Path validation failed");
+          }
+          return dirPath as string;
+        });
+
+      const dirs = await service.getSystemDirectories();
+
+      expect(dirs.music).toBe("");
+      expect(validatePathSpy).toHaveBeenCalled();
+    });
+
     it("should return Windows paths on win32 platform", async () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, "platform", { value: "win32" });
