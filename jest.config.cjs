@@ -5,6 +5,9 @@ module.exports = {
   extensionsToTreatAsEsm: [".ts"],
   testMatch: ["**/tests/**/*.test.ts", "**/src/**/*.test.ts"],
   setupFilesAfterEnv: ["<rootDir>/tests/setup.ts"],
+  // Portability perturbation profile: FO_PORTABILITY=1 makes Linux lie about
+  // readdir order and tmpdir resolution for one run. See tests/perturb/setup.ts.
+  setupFiles: process.env.FO_PORTABILITY ? ["<rootDir>/tests/perturb/setup.ts"] : [],
   transform: {
     "^.+\\.tsx?$": ["ts-jest", { useESM: true }],
   },

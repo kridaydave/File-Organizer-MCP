@@ -3,25 +3,14 @@
  * Archive Validation Utility
  *
  * Provides:
- * - Magic number verification for archive file types
  * - Zip-slip attack prevention
  * - Path containment verification
  */
 
-import path from "path";
 import fs from "fs";
+import path from "path";
 import { SECURITY_LIMITS } from "./security-constants.js";
 import { isSubPath } from "../utils/file-utils.js";
-
-export interface ArchiveValidationResult {
-  valid: boolean;
-  format?: string;
-  error?: string;
-  entries?: number;
-  uncompressedSize?: number;
-  compressedSize?: number;
-  ratio?: number;
-}
 
 export interface EntryValidationResult {
   valid: boolean;
@@ -31,103 +20,34 @@ export interface EntryValidationResult {
 }
 
 /**
- * Detect archive format by reading magic numbers
+ * Resolve the nearest existing ancestor of a path and re-append the
+ * non-existent tail. Mirrors the ancestor walk in resolveSymlinks
+ * (path-validator.service.ts) so containment is checked against real
+ * paths, not just lexical ones. Returns null on resolution failure
+ * (e.g. symlink loop) so callers can fail closed.
  */
-export function detectArchiveFormat(filePath: string): ArchiveValidationResult {
-  try {
-    const buffer = Buffer.alloc(512);
-    const flags =
-      (fs.constants?.O_RDONLY ?? 0) |
-      (process.platform !== "win32" ? (fs.constants?.O_NOFOLLOW ?? 0) : 0);
-    const fd = fs.openSync(filePath, flags);
-    let bytesRead = 0;
+function resolveNearestExistingAncestor(targetPath: string): string | null {
+  let current = targetPath;
+  const tail: string[] = [];
+  while (true) {
     try {
-      bytesRead = fs.readSync(fd, buffer, 0, 512, 0);
-    } finally {
-      fs.closeSync(fd);
-    }
-
-    if (bytesRead < 2) {
-      return { valid: false, error: "File too small to be an archive" };
-    }
-
-    const magicBytes = Array.from(buffer.subarray(0, bytesRead));
-
-    // Check ZIP format (standard PK.. or empty PK..)
-    if (
-      bytesRead >= 4 &&
-      magicBytes[0] === 0x50 &&
-      magicBytes[1] === 0x4b &&
-      ((magicBytes[2] === 0x03 && magicBytes[3] === 0x04) ||
-        (magicBytes[2] === 0x05 && magicBytes[3] === 0x06))
-    ) {
-      return { valid: true, format: "zip" };
-    }
-
-    // Check 7Z format
-    if (
-      bytesRead >= 6 &&
-      magicBytes[0] === 0x37 &&
-      magicBytes[1] === 0x7a &&
-      magicBytes[2] === 0xbc &&
-      magicBytes[3] === 0xaf &&
-      magicBytes[4] === 0x27 &&
-      magicBytes[5] === 0x1c
-    ) {
-      return { valid: true, format: "7z" };
-    }
-
-    // Check XZ format
-    if (
-      bytesRead >= 6 &&
-      magicBytes[0] === 0xfd &&
-      magicBytes[1] === 0x37 &&
-      magicBytes[2] === 0x7a &&
-      magicBytes[3] === 0x58 &&
-      magicBytes[4] === 0x5a &&
-      magicBytes[5] === 0x00
-    ) {
-      return { valid: true, format: "xz" };
-    }
-
-    // Check GZIP format
-    if (
-      bytesRead >= 2 &&
-      magicBytes[0] === SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.gz[0] &&
-      magicBytes[1] === SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.gz[1]
-    ) {
-      return { valid: true, format: "gz" };
-    }
-
-    // Check BZIP2 format
-    if (
-      bytesRead >= 3 &&
-      magicBytes[0] ===
-        SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.bz2[0] &&
-      magicBytes[1] ===
-        SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.bz2[1] &&
-      magicBytes[2] === SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.bz2[2]
-    ) {
-      return { valid: true, format: "bz2" };
-    }
-
-    // Check TAR POSIX format (magic 'ustar' at offset 257)
-    if (bytesRead >= 262) {
-      const tarMagic = buffer.subarray(257, 262).toString("ascii");
-      if (tarMagic === "ustar") {
-        return { valid: true, format: "tar" };
+      const realPath =
+        typeof fs.realpathSync?.native === "function"
+          ? fs.realpathSync.native(current)
+          : fs.realpathSync(current);
+      return tail.length > 0 ? path.join(realPath, ...tail) : realPath;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT" && code !== "ENOTDIR") {
+        return null;
       }
+      const parent = path.dirname(current);
+      if (parent === current) {
+        return targetPath;
+      }
+      tail.unshift(path.basename(current));
+      current = parent;
     }
-
-    return { valid: false, error: "Unknown or unsupported archive format" };
-  } catch (error) {
-    return {
-      valid: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unknown error during format detection",
-    };
   }
 }
 
@@ -196,9 +116,27 @@ export function validateEntryPath(
   // Ensure the resolved path is still within the target directory and does not resolve to target itself
   const normalizedTarget = path.resolve(targetDirectory);
 
+  // Resolve symlinks to prevent zip-slip via pre-existing symlinks
+  const realTarget = resolveNearestExistingAncestor(normalizedTarget);
+  if (realTarget === null) {
+    return {
+      valid: false,
+      entryName,
+      error: "Zip-slip attempt: extracted path escapes target directory",
+    };
+  }
+  const realResolvedPath = resolveNearestExistingAncestor(resolvedPath);
+  if (realResolvedPath === null) {
+    return {
+      valid: false,
+      entryName,
+      error: "Zip-slip attempt: extracted path escapes target directory",
+    };
+  }
+
   if (
-    !isSubPath(normalizedTarget, resolvedPath) ||
-    resolvedPath === normalizedTarget ||
+    !isSubPath(realTarget, realResolvedPath) ||
+    realResolvedPath === realTarget ||
     normalizedEntry === "." ||
     normalizedEntry === ""
   ) {
@@ -321,12 +259,29 @@ export function validateArchiveEntries(
     });
   }
 
-  if (
-    typeof archiveCompressedSize === "number" &&
-    archiveCompressedSize > 0 &&
-    totalUncompressedSize / archiveCompressedSize > maxRatio
-  ) {
-    const errorMsg = `Decompression ratio ${(totalUncompressedSize / archiveCompressedSize).toFixed(1)} exceeds safety limit of ${maxRatio}x`;
+  let effectiveCompressedSize = archiveCompressedSize;
+  if (typeof effectiveCompressedSize !== "number" || effectiveCompressedSize <= 0) {
+    let sumCompressed = 0;
+    let hasCompressed = false;
+    for (const entry of entries) {
+      const c =
+        (entry as any).compressedSize ??
+        (entry as any).compressed ??
+        (entry as any).sizeCompressed;
+      if (typeof c === "number" && c > 0) {
+        sumCompressed += c;
+        hasCompressed = true;
+      }
+    }
+    if (hasCompressed && sumCompressed > 0) {
+      effectiveCompressedSize = sumCompressed;
+    } else {
+      effectiveCompressedSize = 1;
+    }
+  }
+
+  if (totalUncompressedSize / effectiveCompressedSize > maxRatio) {
+    const errorMsg = `Decompression ratio ${(totalUncompressedSize / effectiveCompressedSize).toFixed(1)} exceeds safety limit of ${maxRatio}x`;
     invalidEntries.push({
       valid: false,
       entryName: "",
