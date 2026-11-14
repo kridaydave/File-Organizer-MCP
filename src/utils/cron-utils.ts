@@ -19,7 +19,12 @@
  * Format: second(optional) minute hour day-of-month month day-of-week
  * or: minute hour day-of-month month day-of-week
  */
-type CronField = number | "*/n" | "*";
+type CronField =
+  | number
+  | "*/n"
+  | "*"
+  | { type: "range"; start: number; end: number; step?: number }
+  | { type: "list"; values: number[] };
 
 interface CronComponents {
   minute: CronField;
@@ -44,6 +49,101 @@ const isStepped = (field: CronField): field is "*/n" =>
 
 /** The `n` in `*` `/n`. Only call it on a field `isStepped` accepted. */
 const stepOf = (step: "*/n"): number => parseInt(step.slice(2), 10);
+
+/** A range field: `9-17` or `9-17/2`. */
+const isRange = (
+  field: CronField,
+): field is { type: "range"; start: number; end: number; step?: number } =>
+  typeof field === "object" && field.type === "range";
+
+/** A list field: `9,13,17`. */
+const isList = (field: CronField): field is { type: "list"; values: number[] } =>
+  typeof field === "object" && field.type === "list";
+
+/**
+ * Check if a cron field matches a given value.
+ */
+function fieldMatches(field: CronField, value: number): boolean {
+  if (field === "*") return true;
+  if (isStepped(field)) {
+    const step = stepOf(field);
+    if (isNaN(step) || step === 0) return false;
+    return value % step === 0;
+  }
+  if (typeof field === "number") return field === value;
+  if (isList(field)) return field.values.includes(value);
+  if (isRange(field)) {
+    if (value < field.start || value > field.end) return false;
+    if (field.step !== undefined) {
+      return (value - field.start) % field.step === 0;
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Get the next value in a field that is greater than currentValue.
+ */
+function getNextInField(
+  field: CronField,
+  currentValue: number,
+  max: number,
+): number | null {
+  if (field === "*") return currentValue + 1 > max ? null : currentValue + 1;
+  if (isStepped(field)) {
+    const step = stepOf(field);
+    if (isNaN(step) || step === 0) return null;
+    const next = Math.ceil((currentValue + 1) / step) * step;
+    return next > max ? null : next;
+  }
+  if (typeof field === "number") return field > currentValue ? field : null;
+  if (isList(field)) {
+    const sorted = [...field.values].sort((a, b) => a - b);
+    for (const v of sorted) if (v > currentValue) return v;
+    return null;
+  }
+  if (isRange(field)) {
+    if (currentValue < field.start) return field.start;
+    let candidate = currentValue + 1;
+    if (field.step) {
+      const diff = candidate - field.start;
+      if (diff % field.step !== 0) {
+        candidate += field.step - (diff % field.step);
+      }
+    }
+    return candidate <= field.end ? candidate : null;
+  }
+  return null;
+}
+
+/**
+ * Get the first value in a field.
+ */
+function getFirstInField(field: CronField, min = 0): number | null {
+  if (field === "*") return min;
+  if (isStepped(field)) {
+    const step = stepOf(field);
+    if (isNaN(step) || step === 0) return null;
+    return min % step === 0 ? min : Math.ceil(min / step) * step;
+  }
+  if (typeof field === "number") return field;
+  if (isList(field)) {
+    const sorted = [...field.values].sort((a, b) => a - b);
+    return sorted[0] ?? null;
+  }
+  if (isRange(field)) return field.start;
+  return null;
+}
+
+/** One number from a list of one, for the concrete branches. */
+function getFieldValue(field: CronField): number | null {
+  if (typeof field === "number") return field;
+  if (isList(field) && field.values.length === 1) {
+    return field.values[0] ?? null;
+  }
+  return null;
+}
 
 /**
  * Parse a cron expression into its components
@@ -81,9 +181,42 @@ function parseCronExpression(expression: string): CronComponents | null {
     return null;
   }
 
-  const parseField = (field: string): number | "*/n" | "*" => {
+  const parseField = (field: string): CronField => {
     if (field === "*") return "*";
     if (field.startsWith("*/")) return field as "*/n";
+    if (field.includes("/")) {
+      const [rangePart, stepPart] = field.split("/");
+      if (rangePart === undefined || stepPart === undefined) return "*";
+      const step = parseInt(stepPart, 10);
+      if (!isNaN(step) && rangePart === "*") return `*/${step}` as "*/n";
+      if (!isNaN(step) && rangePart.includes("-")) {
+        const [startStr, endStr] = rangePart.split("-");
+        if (startStr === undefined || endStr === undefined) return "*";
+        const start = parseInt(startStr, 10);
+        const end = parseInt(endStr, 10);
+        if (!isNaN(start) && !isNaN(end)) {
+          return { type: "range", start, end, step };
+        }
+      }
+      const num = parseInt(rangePart, 10);
+      return isNaN(num) ? "*" : num;
+    }
+    if (field.includes(",")) {
+      const values = field
+        .split(",")
+        .map((v) => parseInt(v.trim(), 10))
+        .filter((v) => !isNaN(v));
+      return values.length > 0 ? { type: "list", values } : "*";
+    }
+    if (field.includes("-")) {
+      const [startStr, endStr] = field.split("-");
+      if (startStr === undefined || endStr === undefined) return "*";
+      const start = parseInt(startStr, 10);
+      const end = parseInt(endStr, 10);
+      return !isNaN(start) && !isNaN(end)
+        ? { type: "range", start, end }
+        : "*";
+    }
     const num = parseInt(field, 10);
     return isNaN(num) ? "*" : num;
   };
@@ -109,10 +242,8 @@ function getMinimumIntervalMs(expression: string): number {
   }
 
   // Check for step values like */n
-  const getStep = (field: number | "*/n" | "*"): number | null => {
-    if (typeof field === "string" && field.startsWith("*/")) {
-      return parseInt(field.slice(2), 10);
-    }
+  const getStep = (field: CronField): number | null => {
+    if (isStepped(field)) return stepOf(field);
     return null;
   };
 
@@ -134,15 +265,31 @@ function getMinimumIntervalMs(expression: string): number {
   const isDaily =
     components.minute !== "*" &&
     components.hour !== "*" &&
-    components.dayOfMonth === "*";
+    components.dayOfMonth === "*" &&
+    components.dayOfWeek === "*";
   const isWeekly =
     components.minute !== "*" &&
     components.hour !== "*" &&
-    components.dayOfWeek !== "*";
+    components.dayOfWeek !== "*" &&
+    components.dayOfMonth === "*";
+  const isMonthly =
+    components.minute !== "*" &&
+    components.hour !== "*" &&
+    components.dayOfMonth !== "*" &&
+    components.dayOfWeek === "*";
+  // A range or list hour with a concrete minute fires hourly within the
+  // window, not daily. Without this the fallback reports `0 9-17 * * *`
+  // as once a day, and the range branch below never runs for the fallback.
+  const isSubDailyRange =
+    isConcrete(components.minute) &&
+    (isRange(components.hour) || isList(components.hour)) &&
+    components.dayOfMonth === "*" &&
+    components.dayOfWeek === "*";
 
   if (isWeekly) return 7 * 24 * 60 * 60 * 1000; // 7 days
+  if (isMonthly) return 31 * 24 * 60 * 60 * 1000; // ~1 month
   if (isDaily) return 24 * 60 * 60 * 1000; // 1 day
-  if (isHourly) return 60 * 60 * 1000; // 1 hour
+  if (isHourly || isSubDailyRange) return 60 * 60 * 1000; // 1 hour
 
   // Default to 1 day
   return 24 * 60 * 60 * 1000;
@@ -235,6 +382,39 @@ export function getNextRunTime(
     return next;
   }
 
+  // Handle hour ranges and lists: "0 9-17 * * *" (every hour in the window)
+  // and "0 9,13,17 * * *". Without this the expression degrades to the
+  // 1-day fallback because no branch matches a non-concrete hour.
+  if (
+    isConcrete(components.minute) &&
+    (isRange(components.hour) || isList(components.hour)) &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    next.setMinutes(components.minute);
+    const currentHour = next.getHours();
+    if (fieldMatches(components.hour, currentHour)) {
+      if (next.getTime() > fromDate.getTime()) return next;
+      const later = getNextInField(components.hour, currentHour, 23);
+      if (later !== null) {
+        next.setHours(later);
+        return next;
+      }
+    } else {
+      const later = getNextInField(components.hour, currentHour - 1, 23);
+      if (later !== null && later >= currentHour) {
+        next.setHours(later);
+        return next;
+      }
+    }
+    next.setDate(next.getDate() + 1);
+    const first = getFirstInField(components.hour, 0);
+    next.setHours(first ?? 0);
+    next.setMinutes(components.minute);
+    return next;
+  }
+
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
     isConcrete(components.minute) &&
@@ -249,6 +429,68 @@ export function getNextRunTime(
       next.setDate(next.getDate() + 1);
     }
     return next;
+  }
+
+  // Handle monthly pattern: "0 9 1 * *" (monthly on the 1st at 9am)
+  if (
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
+    components.dayOfMonth !== "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    next.setMinutes(components.minute);
+    next.setHours(components.hour);
+    if (isConcrete(components.dayOfMonth)) {
+      const targetDom = components.dayOfMonth;
+      const currentDom = next.getDate();
+      if (currentDom < targetDom) {
+        next.setDate(targetDom);
+        if (next.getTime() <= fromDate.getTime()) {
+          next.setMonth(next.getMonth() + 1);
+          next.setDate(targetDom);
+        }
+      } else if (currentDom === targetDom) {
+        if (next.getTime() <= fromDate.getTime()) {
+          next.setMonth(next.getMonth() + 1);
+          next.setDate(targetDom);
+        }
+      } else {
+        next.setMonth(next.getMonth() + 1);
+        next.setDate(targetDom);
+      }
+      return next;
+    }
+    if (isList(components.dayOfMonth)) {
+      const currentDom = next.getDate();
+      const sorted = [...components.dayOfMonth.values].sort((a, b) => a - b);
+      for (const day of sorted) {
+        if (day > currentDom) {
+          next.setDate(day);
+          return next;
+        }
+        if (day === currentDom && next.getTime() > fromDate.getTime()) {
+          return next;
+        }
+      }
+      next.setMonth(next.getMonth() + 1);
+      const first = sorted[0];
+      if (first !== undefined) next.setDate(first);
+      return next;
+    }
+    if (isRange(components.dayOfMonth)) {
+      const currentDom = next.getDate();
+      if (fieldMatches(components.dayOfMonth, currentDom)) {
+        if (next.getTime() > fromDate.getTime()) return next;
+      }
+      const later = getNextInField(components.dayOfMonth, currentDom, 31);
+      if (later !== null && later > currentDom) {
+        next.setDate(later);
+        return next;
+      }
+      next.setMonth(next.getMonth() + 1);
+      next.setDate(components.dayOfMonth.start);
+      return next;
+    }
   }
 
   // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
@@ -368,6 +610,61 @@ export function getPreviousRunTime(
     return prev;
   }
 
+  // Handle hour ranges and lists in reverse; mirrors getNextRunTime.
+  if (
+    isConcrete(components.minute) &&
+    (isRange(components.hour) || isList(components.hour)) &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    prev.setMinutes(components.minute);
+    const currentHour = prev.getHours();
+    if (fieldMatches(components.hour, currentHour)) {
+      if (prev.getTime() < fromDate.getTime()) return prev;
+      let candidate = currentHour - 1;
+      let found: number | null = null;
+      while (candidate >= 0) {
+        if (fieldMatches(components.hour, candidate)) {
+          found = candidate;
+          break;
+        }
+        candidate--;
+      }
+      if (found !== null) {
+        prev.setHours(found);
+        return prev;
+      }
+      prev.setDate(prev.getDate() - 1);
+      let last: number | null = 23;
+      while (last !== null && last >= 0 && !fieldMatches(components.hour, last)) {
+        last--;
+      }
+      prev.setHours(last ?? 0);
+      return prev;
+    }
+    let candidate = currentHour - 1;
+    let found: number | null = null;
+    while (candidate >= 0) {
+      if (fieldMatches(components.hour, candidate)) {
+        found = candidate;
+        break;
+      }
+      candidate--;
+    }
+    if (found !== null) {
+      prev.setHours(found);
+      return prev;
+    }
+    prev.setDate(prev.getDate() - 1);
+    let last: number | null = 23;
+    while (last !== null && last >= 0 && !fieldMatches(components.hour, last)) {
+      last--;
+    }
+    prev.setHours(last ?? 0);
+    return prev;
+  }
+
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
     isConcrete(components.minute) &&
@@ -382,6 +679,76 @@ export function getPreviousRunTime(
       prev.setDate(prev.getDate() - 1);
     }
     return prev;
+  }
+
+  // Handle monthly pattern in reverse; mirrors getNextRunTime.
+  if (
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
+    components.dayOfMonth !== "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    prev.setMinutes(components.minute);
+    prev.setHours(components.hour);
+    if (isConcrete(components.dayOfMonth)) {
+      const targetDom = components.dayOfMonth;
+      const currentDom = prev.getDate();
+      if (currentDom > targetDom) {
+        prev.setDate(targetDom);
+        if (prev.getTime() >= fromDate.getTime()) {
+          prev.setMonth(prev.getMonth() - 1);
+          prev.setDate(targetDom);
+        }
+      } else if (currentDom === targetDom) {
+        if (prev.getTime() >= fromDate.getTime()) {
+          prev.setMonth(prev.getMonth() - 1);
+          prev.setDate(targetDom);
+        }
+      } else {
+        prev.setMonth(prev.getMonth() - 1);
+        prev.setDate(targetDom);
+      }
+      return prev;
+    }
+    if (isList(components.dayOfMonth)) {
+      const currentDom = prev.getDate();
+      const sorted = [...components.dayOfMonth.values].sort((a, b) => b - a);
+      for (const day of sorted) {
+        if (day < currentDom) {
+          prev.setDate(day);
+          return prev;
+        }
+        if (day === currentDom && prev.getTime() < fromDate.getTime()) {
+          return prev;
+        }
+      }
+      prev.setMonth(prev.getMonth() - 1);
+      const last = [...components.dayOfMonth.values].sort((a, b) => b - a)[0];
+      if (last !== undefined) prev.setDate(last);
+      return prev;
+    }
+    if (isRange(components.dayOfMonth)) {
+      const currentDom = prev.getDate();
+      if (fieldMatches(components.dayOfMonth, currentDom)) {
+        if (prev.getTime() < fromDate.getTime()) return prev;
+      }
+      let candidate = currentDom - 1;
+      let found: number | null = null;
+      while (candidate >= 1) {
+        if (fieldMatches(components.dayOfMonth, candidate)) {
+          found = candidate;
+          break;
+        }
+        candidate--;
+      }
+      if (found !== null) {
+        prev.setDate(found);
+        return prev;
+      }
+      prev.setMonth(prev.getMonth() - 1);
+      prev.setDate(components.dayOfMonth.end);
+      return prev;
+    }
   }
 
   // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
@@ -466,6 +833,54 @@ export function isValidCronExpression(expression: string): boolean {
     if (field.startsWith("*/")) {
       const step = parseInt(field.slice(2), 10);
       return !isNaN(step) && step > 0 && step <= max;
+    }
+    if (field.includes("/")) {
+      const [rangePart, stepPart] = field.split("/");
+      if (rangePart === undefined || stepPart === undefined) return false;
+      const step = parseInt(stepPart, 10);
+      if (isNaN(step) || step <= 0 || step > max) return false;
+      if (rangePart === "*") return true;
+      if (rangePart.includes("-")) {
+        const [startStr, endStr] = rangePart.split("-");
+        if (startStr === undefined || endStr === undefined) return false;
+        const start = parseInt(startStr, 10);
+        const end = parseInt(endStr, 10);
+        return (
+          !isNaN(start) && !isNaN(end) && start >= min && end <= max && start <= end
+        );
+      }
+      return false;
+    }
+    if (field.includes(",")) {
+      for (const part of field.split(",").map((v) => v.trim())) {
+        if (part === "*") continue;
+        if (part.startsWith("*/")) {
+          const step = parseInt(part.slice(2), 10);
+          if (isNaN(step) || step <= 0 || step > max) return false;
+          continue;
+        }
+        if (part.includes("-")) {
+          const [startStr, endStr] = part.split("-");
+          if (startStr === undefined || endStr === undefined) return false;
+          const start = parseInt(startStr, 10);
+          const end = parseInt(endStr, 10);
+          if (isNaN(start) || isNaN(end) || start < min || end > max || start > end)
+            return false;
+          continue;
+        }
+        const num = parseInt(part, 10);
+        if (isNaN(num) || num < min || num > max) return false;
+      }
+      return true;
+    }
+    if (field.includes("-")) {
+      const [startStr, endStr] = field.split("-");
+      if (startStr === undefined || endStr === undefined) return false;
+      const start = parseInt(startStr, 10);
+      const end = parseInt(endStr, 10);
+      return (
+        !isNaN(start) && !isNaN(end) && start >= min && end <= max && start <= end
+      );
     }
     const num = parseInt(field, 10);
     return !isNaN(num) && num >= min && num <= max;
