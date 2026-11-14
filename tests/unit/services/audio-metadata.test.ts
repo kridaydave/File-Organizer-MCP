@@ -493,6 +493,24 @@ describe("AudioMetadataService", () => {
       const lastUpdate = progressUpdates[progressUpdates.length - 1];
       expect(lastUpdate?.errors).toBeGreaterThan(0);
     });
+
+    it("should reject concurrency of 0", async () => {
+      const file = path.join(testDir, "test.mp3");
+      await fs.writeFile(file, Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00]));
+      await expect(service.extractBatch([file], { concurrency: 0 })).rejects.toThrow();
+    });
+
+    it("should reject negative concurrency", async () => {
+      const file = path.join(testDir, "test2.mp3");
+      await fs.writeFile(file, Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00]));
+      await expect(service.extractBatch([file], { concurrency: -1 })).rejects.toThrow();
+    });
+
+    it("should reject NaN concurrency", async () => {
+      const file = path.join(testDir, "test3.mp3");
+      await fs.writeFile(file, Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00]));
+      await expect(service.extractBatch([file], { concurrency: NaN })).rejects.toThrow();
+    });
   });
 
   // ==================== hasMetadata TESTS ====================
@@ -689,7 +707,7 @@ describe("AudioMetadataService", () => {
         0x00, // Size: 256 bytes
       ]);
 
-      const frames = [
+      const frames: Array<[string, string]> = [
         // TIT2 - Title
         ["TIT2", "Complete Test Song"],
         // TPE1 - Artist
