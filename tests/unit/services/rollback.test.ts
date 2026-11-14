@@ -93,7 +93,7 @@ describe('Rollback Service', () => {
         }
     });
 
-    it('should retry copy undo after partial rollback failure', async () => {
+    it('should restore an undone copy when a later action fails, so the retry can finish', async () => {
         const copySrc = path.join(testDir, 'copy-src.txt');
         const copyDest = path.join(testDir, 'copy-dest.txt');
         await fs.writeFile(copySrc, 'copy-content');
@@ -104,56 +104,62 @@ describe('Rollback Service', () => {
         await fs.writeFile(moveSrc, 'move-content');
         await fs.rename(moveSrc, moveDest);
 
-        const manifestId = await rollbackService.createManifest('Copy then move test', [
-            {
-                type: 'copy',
-                originalPath: copySrc,
-                currentPath: copyDest,
-                timestamp: Date.now()
-            },
-            {
-                type: 'move',
-                originalPath: moveSrc,
-                currentPath: moveDest,
-                timestamp: Date.now()
-            }
+        // Undo runs in reverse, so the copy is un-copied first and the move fails
+        // afterwards. That order is the whole point: without a backup of the copy,
+        // the failure leaves the user with neither the copy nor its original.
+        const manifestId = await rollbackService.createManifest('Move then copy test', [
+            { type: 'move', originalPath: moveSrc, currentPath: moveDest, timestamp: Date.now() },
+            { type: 'copy', originalPath: copySrc, currentPath: copyDest, timestamp: Date.now() },
         ]);
 
-        // Simulate: copy undo will delete copy, then move undo will fail because moveDest deleted
-        await fs.unlink(moveDest);
+        // A real obstruction, not a missing file: main treats a missing target as
+        // a skip, so only a genuine clash makes the move undo fail.
+        await fs.writeFile(moveSrc, 'blocker');
 
         const firstResult = await rollbackService.rollback(manifestId);
         expect(firstResult.failed).toBeGreaterThan(0);
-        // Manifest should remain for retry
-        expect(await fs.access(path.join(testDir, `${manifestId}.json`)).then(() => true).catch(() => false)).toBe(true);
-        // With our testDir as storage, manifest is in testDir
+
+        // The copy the failed batch had already undone must be back on disk.
+        expect(
+            await fs.readFile(copyDest, 'utf-8').catch(() => null),
+        ).toBe('copy-content');
+        expect(
+            await fs.access(path.join(testDir, `${manifestId}.json`)).then(() => true).catch(() => false),
+        ).toBe(true);
+
+        await fs.unlink(moveSrc);
+        const secondResult = await rollbackService.rollback(manifestId);
+
+        expect(secondResult.failed).toBe(0);
+        expect(
+            await fs.access(copyDest).then(() => true).catch(() => false),
+        ).toBe(false);
+        const leftovers = (await fs.readdir(testDir)).filter((f) => f.includes('.copy-backup-'));
+        expect(leftovers).toEqual([]);
     });
 
-    it('should allow retrying copy undo when copy file already removed', async () => {
+    it('should remove the copy and its manifest after a clean undo', async () => {
         const copySrc = path.join(testDir, 'copy2-src.txt');
         const copyDest = path.join(testDir, 'copy2-dest.txt');
         await fs.writeFile(copySrc, 'copy-content-2');
         await fs.copyFile(copySrc, copyDest);
 
         const manifestId = await rollbackService.createManifest('Copy test', [
-            {
-                type: 'copy',
-                originalPath: copySrc,
-                currentPath: copyDest,
-                timestamp: Date.now()
-            }
+            { type: 'copy', originalPath: copySrc, currentPath: copyDest, timestamp: Date.now() },
         ]);
 
-        const result1 = await rollbackService.rollback(manifestId);
-        if (result1.failed === 0) {
-            expect(await fs.access(path.join(testDir, `${manifestId}.json`)).then(() => true).catch(() => false)).toBe(false);
-            return;
-        }
-        const result2 = await rollbackService.rollback(manifestId);
-        expect(result2).toBeDefined();
+        const result = await rollbackService.rollback(manifestId);
+
+        expect(result.failed).toBe(0);
+        expect(result.success).toBe(1);
+        expect(
+            await fs.access(path.join(testDir, `${manifestId}.json`)).then(() => true).catch(() => false),
+        ).toBe(false);
+        const leftovers = (await fs.readdir(testDir)).filter((f) => f.includes('.copy-backup-'));
+        expect(leftovers).toEqual([]);
     });
 
-    it('should retry copy undo after partial rollback where later action fails', async () => {
+    it('should keep the manifest when a later action fails after a copy undo', async () => {
         const copySrc = path.join(testDir, 'copy3-src.txt');
         const copyDest = path.join(testDir, 'copy3-dest.txt');
         await fs.writeFile(copySrc, 'copy-content-3');
@@ -165,27 +171,84 @@ describe('Rollback Service', () => {
         await fs.rename(moveSrc, moveDest);
 
         const manifestId = await rollbackService.createManifest('Copy then move test', [
-            {
-                type: 'copy',
-                originalPath: copySrc,
-                currentPath: copyDest,
-                timestamp: Date.now()
-            },
-            {
-                type: 'move',
-                originalPath: moveSrc,
-                currentPath: moveDest,
-                timestamp: Date.now()
-            }
+            { type: 'copy', originalPath: copySrc, currentPath: copyDest, timestamp: Date.now() },
+            { type: 'move', originalPath: moveSrc, currentPath: moveDest, timestamp: Date.now() },
         ]);
 
-        await fs.unlink(moveDest);
+        await fs.writeFile(moveSrc, 'blocker');
 
         const firstResult = await rollbackService.rollback(manifestId);
         expect(firstResult.failed).toBeGreaterThan(0);
+        expect(
+            await fs.access(path.join(testDir, `${manifestId}.json`)).then(() => true).catch(() => false),
+        ).toBe(true);
 
+        await fs.unlink(moveSrc);
         const secondResult = await rollbackService.rollback(manifestId);
-        expect(secondResult.failed).toBeGreaterThanOrEqual(0);
+        expect(secondResult.failed).toBe(0);
         expect(Array.isArray(secondResult.errors)).toBe(true);
+        expect(secondResult.errors).toEqual([]);
+    });
+
+    it('writes manifest atomically leaving no truncated JSON on write failure', async () => {
+        const src = path.join(testDir, 'source2.txt');
+        const dest = path.join(testDir, 'dest2.txt');
+        await fs.writeFile(src, 'content');
+        await fs.rename(src, dest);
+
+        const writeFileSpy = jest.spyOn(fs, 'writeFile').mockRejectedValueOnce(new Error('ENOSPC'));
+
+        await expect(
+            rollbackService.createManifest('Atomic test', [
+                {
+                    type: 'move',
+                    originalPath: src,
+                    currentPath: dest,
+                    timestamp: Date.now(),
+                },
+            ]),
+        ).rejects.toThrow();
+
+        writeFileSpy.mockRestore();
+
+        const files = await fs.readdir(testDir);
+        const manifestFiles = files.filter((f) => f.endsWith('.json'));
+        expect(manifestFiles).toHaveLength(0);
+
+        const tempFiles = files.filter((f) => f.includes('.tmp'));
+        expect(tempFiles).toHaveLength(0);
+    });
+
+    it('should skip a manifest file whose JSON is not a manifest object', async () => {
+        const src = path.join(testDir, 'kept.txt');
+        const dest = path.join(testDir, 'kept-moved.txt');
+        await fs.writeFile(src, 'content');
+
+        const manifestId = await rollbackService.createManifest('valid manifest', [
+            { type: 'move', originalPath: src, currentPath: dest, timestamp: Date.now() }
+        ]);
+
+        await fs.writeFile(path.join(testDir, 'not-a-manifest.json'), 'null');
+
+        const manifests = await rollbackService.listManifests();
+
+        expect(manifests.map((m) => m.id)).toEqual([manifestId]);
+    });
+
+    it('should skip a manifest file whose JSON is an array', async () => {
+        const src = path.join(testDir, 'kept.txt');
+        const dest = path.join(testDir, 'kept-moved.txt');
+        await fs.writeFile(src, 'content');
+
+        const manifestId = await rollbackService.createManifest('valid manifest', [
+            { type: 'move', originalPath: src, currentPath: dest, timestamp: Date.now() }
+        ]);
+
+        await fs.writeFile(path.join(testDir, 'not-a-manifest.json'), '[{"id":"nope"}]');
+
+        const manifests = await rollbackService.listManifests();
+
+        expect(manifests.length).toBe(1);
+        expect(manifests.map((m) => m.id)).toStrictEqual([manifestId]);
     });
 });

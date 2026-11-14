@@ -9,7 +9,7 @@
 import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
-import os from "os";
+import { getConfigDirectory } from "../../core/config/paths.js";
 import { logger } from "../../utils/logger.js";
 
 const STATE_FILE_VERSION = 1;
@@ -52,36 +52,16 @@ export class SchedulerStateService {
   }
 
   /**
-   * Get the default path for the state file
-   * Uses the same directory as user config
+   * Get the default path for the state file.
+   *
+   * Derived from getConfigDirectory() rather than resolved here. This used to
+   * hardcode `~/.config` on Linux, so XDG_CONFIG_HOME moved config.json,
+   * history and backups while leaving this file behind in the real home
+   * directory: the exact split getConfigDirectory() was introduced to close.
+   * Every default install resolves to the same path it did before.
    */
   private getDefaultStateFilePath(): string {
-    const platform = os.platform();
-    const home = os.homedir();
-
-    if (platform === "win32") {
-      // Windows: %APPDATA%\file-organizer-mcp\scheduler-state.json
-      const appData =
-        process.env.APPDATA || path.join(home, "AppData", "Roaming");
-      return path.join(appData, "file-organizer-mcp", "scheduler-state.json");
-    } else if (platform === "darwin") {
-      // macOS: ~/Library/Application Support/file-organizer-mcp/scheduler-state.json
-      return path.join(
-        home,
-        "Library",
-        "Application Support",
-        "file-organizer-mcp",
-        "scheduler-state.json",
-      );
-    } else {
-      // Linux: ~/.config/file-organizer-mcp/scheduler-state.json
-      return path.join(
-        home,
-        ".config",
-        "file-organizer-mcp",
-        "scheduler-state.json",
-      );
-    }
+    return path.join(getConfigDirectory(), "scheduler-state.json");
   }
 
   /**
@@ -123,6 +103,21 @@ export class SchedulerStateService {
         "SchedulerStateService not initialized. Call initialize() first.",
       );
     }
+  }
+
+  /**
+   * Re-read the state file from disk.
+   *
+   * Loading once is right for the daemon, which owns the file and saves after
+   * every pass. A read-only caller in another process is the opposite case: it
+   * would otherwise report whatever was on disk when its own server started,
+   * so a watch that has run since then still reads as `never_run`. Only
+   * read-only callers should call this. A writer would drop entries it has set
+   * in memory but not yet saved.
+   */
+  async reload(): Promise<void> {
+    this.initialized = false;
+    await this.initialize();
   }
 
   /**
@@ -187,7 +182,7 @@ export class SchedulerStateService {
   /**
    * Save state to disk
    */
-  private async saveState(): Promise<void> {
+  private async saveState(merge: boolean = true): Promise<void> {
     try {
       // Ensure directory exists
       const dir = path.dirname(this.stateFilePath);
@@ -195,10 +190,38 @@ export class SchedulerStateService {
         await fsPromises.mkdir(dir, { recursive: true });
       }
 
-      // Write state to file
+      // This file is shared with a writer that does not go through this
+      // service: runNotify drops a `notifications` throttle key straight onto
+      // disk after a pass. A blind stringify would wipe it on the next
+      // setLastRunTime, so the save reads the current file and carries every
+      // key forward that this service does not own. Only the owned fields are
+      // spread from `this.state`: loadState keeps foreign keys in memory, so
+      // spreading the whole object could push a stale `notifications` value
+      // back over the fresher one runNotify just wrote. `this.state` still
+      // wins for `version`/`directories`, so clears and updates apply.
+      let current: Record<string, unknown> = {};
+      if (merge) {
+        try {
+          const raw = await fsPromises.readFile(this.stateFilePath, "utf-8");
+          const parsed: unknown = JSON.parse(raw);
+          if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+            current = parsed as Record<string, unknown>;
+          }
+        } catch {
+          // Absent, empty, or corrupted on the way in: nothing to preserve, and
+          // the fresh write below replaces it either way.
+        }
+      }
+
+      // Write state to file. When merge is false (clearState), write this.state
+      // alone so foreign keys like notifications are dropped too — a clear means
+      // a clear, not "keep everyone else's data".
+      const payload = merge
+        ? { ...current, version: this.state.version, directories: this.state.directories }
+        : this.state;
       await fsPromises.writeFile(
         this.stateFilePath,
-        JSON.stringify(this.state, null, 2),
+        JSON.stringify(payload, null, 2),
         "utf-8",
       );
       logger.debug("Scheduler state saved successfully");
@@ -361,7 +384,7 @@ export class SchedulerStateService {
     this.ensureInitialized();
 
     this.state = this.createEmptyState();
-    await this.saveState();
+    await this.saveState(false);
     logger.info("Scheduler state cleared");
   }
 
@@ -396,15 +419,49 @@ export class SchedulerStateService {
 let globalSchedulerStateService: SchedulerStateService | null = null;
 
 /**
+ * Sticky default for the singleton, set by setSchedulerStateServicePath. Null
+ * in production, which is what makes getConfigDirectory() the default.
+ */
+let stateFilePathOverride: string | null = null;
+
+/**
  * Get or create the global scheduler state service instance
  * @returns The global SchedulerStateService instance
+ *
+ * Resolution order is explicit argument, then the override set by
+ * setSchedulerStateServicePath, then getConfigDirectory(). Production sets
+ * neither and always gets the config directory.
+ *
+ * The override exists because getConfigDirectory() honours XDG_CONFIG_HOME and
+ * APPDATA on Linux and Windows but resolves to ~/Library/Application Support on
+ * macOS, so no environment variable relocates this file on all three. It is
+ * sticky rather than an argument because callers reach this service through the
+ * singleton, and an argument would only apply to whichever call happened to
+ * build it first. A test that resets the singleton and then called
+ * getSchedulerStateService() with no argument would silently get the default
+ * path back, which is the developer's real state file.
  */
-export async function getSchedulerStateService(): Promise<SchedulerStateService> {
+export async function getSchedulerStateService(
+  stateFilePath?: string,
+): Promise<SchedulerStateService> {
   if (!globalSchedulerStateService) {
-    globalSchedulerStateService = new SchedulerStateService();
+    globalSchedulerStateService = new SchedulerStateService(
+      stateFilePath ?? stateFilePathOverride ?? undefined,
+    );
     await globalSchedulerStateService.initialize();
   }
   return globalSchedulerStateService;
+}
+
+/**
+ * Redirect the singleton to `stateFilePath`, or back to the default with
+ * `undefined`. Test-only: production resolves the config directory.
+ */
+export function setSchedulerStateServicePath(
+  stateFilePath: string | undefined,
+): void {
+  stateFilePathOverride = stateFilePath ?? null;
+  globalSchedulerStateService = null;
 }
 
 /**
