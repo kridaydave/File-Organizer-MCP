@@ -61,6 +61,7 @@ async function buildPlan(
   includeSubdirs: boolean,
   ctx: ToolContext,
   sinceLastRun?: Date,
+  useContentAnalysis: boolean = false,
 ): Promise<{ plan: OrganizationPlan; scannedCount: number }> {
   // Services are stateless — build them per request from the request's config.
   const scanner = new FileScannerService();
@@ -68,15 +69,18 @@ async function buildPlan(
     new CategorizerService(ctx.config.customRules ?? []),
   );
   const scanned = await scanner.getAllFiles(directory, includeSubdirs);
+  const considered = filterSince(scanned, sinceLastRun);
   const plan = await organizer.generateOrganizationPlan(
     directory,
-    filterSince(scanned, sinceLastRun),
+    considered,
     conflictStrategy,
+    useContentAnalysis,
   );
-  // A preview reports two different numbers: how many files it looked at, and how
+  // A preview reports two numbers: how many files the plan considered, and how
   // many moves it proposes. `total_files` is the first, so it matches what
-  // organize_files reports for the same directory.
-  return { plan, scannedCount: scanned.length };
+  // organize_files reports for the same directory and still narrows when
+  // since_last_run asks it to.
+  return { plan, scannedCount: considered.length };
 }
 
 /**
@@ -109,6 +113,7 @@ export async function buildPlanForTest(options: {
   includeSubdirs: boolean;
   ctx: ToolContext;
   sinceLastRun?: Date;
+  useContentAnalysis?: boolean;
   files: readonly FileWithSize[];
 }): Promise<OrganizationPlan> {
   const organizer = new OrganizerService(
@@ -118,6 +123,7 @@ export async function buildPlanForTest(options: {
     options.directory,
     filterSince(options.files, options.sinceLastRun),
     options.conflictStrategy,
+    options.useContentAnalysis ?? false,
   );
 }
 
@@ -141,6 +147,12 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
         enum: ["rename", "skip", "overwrite"],
         description:
           "How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified",
+      },
+      use_content_analysis: {
+        type: "boolean",
+        description:
+          "Analyze file content for accurate type detection and security (slower)",
+        default: false,
       },
       since_last_run: {
         type: "boolean",
@@ -183,6 +195,7 @@ export async function handlePreviewOrganization(
       show_conflicts_only,
       response_format,
       conflict_strategy,
+      use_content_analysis,
       since_last_run,
     } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
@@ -208,6 +221,7 @@ export async function handlePreviewOrganization(
       false,
       ctx,
       lastRun ?? undefined,
+      use_content_analysis ?? false,
     );
 
     let moves = plan.moves.map((m: OrganizationPlan["moves"][0]) => ({
@@ -249,7 +263,8 @@ export async function handlePreviewOrganization(
     const markdown = `### Organization Preview for \`${directory}\`
 
 **Summary:**
-- Files to Move: ${output.summary.total_files}
+- Files Scanned: ${output.summary.total_files}
+- Files to Move: ${output.moves.length}
 - Estimated Time: ${output.summary.estimated_duration_seconds.toFixed(2)}s
 - Conflicts: ${output.moves.filter((m: MoveItem) => m.conflict).length}
 - Conflict Strategy: ${effectiveConflictStrategy}
