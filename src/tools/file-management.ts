@@ -347,6 +347,25 @@ export async function handleSetCustomRules(
   try {
     const parsed = SetCustomRulesInputSchema.safeParse(args);
     if (!parsed.success) {
+      const response_format =
+        (args as Record<string, unknown>)?.response_format === "json"
+          ? "json"
+          : "markdown";
+
+      if (response_format === "json") {
+        const errorMessage = `Error: ${parsed.error.issues.map((i) => i.message).join(", ")}`;
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ error: errorMessage }, null, 2),
+            },
+          ],
+          structuredContent: { error: errorMessage },
+          isError: true,
+        };
+      }
+
       return {
         content: [
           {
@@ -358,7 +377,7 @@ export async function handleSetCustomRules(
       };
     }
 
-    const { rules } = parsed.data;
+    const { rules, response_format } = parsed.data;
 
     // Schema is snake_case on the wire; CustomRule is camelCase internally.
     // (The old singleton path cast these straight through, so filename
@@ -380,6 +399,17 @@ export async function handleSetCustomRules(
     );
 
     if (validRules.length === 0) {
+      if (response_format === "json") {
+        const errorMessage = "No valid Custom Rules were applied.";
+        return {
+          content: [
+            { type: "text", text: JSON.stringify({ error: errorMessage }, null, 2) },
+          ],
+          structuredContent: { error: errorMessage, appliedCount: 0 },
+          isError: true,
+        };
+      }
+
       return {
         content: [
           { type: "text", text: "No valid Custom Rules were applied." },
@@ -402,6 +432,23 @@ export async function handleSetCustomRules(
           },
         ],
         isError: true,
+      };
+    }
+
+    if (response_format === "json") {
+      const result = {
+        success: true,
+        appliedCount: validRules.length,
+        rules: validRules,
+      };
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+        structuredContent: result,
       };
     }
 
