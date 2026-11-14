@@ -12,7 +12,7 @@ A developer skill for coding in the File Organizer MCP project. This skill provi
 - Build, test, and lint commands
 - Step-by-step guide for adding new MCP tools
 - Step-by-step guide for adding new services
-- Security guidelines (8-layer path validation)
+- Security guidelines (path validation pipeline)
 - Testing patterns and templates
 - Code style conventions
 - Common utilities reference
