@@ -1,29 +1,30 @@
 /**
- * Regression test for BUG-61: getUserConfigPath must honor XDG_CONFIG_HOME on Linux
+ * Regression test for BUG-61: getUserConfigPath and getHistoryDirectory must honor XDG_CONFIG_HOME on Linux
  */
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import path from 'path';
 import os from 'os';
 import { getUserConfigPath, getHistoryDirectory } from '../../../src/core/config/paths.js';
 
 describe('Config paths XDG (BUG-61)', () => {
   const originalEnv = process.env;
-  const originalPlatform = process.platform;
+  let platformSpy: jest.SpiedFunction<typeof os.platform> | null = null;
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    platformSpy = jest.spyOn(os, 'platform').mockReturnValue('linux');
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    Object.defineProperty(process, 'platform', {
-      value: originalPlatform,
-    });
+    platformSpy?.mockRestore();
   });
 
   it('uses XDG_CONFIG_HOME for both config and history on Linux', () => {
-    Object.defineProperty(process, 'platform', { value: 'linux' });
-    const xdgDir = path.join(os.tmpdir(), `xdg-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const xdgDir = path.join(
+      os.tmpdir(),
+      `xdg-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     process.env.XDG_CONFIG_HOME = xdgDir;
 
     const configPath = getUserConfigPath();
