@@ -10,6 +10,7 @@ import { pipeline } from "stream/promises";
 import * as piexif from "piexifjs";
 import { MetadataService } from "./metadata/service.js";
 import { PathValidatorService } from "./path-validator.service.js";
+import type { ResolvedDateSource } from "../core/organize/date-organizer.js";
 import { logger } from "../utils/logger.js";
 import { isSubPath } from "../utils/file-utils.js";
 import { safeAtomicMove } from "../core/io/atomic-move.js";
@@ -66,8 +67,22 @@ export interface PhotoOrganizationResult {
   manifestId?: string;
 }
 
+/**
+ * A photo's date paired with the calendar it is read in. They travel together
+ * because they must agree: reading EXIF locally, or `birthtime` in UTC, files a
+ * photo under the wrong month.
+ */
+export interface PhotoDate {
+  instant: Date;
+  source: ResolvedDateSource;
+}
+
 interface PhotoFileInfo extends FileInfo {
-  dateTaken?: Date;
+  /**
+   * The photo's date and the calendar it is read in. Absent when nothing dated
+   * the photo.
+   */
+  date?: PhotoDate;
   cameraModel?: string;
   hasGPS?: boolean;
 }
@@ -257,7 +272,7 @@ export class PhotoOrganizerService {
             {
               source: photo.path,
               target: finalTargetPath,
-              dateTaken: photo.dateTaken?.toISOString(),
+              dateTaken: photo.date?.instant.toISOString(),
             },
           );
         } catch (error) {
@@ -372,16 +387,19 @@ export class PhotoOrganizerService {
 
         const photoInfo: PhotoFileInfo = {
           ...file,
-          dateTaken: undefined,
+          date: undefined,
           cameraModel: undefined,
           hasGPS: false,
         };
 
         // Extract date with fallback chain
         if (metadata?.dateTaken) {
-          photoInfo.dateTaken = new Date(metadata.dateTaken as string);
+          photoInfo.date = {
+            instant: new Date(metadata.dateTaken as string),
+            source: "exif",
+          };
         } else if (config.useDateCreated) {
-          photoInfo.dateTaken = file.created;
+          photoInfo.date = { instant: file.created, source: "mtime" };
         }
 
         // Extract camera model
@@ -398,7 +416,9 @@ export class PhotoOrganizerService {
         // If metadata extraction fails, use file with no metadata
         photos.push({
           ...file,
-          dateTaken: config.useDateCreated ? file.created : undefined,
+          date: config.useDateCreated
+            ? { instant: file.created, source: "mtime" }
+            : undefined,
           cameraModel: undefined,
           hasGPS: false,
         });
@@ -450,7 +470,7 @@ export class PhotoOrganizerService {
     config: PhotoOrganizationConfig,
   ): Promise<string> {
     const folderPath = this.getDateFolderName(
-      photo.dateTaken,
+      photo.date,
       config.dateFormat,
       config.unknownDateFolder!,
     );
@@ -469,20 +489,39 @@ export class PhotoOrganizerService {
   }
 
   /**
-   * Generate folder name from date based on format
+   * Generate folder name from date based on format.
+   *
+   * The calendar comes from the source, because EXIF and a filesystem timestamp
+   * are different kinds of value. exif-parser anchors EXIF to UTC because a
+   * camera records wall-clock time with no offset, so reading it locally filed a
+   * photo taken in the first hours of a day under the previous month.
+   * `birthtime` is a true instant, so its calendar is the local one.
+   * `dateFolder()` in `src/core/organize/date-organizer.ts` reads the same two
+   * sources this way.
    */
   getDateFolderName(
-    date: Date | undefined,
+    date: PhotoDate | undefined,
     format: string,
     unknownFolder: string,
   ): string {
-    if (!date || isNaN(date.getTime())) {
+    if (!date || isNaN(date.instant.getTime())) {
       return unknownFolder;
     }
 
-    const year = date.getFullYear().toString();
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const day = date.getDate().toString().padStart(2, "0");
+    const utc = date.source === "exif";
+    const year = (utc
+      ? date.instant.getUTCFullYear()
+      : date.instant.getFullYear()
+    ).toString();
+    const month = ((utc
+      ? date.instant.getUTCMonth()
+      : date.instant.getMonth()
+    ) + 1)
+      .toString()
+      .padStart(2, "0");
+    const day = (utc ? date.instant.getUTCDate() : date.instant.getDate())
+      .toString()
+      .padStart(2, "0");
 
     switch (format) {
       case "YYYY/MM/DD":

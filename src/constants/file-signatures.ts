@@ -286,7 +286,10 @@ const ELF_SIGNATURE: FileSignature = {
 const MACHO_32_SIGNATURE: FileSignature = {
   type: "MACHO_32",
   mimeType: "application/x-mach-binary",
-  signatures: [Buffer.from([0xfe, 0xed, 0xfa, 0xce])], // 0xFEEDFACE
+  signatures: [
+    Buffer.from([0xfe, 0xed, 0xfa, 0xce]), // 0xFEEDFACE (big-endian)
+    Buffer.from([0xce, 0xfa, 0xed, 0xfe]), // 0xCEFAEDFE (little-endian)
+  ],
   extensions: [".o", ".dylib"],
   category: "Executable",
   description: "Mach-O 32-bit (macOS/iOS)",
@@ -295,7 +298,10 @@ const MACHO_32_SIGNATURE: FileSignature = {
 const MACHO_64_SIGNATURE: FileSignature = {
   type: "MACHO_64",
   mimeType: "application/x-mach-binary",
-  signatures: [Buffer.from([0xfe, 0xed, 0xfa, 0xcf])], // 0xFEEDFACF
+  signatures: [
+    Buffer.from([0xfe, 0xed, 0xfa, 0xcf]), // 0xFEEDFACF (big-endian)
+    Buffer.from([0xcf, 0xfa, 0xed, 0xfe]), // 0xCFFAEDFE (little-endian)
+  ],
   extensions: [".o", ".dylib"],
   category: "Executable",
   description: "Mach-O 64-bit (macOS/iOS)",
@@ -307,6 +313,8 @@ const MACHO_FAT_SIGNATURE: FileSignature = {
   signatures: [
     Buffer.from([0xca, 0xfe, 0xba, 0xbe]), // FAT binary
     Buffer.from([0xca, 0xfe, 0xba, 0xbf]), // FAT binary 64
+    Buffer.from([0xbe, 0xba, 0xfe, 0xca]), // FAT binary (little-endian)
+    Buffer.from([0xbf, 0xba, 0xfe, 0xca]), // FAT binary 64 (little-endian)
   ],
   extensions: [".o", ".dylib"],
   category: "Executable",
@@ -1019,26 +1027,4 @@ export function detectExtensionMismatch(
   }
 
   return null;
-}
-
-/**
- * Get all signatures for a specific category
- * @param category - The category to filter by
- * @returns Array of FileSignature definitions in that category
- */
-export function getSignaturesByCategory(
-  category: FileSignature["category"],
-): FileSignature[] {
-  return FILE_SIGNATURES.filter((sig) => sig.category === category);
-}
-
-/**
- * Check if a buffer contains executable content
- * Convenience function for security checks
- * @param buffer - The buffer to analyze
- * @returns True if the buffer matches an executable signature
- */
-export function isExecutableContent(buffer: Buffer): boolean {
-  const match = matchSignature(buffer);
-  return match !== null && isExecutableSignature(match.type);
 }

@@ -10,7 +10,6 @@ import fs from "fs/promises";
 import { constants, Dirent } from "fs";
 import path from "path";
 import os from "os";
-import { randomUUID } from "crypto";
 import { logger } from "../utils/logger.js";
 import { PathValidatorService } from "./path-validator.service.js";
 import { CategorizerService } from "./categorizer.service.js";
@@ -48,7 +47,7 @@ export interface SystemOrganizeResult {
     category: string;
   }>;
   undoManifest?: {
-    manifestId: string;
+    manifestId?: string;
     operations: Array<{ from: string; to: string; timestamp: string }>;
   };
 }
@@ -499,8 +498,6 @@ export class SystemOrganizeService {
         const targetDir = destResult.destination;
         const useLocalFallback = destResult.useLocalFallback;
 
-        await this.ensureDirectoryExists(targetDir);
-
         let targetPath = path.join(targetDir, fileName);
         targetPath = (await this.handleConflict(
           targetPath,
@@ -513,6 +510,7 @@ export class SystemOrganizeService {
         }
 
         if (!dryRun) {
+          await this.ensureDirectoryExists(targetDir);
           await this.moveOrCopyFile(sourcePath, targetPath, copyInsteadOfMove);
         }
 
@@ -551,11 +549,9 @@ export class SystemOrganizeService {
       }
     }
 
-    const manifestId = randomUUID();
     const undoManifest =
       operations.length > 0
         ? {
-            manifestId,
             operations,
           }
         : undefined;
