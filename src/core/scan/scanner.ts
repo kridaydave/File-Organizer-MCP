@@ -122,8 +122,8 @@ export class FileScannerService {
       for (const item of items) {
         if (item.name.startsWith(".")) continue;
         if (
-          SKIP_DIRECTORIES.includes(
-            item.name as (typeof SKIP_DIRECTORIES)[number],
+          SKIP_DIRECTORIES.some(
+            (dir) => dir.toLowerCase() === item.name.toLowerCase(),
           )
         )
           continue;
@@ -296,8 +296,8 @@ export class FileScannerService {
     for (const item of items) {
       if (item.name.startsWith(".")) continue;
       if (
-        SKIP_DIRECTORIES.includes(
-          item.name as (typeof SKIP_DIRECTORIES)[number],
+        SKIP_DIRECTORIES.some(
+          (dir) => dir.toLowerCase() === item.name.toLowerCase(),
         )
       )
         continue;
