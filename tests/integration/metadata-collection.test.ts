@@ -267,8 +267,7 @@ describe("Photo Collection Tests", () => {
     const result = await photoOrganizer.organize({
       sourceDir,
       targetDir,
-      structure: "flat",
-      filenamePattern: "{title}",
+      dateFormat: "YYYY-MM-DD",
     });
 
     expect(result.success).toBe(true);
@@ -286,8 +285,7 @@ describe("Photo Collection Tests", () => {
     const result = await photoOrganizer.organize({
       sourceDir,
       targetDir,
-      structure: "flat",
-      filenamePattern: "{title}",
+      dateFormat: "YYYY-MM-DD",
     });
 
     expect(result.success).toBe(true);
@@ -301,8 +299,7 @@ describe("Photo Collection Tests", () => {
     const result = await photoOrganizer.organize({
       sourceDir,
       targetDir,
-      structure: "flat",
-      filenamePattern: "{title}",
+      dateFormat: "YYYY-MM-DD",
     });
 
     expect(result.success).toBe(true);
@@ -324,8 +321,7 @@ describe("Photo Collection Tests", () => {
     const result = await photoOrganizer.organize({
       sourceDir,
       targetDir,
-      structure: "flat",
-      filenamePattern: "{title}",
+      dateFormat: "YYYY-MM-DD",
       stripGPS: true,
     });
 

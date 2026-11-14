@@ -41,6 +41,24 @@ export function mapContentTypeToCategory(
     return "Audio";
   }
 
+  // Spreadsheets
+  if (
+    mime.includes("spreadsheet") ||
+    mime.includes("excel") ||
+    ["XLS", "XLSX", "CSV", "ODS"].includes(type)
+  ) {
+    return "Spreadsheets";
+  }
+
+  // Presentations
+  if (
+    mime.includes("presentation") ||
+    mime.includes("powerpoint") ||
+    ["PPT", "PPTX", "ODP"].includes(type)
+  ) {
+    return "Presentations";
+  }
+
   // Documents
   if (
     mime.includes("pdf") ||
@@ -58,24 +76,6 @@ export function mapContentTypeToCategory(
     ].includes(type)
   ) {
     return "Documents";
-  }
-
-  // Spreadsheets
-  if (
-    mime.includes("spreadsheet") ||
-    mime.includes("excel") ||
-    ["XLS", "XLSX", "CSV", "ODS"].includes(type)
-  ) {
-    return "Spreadsheets";
-  }
-
-  // Presentations
-  if (
-    mime.includes("presentation") ||
-    mime.includes("powerpoint") ||
-    ["PPT", "PPTX", "ODP"].includes(type)
-  ) {
-    return "Presentations";
   }
 
   // Archives
