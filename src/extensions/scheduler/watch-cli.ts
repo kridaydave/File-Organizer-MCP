@@ -34,6 +34,25 @@ import {
   handleListWatches,
 } from "./watch-manager.js";
 import { once } from "./once-cli.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { getUserConfigPath } from "../../core/config/paths.js";
+
+/**
+ * Reload the daemon's cron tasks from the current config.
+ * This is the trigger the SIGHUP handler and the config watcher call,
+ * so removing a watch (via `file-organizer-watch remove`, which edits
+ * the shared config) stops its task in the running daemon.
+ *
+ * The scheduler service only exports start/stop at module level, so a
+ * reload is stop + start: start re-reads the watch list and recreates
+ * tasks for whatever is configured now.
+ */
+export async function reloadWatches(): Promise<void> {
+  stopAutoOrganizeScheduler();
+  await startAutoOrganizeScheduler();
+}
 
 function text(response: { content: Array<{ text?: string }> }): string {
   return response.content.map((c) => c.text ?? "").join("\n");
@@ -94,7 +113,6 @@ async function run(): Promise<void> {
   if (result.taskCount === 0) {
     logger.info("No watches configured. Add one with:");
     logger.info('  file-organizer-watch add <directory> "<cron>"');
-    process.exit(0);
   }
 
   const shutdown = (signal: string): void => {
@@ -107,6 +125,33 @@ async function run(): Promise<void> {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   if (process.platform === "win32") {
     process.on("SIGBREAK", () => shutdown("SIGBREAK"));
+  }
+  process.on("SIGHUP", () => {
+    logger.info("Received SIGHUP, reloading watches...");
+    reloadWatches().catch((error) => {
+      logger.error("Failed to reload watches:", error);
+    });
+  });
+
+  // Watch config file for changes to reload tasks automatically
+  try {
+    const configPath = getUserConfigPath();
+    let reloadTimeout: NodeJS.Timeout | null = null;
+    fs.watch(configPath, () => {
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      reloadTimeout = setTimeout(() => {
+        logger.info("Config changed, reloading watches...");
+        reloadWatches().catch((error) => {
+          logger.error("Failed to reload watches:", error);
+        });
+      }, 200);
+    });
+  } catch (error) {
+    logger.debug("Failed to watch config file for changes:", {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   // node-cron holds the event loop; this is just a safety net.
@@ -136,7 +181,16 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  logger.error("Fatal error:", error);
-  process.exit(1);
-});
+// Only run as a CLI when this file is the entrypoint (directly or via
+// bin/file-organizer-watch.mjs). Tests import reloadWatches from here
+// and must not launch the daemon as a side effect.
+const entrypoint = process.argv[1] ? path.resolve(process.argv[1]) : "";
+const isEntrypoint =
+  entrypoint === fileURLToPath(import.meta.url) ||
+  path.basename(entrypoint) === "file-organizer-watch.mjs";
+if (isEntrypoint) {
+  main().catch((error) => {
+    logger.error("Fatal error:", error);
+    process.exit(1);
+  });
+}

@@ -238,6 +238,8 @@ export const batchRenameOutputSchema = z.object({
   rejected: z.boolean(),
   renamed: z.number(),
   processed: z.number(),
+  validationErrors: z.array(z.string()).optional(),
+  invalidPathCount: z.number().optional(),
   rules: z.array(z.record(z.string(), z.unknown())),
   conflicts: z.array(renameCollisionSchema),
   previews: z.array(renamePreviewSchema).optional(),

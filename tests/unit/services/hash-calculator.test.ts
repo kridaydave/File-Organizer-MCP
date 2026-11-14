@@ -2,7 +2,6 @@ import { jest } from '@jest/globals';
 import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import path from 'path';
-import os from 'os';
 import crypto from 'crypto';
 import { HashCalculatorService } from '../../../src/core/hash/hasher.js';
 import {
@@ -17,7 +16,10 @@ describe('HashCalculatorService', () => {
     let testDir: string;
 
     beforeEach(async () => {
-        testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-hash-'));
+        // Under the worktree: findDuplicates stats through
+        // PathValidatorService, which only allows cwd (test mode) and
+        // the home dirs, so os.tmpdir() fixtures would be denied.
+        testDir = await fs.mkdtemp(path.join(process.cwd(), 'test-hash-'));
         hashService = new HashCalculatorService();
     });
 
@@ -285,5 +287,46 @@ describe('HashCalculatorService', () => {
             expect(scan.skipped).toEqual([]);
             expect(scan.skipped_bytes).toBe(0);
         });
+    });
+
+    it('should detect duplicates when caller supplies mismatched sizes', async () => {
+        const file1 = path.join(testDir, 'file1.txt');
+        const file2 = path.join(testDir, 'file2.txt');
+
+        await fs.writeFile(file1, 'identical');
+        await fs.writeFile(file2, 'identical'); // duplicate content
+
+        const files = [
+            { name: 'file1.txt', path: file1, size: 12345, modified: new Date() },
+            { name: 'file2.txt', path: file2, size: 54321, modified: new Date() }
+        ];
+
+        const { groups: duplicates } = await hashService.findDuplicates(files);
+
+        expect(duplicates.length).toBe(1);
+        const group = duplicates[0];
+        if (!group) throw new Error('expected exactly one duplicate group');
+        expect(group.count).toBe(2);
+        expect(group.files.map(f => f.name)).toContain('file1.txt');
+        expect(group.files.map(f => f.name)).toContain('file2.txt');
+    });
+
+    it('should not stat through a symlinked path', async () => {
+        const file1 = path.join(testDir, 'file1.txt');
+        const link = path.join(testDir, 'link.txt');
+
+        await fs.writeFile(file1, 'identical');
+        await fs.symlink(file1, link);
+
+        // The symlink entry must be denied by openAndValidateFile
+        // (O_NOFOLLOW), leaving file1.txt alone in its size group.
+        const files = [
+            { name: 'file1.txt', path: file1, size: 9, modified: new Date() },
+            { name: 'link.txt', path: link, size: 9, modified: new Date() }
+        ];
+
+        const scan = await hashService.findDuplicates(files);
+
+        expect(scan.groups.length).toBe(0);
     });
 });

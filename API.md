@@ -727,13 +727,14 @@ file_organizer_delete_duplicates({
 
 ### Parameters
 
-| Parameter             | Type    | Description                                                                                            | Default    |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------------------ | ---------- |
-| `directory`           | string  | Full path to the directory                                                                             | -          |
-| `show_conflicts_only` | boolean | -                                                                                                      | false      |
-| `response_format`     | string  | -                                                                                                      | 'markdown' |
-| `conflict_strategy`   | string  | How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified | -          |
-| `since_last_run`      | boolean | Only include files modified at or after the last successful scheduler run of this directory. A directory with no recorded run is not filtered | false |
+| Parameter              | Type    | Description                                                                                            | Default    |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------------------ | ---------- |
+| `directory`            | string  | Full path to the directory                                                                             | -          |
+| `show_conflicts_only`  | boolean | -                                                                                                      | false      |
+| `response_format`      | string  | -                                                                                                      | 'markdown' |
+| `conflict_strategy`    | string  | How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified | -          |
+| `use_content_analysis` | boolean | Analyze file content for accurate type detection and security (slower)                                 | false      |
+| `since_last_run`       | boolean | Only include files modified at or after the last successful scheduler run of this directory. A directory with no recorded run is not filtered | false |
 
 ### Example
 
@@ -743,6 +744,7 @@ file_organizer_preview_organization({
   show_conflicts_only: true,
   response_format: "value",
   conflict_strategy: "value",
+  use_content_analysis: false,
   since_last_run: true,
 });
 ```

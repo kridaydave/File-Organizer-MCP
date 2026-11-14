@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
 import {
@@ -575,6 +576,38 @@ describe('v5 Critical Regressions Gate', () => {
       expect(entries).toContain('RENAME-ME.txt');
       expect(entries).not.toContain('rename-me.txt');
       expect(await fs.readFile(upper, 'utf8')).toBe('same file');
+    });
+
+    // Synchronous probe so the test can be a visible skip (it.skip)
+    // on case-insensitive filesystems instead of an early return that
+    // reports a pass without asserting anything.
+    const caseSensitiveFs = ((): boolean => {
+      const probeDir = fsSync.mkdtempSync(path.join(os.tmpdir(), 'case-probe-'));
+      try {
+        fsSync.writeFileSync(path.join(probeDir, 'case-probe-ovr.txt'), 'x');
+        try {
+          fsSync.lstatSync(path.join(probeDir, 'CASE-PROBE-OVR.txt'));
+          return false;
+        } catch (err) {
+          return (err as NodeJS.ErrnoException).code === 'ENOENT';
+        }
+      } finally {
+        fsSync.rmSync(probeDir, { recursive: true, force: true });
+      }
+    })();
+    const itCaseSensitive = caseSensitiveFs ? it : it.skip;
+
+    itCaseSensitive('overwrites a distinct case-colliding destination when overwrite is true', async () => {
+      const lower = path.join(tempDir, 'src.txt');
+      const upper = path.join(tempDir, 'SRC.txt');
+      await fs.writeFile(lower, 'new content');
+      await fs.writeFile(upper, 'old content');
+
+      const res = await safeAtomicMove(lower, upper, { overwrite: true });
+      expect(res.success).toBe(true);
+      expect(await fs.readFile(upper, 'utf8')).toBe('new content');
+      // source should be moved
+      await expect(fs.access(lower)).rejects.toThrow();
     });
   });
 
