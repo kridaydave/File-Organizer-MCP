@@ -2,12 +2,44 @@ import fs from "fs/promises";
 
 import path from "path";
 import os from "os";
-import { OrganizerService } from "../../../src/core/organize/organizer.js";
-import { CategorizerService } from "../../../src/services/categorizer.service.js";
-import { FileWithSize } from "../../../src/types.js";
+import { fileURLToPath } from "url";
+
+import { isolateRollbackStorage } from "../../helpers/rollback-storage.js";
+
+/**
+ * Private rollback and backup storage.
+ *
+ * `executeOrganization` builds a `RollbackService` off the default
+ * `getRollbackDirectory()` and writes pre-overwrite backups to the default
+ * `getBackupDirectory()`. Under jest both are one directory shared by every
+ * worker, so this suite's backups land where every other suite looks and the
+ * manifests it writes decide which manifest is globally newest. The redirect is
+ * registered before the modules under test are imported, which is why they are
+ * dynamic below.
+ */
+const storage = await isolateRollbackStorage("fom-organizer-");
+
+const { OrganizerService } = await import(
+  "../../../src/core/organize/organizer.js"
+);
+const { CategorizerService } = await import(
+  "../../../src/services/categorizer.service.js"
+);
+const { getBackupDirectory } = await import(
+  "../../../src/core/config/paths.js"
+);
+import type { FileWithSize } from "../../../src/types.js";
+
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+);
 
 describe("OrganizerService", () => {
-  let organizer: OrganizerService;
+  // Dynamic import above, so the binding is a value, not a type name.
+  let organizer: InstanceType<typeof OrganizerService>;
   let testDir: string;
 
   beforeEach(async () => {
@@ -21,6 +53,10 @@ describe("OrganizerService", () => {
     } catch (error) {
       console.error("Cleanup error:", error);
     }
+  });
+
+  afterAll(async () => {
+    await storage.remove();
   });
 
   describe("generateOrganizationPlan", () => {
@@ -170,8 +206,11 @@ describe("OrganizerService", () => {
       const finalContent = await fs.readFile(destFile, "utf-8");
       expect(finalContent).toBe("new-content");
 
-      // Verify backup directory contains the old file
-      const backupDir = path.join(process.cwd(), ".file-organizer-backups");
+      // Verify backup directory contains the old file. Read the directory the
+      // redirected module reports rather than a hardcoded one, so this assertion
+      // stays true wherever the suite's private storage lives.
+      expect(getBackupDirectory()).not.toContain(repoRoot);
+      const backupDir = getBackupDirectory();
       const backupFiles = await fs.readdir(backupDir);
       const overwriteBackup = backupFiles.find((f) => f.includes("overwrite_report.pdf"));
       expect(overwriteBackup).toBeDefined();
@@ -183,6 +222,53 @@ describe("OrganizerService", () => {
         );
         expect(backupContent).toBe("old-content");
       }
+    });
+
+    it("should clean up copied destination when unlink fails in overwrite mode (BUG-27)", async () => {
+      const srcFile = path.join(testDir, "source.txt");
+      await fs.writeFile(srcFile, "source-content");
+
+      const docsDir = path.join(testDir, "Documents");
+      await fs.mkdir(docsDir, { recursive: true });
+      const destFile = path.join(docsDir, "source.txt");
+
+      const originalUnlink = fs.unlink;
+      let unlinkCallCount = 0;
+      (fs as any).unlink = async (p: any) => {
+        if (String(p) === String(srcFile)) {
+          unlinkCallCount++;
+          throw new Error("Simulated unlink failure");
+        }
+        return originalUnlink(p);
+      };
+
+      const files: FileWithSize[] = [
+        {
+          name: "source.txt",
+          path: srcFile,
+          size: 14,
+          modified: new Date(),
+        },
+      ];
+
+      let result;
+      try {
+        result = await organizer.organize(testDir, files, {
+          dryRun: false,
+          conflictStrategy: "overwrite",
+        });
+      } finally {
+        (fs as any).unlink = originalUnlink;
+      }
+
+      // Unlink should have failed, so operation should error
+      expect(result!.errors.length).toBeGreaterThan(0);
+
+      // Source file should still exist (unlink failed)
+      await expect(fs.access(srcFile)).resolves.toBeUndefined();
+
+      // Destination should NOT have been left behind (cleaned up)
+      await expect(fs.access(destFile)).rejects.toThrow();
     });
 
     it("should correctly rename files with numeric suffixes on conflict", async () => {
@@ -210,7 +296,9 @@ describe("OrganizerService", () => {
 
       expect(result.errors).toHaveLength(0);
       expect(result.actions).toHaveLength(1);
-      expect(path.basename(result.actions[0].to)).toBe("invoice_2024_1.pdf");
+      const [invoiceAction] = result.actions;
+      if (!invoiceAction) throw new Error("Expected exactly one organize action");
+      expect(path.basename(invoiceAction.to)).toBe("invoice_2024_1.pdf");
     });
 
     it("should correctly rename files like archive_001.zip on conflict", async () => {
@@ -238,7 +326,45 @@ describe("OrganizerService", () => {
 
       expect(result.errors).toHaveLength(0);
       expect(result.actions).toHaveLength(1);
-      expect(path.basename(result.actions[0].to)).toBe("archive_001_1.zip");
+      const [archiveAction] = result.actions;
+      if (!archiveAction) throw new Error("Expected exactly one organize action");
+      expect(path.basename(archiveAction.to)).toBe("archive_001_1.zip");
+    });
+
+    it("should show skip conflicts in dry-run matching execution", async () => {
+      const srcFile = path.join(testDir, "pic.jpg");
+      await fs.writeFile(srcFile, "image content");
+
+      const imagesDir = path.join(testDir, "Images");
+      await fs.mkdir(imagesDir, { recursive: true });
+      await fs.writeFile(path.join(imagesDir, "pic.jpg"), "existing");
+
+      const files: FileWithSize[] = [
+        {
+          name: "pic.jpg",
+          path: srcFile,
+          size: 100,
+          modified: new Date(),
+        },
+      ];
+
+      const dryRunResult = await organizer.organize(testDir, files, {
+        dryRun: true,
+        conflictStrategy: "skip",
+      });
+
+      expect(dryRunResult.actions).toHaveLength(0);
+      expect(dryRunResult.skippedFiles?.length).toBe(1);
+      expect(dryRunResult.skippedCount).toBe(1);
+
+      const execResult = await organizer.organize(testDir, files, {
+        dryRun: false,
+        conflictStrategy: "skip",
+      });
+
+      expect(execResult.actions).toHaveLength(0);
+      expect(execResult.skippedFiles?.length).toBe(1);
+      expect(execResult.skippedCount).toBe(1);
     });
   });
 });
