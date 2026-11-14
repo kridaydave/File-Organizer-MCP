@@ -7,6 +7,7 @@ import fs from "fs/promises";
 import path from "path";
 import { parseFile } from "music-metadata";
 import { logger } from "../../utils/logger.js";
+import { ValidationError } from "../../mcp/types.js";
 import type {
   AudioMetadata,
   AudioMetadataOptions,
@@ -97,6 +98,16 @@ export class AudioMetadataService {
     options: AudioMetadataOptions = {},
   ): Promise<AudioMetadata[]> {
     const { concurrency = 4, onProgress } = options;
+    if (
+      typeof concurrency !== "number" ||
+      !Number.isFinite(concurrency) ||
+      concurrency < 1
+    ) {
+      throw new ValidationError("concurrency must be a positive integer", {
+        field: "concurrency",
+        value: concurrency,
+      });
+    }
     logger.info(
       `Batch extracting metadata for ${filePaths.length} files with concurrency ${concurrency}`,
     );
@@ -121,11 +132,46 @@ export class AudioMetadataService {
 
           const metadata = await this.extract(filePath, options);
           processed++;
+          if (
+            Object.keys(metadata).length <= 4 &&
+            !(metadata as any).duration &&
+            !(metadata as any).title &&
+            !(metadata as any).artist &&
+            !(metadata as any).album &&
+            !(metadata as any).trackNumber &&
+            !(metadata as any).year
+          ) {
+            const ext = path.extname(filePath).toLowerCase().replace(".", "");
+            if (
+              metadata.filePath === filePath &&
+              metadata.format === ext.toUpperCase() &&
+              metadata.hasEmbeddedArtwork === false
+            ) {
+              errors++;
+              onProgress?.({
+                processed,
+                total: filePaths.length,
+                currentFile: filePath,
+                currentStage: "extracting",
+                errors,
+                warnings,
+              });
+              return this.createEmptyMetadata(filePath, ext);
+            }
+          }
           return metadata;
         } catch (error) {
           logger.error(`Failed to extract metadata from ${filePath}:`, error);
           processed++;
           errors++;
+          onProgress?.({
+            processed,
+            total: filePaths.length,
+            currentFile: filePath,
+            currentStage: "extracting",
+            errors,
+            warnings,
+          });
           return this.createEmptyMetadata(
             filePath,
             path.extname(filePath).toLowerCase().replace(".", ""),

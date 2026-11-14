@@ -68,7 +68,7 @@ The most common defect here is a change that works for one tool and is missing e
 - **Security.** Anything crossing into `fs` is typed via `PathValidatorService` and Zod. Change the validation and scanner, organizer, reader, and history logger all follow.
 - **Reverse states.** If you added a way in, add the way out and the way to see it. Organize needs preview + undo + history. Watch needs unwatch + list.
 - **Contracts.** Anything crossing the wire is a `ToolDefinition` in `src/mcp/types.ts:16`. `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) must be honest or the client will make bad decisions.
-- **Two schemas per tool, only one checked.** Every tool definition carries a hand-written JSON `inputSchema` next to its Zod schema in `src/schemas/`. The Zod schema is what the handler parses with; the JSON one is the contract the MCP client actually reads off the wire. They are separate sources of truth for the same field set and nothing keeps them in step: the type checker sees the Zod type, the build never looks at the JSON, and `docs:check` reads neither. Add a field to one and the server either rejects a call the client was told it could make, or the client cannot see a field the server honours. Editing only Zod is the more tempting mistake, because it is the one the compiler accepts. The guard today is the assertion in `tests/integration/tools/preview-since-last-run.test.ts` comparing `Object.keys(def.inputSchema.properties)` against `Object.keys(Schema.shape)`, which is one tool, not a rule.
+- **Two schemas per tool, both checked.** Every tool definition carries a hand-written JSON `inputSchema` next to its Zod schema in `src/schemas/`. The Zod schema is what the handler parses with; the JSON one is the contract the MCP client actually reads off the wire. They are separate sources of truth for the same field set: the type checker sees the Zod type, the build never looks at the JSON, and `docs:check` reads neither. Add a field to one and the server either rejects a call the client was told it could make, or the client cannot see a field the server honours. Editing only Zod is the more tempting mistake, because it is the one the compiler accepts. `tests/unit/schemas/input-schema-parity.test.ts` now holds the two sides together for every registered tool: its SCHEMAS ledger maps each wire name to the Zod schema, fails when a registered tool is missing from the ledger, and compares the top-level field sets both ways. When you add a tool, add its ledger line in the same commit.
 - **Docs.** Behavior a user notices → `README.md`; structural change → `ARCHITECTURE.md`; tool shape → `API.md` + `config.schema.json`; new vocabulary → `docs/FRAMEWORK.md`. `API.md` is not generated in practice: `scripts/generate-docs.js` still reports version 3.0.0 and reformats every table, so running `npm run docs:generate` produces a large unrelated diff and drops the hand-written notes. Hand-edit the tool's parameter table instead.
 
 ## Skills
@@ -107,14 +107,14 @@ Repo facts a generic skill does not know, which is where they belong:
 
 ## Merging and conflicts
 
-Every tool PR edits the same few coordinates: an import block and one `reg()` line in `src/mcp/registry.ts`, the README tool count, and ARCHITECTURE.md. That is the documented contract (`ARCHITECTURE.md:112`), so parallel tool PRs collide on every merge. `main` also runs `strict: true` with 9 required checks, no merge queue, and no auto-merge, so every merge makes every other open branch stale and merges are serial. Plan for that instead of discovering it halfway through a batch.
+Every tool PR edits the same few coordinates: an import block and one `reg()` line in `src/mcp/registry.ts`, the README tool count, and ARCHITECTURE.md. That is the documented contract (`ARCHITECTURE.md:112`), so parallel tool PRs collide on every merge. `main` also runs `strict: true` with a single aggregate required check ("Check", so adding or renaming jobs never needs a branch-protection edit), no merge queue, and no auto-merge, so every merge makes every other open branch stale and merges are serial. Plan for that instead of discovering it halfway through a batch.
 
 Most of the damage is not the conflict, it is the resolution. Four rules:
 
 - **Never `git add -A` after resolving a conflict.** It stages every *other* conflicted file with its `<<<<<<<` still in it. `git add` only the paths you actually resolved.
 - **Check for markers before every commit that follows a resolution.** Two branches shipped committed `<<<<<<<`/`=======` and needed four cleanup commits on `main`:
   ```bash
-  grep -rnE '^(<<<<<<<|=======|>>>>>>>)' --include='*.ts' --include='*.md' . && exit 1
+  grep -rnE '^(<<<<<<<|>>>>>>>|=======($|[^=])|\|\|\|\|\|\|\|)' --include='*.ts' --include='*.md' . && exit 1
   ```
 - **Prove the tool set survived.** A rebase that resolves `registry.ts` by taking one side can silently delete tools that merged in between. This must be empty:
   ```bash
@@ -166,6 +166,13 @@ An empty directory is a bad test. Seed with real shapes, but keep them in the sa
 - For user-visible tool output, check both `json` and `markdown` formats — both are part of the contract.
 - A passing unit test is not proof the tool works. `principle-prove-it-works` means the real artifact. Drive it through `verify-file-organizer`.
 
+The verification layers, cheapest first:
+
+- **Every push (CI):** static checks, the 6-leg test matrix, security audit, `verify-harness` driving `scripts/verify/scenarios/` against the real built server, and the `portability` lane running the suite with perturbed fs. One aggregate required check ("Check").
+- **Every push (gates):** `test:security:gates` includes payload fuzzing, generative property fuzzing (`fast-check`), TOCTOU, and sensitive-file gates.
+- **Local, before handover:** `verify:all`, plus the pre-push hook (conflict markers, duplicate `reg()` names, `docs:check`).
+- **Nightly (`nightly.yml`, 03:00 UTC):** security gates and scenarios on all three OSes, and the Stryker mutation gate over the path validator against `scripts/mutation-baseline.json`. Failures open an issue.
+
 ## Pull requests
 
 - Never make a PR unless the developer explicitly asks.
@@ -184,7 +191,7 @@ An empty directory is a bad test. Seed with real shapes, but keep them in the sa
 
 ## How it works
 
-Client sends a JSON-RPC tool call over stdio → `src/server.ts` creates the MCP server and registers `TOOLS` from `src/mcp/registry.ts` (name → handler map) → handler validates with Zod (`src/schemas/*`) then `validateStrictPath` (`src/services/path-validator.service.ts:369`) → calls a service (`scan`, `categorize`, `organize`, `hash`, `rollback`) → formats `ToolResponse` (`src/mcp/types.ts:16`) → server returns it. Services are pure and stateless; per-request `ctx` carries config and history logger. Side effects (history, backups, rollback manifests) are file-backed, not in memory.
+Client sends a JSON-RPC tool call over stdio → `src/server.ts` creates the MCP server and registers `TOOLS` from `src/mcp/registry.ts` (name → handler map) → handler validates with Zod (`src/schemas/*`) then `validateStrictPath` (`src/services/path-validator.service.ts:378`) → calls a service (`scan`, `categorize`, `organize`, `hash`, `rollback`) → formats `ToolResponse` (`src/mcp/types.ts:16`) → server returns it. Services are pure and stateless; per-request `ctx` carries config and history logger. Side effects (history, backups, rollback manifests) are file-backed, not in memory.
 
 Full tour: `ARCHITECTURE.md` + `docs/FRAMEWORK.md`.
 
@@ -219,6 +226,7 @@ File-Organizer-MCP/
 ├── docs/                      # FRAMEWORK.md, implementation notes, docs/skills/
 ├── examples/                  # config.strict.json, config.sandboxed.json, mcp-clients/
 ├── scripts/                   # build.mjs (entrypoints → bun build), postinstall, prepare, benchmarks, security-gates, check-doc-citations
+│   └── verify/                # the verify harness (harness.mjs, cli.mjs) + scenarios/ + coverage.json
 ├── tests/helpers/             # safe-index: throws on absent, so an assertion can't pass vacuously
 └── .opencode/skills/          # verify-file-organizer: drive the real server
 ```
@@ -289,9 +297,9 @@ Before submitting changes:
 - [ ] If you touched `path.join`, `path.sep`, or `path.relative`: you checked the value cannot reach a test assertion or a documented format string. See rule 3.
 - [ ] If you resolved a conflict: no markers in the diff, and the `comm -3` on the `reg()` set is empty if `registry.ts` was involved.
 
-`npm run verify:all` runs the first four plus docs, security, and the full
-suite. Reach for it when the change is broad or when you are about to hand the
-work over.
+`npm run verify:all` runs the first four plus the workflow-invariant check,
+docs, security, the fuzzing/TOCTOU gates, and the full suite. Reach for it when
+the change is broad or when you are about to hand the work over.
 
 ## Security notes worth knowing
 
@@ -377,9 +385,9 @@ capability does and how to drive it.
 
 Every rule above is a sentence in this file, so it holds exactly as well as the agent reading it. These gaps are why defects reached CI instead of your editor. None of them exist today:
 
-- No commit hooks. No husky, no lint-staged, no `pre-push`. The four conflict rules above are manual.
+- No pre-push-era conflict-rule coverage beyond hooks: a pre-commit hook (conflict markers on staged lines, docs-sync on staged state) and a pre-push hook (tree-wide conflict markers, duplicate `reg()` names, `docs:check`) run locally, but nothing on the remote stops a `--no-verify` push. The four conflict rules above are otherwise manual.
 - `npm run docs:check` runs in CI but only on ubuntu and only after `typecheck:tests`. `tests/unit/docs-tool-list.test.ts` still guards the count from inside the 6-leg matrix, so one stale count reports as 2 failing tests × 6 legs = 12 red checks rather than 1.
-- No portability profile. Nothing runs the suite with `os.tmpdir`, `fs.readdir` order, or `fs.realpath` perturbed, so the five leak classes in rule 3 can only be found on macOS or Windows.
+- The portability profile (`npm run test:portability`, CI job `portability`) perturbs readdir order and tmpdir resolution but nothing else; `fs.realpath` and 8.3 short-name behavior are still only exercised by the real macOS/Windows legs and `nightly`.
 - `main` has `strict: true`, no ruleset, no merge queue, `allow_auto_merge: false`. Merges serialise by hand.
 - The tool list and count are generated, but the hand-written tool bullets in README.md above the `<!-- BEGIN GENERATED TOOL LIST -->` marker, and the tool references in ARCHITECTURE.md, are not. Those are the two hottest conflict sites left.
 - `src/mcp/registry.ts` is a hand-maintained flat array of `reg()` lines. `ARCHITECTURE.md:112` records that auto-discovery was deliberately rejected in favour of a visible one-line edit. Under parallel tool PRs, that decision is what generates the conflicts.
@@ -419,7 +427,10 @@ npm run docs:check:citations:fix           # rewrite drifted file:line citations
 npm run docs:check:tool-count              # tool count/list only, no citation check
 npm run docs:sync                          # regenerate the tool list/count from the registry
 
-npm run verify:all                         # build, lint, typecheck, docs, security, tests
+npm run verify:all                         # build, lint, typecheck, workflow invariants, docs, security, gates, tests
+npm run verify:scenarios                   # drive the real server through scripts/verify/scenarios/
+npm run test:portability                   # full suite with perturbed fs (readdir order, tmpdir symlink)
+npm run test:mutation                      # Stryker over the path validator, gated by the baseline floor
 
 npm run setup                              # TUI wizard
 ```

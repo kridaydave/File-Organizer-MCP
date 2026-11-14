@@ -154,7 +154,12 @@ export async function handleAnalyzeDuplicates(
       };
     }
 
-    const { directory, recommendation_strategy, response_format } = parsed.data;
+    const {
+      directory,
+      recommendation_strategy,
+      auto_select_keep,
+      response_format,
+    } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
 
     const scanner = new FileScannerService();
@@ -164,6 +169,8 @@ export async function handleAnalyzeDuplicates(
     const analysis = await duplicateFinder.findWithScoring(
       files,
       recommendation_strategy,
+      {},
+      auto_select_keep,
     );
     const analyzed = analysis.groups;
 

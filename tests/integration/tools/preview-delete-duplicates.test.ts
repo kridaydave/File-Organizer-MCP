@@ -182,12 +182,13 @@ describe("preview_delete_duplicates", () => {
   it("deletes nothing, in either response format", async () => {
     const sub = path.join(testDir, "sub");
     await writePair(sub, "report", "quarterly numbers");
-    const before = await fs.readdir(sub);
+    // Sort both sides: readdir order is filesystem-dependent (AGENTS.md rule 3).
 
     const markdown = await preview(testDir, "newest", "markdown");
     const json = await preview(testDir, "newest", "json");
 
-    expect(await fs.readdir(sub)).toEqual(before);
+    const before = (await fs.readdir(sub)).sort();
+    expect((await fs.readdir(sub)).sort()).toEqual(before);
     await expect(
       fs.readFile(path.join(sub, "report-first.txt"), "utf-8"),
     ).resolves.toBe("quarterly numbers");

@@ -51,6 +51,28 @@ describe('RenamingService', () => {
     });
 
     describe('applyRenameRules', () => {
+        it('converts snake_case to camelCase and PascalCase with kebab-case input', async () => {
+            const files = [path.join('test', 'my_file_name.txt')];
+            const camelPreview = await service.applyRenameRules(files, [{
+                type: 'case',
+                conversion: 'camelCase'
+            }]);
+            expect(camelPreview[0].new).toBe(path.join('test', 'myFileName.txt'));
+
+            const pascalPreview = await service.applyRenameRules(files, [{
+                type: 'case',
+                conversion: 'PascalCase'
+            }]);
+            expect(pascalPreview[0].new).toBe(path.join('test', 'MyFileName.txt'));
+
+            const kebabFiles = [path.join('test', 'my-file-name.txt')];
+            const kebabCamel = await service.applyRenameRules(kebabFiles, [{
+                type: 'case',
+                conversion: 'camelCase'
+            }]);
+            expect(kebabCamel[0].new).toBe(path.join('test', 'myFileName.txt'));
+        });
+
         it('should handle find and replace rules', async () => {
             const files = [path.join('test', 'hello-world.txt')];
             const rules = [{
@@ -198,6 +220,38 @@ describe('RenamingService', () => {
             const preview = await service.applyRenameRules(files, rules);
             expect(preview[0].conflict).toBe(false);
             expect(preview[0].new).toContain('FILE.TXT');
+        });
+
+        it('should do case-insensitive non-global find_replace for plain strings', async () => {
+            const files = [path.join('test', 'Hello.txt')];
+            const rules = [{
+                type: 'find_replace',
+                find: 'hello',
+                replace: 'bye',
+                use_regex: false,
+                case_sensitive: false,
+                global: false
+            }];
+
+            const preview = await service.applyRenameRules(files, rules);
+            expect(preview[0].new).toBe(path.join('test', 'bye.txt'));
+            expect(preview[0].willChange).toBe(true);
+        });
+
+        it('should do case-insensitive global find_replace for plain strings', async () => {
+            const files = [path.join('test', 'HelloHELLO.txt')];
+            const rules = [{
+                type: 'find_replace',
+                find: 'hello',
+                replace: 'bye',
+                use_regex: false,
+                case_sensitive: false,
+                global: true
+            }];
+
+            const preview = await service.applyRenameRules(files, rules);
+            expect(preview[0].new).toBe(path.join('test', 'byebye.txt'));
+            expect(preview[0].willChange).toBe(true);
         });
     });
 });

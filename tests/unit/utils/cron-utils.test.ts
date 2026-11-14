@@ -207,6 +207,41 @@ describe('cron-utils', () => {
       expect(nextRun).toBeInstanceOf(Date);
       expect(nextRun.getTime()).toBeGreaterThan(baseTime.getTime());
     });
+
+    it('should handle hour ranges like 9-17', () => {
+      const baseTime = new Date(2026, 1, 8, 15, 0);
+      const nextRun = getNextRunTime('0 9-17 * * *', baseTime);
+      expect(nextRun.getHours()).toBe(16);
+      expect(nextRun.getMinutes()).toBe(0);
+      expect(nextRun.getDate()).toBe(8);
+    });
+
+    it('should not treat 0 9-17 * * * as every hour', () => {
+      const baseTime = new Date(2026, 1, 8, 18, 0);
+      const nextRun = getNextRunTime('0 9-17 * * *', baseTime);
+      expect(nextRun.getDate()).toBe(9);
+      expect(nextRun.getHours()).toBe(9);
+      expect(nextRun.getMinutes()).toBe(0);
+    });
+
+    it('should handle hour lists like 9,13,17', () => {
+      const baseTime = new Date(2026, 1, 8, 10, 0);
+      const nextRun = getNextRunTime('0 9,13,17 * * *', baseTime);
+      expect(nextRun.getHours()).toBe(13);
+      expect(nextRun.getMinutes()).toBe(0);
+      expect(nextRun.getDate()).toBe(8);
+    });
+
+    it('should resolve day-of-month expressions to a real date', () => {
+      const baseTime = new Date(2026, 1, 8, 10, 0);
+      const nextRun = getNextRunTime('0 9 1 * *', baseTime);
+      expect(nextRun).toBeInstanceOf(Date);
+      expect(isNaN(nextRun.getTime())).toBe(false);
+      expect(nextRun.getMinutes()).toBe(0);
+      expect(nextRun.getHours()).toBe(9);
+      expect(nextRun.getDate()).toBe(1);
+      expect(nextRun.getMonth()).toBe(2);
+    });
   });
 
   describe('getPreviousRunTime', () => {

@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod";
+import path from "path";
 import { CommonParamsSchema } from "./common.js";
 import { FolderNameSchema } from "./system.js";
 import { MANIFEST_ID_PATTERN } from "../core/organize/manifest-integrity.js";
@@ -62,6 +63,13 @@ export const PreviewOrganizationInputSchema = z
       .optional()
       .describe(
         "How to handle file conflicts for preview. Uses config default if not specified",
+      ),
+    use_content_analysis: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Analyze file content for accurate type detection and security (slower)",
       ),
     since_last_run: z
       .boolean()
@@ -474,7 +482,6 @@ export const SystemOrganizationInputSchema = z
     conflict_strategy: z
       .enum(["skip", "rename", "overwrite"])
       .optional()
-      .default("rename")
       .describe("How to handle file conflicts"),
     dry_run: z
       .boolean()
@@ -487,7 +494,32 @@ export const SystemOrganizationInputSchema = z
       .default(false)
       .describe("Copy instead of move"),
   })
-  .merge(CommonParamsSchema);
+  .merge(CommonParamsSchema)
+  .refine(
+    (data) => {
+      const prefix = data.local_fallback_prefix ?? "Organized";
+      if (/(^|[/\\])\.\.([/\\]|$)/.test(prefix)) {
+        return false;
+      }
+      if (path.isAbsolute(prefix)) {
+        return false;
+      }
+      if (data.source_dir) {
+        const resolvedSource = path.resolve(data.source_dir);
+        const resolvedDest = path.resolve(data.source_dir, prefix);
+        const relative = path.relative(resolvedSource, resolvedDest);
+        if (relative.startsWith("..") || path.isAbsolute(relative)) {
+          return false;
+        }
+      }
+      return true;
+    },
+    {
+      message:
+        "local_fallback_prefix cannot contain parent directory traversal or escape the source directory",
+      path: ["local_fallback_prefix"],
+    },
+  );
 
 export type SystemOrganizationInput = z.infer<
   typeof SystemOrganizationInputSchema

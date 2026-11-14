@@ -226,10 +226,13 @@ export class HistoryLoggerService {
       const stat = await fs.stat(this.lockFilePath).catch(() => null);
 
       if (stat) {
-        // Stale threshold is 2x the wait window: a waiter that polled for the
-        // full lockTimeoutMs must never see the holder's live lock cross the
-        // staleness line at the exact same moment and steal it.
-        const staleAfterMs = this.config.lockTimeoutMs * 2;
+        // Stale threshold is 4x the wait window. One waiter polls for at
+        // most lockTimeoutMs, but sequential waiters (a write that timed out
+        // followed by a read) can push the observed lock age to 2x that, so
+        // the old 2x line got crossed by locks a live process still held.
+        // Crashed locks are still reclaimed well within a test's backdated
+        // 30s against a 5s timeout.
+        const staleAfterMs = this.config.lockTimeoutMs * 4;
         const lockAge = Date.now() - stat.mtimeMs;
         if (lockAge > staleAfterMs) {
           logger.warn("Stale lock detected, removing");
@@ -340,42 +343,45 @@ export class HistoryLoggerService {
       pathGlob === undefined ? null : compilePathGlob(pathGlob);
 
     const allEntries: HistoryEntry[] = [];
-    const lockAcquired = await this.tryAcquireLock();
 
     try {
-      // Read once, not once per candidate file. With a large configured count
-      // the getter's config parse would come to dominate the read it bounds.
-      const maxBackupFiles = this.maxBackupFiles;
-      const filesToRead = [this.historyFilePath];
-      for (let i = 1; i <= maxBackupFiles; i++) {
-        filesToRead.push(
-          path.join(this.config.dataDir, `operations.${i}.jsonl`),
-        );
-      }
+      await this.acquireLock();
 
-      for (const file of filesToRead) {
-        const content = await fs.readFile(file, "utf-8").catch(() => "");
-        if (!content) continue;
+      try {
+        // Read once, not once per candidate file. With a large configured count
+        // the getter's config parse would come to dominate the read it bounds.
+        const maxBackupFiles = this.maxBackupFiles;
+        const filesToRead = [this.historyFilePath];
+        for (let i = 1; i <= maxBackupFiles; i++) {
+          filesToRead.push(
+            path.join(this.config.dataDir, `operations.${i}.jsonl`),
+          );
+        }
 
-        const lines = content.split("\n").filter((line) => line.trim());
+        for (const file of filesToRead) {
+          const content = await fs.readFile(file, "utf-8").catch(() => "");
+          if (!content) continue;
 
-        for (const line of lines) {
-          try {
-            const entry = JSON.parse(line) as HistoryEntry;
-            allEntries.push(entry);
-          } catch (error) {
-            logger.debug(
-              `Skipped corrupted history line: ${(error as Error).message}`,
-            );
+          const lines = content.split("\n").filter((line) => line.trim());
+
+          for (const line of lines) {
+            try {
+              const entry = JSON.parse(line) as HistoryEntry;
+              allEntries.push(entry);
+            } catch (error) {
+              logger.debug(
+                `Skipped corrupted history line: ${(error as Error).message}`,
+              );
+            }
           }
         }
-      }
-    } catch (error) {
-      logger.error("Failed to read history file:", error);
-    } finally {
-      if (lockAcquired) {
+      } catch (error) {
+        logger.error("Failed to read history file:", error);
+      } finally {
         await this.releaseLock();
       }
+    } catch (error) {
+      logger.error("Failed to acquire history lock for reading:", error);
     }
 
     let filtered = allEntries;

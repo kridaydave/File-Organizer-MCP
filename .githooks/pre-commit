@@ -1,6 +1,7 @@
 #!/bin/sh
 set -e
 node scripts/check-conflict-markers.cjs
+node scripts/check-resolution-guards.cjs pre-commit
 if command -v bun >/dev/null 2>&1; then
   bun check
   node scripts/build.mjs >/dev/null

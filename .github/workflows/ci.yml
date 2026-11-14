@@ -222,6 +222,71 @@ jobs:
             MIGRATION.md
             SECURITY.md
 
+  # Drives the real built server through the declarative scenarios in
+  # scripts/verify/scenarios/ (scan -> organize -> undo, duplicates, watch).
+  # A unit test passing is not proof a tool works; this is the proof layer.
+  verify-harness:
+    name: Verify harness scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run verify scenarios
+        run: npm run verify:scenarios
+
+  # Perturbation profile: FO_PORTABILITY=1 makes Linux lie about readdir
+  # order and tmpdir resolution (see tests/perturb/setup.ts), so the five
+  # leak classes in AGENTS.md rule 3 surface here instead of only on macOS
+  # or Windows runners. One extra lane, full gate.
+  portability:
+    name: Portability profile (perturbed fs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FO_PORTABILITY: "1"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run test suite with perturbed fs
+        run: npm run test:portability
+
   # docs:check used to run as the last step of `static`, after typecheck, so a
   # typecheck failure masked it. The same drift was also guarded from inside the
   # jest suite, where one stale count reported on all six matrix lanes. Here it
@@ -262,7 +327,7 @@ jobs:
   check:
     name: Check
     if: ${{ always() }}
-    needs: [static, test, security, build, lint-docs, docs]
+    needs: [static, test, security, build, lint-docs, docs, verify-harness, portability]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

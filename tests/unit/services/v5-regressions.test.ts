@@ -3,8 +3,9 @@
  * Ensures all fixes for data safety, security containment, and MCP protocol compliance remain locked.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
 import {
@@ -576,13 +577,52 @@ describe('v5 Critical Regressions Gate', () => {
       expect(entries).not.toContain('rename-me.txt');
       expect(await fs.readFile(upper, 'utf8')).toBe('same file');
     });
+
+    // Synchronous probe so the test can be a visible skip (it.skip)
+    // on case-insensitive filesystems instead of an early return that
+    // reports a pass without asserting anything.
+    const caseSensitiveFs = ((): boolean => {
+      const probeDir = fsSync.mkdtempSync(path.join(os.tmpdir(), 'case-probe-'));
+      try {
+        fsSync.writeFileSync(path.join(probeDir, 'case-probe-ovr.txt'), 'x');
+        try {
+          fsSync.lstatSync(path.join(probeDir, 'CASE-PROBE-OVR.txt'));
+          return false;
+        } catch (err) {
+          return (err as NodeJS.ErrnoException).code === 'ENOENT';
+        }
+      } finally {
+        fsSync.rmSync(probeDir, { recursive: true, force: true });
+      }
+    })();
+    const itCaseSensitive = caseSensitiveFs ? it : it.skip;
+
+    itCaseSensitive('overwrites a distinct case-colliding destination when overwrite is true', async () => {
+      const lower = path.join(tempDir, 'src.txt');
+      const upper = path.join(tempDir, 'SRC.txt');
+      await fs.writeFile(lower, 'new content');
+      await fs.writeFile(upper, 'old content');
+
+      const res = await safeAtomicMove(lower, upper, { overwrite: true });
+      expect(res.success).toBe(true);
+      expect(await fs.readFile(upper, 'utf8')).toBe('new content');
+      // source should be moved
+      await expect(fs.access(lower)).rejects.toThrow();
+    });
   });
 
   describe('18. Rollback Manifest ID Sync Across Tools', () => {
     it('returns real persisted rollback manifestId from handleSystemOrganization', async () => {
       const sandboxDir = path.join(process.cwd(), 'tests', 'sandbox', 'v5-system-test');
-      const downloadsDir = path.join(sandboxDir, 'Downloads');
-      const docsDir = path.join(sandboxDir, 'Documents');
+      // System organize only accepts real system roots (~/Downloads, ~/Desktop,
+      // os.tmpdir() + subdirs). Redirect os.homedir at the sandbox so the
+      // fixture resolves to a genuine Downloads root without touching the
+      // developer's real home. Under Jest the native homedir ignores
+      // process.env, so the module function itself is spied.
+      const fakeHome = path.join(sandboxDir, 'home');
+      const downloadsDir = path.join(fakeHome, 'Downloads');
+      const docsDir = path.join(fakeHome, 'Documents');
+      const homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(fakeHome);
 
       try {
         await fs.mkdir(downloadsDir, { recursive: true });
@@ -612,6 +652,7 @@ describe('v5 Critical Regressions Gate', () => {
         const found = manifests.find((m) => m.id === undoManifest?.manifestId);
         expect(found).toBeDefined();
       } finally {
+        homedirSpy.mockRestore();
         await fs.rm(sandboxDir, { recursive: true, force: true }).catch(() => {});
       }
     });
