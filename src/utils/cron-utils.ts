@@ -5,6 +5,13 @@
  * Utilities for parsing cron expressions and calculating run times.
  * Supports common cron patterns (hourly, daily, weekly) with fallback
  * heuristics for complex patterns.
+ *
+ * Every calculation in this file runs in LOCAL time, because that is how
+ * node-cron interprets a schedule: `0 9 * * *` fires at 9am wall-clock time,
+ * whatever timezone the machine is set to. These functions used the setUTC*
+ * family, so they disagreed with the scheduler by the machine's UTC offset
+ * (issue #99). A test suite that only ever ran in UTC is why that survived —
+ * tests/unit/utils/cron-utils.test.ts pins a non-UTC offset now.
  */
 
 /**
@@ -14,8 +21,8 @@
  */
 type CronField =
   | number
-  | "*"
   | "*/n"
+  | "*"
   | { type: "range"; start: number; end: number; step?: number }
   | { type: "list"; values: number[] };
 
@@ -25,6 +32,117 @@ interface CronComponents {
   dayOfMonth: CronField;
   month: CronField;
   dayOfWeek: CronField;
+}
+
+/**
+ * A field that names one value ("0 9 * * *") as opposed to a wildcard or a
+ * step. The pattern branches below all need this, and `field !== "*"` is not
+ * it: a step passes that test and then reaches `setHours` with a step string,
+ * which is an Invalid Date and throws on the first `toISOString()`.
+ */
+const isConcrete = (field: CronField): field is number =>
+  typeof field === "number";
+
+/** A step field: `*` followed by `/2`, and so on. */
+const isStepped = (field: CronField): field is "*/n" =>
+  typeof field === "string" && field.startsWith("*/");
+
+/** The `n` in `*` `/n`. Only call it on a field `isStepped` accepted. */
+const stepOf = (step: "*/n"): number => parseInt(step.slice(2), 10);
+
+/** A range field: `9-17` or `9-17/2`. */
+const isRange = (
+  field: CronField,
+): field is { type: "range"; start: number; end: number; step?: number } =>
+  typeof field === "object" && field.type === "range";
+
+/** A list field: `9,13,17`. */
+const isList = (field: CronField): field is { type: "list"; values: number[] } =>
+  typeof field === "object" && field.type === "list";
+
+/**
+ * Check if a cron field matches a given value.
+ */
+function fieldMatches(field: CronField, value: number): boolean {
+  if (field === "*") return true;
+  if (isStepped(field)) {
+    const step = stepOf(field);
+    if (isNaN(step) || step === 0) return false;
+    return value % step === 0;
+  }
+  if (typeof field === "number") return field === value;
+  if (isList(field)) return field.values.includes(value);
+  if (isRange(field)) {
+    if (value < field.start || value > field.end) return false;
+    if (field.step !== undefined) {
+      return (value - field.start) % field.step === 0;
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Get the next value in a field that is greater than currentValue.
+ */
+function getNextInField(
+  field: CronField,
+  currentValue: number,
+  max: number,
+): number | null {
+  if (field === "*") return currentValue + 1 > max ? null : currentValue + 1;
+  if (isStepped(field)) {
+    const step = stepOf(field);
+    if (isNaN(step) || step === 0) return null;
+    const next = Math.ceil((currentValue + 1) / step) * step;
+    return next > max ? null : next;
+  }
+  if (typeof field === "number") return field > currentValue ? field : null;
+  if (isList(field)) {
+    const sorted = [...field.values].sort((a, b) => a - b);
+    for (const v of sorted) if (v > currentValue) return v;
+    return null;
+  }
+  if (isRange(field)) {
+    if (currentValue < field.start) return field.start;
+    let candidate = currentValue + 1;
+    if (field.step) {
+      const diff = candidate - field.start;
+      if (diff % field.step !== 0) {
+        candidate += field.step - (diff % field.step);
+      }
+    }
+    return candidate <= field.end ? candidate : null;
+  }
+  return null;
+}
+
+/**
+ * Get the first value in a field.
+ */
+function getFirstInField(field: CronField, min = 0): number | null {
+  if (field === "*") return min;
+  if (isStepped(field)) {
+    const step = stepOf(field);
+    if (isNaN(step) || step === 0) return null;
+    return min % step === 0 ? min : Math.ceil(min / step) * step;
+  }
+  if (typeof field === "number") return field;
+  if (isList(field)) {
+    const sorted = [...field.values].sort((a, b) => a - b);
+    return sorted[0] ?? null;
+  }
+  if (isRange(field)) return field.start;
+  return null;
+}
+
+/** One number from a list of one, for the concrete branches. */
+function getFieldValue(field: CronField): number | null {
+  if (typeof field === "number") return field;
+  if (isList(field) && field.values.length === 1) {
+    return field.values[0] ?? null;
+  }
+  return null;
 }
 
 /**
@@ -65,65 +183,39 @@ function parseCronExpression(expression: string): CronComponents | null {
 
   const parseField = (field: string): CronField => {
     if (field === "*") return "*";
-    if (field.startsWith("*/")) {
-      return field as "*/n";
-    }
-    // Handle step values with ranges like 1-10/2
+    if (field.startsWith("*/")) return field as "*/n";
     if (field.includes("/")) {
-      const partsSlash = field.split("/");
-      const rangePart = partsSlash[0];
-      const stepPart = partsSlash[1];
-      if (typeof rangePart !== "string" || typeof stepPart !== "string") {
-        return "*";
-      }
+      const [rangePart, stepPart] = field.split("/");
+      if (rangePart === undefined || stepPart === undefined) return "*";
       const step = parseInt(stepPart, 10);
-      if (!isNaN(step) && rangePart === "*") {
-        return `*/${step}` as "*/n";
-      }
+      if (!isNaN(step) && rangePart === "*") return `*/${step}` as "*/n";
       if (!isNaN(step) && rangePart.includes("-")) {
-        const rangeSplit = rangePart.split("-");
-        const startStr = rangeSplit[0];
-        const endStr = rangeSplit[1];
-        if (typeof startStr !== "string" || typeof endStr !== "string") {
-          return "*";
-        }
+        const [startStr, endStr] = rangePart.split("-");
+        if (startStr === undefined || endStr === undefined) return "*";
         const start = parseInt(startStr, 10);
         const end = parseInt(endStr, 10);
         if (!isNaN(start) && !isNaN(end)) {
           return { type: "range", start, end, step };
         }
       }
-      // Fallback
       const num = parseInt(rangePart, 10);
-      if (!isNaN(num)) return num;
-      return "*";
+      return isNaN(num) ? "*" : num;
     }
-    // Handle lists like 1,2,3
     if (field.includes(",")) {
       const values = field
         .split(",")
         .map((v) => parseInt(v.trim(), 10))
         .filter((v) => !isNaN(v));
-      if (values.length > 0) {
-        return { type: "list", values };
-      }
-      return "*";
+      return values.length > 0 ? { type: "list", values } : "*";
     }
-    // Handle ranges like 9-17
     if (field.includes("-")) {
-      const rangeSplit = field.split("-");
-      const startStr = rangeSplit[0];
-      const endStr = rangeSplit[1];
-      if (typeof startStr !== "string" || typeof endStr !== "string") {
-        return "*";
-      }
+      const [startStr, endStr] = field.split("-");
+      if (startStr === undefined || endStr === undefined) return "*";
       const start = parseInt(startStr, 10);
       const end = parseInt(endStr, 10);
-      if (!isNaN(start) && !isNaN(end)) {
-        return { type: "range", start, end };
-      }
-      // If parseInt truncates badly, try to be defensive
-      return "*";
+      return !isNaN(start) && !isNaN(end)
+        ? { type: "range", start, end }
+        : "*";
     }
     const num = parseInt(field, 10);
     return isNaN(num) ? "*" : num;
@@ -139,105 +231,6 @@ function parseCronExpression(expression: string): CronComponents | null {
 }
 
 /**
- * Check if a cron field matches a given value
- */
-function fieldMatches(field: CronField, value: number): boolean {
-  if (field === "*") return true;
-  if (typeof field === "string" && field.startsWith("*/")) {
-    const step = parseInt(field.slice(2), 10);
-    if (isNaN(step) || step === 0) return false;
-    // For step values, check if value is divisible by step from 0
-    return value % step === 0;
-  }
-  if (typeof field === "number") {
-    return field === value;
-  }
-  if (typeof field === "object" && field.type === "list") {
-    return field.values.includes(value);
-  }
-  if (typeof field === "object" && field.type === "range") {
-    if (value < field.start || value > field.end) return false;
-    if (field.step) {
-      return (value - field.start) % field.step === 0;
-    }
-    return true;
-  }
-  return false;
-}
-
-/**
- * Get the next value in a field that >= currentValue
- */
-function getNextInField(field: CronField, currentValue: number, max: number): number | null {
-  if (field === "*") {
-    return currentValue + 1 > max ? null : currentValue + 1;
-  }
-  if (typeof field === "string" && field.startsWith("*/")) {
-    const step = parseInt(field.slice(2), 10);
-    if (isNaN(step) || step === 0) return null;
-    const next = Math.ceil((currentValue + 1) / step) * step;
-    if (next > max) return null;
-    return next;
-  }
-  if (typeof field === "number") {
-    if (field > currentValue) return field;
-    return null;
-  }
-  if (typeof field === "object" && field.type === "list") {
-    const sorted = [...field.values].sort((a, b) => a - b);
-    for (const v of sorted) {
-      if (v > currentValue) return v;
-    }
-    return null;
-  }
-  if (typeof field === "object" && field.type === "range") {
-    let start = field.start;
-    if (currentValue >= field.start) {
-      // Find next in range >= currentValue + 1
-      let candidate = currentValue + 1;
-      if (candidate < field.start) candidate = field.start;
-      if (field.step) {
-        // Align to step from start
-        const diff = candidate - field.start;
-        if (diff % field.step !== 0) {
-          candidate = candidate + (field.step - (diff % field.step));
-        }
-      }
-      if (candidate <= field.end) return candidate;
-      return null;
-    } else {
-      // currentValue is before range, return first in range
-      if (field.step) {
-        return field.start;
-      }
-      return field.start > currentValue ? field.start : null;
-    }
-  }
-  return null;
-}
-
-/**
- * Get the first value in a field
- */
-function getFirstInField(field: CronField, min: number = 0): number | null {
-  if (field === "*") return min;
-  if (typeof field === "string" && field.startsWith("*/")) {
-    const step = parseInt(field.slice(2), 10);
-    if (isNaN(step) || step === 0) return null;
-    return min % step === 0 ? min : Math.ceil(min / step) * step;
-  }
-  if (typeof field === "number") return field;
-  if (typeof field === "object" && field.type === "list") {
-    const sorted = [...field.values].sort((a, b) => a - b);
-    return sorted[0] ?? null;
-  }
-  if (typeof field === "object" && field.type === "range") {
-    return field.start;
-  }
-  return null;
-}
-
-/**
  * Get the minimum interval in milliseconds from a cron expression
  * Used as a heuristic for complex patterns
  */
@@ -250,12 +243,7 @@ function getMinimumIntervalMs(expression: string): number {
 
   // Check for step values like */n
   const getStep = (field: CronField): number | null => {
-    if (typeof field === "string" && field.startsWith("*/")) {
-      return parseInt(field.slice(2), 10);
-    }
-    if (typeof field === "object" && field.type === "range" && field.step) {
-      return null; // Could be complex
-    }
+    if (isStepped(field)) return stepOf(field);
     return null;
   };
 
@@ -273,26 +261,12 @@ function getMinimumIntervalMs(expression: string): number {
   }
 
   // Check for specific values to determine frequency
-  const isHourly =
-    components.minute !== "*" &&
-    (typeof components.minute === "number" ||
-      typeof components.minute === "object") &&
-    components.hour === "*" &&
-    components.dayOfMonth === "*" &&
-    components.month === "*" &&
-    components.dayOfWeek === "*";
+  const isHourly = components.minute !== "*" && components.hour === "*";
   const isDaily =
     components.minute !== "*" &&
     components.hour !== "*" &&
     components.dayOfMonth === "*" &&
-    components.month === "*" &&
-    (components.dayOfWeek === "*" || components.dayOfWeek === undefined);
-  const minuteIsSpecific =
-    components.minute !== "*" &&
-    !(typeof components.minute === "string" && (components.minute as string).startsWith("*/"));
-  const hourIsStep = typeof components.hour === "string" && (components.hour as string).startsWith("*/");
-  const hourIsWildcard = components.hour === "*";
-  const hourIsSpecific = !hourIsWildcard && !hourIsStep && typeof components.hour !== "object"; // number case
+    components.dayOfWeek === "*";
   const isWeekly =
     components.minute !== "*" &&
     components.hour !== "*" &&
@@ -303,11 +277,19 @@ function getMinimumIntervalMs(expression: string): number {
     components.hour !== "*" &&
     components.dayOfMonth !== "*" &&
     components.dayOfWeek === "*";
+  // A range or list hour with a concrete minute fires hourly within the
+  // window, not daily. Without this the fallback reports `0 9-17 * * *`
+  // as once a day, and the range branch below never runs for the fallback.
+  const isSubDailyRange =
+    isConcrete(components.minute) &&
+    (isRange(components.hour) || isList(components.hour)) &&
+    components.dayOfMonth === "*" &&
+    components.dayOfWeek === "*";
 
   if (isWeekly) return 7 * 24 * 60 * 60 * 1000; // 7 days
   if (isMonthly) return 31 * 24 * 60 * 60 * 1000; // ~1 month
-  if (isDaily || (minuteIsSpecific && components.hour !== "*" && components.dayOfMonth === "*")) return 24 * 60 * 60 * 1000; // 1 day
-  if (isHourly || (minuteIsSpecific && components.hour === "*" && components.dayOfMonth === "*")) return 60 * 60 * 1000; // 1 hour
+  if (isDaily) return 24 * 60 * 60 * 1000; // 1 day
+  if (isHourly || isSubDailyRange) return 60 * 60 * 1000; // 1 hour
 
   // Default to 1 day
   return 24 * 60 * 60 * 1000;
@@ -330,342 +312,204 @@ export function getNextRunTime(
   }
 
   const next = new Date(fromDate.getTime());
-  next.setUTCSeconds(0);
-  next.setUTCMilliseconds(0);
-
-  // Helper to get a specific value from a field (for backward compat)
-  const getFieldValue = (field: CronField): number | null => {
-    if (typeof field === "number") return field;
-    if (typeof field === "object" && field.type === "list" && field.values.length === 1) {
-      const v = field.values[0];
-      return typeof v === "number" ? v : null;
-    }
-    return null;
-  };
-
-  const isStepMinute =
-    typeof components.minute === "string" && components.minute.startsWith("*/");
-  const isStepHour =
-    typeof components.hour === "string" && components.hour.startsWith("*/");
+  next.setSeconds(0);
+  next.setMilliseconds(0);
 
   // Handle step values (e.g., */30 for every 30 minutes)
-  if (isStepMinute) {
-    const step = parseInt((components.minute as string).slice(2), 10);
-    const currentMinute = next.getUTCMinutes();
+  if (isStepped(components.minute)) {
+    const step = stepOf(components.minute);
+    const currentMinute = next.getMinutes();
     const nextMinute = Math.ceil((currentMinute + 1) / step) * step;
 
     if (nextMinute >= 60) {
-      next.setUTCHours(next.getUTCHours() + 1);
-      next.setUTCMinutes(0);
+      next.setHours(next.getHours() + 1);
+      next.setMinutes(0);
     } else {
-      next.setUTCMinutes(nextMinute);
+      next.setMinutes(nextMinute);
     }
     return next;
   }
 
-  // Handle step values in hours with specific minute
+  // Handle hour steps: "0 */2 * * *" (on the hour, every other hour). The
+  // interval fallback below gets the spacing right and the time wrong: at
+  // 15:10 it answers 17:10, where the schedule fires at 16:00.
   if (
-    isStepHour &&
-    components.minute !== "*" &&
-    !(typeof components.minute === "string" && components.minute.startsWith("*/"))
+    isConcrete(components.minute) &&
+    isStepped(components.hour) &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
   ) {
-    const minuteVal = getFieldValue(components.minute);
-    const step = parseInt((components.hour as string).slice(2), 10);
-    next.setUTCMinutes(minuteVal !== null ? minuteVal : next.getUTCMinutes());
-    // Find next hour divisible by step
-    let hour = next.getUTCHours();
-    if (next.getUTCMinutes() < (minuteVal !== null ? minuteVal : 0) || next.getTime() <= fromDate.getTime() || hour % step !== 0) {
-      // simple approach
+    const step = stepOf(components.hour);
+    next.setMinutes(components.minute);
+    const remainder = next.getHours() % step;
+    if (remainder !== 0) {
+      next.setHours(next.getHours() + (step - remainder));
     }
-    // easier: if current time is past this run, add interval
     if (next.getTime() <= fromDate.getTime()) {
-      next.setUTCHours(next.getUTCHours() + step);
-    }
-    // normalize
-    if (minuteVal !== null) {
-      next.setUTCMinutes(minuteVal);
-      if (next.getTime() <= fromDate.getTime()) {
-        next.setUTCHours(next.getUTCHours() + step);
-      }
+      next.setHours(next.getHours() + step);
     }
     return next;
   }
 
-  // Handle hourly pattern: "0 * * * *" or "0 9-17 * * *" style (minute specific, hour any/range, DOM/month/DOW *)
-  const minuteSpecific =
-    components.minute !== "*" &&
-    !isStepMinute;
-  const hourWildcard =
-    components.hour === "*" ||
-    isStepHour;
+  // Handle "* * * * *" — every minute. The pattern branches below all require
+  // a concrete minute, so without this the schedule fell through to the
+  // 1-day interval fallback and a watch firing every minute would be reported
+  // as one that runs once a day.
   if (
-    minuteSpecific &&
-    hourWildcard &&
+    components.minute === "*" &&
+    components.hour === "*" &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    const minuteVal = getFieldValue(components.minute);
-    if (minuteVal !== null) {
-      next.setUTCMinutes(minuteVal);
-      if (next.getTime() <= fromDate.getTime()) {
-        next.setUTCHours(next.getUTCHours() + 1);
-      }
+    next.setMinutes(next.getMinutes() + 1);
+    return next;
+  }
+
+  // Handle hourly pattern: "0 * * * *"
+  if (
+    isConcrete(components.minute) &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    next.setMinutes(components.minute);
+    if (next.getTime() <= fromDate.getTime()) {
+      next.setHours(next.getHours() + 1);
     }
     return next;
   }
 
-  // Handle pattern with minute specific, hour is range/list/specific, DOM *, month *, DOW *
+  // Handle hour ranges and lists: "0 9-17 * * *" (every hour in the window)
+  // and "0 9,13,17 * * *". Without this the expression degrades to the
+  // 1-day fallback because no branch matches a non-concrete hour.
   if (
-    minuteSpecific &&
-    components.hour !== "*" &&
-    !isStepHour &&
+    isConcrete(components.minute) &&
+    (isRange(components.hour) || isList(components.hour)) &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    const minuteVal = getFieldValue(components.minute);
-    if (minuteVal !== null) {
-      next.setUTCMinutes(minuteVal);
-    }
-    const currentHour = next.getUTCHours();
-    // Check if current hour matches and time hasn't passed
+    next.setMinutes(components.minute);
+    const currentHour = next.getHours();
     if (fieldMatches(components.hour, currentHour)) {
-      if (next.getTime() <= fromDate.getTime()) {
-        // Look for next hour in range
-        const nextHour = getNextInField(components.hour, currentHour, 23);
-        if (nextHour !== null) {
-          next.setUTCHours(nextHour);
-          return next;
-        } else {
-          // Move to next day, start at first hour in range
-          next.setUTCDate(next.getUTCDate() + 1);
-          const firstHour = getFirstInField(components.hour, 0);
-          if (firstHour !== null) next.setUTCHours(firstHour);
-          else next.setUTCHours(0);
-          return next;
-        }
-      } else {
+      if (next.getTime() > fromDate.getTime()) return next;
+      const later = getNextInField(components.hour, currentHour, 23);
+      if (later !== null) {
+        next.setHours(later);
         return next;
       }
     } else {
-      // Current hour doesn't match, look for next hour in range today
-      const nextHour = getNextInField(components.hour, currentHour - 1, 23); // look from before current
-      // easier: find next hour >= currentHour
-      if (typeof components.hour === "object" && components.hour.type === "range") {
-        if (currentHour < components.hour.start) {
-          next.setUTCHours(components.hour.start);
-          return next;
-        } else if (currentHour <= components.hour.end) {
-          // look for next in range
-          let candidate = currentHour;
-          // try to find next
-          const nh = getNextInField(components.hour, currentHour, 23);
-          if (nh !== null && nh >= currentHour) {
-            // but if same hour doesn't match time? we need hour > currentHour or hour matches and time ok
-            // check: is current hour in range and time not passed?
-            if (fieldMatches(components.hour, currentHour) && next.getTime() > fromDate.getTime()) {
-              return next;
-            }
-            if (nh !== currentHour || next.getTime() <= fromDate.getTime()) {
-              // if nh is same as currentHour and time passed, need next
-              if (nh === currentHour && next.getTime() <= fromDate.getTime()) {
-                const nh2 = getNextInField(components.hour, currentHour, 23);
-                if (nh2 !== null) { next.setUTCHours(nh2); return next; }
-              } else if (nh > currentHour) {
-                next.setUTCHours(nh);
-                return next;
-              }
-            }
-          }
-          const nh2 = getNextInField(components.hour, currentHour, 23);
-          if (nh2 !== null && nh2 > currentHour) { next.setUTCHours(nh2); return next; }
-          if (nh2 !== null && nh2 === currentHour && next.getTime() > fromDate.getTime()) { return next; }
-        }
-        // move to next day
-        next.setUTCDate(next.getUTCDate() + 1);
-        next.setUTCHours(components.hour.start);
-        return next;
-      } else if (typeof components.hour === "object" && components.hour.type === "list") {
-        const sorted = [...components.hour.values].sort((a,b)=>a-b);
-        // find next > currentHour or first if none
-        for (const h of sorted) {
-          if (typeof h === "number" && h > currentHour) { next.setUTCHours(h); return next; }
-          if (typeof h === "number" && h === currentHour && next.getTime() > fromDate.getTime()) { next.setUTCHours(h); return next; }
-        }
-        next.setUTCDate(next.getUTCDate() + 1);
-        if (typeof sorted[0] === "number") {
-          next.setUTCHours(sorted[0]);
-        }
-        return next;
-      } else if (typeof components.hour === "number") {
-        next.setUTCHours(components.hour);
-        if (next.getTime() <= fromDate.getTime()) {
-          next.setUTCDate(next.getUTCDate() + 1);
-        }
+      const later = getNextInField(components.hour, currentHour - 1, 23);
+      if (later !== null && later >= currentHour) {
+        next.setHours(later);
         return next;
       }
-      // fallback
-      next.setUTCDate(next.getUTCDate() + 1);
-      const firstHour = getFirstInField(components.hour, 0);
-      if (firstHour !== null) next.setUTCHours(firstHour);
-      return next;
     }
+    next.setDate(next.getDate() + 1);
+    const first = getFirstInField(components.hour, 0);
+    next.setHours(first ?? 0);
+    next.setMinutes(components.minute);
+    return next;
   }
 
   // Handle daily pattern: "0 9 * * *" (daily at 9am)
   if (
-    minuteSpecific &&
-    components.hour !== "*" &&
-    !isStepHour &&
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    const minuteVal = getFieldValue(components.minute);
-    const hourVal = getFieldValue(components.hour);
-    if (minuteVal !== null) next.setUTCMinutes(minuteVal);
-    if (hourVal !== null) next.setUTCHours(hourVal);
-    else {
-      // try to set first hour if range
-      const fh = getFirstInField(components.hour, 0);
-      if (fh !== null) next.setUTCHours(fh);
-    }
+    next.setMinutes(components.minute);
+    next.setHours(components.hour);
     if (next.getTime() <= fromDate.getTime()) {
-      next.setUTCDate(next.getUTCDate() + 1);
-      // if hour was a range, reset to first hour of range
-      if (typeof components.hour === "object" && components.hour.type === "range") {
-        next.setUTCHours(components.hour.start);
-        if (minuteVal !== null) next.setUTCMinutes(minuteVal);
-      }
+      next.setDate(next.getDate() + 1);
     }
     return next;
   }
 
-  // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
+  // Handle monthly pattern: "0 9 1 * *" (monthly on the 1st at 9am)
   if (
-    minuteSpecific &&
-    components.hour !== "*" &&
-    !isStepHour &&
-    components.dayOfWeek !== "*" &&
-    components.dayOfMonth === "*"
-  ) {
-    const minuteVal = getFieldValue(components.minute);
-    const hourVal = getFieldValue(components.hour);
-    if (minuteVal !== null) next.setUTCMinutes(minuteVal);
-    if (hourVal !== null) next.setUTCHours(hourVal);
-    else {
-      const fh = getFirstInField(components.hour, 0);
-      if (fh !== null) next.setUTCHours(fh);
-    }
-    if (typeof components.dayOfWeek === "number") {
-      const targetDay = components.dayOfWeek;
-      const currentDay = next.getUTCDay();
-      const daysUntilTarget = (targetDay - currentDay + 7) % 7;
-      next.setUTCDate(next.getUTCDate() + daysUntilTarget);
-      if (next.getTime() <= fromDate.getTime()) {
-        next.setUTCDate(next.getUTCDate() + 7);
-      }
-      return next;
-    } else if (typeof components.dayOfWeek === "object" && components.dayOfWeek.type === "list") {
-      // find next matching day
-      const currentDay = next.getUTCDay();
-      // check today
-      for (let i = 0; i < 7; i++) {
-        const checkDay = (currentDay + i) % 7;
-        if (components.dayOfWeek.values.includes(checkDay)) {
-          next.setUTCDate(next.getUTCDate() + i);
-          if (i === 0 && next.getTime() <= fromDate.getTime()) {
-            // try next week
-            next.setUTCDate(next.getUTCDate() + 7);
-          }
-          return next;
-        }
-      }
-      return next;
-    } else {
-      const targetDay = getFieldValue(components.dayOfWeek);
-      if (targetDay !== null) {
-        const currentDay = next.getUTCDay();
-        const daysUntilTarget = (targetDay - currentDay + 7) % 7;
-        next.setUTCDate(next.getUTCDate() + daysUntilTarget);
-        if (next.getTime() <= fromDate.getTime()) {
-          next.setUTCDate(next.getUTCDate() + 7);
-        }
-        return next;
-      }
-    }
-  }
-
-  // Handle monthly pattern: specific day of month, every month at specified time
-  if (
-    minuteSpecific &&
-    components.hour !== "*" &&
-    !isStepHour &&
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
     components.dayOfMonth !== "*" &&
     components.dayOfWeek === "*"
   ) {
-    const minuteVal = getFieldValue(components.minute);
-    const hourVal = getFieldValue(components.hour);
-    if (minuteVal !== null) next.setUTCMinutes(minuteVal);
-    if (hourVal !== null) next.setUTCHours(hourVal);
-    else {
-      const fh = getFirstInField(components.hour, 0);
-      if (fh !== null) next.setUTCHours(fh);
-    }
-    const targetDom = getFieldValue(components.dayOfMonth);
-    if (targetDom !== null) {
-      const currentDom = next.getUTCDate();
+    next.setMinutes(components.minute);
+    next.setHours(components.hour);
+    if (isConcrete(components.dayOfMonth)) {
+      const targetDom = components.dayOfMonth;
+      const currentDom = next.getDate();
       if (currentDom < targetDom) {
-        next.setUTCDate(targetDom);
+        next.setDate(targetDom);
         if (next.getTime() <= fromDate.getTime()) {
-          next.setUTCMonth(next.getUTCMonth() + 1);
-          next.setUTCDate(targetDom);
+          next.setMonth(next.getMonth() + 1);
+          next.setDate(targetDom);
         }
-        return next;
       } else if (currentDom === targetDom) {
         if (next.getTime() <= fromDate.getTime()) {
-          next.setUTCMonth(next.getUTCMonth() + 1);
-          next.setUTCDate(targetDom);
+          next.setMonth(next.getMonth() + 1);
+          next.setDate(targetDom);
         }
-        return next;
       } else {
-        next.setUTCMonth(next.getUTCMonth() + 1);
-        next.setUTCDate(targetDom);
-        return next;
-      }
-    } else if (typeof components.dayOfMonth === "object" && components.dayOfMonth.type === "list") {
-      const currentDom = next.getUTCDate();
-      const sorted = [...components.dayOfMonth.values].sort((a,b)=>a-b);
-      for (const d of sorted) {
-        if (typeof d === "number" && d > currentDom) { next.setUTCDate(d); return next; }
-        if (typeof d === "number" && d === currentDom && next.getTime() > fromDate.getTime()) { next.setUTCDate(d); return next; }
-      }
-      next.setUTCMonth(next.getUTCMonth() + 1);
-      if (typeof sorted[0] === "number") {
-        next.setUTCDate(sorted[0]);
+        next.setMonth(next.getMonth() + 1);
+        next.setDate(targetDom);
       }
       return next;
-    } else if (typeof components.dayOfMonth === "object" && components.dayOfMonth.type === "range") {
-      const currentDom = next.getUTCDate();
-      if (fieldMatches(components.dayOfMonth, currentDom)) {
-        if (next.getTime() > fromDate.getTime()) {
+    }
+    if (isList(components.dayOfMonth)) {
+      const currentDom = next.getDate();
+      const sorted = [...components.dayOfMonth.values].sort((a, b) => a - b);
+      for (const day of sorted) {
+        if (day > currentDom) {
+          next.setDate(day);
+          return next;
+        }
+        if (day === currentDom && next.getTime() > fromDate.getTime()) {
           return next;
         }
       }
-      // look for next
-      const nd = getNextInField(components.dayOfMonth, currentDom, 31);
-      if (nd !== null && nd > currentDom) {
-        next.setUTCDate(nd);
-        return next;
-      }
-      if (nd !== null && nd === currentDom && next.getTime() > fromDate.getTime()) {
-        return next;
-      }
-      next.setUTCMonth(next.getUTCMonth() + 1);
-      next.setUTCDate(components.dayOfMonth.start);
+      next.setMonth(next.getMonth() + 1);
+      const first = sorted[0];
+      if (first !== undefined) next.setDate(first);
       return next;
     }
+    if (isRange(components.dayOfMonth)) {
+      const currentDom = next.getDate();
+      if (fieldMatches(components.dayOfMonth, currentDom)) {
+        if (next.getTime() > fromDate.getTime()) return next;
+      }
+      const later = getNextInField(components.dayOfMonth, currentDom, 31);
+      if (later !== null && later > currentDom) {
+        next.setDate(later);
+        return next;
+      }
+      next.setMonth(next.getMonth() + 1);
+      next.setDate(components.dayOfMonth.start);
+      return next;
+    }
+  }
+
+  // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
+  if (
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
+    isConcrete(components.dayOfWeek) &&
+    components.dayOfMonth === "*"
+  ) {
+    next.setMinutes(components.minute);
+    next.setHours(components.hour);
+    const targetDay = components.dayOfWeek;
+    const currentDay = next.getDay();
+    const daysUntilTarget = (targetDay - currentDay + 7) % 7;
+    next.setDate(next.getDate() + daysUntilTarget);
+    if (next.getTime() <= fromDate.getTime()) {
+      next.setDate(next.getDate() + 7);
+    }
+    return next;
   }
 
   // Fallback: use minimum interval
@@ -690,252 +534,241 @@ export function getPreviousRunTime(
   }
 
   const prev = new Date(fromDate.getTime());
-  prev.setUTCSeconds(0);
-  prev.setUTCMilliseconds(0);
-
-  const getFieldValue = (field: CronField): number | null => {
-    if (typeof field === "number") return field;
-    if (typeof field === "object" && field.type === "list" && field.values.length === 1) {
-      const v = field.values[0];
-      return typeof v === "number" ? v : null;
-    }
-    return null;
-  };
-
-  const isStepMinute =
-    typeof components.minute === "string" && components.minute.startsWith("*/");
-  const isStepHour =
-    typeof components.hour === "string" && components.hour.startsWith("*/");
-  const minuteSpecific = components.minute !== "*" && !isStepMinute;
+  prev.setSeconds(0);
+  prev.setMilliseconds(0);
 
   // Handle step values (e.g., */30 for every 30 minutes)
-  if (isStepMinute) {
-    const step = parseInt((components.minute as string).slice(2), 10);
-    const currentMinute = prev.getUTCMinutes();
+  if (isStepped(components.minute)) {
+    const step = stepOf(components.minute);
+    const currentMinute = prev.getMinutes();
     const prevMinute = Math.floor(currentMinute / step) * step;
 
     if (prevMinute < 0) {
-      prev.setUTCHours(prev.getUTCHours() - 1);
-      prev.setUTCMinutes(60 - step);
+      prev.setHours(prev.getHours() - 1);
+      prev.setMinutes(60 - step);
     } else {
-      prev.setUTCMinutes(prevMinute);
+      prev.setMinutes(prevMinute);
     }
     if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCMinutes(prev.getUTCMinutes() - step);
-      if (prev.getUTCMinutes() < 0) {
-        prev.setUTCHours(prev.getUTCHours() - 1);
-        prev.setUTCMinutes(60 + prev.getUTCMinutes());
+      prev.setMinutes(prev.getMinutes() - step);
+      if (prev.getMinutes() < 0) {
+        prev.setHours(prev.getHours() - 1);
+        prev.setMinutes(60 + prev.getMinutes());
       }
     }
     return prev;
   }
 
-  // Handle hourly pattern: "0 * * * *" or minute specific with wildcard hour
+  // Handle hour steps: "0 */2 * * *"; mirrors getNextRunTime's branch.
   if (
-    minuteSpecific &&
-    (components.hour === "*" || isStepHour) &&
+    isConcrete(components.minute) &&
+    isStepped(components.hour) &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    const minuteVal = getFieldValue(components.minute);
-    if (minuteVal !== null) prev.setUTCMinutes(minuteVal);
+    const step = stepOf(components.hour);
+    prev.setMinutes(components.minute);
+    const remainder = prev.getHours() % step;
+    if (remainder !== 0) {
+      prev.setHours(prev.getHours() - remainder);
+    }
     if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCHours(prev.getUTCHours() - 1);
+      prev.setHours(prev.getHours() - step);
     }
     return prev;
   }
 
-  // Handle patterns with hour range/list
+  // Handle "* * * * *" — every minute; mirrors getNextRunTime's branch. The
+  // seconds were zeroed above, so an fromDate that lands exactly on a minute
+  // boundary steps back one minute to stay strictly in the past.
   if (
-    minuteSpecific &&
-    components.hour !== "*" &&
-    !isStepHour &&
+    components.minute === "*" &&
+    components.hour === "*" &&
     components.dayOfMonth === "*" &&
     components.month === "*" &&
     components.dayOfWeek === "*"
   ) {
-    const minuteVal = getFieldValue(components.minute);
-    if (minuteVal !== null) prev.setUTCMinutes(minuteVal);
-    const currentHour = prev.getUTCHours();
+    if (prev.getTime() >= fromDate.getTime()) {
+      prev.setMinutes(prev.getMinutes() - 1);
+    }
+    return prev;
+  }
+
+  // Handle hourly pattern: "0 * * * *"
+  if (
+    isConcrete(components.minute) &&
+    components.hour === "*" &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    prev.setMinutes(components.minute);
+    if (prev.getTime() >= fromDate.getTime()) {
+      prev.setHours(prev.getHours() - 1);
+    }
+    return prev;
+  }
+
+  // Handle hour ranges and lists in reverse; mirrors getNextRunTime.
+  if (
+    isConcrete(components.minute) &&
+    (isRange(components.hour) || isList(components.hour)) &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    prev.setMinutes(components.minute);
+    const currentHour = prev.getHours();
     if (fieldMatches(components.hour, currentHour)) {
-      if (prev.getTime() >= fromDate.getTime()) {
-        // look for previous hour in range
-        if (typeof components.hour === "object" && components.hour.type === "range") {
-          let h = currentHour - 1;
-          while (h >= components.hour.start) {
-            if (components.hour.step) {
-              if ((h - components.hour.start) % components.hour.step === 0) {
-                prev.setUTCHours(h);
-                return prev;
-              }
-            } else {
-              prev.setUTCHours(h);
-              return prev;
-            }
-            h--;
-          }
-          prev.setUTCDate(prev.getUTCDate() - 1);
-          prev.setUTCHours(components.hour.end);
-          if (components.hour.step) {
-            let h2 = components.hour.end;
-            while (h2 >= components.hour.start) {
-              if ((h2 - components.hour.start) % components.hour.step === 0) {
-                prev.setUTCHours(h2);
-                break;
-              }
-              h2--;
-            }
-          }
-          return prev;
-        } else if (typeof components.hour === "object" && components.hour.type === "list") {
-          const sorted = [...components.hour.values].sort((a,b)=>b-a);
-          for (const h of sorted) {
-            if (typeof h === "number" && h < currentHour) { prev.setUTCHours(h); return prev; }
-          }
-          prev.setUTCDate(prev.getUTCDate() - 1);
-          if (typeof sorted[0] === "number") {
-            prev.setUTCHours(sorted[0]);
-          }
-          return prev;
-        } else if (typeof components.hour === "number") {
-          prev.setUTCHours(components.hour);
-          prev.setUTCDate(prev.getUTCDate() - 1);
-          return prev;
+      if (prev.getTime() < fromDate.getTime()) return prev;
+      let candidate = currentHour - 1;
+      let found: number | null = null;
+      while (candidate >= 0) {
+        if (fieldMatches(components.hour, candidate)) {
+          found = candidate;
+          break;
+        }
+        candidate--;
+      }
+      if (found !== null) {
+        prev.setHours(found);
+        return prev;
+      }
+      prev.setDate(prev.getDate() - 1);
+      let last: number | null = 23;
+      while (last !== null && last >= 0 && !fieldMatches(components.hour, last)) {
+        last--;
+      }
+      prev.setHours(last ?? 0);
+      return prev;
+    }
+    let candidate = currentHour - 1;
+    let found: number | null = null;
+    while (candidate >= 0) {
+      if (fieldMatches(components.hour, candidate)) {
+        found = candidate;
+        break;
+      }
+      candidate--;
+    }
+    if (found !== null) {
+      prev.setHours(found);
+      return prev;
+    }
+    prev.setDate(prev.getDate() - 1);
+    let last: number | null = 23;
+    while (last !== null && last >= 0 && !fieldMatches(components.hour, last)) {
+      last--;
+    }
+    prev.setHours(last ?? 0);
+    return prev;
+  }
+
+  // Handle daily pattern: "0 9 * * *" (daily at 9am)
+  if (
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
+    components.dayOfMonth === "*" &&
+    components.month === "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    prev.setMinutes(components.minute);
+    prev.setHours(components.hour);
+    if (prev.getTime() >= fromDate.getTime()) {
+      prev.setDate(prev.getDate() - 1);
+    }
+    return prev;
+  }
+
+  // Handle monthly pattern in reverse; mirrors getNextRunTime.
+  if (
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
+    components.dayOfMonth !== "*" &&
+    components.dayOfWeek === "*"
+  ) {
+    prev.setMinutes(components.minute);
+    prev.setHours(components.hour);
+    if (isConcrete(components.dayOfMonth)) {
+      const targetDom = components.dayOfMonth;
+      const currentDom = prev.getDate();
+      if (currentDom > targetDom) {
+        prev.setDate(targetDom);
+        if (prev.getTime() >= fromDate.getTime()) {
+          prev.setMonth(prev.getMonth() - 1);
+          prev.setDate(targetDom);
+        }
+      } else if (currentDom === targetDom) {
+        if (prev.getTime() >= fromDate.getTime()) {
+          prev.setMonth(prev.getMonth() - 1);
+          prev.setDate(targetDom);
         }
       } else {
-        return prev;
+        prev.setMonth(prev.getMonth() - 1);
+        prev.setDate(targetDom);
       }
-    } else {
-      if (typeof components.hour === "object" && components.hour.type === "range") {
-        if (currentHour > components.hour.end) {
-          prev.setUTCHours(components.hour.end);
-          if (components.hour.step) {
-            let h2 = components.hour.end;
-            while (h2 >= components.hour.start) {
-              if ((h2 - components.hour.start) % components.hour.step === 0) { prev.setUTCHours(h2); break; }
-              h2--;
-            }
-          }
+      return prev;
+    }
+    if (isList(components.dayOfMonth)) {
+      const currentDom = prev.getDate();
+      const sorted = [...components.dayOfMonth.values].sort((a, b) => b - a);
+      for (const day of sorted) {
+        if (day < currentDom) {
+          prev.setDate(day);
           return prev;
-        } else if (currentHour >= components.hour.start) {
-          // find prev in range
         }
-        prev.setUTCDate(prev.getUTCDate() - 1);
-        prev.setUTCHours(components.hour.end);
-        if (components.hour.step) {
-          let h2 = components.hour.end;
-          while (h2 >= components.hour.start) {
-            if ((h2 - components.hour.start) % components.hour.step === 0) { prev.setUTCHours(h2); break; }
-            h2--;
-          }
+        if (day === currentDom && prev.getTime() < fromDate.getTime()) {
+          return prev;
         }
-        return prev;
-      } else if (typeof components.hour === "object" && components.hour.type === "list") {
-        const sorted = [...components.hour.values].sort((a,b)=>b-a);
-        for (const h of sorted) {
-          if (typeof h === "number" && h < currentHour) { prev.setUTCHours(h); return prev; }
+      }
+      prev.setMonth(prev.getMonth() - 1);
+      const last = [...components.dayOfMonth.values].sort((a, b) => b - a)[0];
+      if (last !== undefined) prev.setDate(last);
+      return prev;
+    }
+    if (isRange(components.dayOfMonth)) {
+      const currentDom = prev.getDate();
+      if (fieldMatches(components.dayOfMonth, currentDom)) {
+        if (prev.getTime() < fromDate.getTime()) return prev;
+      }
+      let candidate = currentDom - 1;
+      let found: number | null = null;
+      while (candidate >= 1) {
+        if (fieldMatches(components.dayOfMonth, candidate)) {
+          found = candidate;
+          break;
         }
-        prev.setUTCDate(prev.getUTCDate() - 1);
-        const last = sorted[sorted.length-1];
-        if (typeof last === "number") {
-          prev.setUTCHours(last);
-        }
+        candidate--;
+      }
+      if (found !== null) {
+        prev.setDate(found);
         return prev;
       }
-    }
-  }
-
-  // Handle daily pattern: "0 9 * * *"
-  if (
-    minuteSpecific &&
-    components.hour !== "*" &&
-    !isStepHour &&
-    components.dayOfMonth === "*" &&
-    components.month === "*" &&
-    components.dayOfWeek === "*"
-  ) {
-    const minuteVal = getFieldValue(components.minute);
-    const hourVal = getFieldValue(components.hour);
-    if (minuteVal !== null) prev.setUTCMinutes(minuteVal);
-    if (hourVal !== null) prev.setUTCHours(hourVal);
-    else {
-      const fh = getFirstInField(components.hour, 0);
-      if (fh !== null) prev.setUTCHours(fh);
-    }
-    if (prev.getTime() >= fromDate.getTime()) {
-      prev.setUTCDate(prev.getUTCDate() - 1);
-    }
-    return prev;
-  }
-
-  // Handle weekly pattern
-  if (
-    minuteSpecific &&
-    components.hour !== "*" &&
-    !isStepHour &&
-    components.dayOfWeek !== "*" &&
-    components.dayOfMonth === "*"
-  ) {
-    const minuteVal = getFieldValue(components.minute);
-    const hourVal = getFieldValue(components.hour);
-    if (minuteVal !== null) prev.setUTCMinutes(minuteVal);
-    if (hourVal !== null) prev.setUTCHours(hourVal);
-    else {
-      const fh = getFirstInField(components.hour, 0);
-      if (fh !== null) prev.setUTCHours(fh);
-    }
-    if (typeof components.dayOfWeek === "number") {
-      const targetDay = components.dayOfWeek;
-      const currentDay = prev.getUTCDay();
-      const daysDiff = currentDay - targetDay;
-      const daysToSubtract = daysDiff >= 0 ? daysDiff : daysDiff + 7;
-      prev.setUTCDate(prev.getUTCDate() - daysToSubtract);
-      if (prev.getTime() >= fromDate.getTime()) {
-        prev.setUTCDate(prev.getUTCDate() - 7);
-      }
+      prev.setMonth(prev.getMonth() - 1);
+      prev.setDate(components.dayOfMonth.end);
       return prev;
     }
   }
 
-  // Handle monthly pattern
+  // Handle weekly pattern: "0 9 * * 0" (weekly on Sunday at 9am)
   if (
-    minuteSpecific &&
-    components.hour !== "*" &&
-    !isStepHour &&
-    components.dayOfMonth !== "*" &&
-    components.dayOfWeek === "*"
+    isConcrete(components.minute) &&
+    isConcrete(components.hour) &&
+    isConcrete(components.dayOfWeek) &&
+    components.dayOfMonth === "*"
   ) {
-    const minuteVal = getFieldValue(components.minute);
-    const hourVal = getFieldValue(components.hour);
-    if (minuteVal !== null) prev.setUTCMinutes(minuteVal);
-    if (hourVal !== null) prev.setUTCHours(hourVal);
-    else {
-      const fh = getFirstInField(components.hour, 0);
-      if (fh !== null) prev.setUTCHours(fh);
+    prev.setMinutes(components.minute);
+    prev.setHours(components.hour);
+    const targetDay = components.dayOfWeek;
+    const currentDay = prev.getDay();
+    const daysDiff = currentDay - targetDay;
+    const daysToSubtract = daysDiff >= 0 ? daysDiff : daysDiff + 7;
+    prev.setDate(prev.getDate() - daysToSubtract);
+    if (prev.getTime() >= fromDate.getTime()) {
+      prev.setDate(prev.getDate() - 7);
     }
-    const targetDom = getFieldValue(components.dayOfMonth);
-    if (targetDom !== null) {
-      const currentDom = prev.getUTCDate();
-      if (currentDom > targetDom) {
-        prev.setUTCDate(targetDom);
-        if (prev.getTime() >= fromDate.getTime()) {
-          prev.setUTCMonth(prev.getUTCMonth() - 1);
-          prev.setUTCDate(targetDom);
-        }
-        return prev;
-      } else if (currentDom === targetDom) {
-        if (prev.getTime() >= fromDate.getTime()) {
-          prev.setUTCMonth(prev.getUTCMonth() - 1);
-          prev.setUTCDate(targetDom);
-        }
-        return prev;
-      } else {
-        prev.setUTCMonth(prev.getUTCMonth() - 1);
-        prev.setUTCDate(targetDom);
-        return prev;
-      }
-    }
+    return prev;
   }
 
   // Fallback: use minimum interval
@@ -1001,70 +834,53 @@ export function isValidCronExpression(expression: string): boolean {
       const step = parseInt(field.slice(2), 10);
       return !isNaN(step) && step > 0 && step <= max;
     }
-    // Handle step with range like 1-10/2
     if (field.includes("/")) {
-      const partsSlash = field.split("/");
-      const rangePart = partsSlash[0];
-      const stepPart = partsSlash[1];
-      if (typeof rangePart !== "string" || typeof stepPart !== "string") {
-        return false;
-      }
+      const [rangePart, stepPart] = field.split("/");
+      if (rangePart === undefined || stepPart === undefined) return false;
       const step = parseInt(stepPart, 10);
       if (isNaN(step) || step <= 0 || step > max) return false;
       if (rangePart === "*") return true;
       if (rangePart.includes("-")) {
-        const rangeSplit = rangePart.split("-");
-        const s = rangeSplit[0];
-        const e = rangeSplit[1];
-        if (typeof s !== "string" || typeof e !== "string") {
-          return false;
-        }
-        const start = parseInt(s, 10);
-        const end = parseInt(e, 10);
-        return !isNaN(start) && !isNaN(end) && start >= min && end <= max && start <= end;
+        const [startStr, endStr] = rangePart.split("-");
+        if (startStr === undefined || endStr === undefined) return false;
+        const start = parseInt(startStr, 10);
+        const end = parseInt(endStr, 10);
+        return (
+          !isNaN(start) && !isNaN(end) && start >= min && end <= max && start <= end
+        );
       }
       return false;
     }
-    // Handle lists like 1,2,3
     if (field.includes(",")) {
-      const values = field.split(",").map((v) => v.trim());
-      for (const v of values) {
-        if (v === "*") continue;
-        if (v.startsWith("*/")) {
-          const step = parseInt(v.slice(2), 10);
+      for (const part of field.split(",").map((v) => v.trim())) {
+        if (part === "*") continue;
+        if (part.startsWith("*/")) {
+          const step = parseInt(part.slice(2), 10);
           if (isNaN(step) || step <= 0 || step > max) return false;
           continue;
         }
-        if (v.includes("-")) {
-          const rangeSplit = v.split("-");
-          const s = rangeSplit[0];
-          const e = rangeSplit[1];
-          if (typeof s !== "string" || typeof e !== "string") {
+        if (part.includes("-")) {
+          const [startStr, endStr] = part.split("-");
+          if (startStr === undefined || endStr === undefined) return false;
+          const start = parseInt(startStr, 10);
+          const end = parseInt(endStr, 10);
+          if (isNaN(start) || isNaN(end) || start < min || end > max || start > end)
             return false;
-          }
-          const start = parseInt(s, 10);
-          const end = parseInt(e, 10);
-          if (isNaN(start) || isNaN(end) || start < min || end > max || start > end) return false;
           continue;
         }
-        const num = parseInt(v, 10);
+        const num = parseInt(part, 10);
         if (isNaN(num) || num < min || num > max) return false;
       }
       return true;
     }
-    // Handle ranges like 9-17
     if (field.includes("-")) {
-      const rangeSplit = field.split("-");
-      const s = rangeSplit[0];
-      const e = rangeSplit[1];
-      if (typeof s !== "string" || typeof e !== "string") {
-        return false;
-      }
-      const start = parseInt(s, 10);
-      const end = parseInt(e, 10);
-      if (isNaN(start) || isNaN(end)) return false;
-      if (start < min || end > max || start > end) return false;
-      return true;
+      const [startStr, endStr] = field.split("-");
+      if (startStr === undefined || endStr === undefined) return false;
+      const start = parseInt(startStr, 10);
+      const end = parseInt(endStr, 10);
+      return (
+        !isNaN(start) && !isNaN(end) && start >= min && end <= max && start <= end
+      );
     }
     const num = parseInt(field, 10);
     return !isNaN(num) && num >= min && num <= max;
@@ -1075,15 +891,11 @@ export function isValidCronExpression(expression: string): boolean {
   if (parts.length < startIdx + 5) {
     return false;
   }
-  try {
-    return (
-      validateField(parts[startIdx]!, 0, 59) && // minute
-      validateField(parts[startIdx + 1]!, 0, 23) && // hour
-      validateField(parts[startIdx + 2]!, 1, 31) && // day of month
-      validateField(parts[startIdx + 3]!, 1, 12) && // month
-      validateField(parts[startIdx + 4]!, 0, 6) // day of week
-    );
-  } catch {
-    return false;
-  }
+  return (
+    validateField(parts[startIdx]!, 0, 59) && // minute
+    validateField(parts[startIdx + 1]!, 0, 23) && // hour
+    validateField(parts[startIdx + 2]!, 1, 31) && // day of month
+    validateField(parts[startIdx + 3]!, 1, 12) && // month
+    validateField(parts[startIdx + 4]!, 0, 6) // day of week
+  );
 }

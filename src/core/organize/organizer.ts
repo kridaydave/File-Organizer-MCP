@@ -47,6 +47,12 @@ export interface OrganizeResult {
   aborted: boolean;
   skippedCount?: number;
   skippedFiles?: { path: string; reason: string }[];
+  /**
+   * The rollback manifest this batch wrote, or undefined on a dry run and when
+   * no manifest could be created. This is the id `undo_last_operation` takes,
+   * so a caller that drops it has no way to undo the batch selectively later.
+   */
+  manifestId?: string;
 }
 
 // BUG-003 FIX: Maximum consecutive errors before aborting to prevent endless processing
@@ -236,20 +242,174 @@ export class OrganizerService {
     );
 
     if (dryRun) {
+      const actions: OrganizeAction[] = [];
+      const skippedFiles: { path: string; reason: string }[] = [...plan.skippedFiles];
+
+      for (const move of plan.moves) {
+        if (move.hasConflict && move.conflictResolution === "skip") {
+          skippedFiles.push({
+            path: move.source,
+            reason: "Conflict resolution is skip",
+          });
+          continue;
+        }
+
+        try {
+          const targetPath = move.destination;
+          const sourcePath = move.source;
+
+          if (path.resolve(sourcePath) === path.resolve(targetPath)) {
+            continue;
+          }
+
+          // Simulate disk conflict handling like execution does
+          if (
+            move.conflictResolution === "overwrite" ||
+            move.conflictResolution === "overwrite_if_newer"
+          ) {
+            if (move.conflictResolution === "overwrite_if_newer") {
+              try {
+                const destStat = await fs.stat(targetPath);
+                const srcStat = await fs.stat(sourcePath);
+                if (srcStat.mtime.getTime() <= destStat.mtime.getTime()) {
+                  skippedFiles.push({ path: sourcePath, reason: "destination is newer or equal" });
+                  continue;
+                }
+              } catch (statErr: unknown) {
+                if (isErrnoException(statErr) && statErr.code === "ENOENT") {
+                  // Destination doesn't exist - would proceed
+                } else {
+                  throw statErr;
+                }
+              }
+            }
+            actions.push({
+              file: path.basename(sourcePath),
+              from: sourcePath,
+              to: targetPath,
+              category: move.category as CategoryName,
+            });
+            continue;
+          }
+
+          if (move.conflictResolution === "rename") {
+            // In dry-run, check if the planned destination or subsequent ones would conflict
+            // For accuracy matching execution, we need to simulate
+            let effectivePath = targetPath;
+            const sourceExt = path.extname(sourcePath);
+            const sourceBaseName = path.basename(sourcePath, sourceExt);
+            const destDir = path.dirname(targetPath);
+
+            let startCounter = 1;
+            const plannedBaseName = path.basename(targetPath, path.extname(targetPath));
+            if (plannedBaseName.startsWith(`${sourceBaseName}_`)) {
+              const suffix = plannedBaseName.slice(sourceBaseName.length + 1);
+              if (/^\d+$/.test(suffix)) {
+                startCounter = parseInt(suffix, 10) + 1;
+              }
+            }
+
+            // Try to find a non-conflicting name like execution would
+            let found = false;
+            let retryCount = startCounter - 1;
+            let candidate = effectivePath;
+            for (let i = 0; i < 100 && !found; i++) {
+              try {
+                await fs.access(candidate);
+                // File exists, try next name
+                retryCount++;
+                candidate = path.join(
+                  destDir,
+                  `${sourceBaseName}_${retryCount}${sourceExt}`,
+                );
+              } catch {
+                // Doesn't exist, we can use it
+                effectivePath = candidate;
+                found = true;
+              }
+            }
+            if (!found) {
+              skippedFiles.push({ path: sourcePath, reason: "Too many naming conflicts" });
+              continue;
+            }
+            actions.push({
+              file: path.basename(sourcePath),
+              from: sourcePath,
+              to: effectivePath,
+              category: move.category as CategoryName,
+            });
+            continue;
+          }
+
+          // For skip or other strategies, check if destination exists (disk conflict)
+          try {
+            await fs.access(targetPath);
+            // Destination exists
+            if (move.conflictResolution === "skip") {
+              skippedFiles.push({
+                path: sourcePath,
+                reason: `destination ${targetPath} already exists`,
+              });
+              continue;
+            } else {
+              // Try to find alternative name like rename would
+              const sourceExt = path.extname(sourcePath);
+              const sourceBaseName = path.basename(sourcePath, sourceExt);
+              const destDir = path.dirname(targetPath);
+              let retryCount = 0;
+              let effectivePath = targetPath;
+              let found = false;
+              for (let i = 1; i < 100 && !found; i++) {
+                retryCount = i;
+                effectivePath = path.join(
+                  destDir,
+                  `${sourceBaseName}_${retryCount}${sourceExt}`,
+                );
+                try {
+                  await fs.access(effectivePath);
+                } catch {
+                  found = true;
+                }
+              }
+              if (!found) {
+                skippedFiles.push({ path: sourcePath, reason: "Too many naming conflicts" });
+                continue;
+              }
+              actions.push({
+                file: path.basename(sourcePath),
+                from: sourcePath,
+                to: effectivePath,
+                category: move.category as CategoryName,
+              });
+              continue;
+            }
+          } catch {
+            // Destination doesn't exist
+            actions.push({
+              file: path.basename(sourcePath),
+              from: sourcePath,
+              to: targetPath,
+              category: move.category as CategoryName,
+            });
+            continue;
+          }
+        } catch (error) {
+          skippedFiles.push({
+            path: move.source,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       return {
         statistics: plan.categoryCounts,
-        actions: plan.moves.map((m) => ({
-          file: path.basename(m.source),
-          from: m.source,
-          to: m.destination,
-          category: m.category as CategoryName,
-        })),
+        actions,
         errors: plan.warnings,
         errorCount: 0,
-        successCount: plan.moves.length,
+        successCount: actions.length,
         aborted: false,
-        skippedCount: plan.skippedFiles.length,
-        skippedFiles: plan.skippedFiles,
+        skippedCount: skippedFiles.length,
+        skippedFiles,
       };
     }
 
@@ -362,7 +522,31 @@ export class OrganizerService {
           // If it fails with EEXIST, destination exists: backup targetPath first, then move.
           try {
             await fs.copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL);
-            await fs.unlink(sourcePath);
+            try {
+              await fs.unlink(sourcePath);
+            } catch (unlinkErr: unknown) {
+              // BUG-27 FIX: If unlink fails after copy, clean up the copied file to avoid orphan
+              try {
+                await fs.unlink(targetPath);
+                logger.info(
+                  `Successfully cleaned up copied file ${targetPath} after failed source unlink`,
+                );
+              } catch (cleanupErr) {
+                const criticalMsg = `CRITICAL: Failed to cleanup copied file ${targetPath} after failed source unlink. Manual intervention may be required.`;
+                logger.error(criticalMsg);
+                errors.push(criticalMsg);
+              }
+
+              const errMessage =
+                unlinkErr instanceof Error
+                  ? unlinkErr.message
+                  : String(unlinkErr);
+              throw new Error(
+                `CRITICAL: Source file ${sourcePath} unlink failed after successful copy. ` +
+                  `Source file integrity compromised. Error: ${errMessage}`,
+                { cause: unlinkErr },
+              );
+            }
           } catch (copyErr: unknown) {
             if (isErrnoException(copyErr) && copyErr.code === "EEXIST") {
               const backupName = `${Date.now()}_${crypto.randomUUID()}_overwrite_${path.basename(targetPath)}`;
@@ -636,9 +820,10 @@ export class OrganizerService {
     }
 
     // Save rollback manifest once for the entire batch
+    let manifestId: string | undefined;
     if (rollbackActions.length > 0) {
       try {
-        await rollbackService.createManifest(
+        manifestId = await rollbackService.createManifest(
           `Organization of ${directory} (${rollbackActions.length} files)`,
           rollbackActions,
         );
@@ -673,6 +858,7 @@ export class OrganizerService {
       aborted,
       skippedCount: skippedFiles.length,
       skippedFiles,
+      manifestId,
     };
   }
 }
