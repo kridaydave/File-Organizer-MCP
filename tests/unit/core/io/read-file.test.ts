@@ -151,6 +151,8 @@ describe("core/io sensitive patterns", () => {
     "/home/user/.docker/config.json",
     "/etc/shadow",
     "/home/user/api_key.txt",
+    "/allowed/passwd~",
+    "/allowed/server.pem.bak",
   ])("flags %s", (p) => {
     expect(isSensitiveFile(p)).toBe(true);
   });

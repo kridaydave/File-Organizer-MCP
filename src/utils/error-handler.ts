@@ -7,6 +7,7 @@ import crypto from "crypto";
 import {
   AccessDeniedError,
   ValidationError,
+  type ToolContentBlock,
   type ToolResponse,
 } from "../types.js";
 import { FileOrganizerError } from "../errors.js";
@@ -45,7 +46,7 @@ export function sanitizeErrorMessage(error: Error | string): string {
 
   // Replace Unix absolute paths (e.g., /home/user, /var/log)
   sanitized = sanitized.replace(
-    /(?:^|[\s"'(\[{<:=`])(\/(?:[^\s"'()\[\]{}<>\0\r\n`=]+\/)*[^\s"'()\[\]{}<>\0\r\n`=]+)/g,
+    /(?:^|[\s"'(\[{<:=`])(\/(?:[^:\s"'()\[\]{}<>\0\r\n`=]+(?:\s+[^:\s"'()\[\]{}<>\0\r\n`=]+)*)+)/g,
     (match, p) => match.slice(0, match.length - p.length) + "[PATH]",
   );
 
@@ -56,6 +57,22 @@ export function sanitizeErrorMessage(error: Error | string): string {
   );
 
   return sanitized;
+}
+
+/**
+ * Sanitize every text block while keeping the non-empty tuple shape, so mapping
+ * the blocks does not widen the type back to an array.
+ */
+function sanitizeBlocks(
+  blocks: ToolResponse["content"],
+): ToolResponse["content"] {
+  const [first, ...rest] = blocks.map((item) =>
+    item.type === "text"
+      ? { ...item, text: sanitizeErrorMessage(item.text) }
+      : item,
+  );
+  // The input was non-empty, so the first mapped block is present too.
+  return [first as ToolContentBlock, ...rest];
 }
 
 /**
@@ -74,15 +91,7 @@ export function createErrorResponse(error: unknown): ToolResponse {
     const response = error.toResponse();
     return {
       ...response,
-      content: response.content.map((item) => {
-        if (item.type === "text") {
-          return {
-            ...item,
-            text: sanitizeErrorMessage(item.text),
-          };
-        }
-        return item;
-      }),
+      content: sanitizeBlocks(response.content),
     };
   } else if (error instanceof AccessDeniedError) {
     // Safe to show sanitized message for expected errors
