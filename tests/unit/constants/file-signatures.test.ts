@@ -296,6 +296,27 @@ describe("File Signatures Database", () => {
       expect(result).toBeNull();
     });
 
+    it("should detect XML declaration as XML not SVG", () => {
+      const xmlBuffer = Buffer.from('<?xml version="1.0"?>\n<config></config>');
+      const result = matchSignature(xmlBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("XML");
+    });
+
+    it("should detect SVG files with xml declaration as SVG", () => {
+      const svgBuffer = Buffer.from('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+      const result = matchSignature(svgBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("SVG");
+    });
+
+    it("should detect SVG files without xml declaration as SVG", () => {
+      const svgBuffer = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+      const result = matchSignature(svgBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("SVG");
+    });
+
     it("should match JPEG with APPn markers outside previously listed set (BUG-80)", () => {
       const jpegApp2Buffer = Buffer.from([0xff, 0xd8, 0xff, 0xe2]);
       const result = matchSignature(jpegApp2Buffer);
