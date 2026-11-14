@@ -660,7 +660,7 @@ export class OrganizerService {
             await rollbackService.createManifest(
               `Organization of ${directory} (${rollbackActions.length} files)`,
               rollbackActions,
-              manifestId,
+              { manifestId },
             );
           } catch (manifestErr) {
             const manifestError =
@@ -691,7 +691,7 @@ export class OrganizerService {
         await rollbackService.createManifest(
           `Organization of ${directory} (${rollbackActions.length} files)`,
           rollbackActions,
-          manifestId,
+          { manifestId },
         );
       } catch (manifestErr) {
         const manifestError =

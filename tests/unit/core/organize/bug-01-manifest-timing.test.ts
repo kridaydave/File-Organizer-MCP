@@ -66,14 +66,14 @@ describe('BUG-01: manifest written before/during moves', () => {
     rollbackService.createManifest = async function (
       description: string,
       actions: any[],
-      manifestId?: string,
+      options?: { manifestId?: string },
     ) {
       callCount++;
       // Fail on the final call (after all moves are done)
       if (callCount >= 5) {
         throw new Error('Simulated manifest write failure');
       }
-      return originalCreateManifest(description, actions, manifestId);
+      return originalCreateManifest(description, actions, options);
     } as any;
 
     organizer = new OrganizerService(new CategorizerService(), undefined as any, rollbackService);

@@ -355,7 +355,7 @@ export class RenamingService {
             await this.rollbackService.createManifest(
               `Batch Rename of ${rollbackActions.length} files`,
               rollbackActions as RollbackAction[],
-              manifestId,
+              { manifestId },
             );
           } catch (manifestErr) {
             const manifestError =
@@ -377,7 +377,7 @@ export class RenamingService {
         await this.rollbackService.createManifest(
           `Batch Rename of ${rollbackActions.length} files`,
           rollbackActions as RollbackAction[],
-          manifestId,
+          { manifestId },
         );
       } catch (manifestErr) {
         const manifestError =

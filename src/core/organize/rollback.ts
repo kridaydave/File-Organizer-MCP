@@ -19,6 +19,12 @@ import { PathValidatorService } from "../../services/path-validator.service.js";
 import { manifestIntegrityService } from "./manifest-integrity.js";
 import { safeAtomicMove } from "../io/atomic-move.js";
 
+/** How `createManifest` spends on manifest identity. */
+export interface ManifestIntegrityOptions {
+  /** Reuse this id instead of generating one, for incremental updates. */
+  manifestId?: string;
+}
+
 export class RollbackService {
   private storageDir: string;
   private pathValidator: PathValidatorService;
@@ -71,11 +77,11 @@ export class RollbackService {
   async createManifest(
     description: string,
     actions: RollbackAction[],
-    manifestId?: string,
+    options: ManifestIntegrityOptions = {},
   ): Promise<string> {
     await this.ensureStorage();
 
-    const id = manifestId || randomUUID();
+    const id = options.manifestId || randomUUID();
     const timestamp = Date.now();
     const hash = manifestIntegrityService.computeHash(actions, timestamp);
 
