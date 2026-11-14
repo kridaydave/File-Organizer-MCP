@@ -18,7 +18,9 @@ export function mapContentTypeToCategory(
   // Images
   if (
     mime.startsWith("image/") ||
-    ["PNG", "JPEG", "GIF", "BMP", "WEBP", "TIFF", "ICO", "SVG"].includes(type)
+    ["PNG", "JPEG", "GIF", "BMP", "WEBP", "TIFF", "ICO", "SVG", "HEIC", "HEIF"].includes(
+      type,
+    )
   ) {
     return "Images";
   }
