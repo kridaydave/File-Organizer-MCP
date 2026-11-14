@@ -111,5 +111,73 @@ describe("Client Detector JSONC & Config Safety", () => {
       expect(parsed.mcpServers["custom-tool"]).toBeDefined();
       expect(parsed.mcpServers["file-organizer"]).toBeDefined();
     });
+
+    it("should write Cline config to file path without doubling when configPath is a file path", async () => {
+      const settingsDir = path.join(testDir, "saoudrizwan.claude-dev", "settings");
+      await fs.mkdir(settingsDir, { recursive: true });
+      const configFilePath = path.join(settingsDir, "cline_mcp_settings.json");
+
+      const client: MCPClient = {
+        id: "cline",
+        name: "Cline (VS Code)",
+        description: "VS Code extension for AI coding with MCP",
+        icon: "👨‍💻",
+        installed: true,
+        configPath: configFilePath,
+        configFormat: "json",
+        website: "https://github.com/cline/cline",
+      };
+
+      const result = await writeClientConfig(client, "file-organizer");
+      expect(result.success).toBe(true);
+
+      const stats = await fs.stat(configFilePath);
+      expect(stats.isFile()).toBe(true);
+
+      const doubledPath = path.join(configFilePath, "cline_mcp_settings.json");
+      const doubledExists = await fs
+        .access(doubledPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(doubledExists).toBe(false);
+
+      const content = await fs.readFile(configFilePath, "utf-8");
+      const parsed = JSON.parse(content);
+      expect(parsed.mcpServers["file-organizer"]).toBeDefined();
+    });
+
+    it("should write Roo Code config to file path without doubling when configPath is a file path", async () => {
+      const settingsDir = path.join(testDir, "RooVeterinaryInc.roo-cline", "settings");
+      await fs.mkdir(settingsDir, { recursive: true });
+      const configFilePath = path.join(settingsDir, "roo_code_mcp_settings.json");
+
+      const client: MCPClient = {
+        id: "roo-code",
+        name: "Roo Code (VS Code)",
+        description: "VS Code extension for AI coding (Cline fork)",
+        icon: "🦘",
+        installed: true,
+        configPath: configFilePath,
+        configFormat: "json",
+        website: "https://github.com/RooVetGit/Roo-Code",
+      };
+
+      const result = await writeClientConfig(client, "file-organizer");
+      expect(result.success).toBe(true);
+
+      const stats = await fs.stat(configFilePath);
+      expect(stats.isFile()).toBe(true);
+
+      const doubledPath = path.join(configFilePath, "roo_code_mcp_settings.json");
+      const doubledExists = await fs
+        .access(doubledPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(doubledExists).toBe(false);
+
+      const content = await fs.readFile(configFilePath, "utf-8");
+      const parsed = JSON.parse(content);
+      expect(parsed.mcpServers["file-organizer"]).toBeDefined();
+    });
   });
 });
