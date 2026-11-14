@@ -16,6 +16,7 @@ import type {
 import { MAX_FILE_SIZE } from "../../config.js";
 import { formatBytes } from "../../utils/formatters.js";
 import { logger } from "../../utils/logger.js";
+import { PathValidatorService } from "../../services/path-validator.service.js";
 
 /** Bytes read from each end of an oversized file when sampling. */
 const SAMPLE_WINDOW = 64 * 1024;
@@ -62,9 +63,14 @@ function withTimeout<T>(
  */
 export class HashCalculatorService {
   private readonly maxFileSize: number;
+  private readonly pathValidator: PathValidatorService;
 
-  constructor(maxFileSize = MAX_FILE_SIZE) {
+  constructor(
+    maxFileSize = MAX_FILE_SIZE,
+    pathValidator?: PathValidatorService,
+  ) {
     this.maxFileSize = maxFileSize;
+    this.pathValidator = pathValidator ?? new PathValidatorService();
   }
 
   /**
@@ -166,8 +172,7 @@ export class HashCalculatorService {
 
     try {
       // `handle.read` takes no AbortSignal, so the budget is enforced by
-      // racing the reads rather than by aborting them. A read that outlives
-      // the race is abandoned rather than waited on.
+      // racing the reads rather than by aborting them.
       const digest = await withTimeout(
         this.buildSampledDigest(handle, size),
         timeoutMs,
@@ -215,50 +220,75 @@ export class HashCalculatorService {
   }
 
   /**
-   * Sort files into buckets by byte length, recording why any file cannot be
-   * compared at all.
+   * Sort files into buckets by actual byte length, recording why any file
+   * cannot be compared at all.
    *
-   * Files that cannot be hashed (empty, or over the cap) never reach the hash
-   * loop, so they are recorded here as skipped. A file with a unique byte
-   * length is deliberately *not* recorded: it is correctly excluded, since
-   * nothing can share its length, and reporting it would imply a blind spot
-   * that does not exist.
+   * Sizes come from stating through the path validator, not from the
+   * caller, so a stale size cannot hide a duplicate. A file with a unique
+   * byte length is deliberately not recorded as skipped.
    */
-  private groupByComparableSize(
+  private async groupByComparableSize(
     files: FileWithSize[],
     skipped: SkippedFile[],
     decided: Set<string>,
-  ): Map<number, FileWithSize[]> {
+  ): Promise<Map<number, FileWithSize[]>> {
     const sizeGroups = new Map<number, FileWithSize[]>();
 
     for (const file of files) {
-      if (file.size <= 0) {
+      let handle: fs.FileHandle | undefined;
+      try {
+        // Stat through the validator: openAndValidateFile opens with
+        // O_NOFOLLOW and checks containment, so a symlinked path cannot
+        // be followed to stat a file outside the allowed directories.
+        // The caller's size is untrusted, so group by the real one.
+        handle = await this.pathValidator.openAndValidateFile(file.path);
+        const stats = await handle.stat();
+        const realSize = stats.size;
+        file.size = realSize;
+        if (realSize <= 0) {
+          skipped.push(
+            this.describeSkip(
+              file,
+              "empty_file",
+              "Empty file: every 0-byte file is trivially identical, so it carries no duplicate information.",
+            ),
+          );
+          decided.add(file.path);
+          continue;
+        }
+        if (realSize > this.maxFileSize) {
+          skipped.push(
+            this.describeSkip(
+              file,
+              "exceeds_size_cap",
+              `Larger than the ${formatBytes(this.maxFileSize)} hashing cap, so its content was not compared.`,
+            ),
+          );
+          decided.add(file.path);
+          continue;
+        }
+        const group = sizeGroups.get(realSize) ?? [];
+        group.push(file);
+        sizeGroups.set(realSize, group);
+      } catch (error) {
+        logger.error(`Error stating ${file.name}: ${(error as Error).message}`);
         skipped.push(
           this.describeSkip(
             file,
-            "empty_file",
-            "Empty file: every 0-byte file is trivially identical, so it carries no duplicate information.",
+            "hash_failed",
+            `Could not be read for hashing: ${(error as Error).message}`,
           ),
         );
         decided.add(file.path);
-        continue;
+      } finally {
+        if (handle) {
+          try {
+            await handle.close();
+          } catch {
+            // Ignore close errors
+          }
+        }
       }
-
-      if (file.size > this.maxFileSize) {
-        skipped.push(
-          this.describeSkip(
-            file,
-            "exceeds_size_cap",
-            `Larger than the ${formatBytes(this.maxFileSize)} hashing cap, so its content was not compared.`,
-          ),
-        );
-        decided.add(file.path);
-        continue;
-      }
-
-      const group = sizeGroups.get(file.size) ?? [];
-      group.push(file);
-      sizeGroups.set(file.size, group);
     }
 
     return sizeGroups;
@@ -310,7 +340,11 @@ export class HashCalculatorService {
     // them a second time under a different reason.
     const decided = new Set<string>();
 
-    const sizeGroups = this.groupByComparableSize(files, skipped, decided);
+    const sizeGroups = await this.groupByComparableSize(
+      files,
+      skipped,
+      decided,
+    );
 
     let timedOut = false;
     for (const [, candidates] of sizeGroups) {
