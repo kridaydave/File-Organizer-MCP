@@ -368,7 +368,31 @@ export class OrganizerService {
           // If it fails with EEXIST, destination exists: backup targetPath first, then move.
           try {
             await fs.copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL);
-            await fs.unlink(sourcePath);
+            try {
+              await fs.unlink(sourcePath);
+            } catch (unlinkErr: unknown) {
+              // BUG-27 FIX: If unlink fails after copy, clean up the copied file to avoid orphan
+              try {
+                await fs.unlink(targetPath);
+                logger.info(
+                  `Successfully cleaned up copied file ${targetPath} after failed source unlink`,
+                );
+              } catch (cleanupErr) {
+                const criticalMsg = `CRITICAL: Failed to cleanup copied file ${targetPath} after failed source unlink. Manual intervention may be required.`;
+                logger.error(criticalMsg);
+                errors.push(criticalMsg);
+              }
+
+              const errMessage =
+                unlinkErr instanceof Error
+                  ? unlinkErr.message
+                  : String(unlinkErr);
+              throw new Error(
+                `CRITICAL: Source file ${sourcePath} unlink failed after successful copy. ` +
+                  `Source file integrity compromised. Error: ${errMessage}`,
+                { cause: unlinkErr },
+              );
+            }
           } catch (copyErr: unknown) {
             if (isErrnoException(copyErr) && copyErr.code === "EEXIST") {
               const backupName = `${Date.now()}_${crypto.randomUUID()}_overwrite_${path.basename(targetPath)}`;
