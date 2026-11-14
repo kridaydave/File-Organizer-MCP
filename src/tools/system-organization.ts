@@ -10,6 +10,7 @@
 
 import path from "path";
 import os from "os";
+import fsSync from "fs";
 import { z } from "zod";
 import type { ToolDefinition, ToolResponse, RollbackAction } from "../types.js";
 import { RollbackService } from "../core/organize/rollback.js";
@@ -18,9 +19,9 @@ import { SystemOrganizeService } from "../services/system-organize.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { SystemOrganizationInputSchema } from "../schemas/organize.js";
 import { logger } from "../utils/logger.js";
+import { createRequestContext, type ToolContext } from "../mcp/context.js";
 
 const VALID_SOURCE_DIRS = ["Downloads", "Desktop", "Temp"];
-const VALID_SOURCE_NAMES = ["downloads", "desktop", "temp"];
 
 function resolveSourceDir(sourceDir: string): string {
   const trimmed = sourceDir.trim();
@@ -37,21 +38,64 @@ function resolveSourceDir(sourceDir: string): string {
   return trimmed;
 }
 
-function isValidSourceDir(dirPath: string): boolean {
-  const base = path.basename(dirPath).toLowerCase();
-  if (VALID_SOURCE_NAMES.includes(base)) {
-    return true;
+/**
+ * The canonical spelling of a path, so a directory is compared to the roots by
+ * what it actually is rather than by how it was typed.
+ *
+ * Two spellings of one directory otherwise look unrelated to a string prefix
+ * check: macOS `os.tmpdir()` is `/var/folders/...` while the realpath of the
+ * same place is `/private/var/folders/...`, and Windows short names spell a
+ * directory `RUNNER~1` where the long name is `runneradmin`. Comparing the
+ * unresolved forms rejected directories that really were inside Downloads.
+ * Falls back to the input when the path does not exist yet, which is what the
+ * prefix check below already tolerated.
+ */
+function canonicalizeForCompare(inputPath: string): string {
+  try {
+    return typeof fsSync.realpathSync?.native === "function"
+      ? fsSync.realpathSync.native(inputPath)
+      : fsSync.realpathSync(inputPath);
+  } catch {
+    return inputPath;
   }
+}
+
+function isValidSourceDir(dirPath: string): boolean {
   const homeDir = os.homedir();
-  const allowed = [
-    path.join(homeDir, "Downloads").toLowerCase(),
-    path.join(homeDir, "Desktop").toLowerCase(),
-    os.tmpdir().toLowerCase(),
+  // Containment matches a home source dir so a folder inside Downloads counts.
+  // The temp root is matched by identity only: os.tmpdir() on Linux is /tmp, and
+  // a prefix match against it would accept every scratch directory on the
+  // machine as a system source.
+  const containers = [
+    path.join(homeDir, "Downloads"),
+    path.join(homeDir, "Desktop"),
   ];
-  return allowed.some(
-    (a) =>
-      dirPath.toLowerCase() === a ||
-      dirPath.toLowerCase().startsWith(a + path.sep),
+  const exact = [os.tmpdir()];
+
+  // A prefix match on the canonical form, with the typed form kept as a
+  // fallback so a not-yet-created directory is still judged the way it was
+  // before. Lowercased throughout: Windows drive letters and 8.3 short names
+  // differ in case alone. No basename shortcut: a directory named
+  // "downloads" outside the allowed roots is rejected.
+  const typed = dirPath.toLowerCase();
+  const canonical = canonicalizeForCompare(dirPath).toLowerCase();
+  const forms = (root: string) => [
+    canonicalizeForCompare(root).toLowerCase(),
+    root.toLowerCase(),
+  ];
+  const matches = (candidate: string, r: string) =>
+    candidate === r ||
+    candidate.startsWith(r + path.sep) ||
+    candidate.startsWith(r + "/");
+  return (
+    exact.some((root) =>
+      forms(root).some((r) => canonical === r || typed === r),
+    ) ||
+    containers.some((root) =>
+      forms(root).some((r) =>
+        [canonical, typed].some((candidate) => matches(candidate, r)),
+      ),
+    )
   );
 }
 
@@ -89,14 +133,15 @@ export const systemOrganizationToolDefinition: ToolDefinition = {
       },
       local_fallback_prefix: {
         type: "string",
-        description: "Prefix for local fallback folder",
+        description:
+          "Single folder name (no separators) for the local fallback",
         default: "Organized",
       },
       conflict_strategy: {
         type: "string",
         enum: ["skip", "rename", "overwrite"],
-        description: "How to handle file conflicts",
-        default: "rename",
+        description:
+          "How to handle file conflicts. Uses config default if not specified",
       },
       dry_run: {
         type: "boolean",
@@ -128,6 +173,7 @@ export const systemOrganizationToolDefinition: ToolDefinition = {
 
 export async function handleSystemOrganization(
   args: Record<string, unknown>,
+  ctx: ToolContext = createRequestContext(),
 ): Promise<ToolResponse> {
   try {
     const parsed = SystemOrganizationInputSchema.safeParse(args);
@@ -154,6 +200,9 @@ export async function handleSystemOrganization(
       copy_instead_of_move,
       response_format,
     } = parsed.data;
+
+    const effectiveConflictStrategy =
+      conflict_strategy ?? ctx.config.conflictStrategy ?? "rename";
 
     const resolvedSource = resolveSourceDir(source_dir);
 
@@ -186,7 +235,7 @@ export async function handleSystemOrganization(
       createSubfolders: create_subfolders,
       fallbackToLocal: fallback_to_local,
       localFallbackPrefix: local_fallback_prefix,
-      conflictStrategy: conflict_strategy,
+      conflictStrategy: effectiveConflictStrategy,
       dryRun: dry_run,
       copyInsteadOfMove: copy_instead_of_move,
     });
@@ -235,7 +284,9 @@ export async function handleSystemOrganization(
 
     lines.push("## Summary");
     if (result.undoManifest?.manifestId) {
-      lines.push(`- **Rollback Manifest ID:** \`${result.undoManifest.manifestId}\``);
+      lines.push(
+        `- **Rollback Manifest ID:** \`${result.undoManifest.manifestId}\``,
+      );
     }
     lines.push(`- **Moved to System Directories:** ${result.movedToSystem}`);
     lines.push(`- **Organized Locally:** ${result.organizedLocally}`);
@@ -293,7 +344,7 @@ export async function handleSystemOrganization(
       );
     }
 
-    if (result.undoManifest && result.undoManifest.operations.length > 0) {
+    if (result.undoManifest?.manifestId) {
       lines.push("## Undo Information");
       lines.push(`- **Manifest ID:** ${result.undoManifest.manifestId}`);
       lines.push(`- **Operations:** ${result.undoManifest.operations.length}`);

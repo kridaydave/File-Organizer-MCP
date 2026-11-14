@@ -73,25 +73,113 @@ export async function safeAtomicMove(
     // On case-insensitive filesystems lstat(dest) resolves to the source file
     // itself (same inode), so the rename proceeds.
     let collides = false;
+    let destIsFile = false;
     try {
       const [destStat, srcStat] = await Promise.all([
         fs.lstat(destinationPath),
         fs.lstat(sourcePath),
       ]);
       collides = destStat.ino !== srcStat.ino || destStat.dev !== srcStat.dev;
+      destIsFile = destStat.isFile();
     } catch {
       // Destination not statable (ENOENT) — safe to proceed with the rename.
     }
+    let caseBackupPath: string | undefined;
     if (collides) {
-      const eexist = new Error(
-        `Destination file already exists: ${path.basename(destinationPath)}`,
-      ) as NodeJS.ErrnoException;
-      eexist.code = "EEXIST";
-      throw eexist;
+      if (!overwrite) {
+        const eexist = new Error(
+          `Destination file already exists: ${path.basename(destinationPath)}`,
+        ) as NodeJS.ErrnoException;
+        eexist.code = "EEXIST";
+        throw eexist;
+      }
+      // Overwrite a distinct case-colliding destination
+      if (destIsFile && backupBeforeOverwrite) {
+        caseBackupPath = await backupBeforeOverwrite(destinationPath);
+      }
+      if (destIsFile) {
+        try {
+          await fs.unlink(destinationPath);
+        } catch (unlinkErr) {
+          if (!isErrnoException(unlinkErr) || (unlinkErr as NodeJS.ErrnoException).code !== "ENOENT") {
+            throw unlinkErr;
+          }
+        }
+      }
+      // Now proceed as if destination doesn't exist
     }
+
+    if (copyInsteadOfMove) {
+      try {
+        await fs.copyFile(sourcePath, destinationPath, COPYFILE_EXCL);
+      } catch (copyErr) {
+        if (isErrnoException(copyErr) && (copyErr as NodeJS.ErrnoException).code === "EEXIST" && !overwrite) {
+          const eexist = new Error(
+            `Destination file already exists: ${path.basename(destinationPath)}`,
+          ) as NodeJS.ErrnoException;
+          eexist.code = "EEXIST";
+          throw eexist;
+        }
+        throw copyErr;
+      }
+      return {
+        success: true,
+        sourcePath,
+        destinationPath,
+        rollbackAction: {
+          type: "copy",
+          originalPath: sourcePath,
+          currentPath: destinationPath,
+          timestamp: Date.now(),
+        },
+      };
+    }
+
     const tempIntermediate = `${destinationPath}.tmp-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
-    await fs.rename(sourcePath, tempIntermediate);
-    await fs.rename(tempIntermediate, destinationPath);
+    try {
+      await fs.rename(sourcePath, tempIntermediate);
+      try {
+        await fs.rename(tempIntermediate, destinationPath);
+      } catch (renameErr) {
+        // If second rename fails, try to restore source to avoid orphaning
+        try {
+          await fs.rename(tempIntermediate, sourcePath);
+        } catch (restoreErr) {
+          logger.error(`Failed to restore source ${sourcePath} after case-only rename failure.`);
+          try {
+            await fs.unlink(tempIntermediate);
+          } catch {
+            // ignore
+          }
+        }
+        throw renameErr;
+      }
+    } catch (err) {
+      // Ensure temp file is cleaned up if it still exists and source might be missing
+      try {
+        await fs.access(tempIntermediate);
+        const tempExists = true;
+        try {
+          await fs.access(sourcePath);
+          // source exists, temp is leftover
+          await fs.unlink(tempIntermediate);
+        } catch {
+          // source missing, temp might be our only copy - try to restore
+          try {
+            await fs.rename(tempIntermediate, sourcePath);
+          } catch {
+            try {
+              await fs.unlink(tempIntermediate);
+            } catch {
+              // ignore
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+      throw err;
+    }
 
     return {
       success: true,
@@ -102,43 +190,129 @@ export async function safeAtomicMove(
         originalPath: sourcePath,
         currentPath: destinationPath,
         timestamp: Date.now(),
+        backupPath: caseBackupPath,
       },
     };
   }
 
-  // If overwrite is requested and destination exists, take a backup first if provided
+  // Overwrite path: never unlink the destination until the source has been safely
+  // copied. Copy the source into a temp file first; only then replace dest.
   let backupPath: string | undefined;
+  const tempDest = `${destinationPath}.tmp-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
+  let replacedExisting = false;
+
   if (overwrite) {
+    let destExists = false;
+    let destIsFile = false;
     try {
       const destStat = await fs.stat(destinationPath);
-      if (destStat.isFile() && backupBeforeOverwrite) {
-        backupPath = await backupBeforeOverwrite(destinationPath);
-      }
-      if (destStat.isFile()) {
-        await fs.unlink(destinationPath);
-      }
+      destExists = true;
+      destIsFile = destStat.isFile();
     } catch (statErr) {
       if (!isErrnoException(statErr) || statErr.code !== "ENOENT") {
         throw statErr;
       }
     }
+
+    if (destExists && destIsFile) {
+      // Copy source to temp first; if this fails the destination stays intact.
+      try {
+        await fs.copyFile(sourcePath, tempDest);
+      } catch (copyErr) {
+        try {
+          await fs.unlink(tempDest);
+        } catch {
+          // ignore
+        }
+        throw copyErr;
+      }
+
+      if (backupBeforeOverwrite) {
+        try {
+          backupPath = await backupBeforeOverwrite(destinationPath);
+        } catch (backupErr) {
+          try {
+            await fs.unlink(tempDest);
+          } catch {
+            // ignore
+          }
+          throw backupErr;
+        }
+      }
+
+      try {
+        await fs.unlink(destinationPath);
+      } catch (unlinkErr) {
+        if (!isErrnoException(unlinkErr) || unlinkErr.code !== "ENOENT") {
+          if (backupPath) {
+            try {
+              await fs.copyFile(backupPath, destinationPath);
+            } catch {
+              // ignore restore errors
+            }
+          }
+          try {
+            await fs.unlink(tempDest);
+          } catch {
+            // ignore
+          }
+          throw unlinkErr;
+        }
+      }
+
+      try {
+        await fs.rename(tempDest, destinationPath);
+      } catch (renameErr) {
+        if (isErrnoException(renameErr) && renameErr.code === "EXDEV") {
+          try {
+            await fs.copyFile(tempDest, destinationPath);
+            await fs.unlink(tempDest);
+          } catch (exdevErr) {
+            if (backupPath) {
+              try {
+                await fs.copyFile(backupPath, destinationPath);
+              } catch {
+                // ignore
+              }
+            }
+            throw exdevErr;
+          }
+        } else {
+          if (backupPath) {
+            try {
+              await fs.copyFile(backupPath, destinationPath);
+            } catch {
+              // ignore
+            }
+          }
+          try {
+            await fs.unlink(tempDest);
+          } catch {
+            // ignore
+          }
+          throw renameErr;
+        }
+      }
+
+      replacedExisting = true;
+    }
   }
 
-  // Attempt atomic COPY with COPYFILE_EXCL to guarantee destination cannot be clobbered
-  try {
-    await fs.copyFile(sourcePath, destinationPath, COPYFILE_EXCL);
-  } catch (copyErr) {
-    if (isErrnoException(copyErr) && copyErr.code === "EEXIST" && !overwrite) {
-      // Callers (rename/organizer/rollback) branch on errno.code; the message
-      // carries only the basename so internal paths never leak into results.
-      const eexist = new Error(
-        `Destination file already exists: ${path.basename(destinationPath)}`,
-        { cause: copyErr },
-      ) as NodeJS.ErrnoException;
-      eexist.code = "EEXIST";
-      throw eexist;
+  // Non-overwrite, or overwrite with no existing destination: original behavior.
+  if (!replacedExisting) {
+    try {
+      await fs.copyFile(sourcePath, destinationPath, COPYFILE_EXCL);
+    } catch (copyErr) {
+      if (isErrnoException(copyErr) && copyErr.code === "EEXIST" && !overwrite) {
+        const eexist = new Error(
+          `Destination file already exists: ${path.basename(destinationPath)}`,
+          { cause: copyErr },
+        ) as NodeJS.ErrnoException;
+        eexist.code = "EEXIST";
+        throw eexist;
+      }
+      throw copyErr;
     }
-    throw copyErr;
   }
 
   // If operation is a copy, we are done
@@ -152,6 +326,7 @@ export async function safeAtomicMove(
         originalPath: sourcePath,
         currentPath: destinationPath,
         timestamp: Date.now(),
+        backupPath,
       },
     };
   }

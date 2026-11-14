@@ -1,29 +1,67 @@
 import { jest } from "@jest/globals";
 import path from "path";
+import os from "os";
+import fs from "fs/promises";
+import type { FileHandle } from "fs/promises";
 import {
   withMockedLogger,
   type MockLogger,
 } from "../../utils/logger-mock.js";
+import { at } from "../../helpers/safe-index.js";
 
-const mockReaddir = jest.fn();
-const mockStat = jest.fn();
-const mockAccess = jest.fn();
-const mockMkdir = jest.fn();
-const mockRename = jest.fn();
-const mockUnlink = jest.fn();
-const mockCopyFile = jest.fn();
-const mockWriteFile = jest.fn();
-const mockUtimes = jest.fn();
-const mockReadFile = jest.fn();
-const mockOpen = jest.fn();
-const mockRead = jest.fn();
+/** The slice of `Dirent` the service reads while walking the source directory. */
+interface DirentLike {
+  name: string;
+  isFile: () => boolean;
+}
 
-const mockPipeline = jest.fn();
-const mockCreateReadStream = jest.fn();
-const mockCreateWriteStream = jest.fn();
+/** The slice of `Stats` the service reads to derive a fallback date. */
+interface StatLike {
+  size: number;
+  birthtime: Date;
+  mtime: Date;
+}
 
-const mockExtractMetadata = jest.fn();
-const mockValidatePath = jest.fn();
+/** The slice of `FileHandle` used when stripping GPS data. */
+interface FileHandleLike {
+  read: ReturnType<typeof jest.fn<() => Promise<{ bytesRead: number }>>>;
+  close: ReturnType<typeof jest.fn<() => Promise<void>>>;
+}
+
+/**
+ * A real descriptor narrowed to the two members the organizer touches. The GPS
+ * rewrite reads the file for real, so the mock has to hand back an actual
+ * handle; the cast is the seam between a `FileHandle` and the jest-shaped
+ * interface above, and it lives here so both call sites share one.
+ */
+const openHandleLike = async (filePath: string): Promise<FileHandleLike> =>
+  (await fs.open(filePath, "r")) as unknown as FileHandleLike;
+
+/** The metadata fields the organizer reads off an extracted photo record. */
+interface PhotoMetadataLike {
+  dateTaken?: string;
+  camera?: string;
+}
+
+const mockReaddir = jest.fn<() => Promise<Array<DirentLike>>>();
+const mockStat = jest.fn<() => Promise<StatLike>>();
+const mockAccess = jest.fn<() => Promise<void>>();
+const mockMkdir = jest.fn<() => Promise<void>>();
+const mockRename = jest.fn<() => Promise<void>>();
+const mockUnlink = jest.fn<() => Promise<void>>();
+const mockCopyFile = jest.fn<() => Promise<void>>();
+const mockWriteFile = jest.fn<() => Promise<void>>();
+const mockUtimes = jest.fn<() => Promise<void>>();
+const mockReadFile = jest.fn<() => Promise<Buffer>>();
+const mockOpen = jest.fn<() => Promise<FileHandleLike>>();
+const mockRead = jest.fn<() => Promise<{ bytesRead: number }>>();
+
+const mockPipeline = jest.fn<() => Promise<void>>();
+const mockCreateReadStream = jest.fn<() => NodeJS.ReadableStream>();
+const mockCreateWriteStream = jest.fn<() => NodeJS.WritableStream>();
+
+const mockExtractMetadata = jest.fn<() => Promise<PhotoMetadataLike>>();
+const mockValidatePath = jest.fn<(candidate: string) => string>();
 
 jest.unstable_mockModule("fs/promises", () => ({
   default: {
@@ -85,6 +123,19 @@ jest.unstable_mockModule(
   }),
 );
 
+jest.unstable_mockModule("../../../src/core/io/index.js", () => ({
+  readFile: jest.fn(async (filePath: string, options?: any) => {
+    const encoding = options?.encoding === undefined ? "utf-8" : options?.encoding;
+    const data = encoding === null ? Buffer.from([0xff, 0xd8]) : "[mock]";
+    return { data, bytesRead: data.length, totalSize: data.length, mimeType: "image/jpeg" };
+  }),
+  assertNotSensitive: jest.fn(),
+  isSensitiveFile: jest.fn(() => false),
+  SENSITIVE_PATTERNS: [],
+  SENSITIVE_DIRECTORIES: [],
+  safeAtomicMove: jest.fn(),
+}));
+
 const { PhotoOrganizerService } = await import(
   "../../../src/services/photo-organizer.service.js"
 );
@@ -93,10 +144,16 @@ const sourceDir = "/photos-source";
 const targetDir = "/organized-target";
 
 describe("PhotoOrganizerService", () => {
-  let service: PhotoOrganizerService;
+  let service: InstanceType<typeof PhotoOrganizerService>;
+  let defaultTmpFile: string;
+  let defaultTmpDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+
+    defaultTmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "photo-org-def-"));
+    defaultTmpFile = path.join(defaultTmpDir, "photo.jpg");
+    await fs.writeFile(defaultTmpFile, Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
 
     mockValidatePath.mockImplementation((p: string) => p);
     mockReaddir.mockResolvedValue([{ name: "photo.jpg", isFile: () => true }]);
@@ -118,10 +175,16 @@ describe("PhotoOrganizerService", () => {
     mockUtimes.mockResolvedValue(undefined);
     mockReadFile.mockResolvedValue(Buffer.from([0xff, 0xd8]));
     mockPipeline.mockResolvedValue(undefined);
-    mockOpen.mockResolvedValue({ read: mockRead, close: jest.fn() });
+    mockOpen.mockImplementation(() => openHandleLike(defaultTmpFile));
     mockRead.mockResolvedValue({ bytesRead: 0 });
 
     service = new PhotoOrganizerService();
+  });
+
+  afterEach(async () => {
+    if (defaultTmpDir) {
+      await fs.rm(defaultTmpDir, { recursive: true, force: true });
+    }
   });
 
   describe("getDateFolderName", () => {
@@ -132,28 +195,28 @@ describe("PhotoOrganizerService", () => {
     });
 
     it("formats a date as YYYY/MM/DD", () => {
-      const date = new Date(2020, 4, 10);
+      const date = { instant: new Date(2020, 4, 10), source: "mtime" as const };
       expect(service.getDateFolderName(date, "YYYY/MM/DD", "Unknown Date")).toBe(
         path.join("2020", "05", "10"),
       );
     });
 
     it("formats a date as YYYY-MM-DD", () => {
-      const date = new Date(2020, 4, 10);
+      const date = { instant: new Date(2020, 4, 10), source: "mtime" as const };
       expect(
         service.getDateFolderName(date, "YYYY-MM-DD", "Unknown Date"),
       ).toBe("2020-05-10");
     });
 
     it("formats a date as YYYY/MM", () => {
-      const date = new Date(2020, 4, 10);
+      const date = { instant: new Date(2020, 4, 10), source: "mtime" as const };
       expect(service.getDateFolderName(date, "YYYY/MM", "Unknown Date")).toBe(
         path.join("2020", "05"),
       );
     });
 
     it("formats a date as YYYY", () => {
-      const date = new Date(2020, 4, 10);
+      const date = { instant: new Date(2020, 4, 10), source: "mtime" as const };
       expect(service.getDateFolderName(date, "YYYY", "Unknown Date")).toBe(
         "2020",
       );
@@ -225,13 +288,14 @@ describe("PhotoOrganizerService", () => {
         expect(result.success).toBe(true);
         expect(result.organizedFiles).toBe(1);
         expect(result.movedFiles).toHaveLength(1);
-        expect(result.movedFiles[0].originalPath).toBe(
+        expect(at(result.movedFiles, 0).originalPath).toBe(
           path.join(sourceDir, "photo.jpg"),
         );
-        expect(result.movedFiles[0].currentPath).toBe(
+        expect(at(result.movedFiles, 0).currentPath).toBe(
           path.join(targetDir, "2020", "05", "10", "photo.jpg"),
         );
-        expect(mockRename).toHaveBeenCalledTimes(1);
+        expect(mockCopyFile).toHaveBeenCalledTimes(1);
+        expect(mockUnlink).toHaveBeenCalledTimes(1);
       }),
     );
   });
@@ -250,7 +314,7 @@ describe("PhotoOrganizerService", () => {
 
         expect(result.success).toBe(true);
         expect(result.organizedFiles).toBe(1);
-        expect(mockPipeline).toHaveBeenCalled();
+        expect(mockCopyFile).toHaveBeenCalled();
         expect(mockRename).not.toHaveBeenCalled();
       }),
     );
@@ -258,12 +322,8 @@ describe("PhotoOrganizerService", () => {
 
   describe("cross-device EXDEV fallback", () => {
     it(
-      "falls back to copyFile and unlink when rename rejects with EXDEV",
+      "uses atomic move for cross-device operations",
       withMockedLogger(async (_logger: MockLogger) => {
-        mockRename.mockRejectedValue(
-          Object.assign(new Error("EXDEV"), { code: "EXDEV" }),
-        );
-
         const result = await service.organize({
           sourceDir,
           targetDir,
@@ -288,7 +348,7 @@ describe("PhotoOrganizerService", () => {
           { name: "photo1.jpg", isFile: () => true },
           { name: "photo2.jpg", isFile: () => true },
         ]);
-        mockRename
+        mockCopyFile
           .mockRejectedValueOnce(new Error("disk full"))
           .mockResolvedValue(undefined);
 
@@ -301,7 +361,33 @@ describe("PhotoOrganizerService", () => {
 
         expect(result.organizedFiles).toBe(1);
         expect(result.errors).toHaveLength(1);
-        expect(result.errors[0].file).toBe(path.join(sourceDir, "photo1.jpg"));
+        expect(at(result.errors, 0).file).toBe(path.join(sourceDir, "photo1.jpg"));
+        expect(result.success).toBe(false);
+      }),
+    );
+
+    it(
+      "returns success false when all per-file actions fail",
+      withMockedLogger(async (_logger: MockLogger) => {
+        mockReaddir.mockResolvedValue([
+          { name: "photo1.jpg", isFile: () => true },
+          { name: "photo2.jpg", isFile: () => true },
+        ]);
+        // The move goes through safeAtomicMove, which can rename or copy before
+        // unlinking, so both seams have to fail for every action to fail.
+        mockRename.mockRejectedValue(new Error("permission denied"));
+        mockCopyFile.mockRejectedValue(new Error("permission denied"));
+
+        const result = await service.organize({
+          sourceDir,
+          targetDir,
+          dateFormat: "YYYY/MM/DD",
+          dryRun: false,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.organizedFiles).toBe(0);
+        expect(result.errors).toHaveLength(2);
       }),
     );
   });
@@ -366,6 +452,117 @@ describe("PhotoOrganizerService", () => {
             "Source and target directories cannot be nested within each other",
           ),
         )).toBe(true);
+      }),
+    );
+  });
+
+  describe("GPS stripping (BUG-13 regression)", () => {
+    it(
+      "does not count GPS as stripped when stripping does not actually occur on non-JPEG",
+      withMockedLogger(async (_logger: MockLogger) => {
+        // Simulate PNG file that has GPS marker detected by hasGPSData
+        mockReaddir.mockResolvedValue([
+          { name: "photo.png", isFile: () => true },
+        ]);
+        const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "photo-org-"));
+        const tmpFile = path.join(tmpDir, "photo.png");
+        const buf = Buffer.alloc(4);
+        buf[0] = 0x25;
+        buf[1] = 0x88;
+        await fs.writeFile(tmpFile, buf);
+        try {
+          mockOpen.mockImplementation(() => openHandleLike(tmpFile));
+
+          const result = await service.organize({
+            sourceDir,
+            targetDir,
+            dateFormat: "YYYY/MM/DD",
+            dryRun: false,
+            stripGPS: true,
+            copyInsteadOfMove: true,
+          });
+
+          expect(result.strippedGPSFiles).toBe(0);
+        } finally {
+          await fs.rm(tmpDir, { recursive: true, force: true });
+        }
+      }),
+    );
+  });
+
+  describe("unknown date folder containment", () => {
+    it("sanitizes traversal sequences so the folder stays a leaf", () => {
+      expect(
+        service.getDateFolderName(undefined, "YYYY/MM", "../../evil"),
+      ).toBe("____evil");
+    });
+
+    it("keeps organized files under the target directory", async () => {
+      mockExtractMetadata.mockResolvedValue({});
+
+      const result = await service.organize({
+        sourceDir,
+        targetDir,
+        dateFormat: "YYYY/MM",
+        unknownDateFolder: "../../evil",
+        dryRun: true,
+      });
+
+      expect(result.success).toBe(true);
+      const folders = Object.keys(result.structure);
+      expect(folders.length).toBe(1);
+      const folder = at(folders, 0);
+      expect(folder).toBe(path.join(targetDir, "____evil"));
+      expect(folder.includes("..")).toBe(false);
+    });
+  });
+
+  describe("concurrent runs", () => {
+    it(
+      "does not silently overwrite when two runs race to the same destination",
+      withMockedLogger(async (_logger: MockLogger) => {
+        const service1 = new PhotoOrganizerService();
+        const service2 = new PhotoOrganizerService();
+
+        let copyAttempts = 0;
+        mockCopyFile.mockImplementation(async () => {
+          copyAttempts++;
+          if (copyAttempts === 1 || copyAttempts === 3) {
+            return undefined;
+          }
+          const err = new Error("Destination file already exists") as NodeJS.ErrnoException;
+          err.code = "EEXIST";
+          throw err;
+        });
+
+        const [result1, result2] = await Promise.all([
+          service1.organize({
+            sourceDir,
+            targetDir,
+            dateFormat: "YYYY/MM/DD",
+            dryRun: false,
+          }),
+          service2.organize({
+            sourceDir,
+            targetDir,
+            dateFormat: "YYYY/MM/DD",
+            dryRun: false,
+          }),
+        ]);
+
+        expect(result1.success).toBe(true);
+        expect(result2.success).toBe(true);
+        expect(result1.errors).toHaveLength(0);
+        expect(result2.errors).toHaveLength(0);
+        expect(result1.organizedFiles).toBe(1);
+        expect(result2.organizedFiles).toBe(1);
+        expect(result1.movedFiles.length).toBeGreaterThan(0);
+        expect(result2.movedFiles.length).toBeGreaterThan(0);
+        const moved1 = result1.movedFiles[0];
+        const moved2 = result2.movedFiles[0];
+        expect(moved1?.currentPath).toBeDefined();
+        expect(moved2?.currentPath).toBeDefined();
+        expect(moved1?.currentPath).not.toBe(moved2?.currentPath);
       }),
     );
   });

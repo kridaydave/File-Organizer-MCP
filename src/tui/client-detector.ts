@@ -795,28 +795,34 @@ export async function writeClientConfig(
 
   switch (client.id) {
     case "claude-desktop":
-      configFilePath = path.join(
-        client.configPath,
-        "claude_desktop_config.json",
-      );
+      configFilePath = path.basename(client.configPath) === "claude_desktop_config.json"
+        ? client.configPath
+        : path.join(client.configPath, "claude_desktop_config.json");
       break;
     case "cursor":
-      configFilePath = path.join(client.configPath, "mcp.json");
+      configFilePath = path.basename(client.configPath) === "mcp.json"
+        ? client.configPath
+        : path.join(client.configPath, "mcp.json");
       break;
     case "windsurf":
-      configFilePath = path.join(client.configPath, "mcp_config.json");
+      configFilePath = path.basename(client.configPath) === "mcp_config.json"
+        ? client.configPath
+        : path.join(client.configPath, "mcp_config.json");
       break;
     case "cline":
-      configFilePath = path.join(client.configPath, "cline_mcp_settings.json");
+      configFilePath = path.basename(client.configPath) === "cline_mcp_settings.json"
+        ? client.configPath
+        : path.join(client.configPath, "cline_mcp_settings.json");
       break;
     case "roo-code":
-      configFilePath = path.join(
-        client.configPath,
-        "roo_code_mcp_settings.json",
-      );
+      configFilePath = path.basename(client.configPath) === "roo_code_mcp_settings.json"
+        ? client.configPath
+        : path.join(client.configPath, "roo_code_mcp_settings.json");
       break;
     case "continue":
-      configFilePath = path.join(client.configPath, "config.json");
+      configFilePath = path.basename(client.configPath) === "config.json"
+        ? client.configPath
+        : path.join(client.configPath, "config.json");
       break;
     default:
       return { success: false, message: "Unknown client" };

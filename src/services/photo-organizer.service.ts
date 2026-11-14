@@ -10,6 +10,7 @@ import { pipeline } from "stream/promises";
 import * as piexif from "piexifjs";
 import { MetadataService } from "./metadata/service.js";
 import { PathValidatorService } from "./path-validator.service.js";
+import type { ResolvedDateSource } from "../core/organize/date-organizer.js";
 import { logger } from "../utils/logger.js";
 import { isSubPath } from "../utils/file-utils.js";
 import { safeAtomicMove } from "../core/io/atomic-move.js";
@@ -66,8 +67,22 @@ export interface PhotoOrganizationResult {
   manifestId?: string;
 }
 
+/**
+ * A photo's date paired with the calendar it is read in. They travel together
+ * because they must agree: reading EXIF locally, or `birthtime` in UTC, files a
+ * photo under the wrong month.
+ */
+export interface PhotoDate {
+  instant: Date;
+  source: ResolvedDateSource;
+}
+
 interface PhotoFileInfo extends FileInfo {
-  dateTaken?: Date;
+  /**
+   * The photo's date and the calendar it is read in. Absent when nothing dated
+   * the photo.
+   */
+  date?: PhotoDate;
   cameraModel?: string;
   hasGPS?: boolean;
 }
@@ -156,9 +171,9 @@ export class PhotoOrganizerService {
       for (const photo of photosWithMetadata) {
         try {
           const targetPath = await this.getTargetPath(photo, config);
-          const finalTargetPath = await this.resolveCollision(targetPath, usedPaths);
+          let finalTargetPath = await this.resolveCollision(targetPath, usedPaths);
           usedPaths.add(finalTargetPath);
-          const targetDir = path.dirname(finalTargetPath);
+          let targetDir = path.dirname(finalTargetPath);
 
           if (dryRun) {
             // Dry run: just track the structure
@@ -179,19 +194,72 @@ export class PhotoOrganizerService {
           if (config.copyInsteadOfMove) {
             if (config.stripGPS && photo.hasGPS) {
               // Copy without GPS data
-              await this.copyWithoutGPS(photo.path, finalTargetPath);
-              result.strippedGPSFiles++;
-              logger.info("Stripped GPS data from file", {
-                source: photo.path,
-                target: finalTargetPath,
-              });
+              const gpsStripped = await this.copyWithoutGPS(
+                photo.path,
+                finalTargetPath,
+              );
+              if (gpsStripped) {
+                result.strippedGPSFiles++;
+                logger.info("Stripped GPS data from file", {
+                  source: photo.path,
+                  target: finalTargetPath,
+                });
+              } else {
+                logger.warn("GPS stripping was requested but did not occur", {
+                  source: photo.path,
+                  target: finalTargetPath,
+                });
+              }
             } else {
-              await this.copyFile(photo.path, finalTargetPath);
+              try {
+                await safeAtomicMove(photo.path, finalTargetPath, {
+                  copyInsteadOfMove: true,
+                });
+              } catch (moveErr) {
+                const err = moveErr as NodeJS.ErrnoException;
+                if (err.code === "EEXIST") {
+                  let currentTarget = finalTargetPath;
+                  for (let attempt = 0; attempt < 1000; attempt++) {
+                    currentTarget = await this.resolveCollision(
+                      currentTarget,
+                      usedPaths,
+                    );
+                    usedPaths.add(currentTarget);
+                    try {
+                      await safeAtomicMove(photo.path, currentTarget, {
+                        copyInsteadOfMove: true,
+                      });
+                      finalTargetPath = currentTarget;
+                      targetDir = path.dirname(finalTargetPath);
+                      break;
+                    } catch (retryErr) {
+                      const rerr = retryErr as NodeJS.ErrnoException;
+                      if (rerr.code === "EEXIST") {
+                        continue;
+                      }
+                      throw retryErr;
+                    }
+                  }
+                } else {
+                  throw moveErr;
+                }
+              }
             }
           } else {
             if (config.stripGPS && photo.hasGPS) {
               // Move with GPS stripping: copy without GPS then delete original
-              await this.copyWithoutGPS(photo.path, finalTargetPath);
+              const gpsStripped = await this.copyWithoutGPS(
+                photo.path,
+                finalTargetPath,
+              );
+
+              if (!gpsStripped) {
+                // Do not delete original if GPS was not actually stripped
+                await fs.unlink(finalTargetPath).catch(() => {});
+                throw new Error(
+                  "GPS stripping failed or not supported for this file",
+                );
+              }
 
               // Verify the copy succeeded before deleting original
               const targetExists = await fs
@@ -229,22 +297,58 @@ export class PhotoOrganizerService {
               });
             } else {
               try {
-                await fs.rename(photo.path, finalTargetPath);
-              } catch (renameErr) {
-                const err = renameErr as NodeJS.ErrnoException;
-                if (err.code === "EXDEV") {
-                  await safeAtomicMove(photo.path, finalTargetPath, {
+                const moveRes = await safeAtomicMove(
+                  photo.path,
+                  finalTargetPath,
+                  {
                     copyInsteadOfMove: false,
+                  },
+                );
+                if (!config.copyInsteadOfMove && moveRes.rollbackAction) {
+                  result.movedFiles.push({
+                    originalPath: photo.path,
+                    currentPath: finalTargetPath,
                   });
+                }
+              } catch (moveErr) {
+                const err = moveErr as NodeJS.ErrnoException;
+                if (err.code === "EEXIST") {
+                  let currentTarget = finalTargetPath;
+                  for (let attempt = 0; attempt < 1000; attempt++) {
+                    currentTarget = await this.resolveCollision(
+                      currentTarget,
+                      usedPaths,
+                    );
+                    usedPaths.add(currentTarget);
+                    try {
+                      const moveRes = await safeAtomicMove(
+                        photo.path,
+                        currentTarget,
+                        {
+                          copyInsteadOfMove: false,
+                        },
+                      );
+                      finalTargetPath = currentTarget;
+                      targetDir = path.dirname(finalTargetPath);
+                      if (!config.copyInsteadOfMove && moveRes.rollbackAction) {
+                        result.movedFiles.push({
+                          originalPath: photo.path,
+                          currentPath: finalTargetPath,
+                        });
+                      }
+                      break;
+                    } catch (retryErr) {
+                      const rerr = retryErr as NodeJS.ErrnoException;
+                      if (rerr.code === "EEXIST") {
+                        continue;
+                      }
+                      throw retryErr;
+                    }
+                  }
                 } else {
-                  throw renameErr;
+                  throw moveErr;
                 }
               }
-              // Track moved file for rollback support
-              result.movedFiles.push({
-                originalPath: photo.path,
-                currentPath: finalTargetPath,
-              });
             }
           }
 
@@ -257,7 +361,7 @@ export class PhotoOrganizerService {
             {
               source: photo.path,
               target: finalTargetPath,
-              dateTaken: photo.dateTaken?.toISOString(),
+              dateTaken: photo.date?.instant.toISOString(),
             },
           );
         } catch (error) {
@@ -274,6 +378,7 @@ export class PhotoOrganizerService {
         errors: result.errors.length,
         strippedGPS: result.strippedGPSFiles,
       });
+      result.success = result.errors.length === 0;
     } catch (error) {
       result.success = false;
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -372,16 +477,19 @@ export class PhotoOrganizerService {
 
         const photoInfo: PhotoFileInfo = {
           ...file,
-          dateTaken: undefined,
+          date: undefined,
           cameraModel: undefined,
           hasGPS: false,
         };
 
         // Extract date with fallback chain
         if (metadata?.dateTaken) {
-          photoInfo.dateTaken = new Date(metadata.dateTaken as string);
+          photoInfo.date = {
+            instant: new Date(metadata.dateTaken as string),
+            source: "exif",
+          };
         } else if (config.useDateCreated) {
-          photoInfo.dateTaken = file.created;
+          photoInfo.date = { instant: file.created, source: "mtime" };
         }
 
         // Extract camera model
@@ -398,7 +506,9 @@ export class PhotoOrganizerService {
         // If metadata extraction fails, use file with no metadata
         photos.push({
           ...file,
-          dateTaken: config.useDateCreated ? file.created : undefined,
+          date: config.useDateCreated
+            ? { instant: file.created, source: "mtime" }
+            : undefined,
           cameraModel: undefined,
           hasGPS: false,
         });
@@ -450,7 +560,7 @@ export class PhotoOrganizerService {
     config: PhotoOrganizationConfig,
   ): Promise<string> {
     const folderPath = this.getDateFolderName(
-      photo.dateTaken,
+      photo.date,
       config.dateFormat,
       config.unknownDateFolder!,
     );
@@ -465,24 +575,53 @@ export class PhotoOrganizerService {
       }
     }
 
-    return path.join(targetDir, photo.name);
+    const finalTargetPath = path.join(targetDir, photo.name);
+
+    // Defense-in-depth: never allow a computed destination to escape the
+    // validated target directory.
+    if (!isSubPath(config.targetDir, finalTargetPath)) {
+      throw new Error("Unsafe destination path rejected");
+    }
+
+    return finalTargetPath;
   }
 
   /**
-   * Generate folder name from date based on format
+   * Generate folder name from date based on format.
+   *
+   * The calendar comes from the source, because EXIF and a filesystem timestamp
+   * are different kinds of value. exif-parser anchors EXIF to UTC because a
+   * camera records wall-clock time with no offset, so reading it locally filed a
+   * photo taken in the first hours of a day under the previous month.
+   * `birthtime` is a true instant, so its calendar is the local one.
+   * `dateFolder()` in `src/core/organize/date-organizer.ts` reads the same two
+   * sources this way.
    */
   getDateFolderName(
-    date: Date | undefined,
+    date: PhotoDate | undefined,
     format: string,
     unknownFolder: string,
   ): string {
-    if (!date || isNaN(date.getTime())) {
-      return unknownFolder;
+    if (!date || isNaN(date.instant.getTime())) {
+      // Treat the user-supplied folder as a single leaf name so values like
+      // "../../evil" cannot escape the target directory.
+      return this.sanitizeFolderName(unknownFolder);
     }
 
-    const year = date.getFullYear().toString();
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const day = date.getDate().toString().padStart(2, "0");
+    const utc = date.source === "exif";
+    const year = (utc
+      ? date.instant.getUTCFullYear()
+      : date.instant.getFullYear()
+    ).toString();
+    const month = ((utc
+      ? date.instant.getUTCMonth()
+      : date.instant.getMonth()
+    ) + 1)
+      .toString()
+      .padStart(2, "0");
+    const day = (utc ? date.instant.getUTCDate() : date.instant.getDate())
+      .toString()
+      .padStart(2, "0");
 
     switch (format) {
       case "YYYY/MM/DD":
@@ -615,23 +754,28 @@ export class PhotoOrganizerService {
    * service method that receives pre-validated paths from the public-facing tools,
    * ensuring all path access control checks happen at the boundary of the service layer.
    */
-  private async copyWithoutGPS(source: string, target: string): Promise<void> {
+  private async copyWithoutGPS(source: string, target: string): Promise<boolean> {
     const readResult = await readFile(source, { encoding: null }); /* validates sensitive files */
     const buffer = Buffer.isBuffer(readResult.data)
       ? readResult.data
       : Buffer.from(readResult.data);
 
     // For JPEG files, attempt to strip GPS EXIF segments
-    const strippedBuffer = this.stripGPSFromBuffer(buffer);
+    const stripResult = this.stripGPSFromBuffer(buffer);
 
     // Write the stripped file
-    await fs.writeFile(target, strippedBuffer);
+    await fs.writeFile(target, stripResult.buffer);
 
     // Preserve timestamps
     const stats = await fs.stat(source);
     await fs.utimes(target, stats.atime, stats.mtime);
 
-    logger.debug("GPS data stripped from file", { source, target });
+    if (stripResult.gpsStripped) {
+      logger.debug("GPS data stripped from file", { source, target });
+    } else {
+      logger.debug("GPS data not stripped from file", { source, target });
+    }
+    return stripResult.gpsStripped;
   }
 
   /**
@@ -639,16 +783,16 @@ export class PhotoOrganizerService {
    * Uses piexifjs to remove GPS EXIF data while preserving other metadata
    *
    * @param buffer - JPEG file buffer
-   * @returns Buffer with GPS data stripped
+   * @returns Buffer with GPS data stripped and whether GPS was actually removed
    */
-  private stripGPSFromBuffer(buffer: Buffer): Buffer {
+  private stripGPSFromBuffer(buffer: Buffer): { buffer: Buffer; gpsStripped: boolean } {
     // Check if it's a JPEG
     if (buffer[0] !== 0xff || buffer[1] !== 0xd8) {
       // Not a JPEG, cannot strip GPS without format-specific handling
       logger.warn(
         "GPS stripping is only supported for JPEG files. Non-JPEG file will be copied with metadata intact.",
       );
-      return buffer;
+      return { buffer, gpsStripped: false };
     }
 
     try {
@@ -663,7 +807,7 @@ export class PhotoOrganizerService {
 
       if (!hasGPS) {
         // No GPS data to strip
-        return buffer;
+        return { buffer, gpsStripped: false };
       }
 
       // Remove GPS IFD entirely
@@ -689,7 +833,7 @@ export class PhotoOrganizerService {
         newSize: resultBuffer.length,
       });
 
-      return resultBuffer;
+      return { buffer: resultBuffer, gpsStripped: true };
     } catch (error) {
       // If EXIF manipulation fails, log error but return original buffer
       // to prevent data loss
@@ -700,7 +844,7 @@ export class PhotoOrganizerService {
       logger.warn(
         "GPS stripping failed - file will be copied with GPS data intact",
       );
-      return buffer;
+      return { buffer, gpsStripped: false };
     }
   }
 }
