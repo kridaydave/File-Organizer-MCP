@@ -8,7 +8,6 @@
 import fs from "fs/promises";
 import { constants } from "fs";
 import path from "path";
-import os from "os";
 import { randomUUID } from "crypto";
 
 import type { RollbackManifest, RollbackAction } from "../../types.js";
@@ -198,17 +197,17 @@ export class RollbackService {
     try {
       for (const action of reverseActions) {
         // Validate paths before operations
-        if (action.originalPath) {
-          const isTmp = action.originalPath.includes(os.tmpdir()) || action.originalPath.includes(process.cwd());
-          if (!isTmp && !this.pathValidator.isPathAllowed(action.originalPath)) {
-            throw new Error(`Invalid original path: ${action.originalPath}`);
-          }
+        if (
+          action.originalPath &&
+          !this.pathValidator.isPathAllowed(action.originalPath)
+        ) {
+          throw new Error(`Invalid original path: ${action.originalPath}`);
         }
-        if (action.currentPath) {
-          const isTmp = action.currentPath.includes(os.tmpdir()) || action.currentPath.includes(process.cwd());
-          if (!isTmp && !this.pathValidator.isPathAllowed(action.currentPath)) {
-            throw new Error(`Invalid current path: ${action.currentPath}`);
-          }
+        if (
+          action.currentPath &&
+          !this.pathValidator.isPathAllowed(action.currentPath)
+        ) {
+          throw new Error(`Invalid current path: ${action.currentPath}`);
         }
 
         if (
@@ -220,8 +219,8 @@ export class RollbackService {
           try {
             await fs.access(action.currentPath);
           } catch {
-            const err = new Error(`Current file not found: ${action.currentPath}`);
-            (err as any).action = action;
+            const err = new Error(`Current file not found: ${action.currentPath}`) as Error & { action?: RollbackAction };
+            err.action = action;
             throw err;
           }
 
@@ -371,31 +370,12 @@ export class RollbackService {
       results.failed++;
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      let failedAction = error instanceof Error && "action" in error ? (error as { action?: RollbackAction }).action : undefined;
-      if (!failedAction) failedAction = (error as any).action;
+      const failedAction = error instanceof Error && "action" in error ? (error as { action?: RollbackAction }).action : undefined;
       const actionType = failedAction?.type || "unknown";
       const actionPath = failedAction?.originalPath || "unknown path";
       results.errors.push(
         `Failed to undo ${actionType} for ${actionPath}: ${errorMessage}`,
       );
-      // BUG-77: If rollback fails because current file is missing but we need to restore
-      // to original location for partial rollback recovery, try to create the original file
-      try {
-        const candidates = failedAction ? [failedAction] : reverseActions;
-        for (const a of candidates) {
-          if ((a.type === "move" || a.type === "rename") && a.originalPath && a.currentPath) {
-            const origExists = await fs.access(a.originalPath).then(()=>true).catch(()=>false);
-            const curExists = await fs.access(a.currentPath).then(()=>true).catch(()=>false);
-            if (!origExists && !curExists) {
-              await fs.mkdir(path.dirname(a.originalPath), { recursive: true }).catch(() => {});
-              await fs.writeFile(a.originalPath, "").catch(() => {});
-              break;
-            }
-          }
-        }
-      } catch {
-        // Ignore fallback creation errors
-      }
 
       // Attempt to recover already completed actions to restore to original state
       if (completedActions.length > 0) {
@@ -407,19 +387,26 @@ export class RollbackService {
         for (const completed of [...completedActions].reverse()) {
           try {
             if (completed.stage === "move") {
-              // BUG-77: Decrement success count on recovery; do not revert completed rollbacks
+              // Revert the move: move back from original to current
+              await safeAtomicMove(completed.paths.to, completed.paths.from, { overwrite: true });
               results.errors.push(
                 `Recovered move: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
               );
             } else if (completed.stage === "restore") {
+              // Revert the restore: move back from current to backup location
+              await safeAtomicMove(completed.paths.to, completed.paths.from, { overwrite: true });
               results.errors.push(
                 `Recovered restore: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
               );
             } else if (completed.stage === "copy") {
+              // Revert copy undo: recreate the copied file (would require backup, but we don't have it)
+              // Note: We can't fully recover copy operation undo, since we don't have the file content
               results.errors.push(
                 `Warning: Cannot recover copy operation - file content not available: ${completed.paths.from}`,
               );
             } else if (completed.stage === "delete") {
+              // Revert delete undo: delete the restored file (backup is still preserved on disk)
+              await fs.unlink(completed.paths.to);
               results.errors.push(
                 `Recovered delete: Reverted ${completed.paths.to}`,
               );
