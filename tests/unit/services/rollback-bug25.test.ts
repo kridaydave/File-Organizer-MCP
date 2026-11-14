@@ -57,7 +57,11 @@ describe('Rollback BUG-25', () => {
         expect(await fs.access(currA).then(() => true).catch(() => false)).toBe(false);
         expect(await fs.access(origB).then(() => true).catch(() => false)).toBe(true);
         expect(await fs.access(currB).then(() => true).catch(() => false)).toBe(false);
-        expect(result.failed).toBe(1);
+        // A missing file is a skip, not a failure: main keeps it out of `failed`
+        // and out of `errors`, because a caller reading those is looking for what
+        // went wrong. What this test proves is that the other two moves still ran.
+        expect(result.failed).toBe(0);
+        expect(result.skipped).toBe(1);
         expect(result.success).toBe(2);
     });
 });

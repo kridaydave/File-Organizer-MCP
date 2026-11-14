@@ -29,6 +29,12 @@ import {
 import {
   findLargestFilesToolDefinition,
   handleFindLargestFiles,
+diskUsageByCategoryToolDefinition,
+  handleDiskUsageByCategory,
+  findOldFilesToolDefinition,
+  handleFindOldFiles,
+  findEmptyDirectoriesToolDefinition,
+  handleFindEmptyDirectories,
 } from "../tools/file-analysis.js";
 import {
   findDuplicateFilesToolDefinition,
@@ -41,22 +47,30 @@ import {
 import {
   previewOrganizationToolDefinition,
   handlePreviewOrganization,
+  validateOrganizationPlanToolDefinition,
+  handleValidateOrganizationPlan,
 } from "../tools/organization-preview.js";
 import {
   getCategoriesToolDefinition,
   handleGetCategories,
   setCustomRulesToolDefinition,
   handleSetCustomRules,
+  exportConfigToolDefinition,
+  handleExportConfig,
 } from "../tools/file-management.js";
 import {
   analyzeDuplicatesToolDefinition,
   handleAnalyzeDuplicates,
   deleteDuplicatesToolDefinition,
   handleDeleteDuplicates,
+  previewDeleteDuplicatesToolDefinition,
+  handlePreviewDeleteDuplicates,
 } from "../tools/duplicate-management.js";
 import {
   undoLastOperationToolDefinition,
   handleUndoLastOperation,
+  verifyIntegrityToolDefinition,
+  handleVerifyIntegrity,
 } from "../tools/rollback.js";
 import {
   batchRenameToolDefinition,
@@ -91,6 +105,8 @@ import {
   handleReadFile,
 } from "../tools/file-reader.tool.js";
 import {
+  searchHistoryToolDefinition,
+  handleSearchHistory,
   viewHistoryToolDefinition,
   handleViewHistory,
 } from "../tools/view-history.js";
@@ -98,6 +114,45 @@ import {
   organizeByProjectToolDefinition,
   handleOrganizeByProject,
 } from "../tools/project-organization.js";
+import {
+  organizeByDateToolDefinition,
+  handleOrganizeByDate,
+} from "../tools/date-organization.js";
+import { doctorToolDefinition, handleDoctor } from "../tools/doctor.js";
+import {
+  findBrokenSymlinksToolDefinition,
+  handleFindBrokenSymlinks,
+} from "../tools/symlink-audit.js";
+import {
+  quarantineFilesToolDefinition,
+  handleQuarantineFiles,
+  restoreQuarantineToolDefinition,
+  handleRestoreQuarantine,
+} from "../tools/file-quarantine.js";
+import {
+  sensitiveScanToolDefinition,
+  handleSensitiveScan,
+} from "../tools/sensitive-scan.js";
+import {
+  exportReportToolDefinition,
+  handleExportReport,
+} from "../tools/export-report.js";
+import {
+  organizerDigestToolDefinition,
+  handleOrganizerDigest,
+} from "../tools/organizer-digest.js";
+import {
+  watchStatusToolDefinition,
+  handleWatchStatus,
+} from "../tools/watch-status.js";
+import {
+  watchDirectoryToolDefinition,
+  handleWatchDirectory,
+  unwatchDirectoryToolDefinition,
+  handleUnwatchDirectory,
+  listWatchesToolDefinition,
+  handleListWatches,
+} from "../tools/watch-tools.js";
 
 function reg(def: ToolDefinition, handler: ToolHandler) {
   return defineTool({
@@ -106,33 +161,57 @@ function reg(def: ToolDefinition, handler: ToolHandler) {
     title: def.title,
     inputSchema: def.inputSchema,
     annotations: def.annotations,
+    outputSchema: def.outputSchema,
     handler,
   });
 }
 
+// Sorted by tool name, not by when the tool was added. Two people adding
+// different tools at the same time then insert at different coordinates
+// instead of the same one, so their branches merge instead of colliding.
 const entries = [
-  reg(listFilesToolDefinition, handleListFiles),
-  reg(scanDirectoryToolDefinition, handleScanDirectory),
+  reg(analyzeDuplicatesToolDefinition, handleAnalyzeDuplicates),
+  reg(batchReadFilesToolDefinition, handleBatchReadFiles),
+  reg(batchRenameToolDefinition, handleBatchRename),
   reg(categorizeByTypeToolDefinition, handleCategorizeByType),
-  reg(findLargestFilesToolDefinition, handleFindLargestFiles),
+  reg(deleteDuplicatesToolDefinition, handleDeleteDuplicates),
+  reg(diskUsageByCategoryToolDefinition, handleDiskUsageByCategory),
+  reg(doctorToolDefinition, handleDoctor),
+  reg(exportConfigToolDefinition, handleExportConfig),
+  reg(exportReportToolDefinition, handleExportReport),
+  reg(fileReaderToolDefinition, handleReadFile),
+  reg(findBrokenSymlinksToolDefinition, handleFindBrokenSymlinks),
   reg(findDuplicateFilesToolDefinition, handleFindDuplicateFiles),
+  reg(findEmptyDirectoriesToolDefinition, handleFindEmptyDirectories),
+  reg(findLargestFilesToolDefinition, handleFindLargestFiles),
+  reg(findOldFilesToolDefinition, handleFindOldFiles),
+  reg(getCategoriesToolDefinition, handleGetCategories),
+  reg(inspectMetadataToolDefinition, handleInspectMetadata),
+  reg(listFilesToolDefinition, handleListFiles),
+  reg(listWatchesToolDefinition, handleListWatches),
+  reg(organizeByDateToolDefinition, handleOrganizeByDate),
+  reg(organizeByProjectToolDefinition, handleOrganizeByProject),
   reg(organizeFilesToolDefinition, handleOrganizeFiles),
-  reg(previewOrganizationToolDefinition, handlePreviewOrganization),
+  reg(organizerDigestToolDefinition, handleOrganizerDigest),
   reg(organizeMusicToolDefinition, handleOrganizeMusic),
   reg(organizePhotosToolDefinition, handleOrganizePhotos),
+  reg(previewDeleteDuplicatesToolDefinition, handlePreviewDeleteDuplicates),
+  reg(previewOrganizationToolDefinition, handlePreviewOrganization),
+  reg(quarantineFilesToolDefinition, handleQuarantineFiles),
+  reg(restoreQuarantineToolDefinition, handleRestoreQuarantine),
+  reg(scanDirectoryToolDefinition, handleScanDirectory),
+  reg(searchHistoryToolDefinition, handleSearchHistory),
+  reg(sensitiveScanToolDefinition, handleSensitiveScan),
+  reg(setCustomRulesToolDefinition, handleSetCustomRules),
   reg(smartSuggestToolDefinition, handleSmartSuggest),
   reg(systemOrganizationToolDefinition, handleSystemOrganization),
-  reg(batchReadFilesToolDefinition, handleBatchReadFiles),
-  reg(getCategoriesToolDefinition, handleGetCategories),
-  reg(setCustomRulesToolDefinition, handleSetCustomRules),
-  reg(analyzeDuplicatesToolDefinition, handleAnalyzeDuplicates),
-  reg(deleteDuplicatesToolDefinition, handleDeleteDuplicates),
   reg(undoLastOperationToolDefinition, handleUndoLastOperation),
-  reg(batchRenameToolDefinition, handleBatchRename),
-  reg(inspectMetadataToolDefinition, handleInspectMetadata),
-  reg(fileReaderToolDefinition, handleReadFile),
+  reg(unwatchDirectoryToolDefinition, handleUnwatchDirectory),
+  reg(validateOrganizationPlanToolDefinition, handleValidateOrganizationPlan),
+  reg(verifyIntegrityToolDefinition, handleVerifyIntegrity),
   reg(viewHistoryToolDefinition, handleViewHistory),
-  reg(organizeByProjectToolDefinition, handleOrganizeByProject),
+  reg(watchDirectoryToolDefinition, handleWatchDirectory),
+  reg(watchStatusToolDefinition, handleWatchStatus),
 ];
 
 export const TOOLS: ToolDefinition[] = entries.map((e) => e.definition);

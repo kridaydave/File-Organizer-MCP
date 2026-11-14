@@ -14,17 +14,18 @@ import { validateStrictPath } from "../services/path-validator.service.js";
 import { FileScannerService } from "../core/scan/scanner.js";
 import { HashCalculatorService } from "../core/hash/hasher.js";
 import { createErrorResponse, sanitizeErrorMessage } from "../utils/error-handler.js";
-import { formatBytes } from "../utils/formatters.js";
+import { formatBytes, renderSkippedNotice } from "../utils/formatters.js";
 import {
   FindDuplicateFilesInputSchema,
   type FindDuplicateFilesInput,
 } from "../schemas/scan.js";
+import { findDuplicatesOutputJsonSchema } from "../schemas/output.js";
 
 export const findDuplicateFilesToolDefinition: ToolDefinition = {
   name: "file_organizer_find_duplicate_files",
   title: "Find Duplicate Files",
   description:
-    "Find duplicate files in a directory based on their content (SHA-256 hash). Shows potential wasted space.",
+    "Find duplicate files in a directory based on their content (SHA-256 hash). Shows potential wasted space. Files above the hashing size cap (100MB by default) and empty files are not compared; any such file is reported back in `skipped` so the result is never mistaken for exhaustive.",
   inputSchema: {
     type: "object",
     properties: {
@@ -43,6 +44,7 @@ export const findDuplicateFilesToolDefinition: ToolDefinition = {
     },
     required: ["directory"],
   },
+  outputSchema: findDuplicatesOutputJsonSchema,
   annotations: {
     readOnlyHint: true,
     destructiveHint: false,
@@ -85,7 +87,8 @@ export async function handleFindDuplicateFiles(
     const hashCalculator = new HashCalculatorService();
 
     const files = await scanner.getAllFiles(validatedPath, false);
-    const allDuplicates = await hashCalculator.findDuplicates(files);
+    const scan = await hashCalculator.findDuplicates(files);
+    const allDuplicates = scan.groups;
 
     const totalDuplicateSize = allDuplicates.reduce((sum, group) => {
       const fileSize =
@@ -111,6 +114,8 @@ export async function handleFindDuplicateFiles(
       duplicate_groups: total_count,
       total_duplicate_files: allDuplicates.reduce((sum, g) => sum + g.count, 0),
       wasted_space: formatBytes(totalDuplicateSize),
+      skipped: scan.skipped,
+      skipped_bytes: scan.skipped_bytes,
     };
 
     if (response_format === "json") {
@@ -120,6 +125,12 @@ export async function handleFindDuplicateFiles(
       };
     }
 
+    const skippedNotice = renderSkippedNotice(
+      result.skipped,
+      result.skipped_bytes,
+      "the results above are partial.",
+    );
+
     const markdown = `### Duplicate Files in \`${result.directory}\`
 **Wasted Space:** ${result.wasted_space}
 **Duplicate Groups:** ${result.total_count}
@@ -127,10 +138,11 @@ export async function handleFindDuplicateFiles(
 
 ${result.items.map((g) => `**Group (${g.size} each):**\n${g.files.map((f) => `- ${f.path}`).join("\n")}`).join("\n\n")}
 
-${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more groups (use offset=${result.next_offset})*` : ""}`;
+${result.has_more ? `*... ${result.total_count - (result.offset + result.returned_count)} more groups (use offset=${result.next_offset})*` : ""}${skippedNotice ? `\n\n${skippedNotice}` : ""}`;
 
     return {
       content: [{ type: "text", text: markdown }],
+      structuredContent: result as unknown as Record<string, unknown>,
     };
   } catch (error) {
     return createErrorResponse(error);

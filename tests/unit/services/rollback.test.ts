@@ -92,4 +92,66 @@ describe('Rollback Service', () => {
             await fs.rm(externalDir, { recursive: true, force: true }).catch(() => { });
         }
     });
+
+    it('writes manifest atomically leaving no truncated JSON on write failure', async () => {
+        const src = path.join(testDir, 'source2.txt');
+        const dest = path.join(testDir, 'dest2.txt');
+        await fs.writeFile(src, 'content');
+        await fs.rename(src, dest);
+
+        const writeFileSpy = jest.spyOn(fs, 'writeFile').mockRejectedValueOnce(new Error('ENOSPC'));
+
+        await expect(
+            rollbackService.createManifest('Atomic test', [
+                {
+                    type: 'move',
+                    originalPath: src,
+                    currentPath: dest,
+                    timestamp: Date.now(),
+                },
+            ]),
+        ).rejects.toThrow();
+
+        writeFileSpy.mockRestore();
+
+        const files = await fs.readdir(testDir);
+        const manifestFiles = files.filter((f) => f.endsWith('.json'));
+        expect(manifestFiles).toHaveLength(0);
+
+        const tempFiles = files.filter((f) => f.includes('.tmp'));
+        expect(tempFiles).toHaveLength(0);
+    });
+
+    it('should skip a manifest file whose JSON is not a manifest object', async () => {
+        const src = path.join(testDir, 'kept.txt');
+        const dest = path.join(testDir, 'kept-moved.txt');
+        await fs.writeFile(src, 'content');
+
+        const manifestId = await rollbackService.createManifest('valid manifest', [
+            { type: 'move', originalPath: src, currentPath: dest, timestamp: Date.now() }
+        ]);
+
+        await fs.writeFile(path.join(testDir, 'not-a-manifest.json'), 'null');
+
+        const manifests = await rollbackService.listManifests();
+
+        expect(manifests.map((m) => m.id)).toEqual([manifestId]);
+    });
+
+    it('should skip a manifest file whose JSON is an array', async () => {
+        const src = path.join(testDir, 'kept.txt');
+        const dest = path.join(testDir, 'kept-moved.txt');
+        await fs.writeFile(src, 'content');
+
+        const manifestId = await rollbackService.createManifest('valid manifest', [
+            { type: 'move', originalPath: src, currentPath: dest, timestamp: Date.now() }
+        ]);
+
+        await fs.writeFile(path.join(testDir, 'not-a-manifest.json'), '[{"id":"nope"}]');
+
+        const manifests = await rollbackService.listManifests();
+
+        expect(manifests.length).toBe(1);
+        expect(manifests.map((m) => m.id)).toStrictEqual([manifestId]);
+    });
 });
