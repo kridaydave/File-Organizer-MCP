@@ -667,4 +667,39 @@ describe('AutoOrganizeService', () => {
       service.stop();
     });
   });
+
+  describe('BUG-58 duplicate watch entries', () => {
+    it('should deduplicate watch entries and stop old tasks so only one task remains', async () => {
+      const { AutoOrganizeService } =
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const path = await import('path');
+      const os = await import('os');
+      const fs = await import('fs/promises');
+
+      const testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bug58-'));
+      const watches: WatchConfig[] = [
+        {
+          directory: testDir,
+          schedule: '0 9 * * *',
+          rules: { auto_organize: true },
+        },
+        {
+          directory: path.join(testDir, ''),
+          schedule: '0 10 * * *',
+          rules: { auto_organize: true },
+        },
+      ];
+      const mockConfig = { watchList: watches };
+      // Landing shape: configLoader first, so the duplicate stop still fires.
+      const service = new AutoOrganizeService(() => mockConfig);
+
+      const result = service.reloadTasks();
+      expect(result.taskCount).toBe(1);
+      expect(service.getTaskCount()).toBe(1);
+      expect(service.getWatchedDirectories().length).toBe(1);
+
+      service.stop();
+      await fs.rm(testDir, { recursive: true, force: true });
+    });
+  });
 });
