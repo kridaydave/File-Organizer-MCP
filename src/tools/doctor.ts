@@ -62,6 +62,7 @@ const REJECTION_ADVICE: Record<string, string> = {
     "is outside your home directory and external volumes are not allowed. Move it under your home, or set allowExternalVolumes if it is a real external volume",
   external_volume_not_allowed:
     "is on an external volume. Set allowExternalVolumes to true to allow it",
+  non_string: "is not a string. Each entry must be a directory path string",
 };
 
 function describeRejection(configured: string, rejection: string): string {

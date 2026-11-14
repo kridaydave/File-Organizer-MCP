@@ -21,7 +21,8 @@ export type AllowedDirRejection =
   | "path_traversal"
   | "null_byte"
   | "outside_home"
-  | "external_volume_not_allowed";
+  | "external_volume_not_allowed"
+  | "non_string";
 
 export interface AllowedDirVerdict {
   /** The string exactly as the user wrote it in config.json. */
@@ -43,9 +44,21 @@ function expandUserDir(dir: string): string {
 }
 
 export function inspectAllowedDir(
-  dir: string,
+  dir: unknown,
   allowExternalVolumes: boolean,
 ): AllowedDirVerdict {
+  if (typeof dir !== "string") {
+    return {
+      configured: String(dir),
+      resolved: String(dir),
+      exists: false,
+      isDirectory: false,
+      symlink: false,
+      accepted: false,
+      rejection: "non_string",
+      blockedByPolicy: false,
+    };
+  }
   const expanded = expandUserDir(dir);
   const resolved = path.resolve(expanded);
   const blockedPatterns = getAlwaysBlockedPatterns();
@@ -134,7 +147,7 @@ export function inspectAllowedDir(
 }
 
 export function inspectAllowedDirs(
-  dirs: readonly string[],
+  dirs: readonly unknown[],
   allowExternalVolumes: boolean,
 ): AllowedDirVerdict[] {
   return dirs.map((dir) => inspectAllowedDir(dir, allowExternalVolumes));
