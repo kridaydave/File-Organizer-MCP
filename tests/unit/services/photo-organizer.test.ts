@@ -325,6 +325,32 @@ describe("PhotoOrganizerService", () => {
         expect(result.organizedFiles).toBe(1);
         expect(result.errors).toHaveLength(1);
         expect(at(result.errors, 0).file).toBe(path.join(sourceDir, "photo1.jpg"));
+        expect(result.success).toBe(false);
+      }),
+    );
+
+    it(
+      "returns success false when all per-file actions fail",
+      withMockedLogger(async (_logger: MockLogger) => {
+        mockReaddir.mockResolvedValue([
+          { name: "photo1.jpg", isFile: () => true },
+          { name: "photo2.jpg", isFile: () => true },
+        ]);
+        // The move goes through safeAtomicMove, which can rename or copy before
+        // unlinking, so both seams have to fail for every action to fail.
+        mockRename.mockRejectedValue(new Error("permission denied"));
+        mockCopyFile.mockRejectedValue(new Error("permission denied"));
+
+        const result = await service.organize({
+          sourceDir,
+          targetDir,
+          dateFormat: "YYYY/MM/DD",
+          dryRun: false,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.organizedFiles).toBe(0);
+        expect(result.errors).toHaveLength(2);
       }),
     );
   });
