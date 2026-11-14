@@ -125,5 +125,4 @@ export function setupGracefulShutdown(): void {
   });
 }
 
-// Alias for task spec compatibility
-export const startMcpServer = bootstrapServer;
+
