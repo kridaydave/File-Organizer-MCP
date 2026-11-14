@@ -3,6 +3,8 @@
  * Owns its own cleanup interval; destroy() when done.
  */
 
+import fs from "fs/promises";
+import * as fsSync from "fs";
 import { logger } from "../../utils/logger.js";
 import type { CategoryName } from "../../types.js";
 import type { ContentCategoryResult } from "./content.js";
@@ -18,6 +20,7 @@ export class ContentAnalysisCache {
   private promises: Map<string, Promise<CategoryName>> = new Map();
   private results: Map<string, CategoryName> = new Map();
   private timestamps: Map<string, number> = new Map();
+  private fileStats: Map<string, { mtimeMs: number; size: number }> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(
@@ -59,6 +62,7 @@ export class ContentAnalysisCache {
       this.promises.delete(key);
       this.results.delete(key);
       this.timestamps.delete(key);
+      this.fileStats.delete(key);
     }
 
     if (keysToDelete.length > 0) {
@@ -85,6 +89,60 @@ export class ContentAnalysisCache {
     this.stopCleanupInterval();
   }
 
+  private async getFileStats(filePath: string): Promise<{ mtimeMs: number; size: number } | undefined> {
+    try {
+      const stat = await fs.stat(filePath);
+      return { mtimeMs: stat.mtimeMs, size: stat.size };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private getFileStatsSync(filePath: string): { mtimeMs: number; size: number } | undefined {
+    try {
+      const stat = fsSync.statSync(filePath);
+      return { mtimeMs: stat.mtimeMs, size: stat.size };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private isCacheStaleSync(key: string, filePath: string): boolean {
+    const cachedStats = this.fileStats.get(key);
+    if (!cachedStats) {
+      return false;
+    }
+    const currentStats = this.getFileStatsSync(filePath);
+    if (!currentStats) {
+      return true;
+    }
+    if (
+      currentStats.mtimeMs !== cachedStats.mtimeMs ||
+      currentStats.size !== cachedStats.size
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  private async isCacheStale(key: string, filePath: string): Promise<boolean> {
+    const cachedStats = this.fileStats.get(key);
+    if (!cachedStats) {
+      return false;
+    }
+    const currentStats = await this.getFileStats(filePath);
+    if (!currentStats) {
+      return true;
+    }
+    if (
+      currentStats.mtimeMs !== cachedStats.mtimeMs ||
+      currentStats.size !== cachedStats.size
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   /**
    * Trigger async content analysis in the background
    */
@@ -100,8 +158,12 @@ export class ContentAnalysisCache {
         const result = await this.analyze(filePath);
 
         if (result.confidence >= 0.7) {
+          const stats = await this.getFileStats(filePath);
           this.results.set(key, result.category);
           this.timestamps.set(key, Date.now());
+          if (stats) {
+            this.fileStats.set(key, stats);
+          }
           logger.info("Content analysis updated category", {
             filePath,
             name,
@@ -124,6 +186,7 @@ export class ContentAnalysisCache {
         this.promises.delete(key);
         if (!this.results.has(key)) {
           this.timestamps.delete(key);
+          this.fileStats.delete(key);
         }
       }
     })();
@@ -138,6 +201,13 @@ export class ContentAnalysisCache {
    */
   getUpdated(name: string, filePath: string): CategoryName | undefined {
     const key = `${filePath}:${name}`;
+    if (this.isCacheStaleSync(key, filePath)) {
+      this.results.delete(key);
+      this.promises.delete(key);
+      this.timestamps.delete(key);
+      this.fileStats.delete(key);
+      return undefined;
+    }
     return this.results.get(key);
   }
 
@@ -146,6 +216,12 @@ export class ContentAnalysisCache {
    */
   async waitFor(name: string, filePath: string): Promise<CategoryName> {
     const key = `${filePath}:${name}`;
+    if (await this.isCacheStale(key, filePath)) {
+      this.results.delete(key);
+      this.promises.delete(key);
+      this.timestamps.delete(key);
+      this.fileStats.delete(key);
+    }
     const cachedResult = this.results.get(key);
     if (cachedResult) {
       return cachedResult;
@@ -168,6 +244,7 @@ export class ContentAnalysisCache {
         ...this.results.keys(),
         ...this.promises.keys(),
         ...this.timestamps.keys(),
+        ...this.fileStats.keys(),
       ]);
       const prefix = `${filePath}:`;
       for (const key of allKeys) {
@@ -175,12 +252,14 @@ export class ContentAnalysisCache {
           this.results.delete(key);
           this.promises.delete(key);
           this.timestamps.delete(key);
+          this.fileStats.delete(key);
         }
       }
     } else {
       this.results.clear();
       this.promises.clear();
       this.timestamps.clear();
+      this.fileStats.clear();
     }
   }
 }

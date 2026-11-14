@@ -13,6 +13,18 @@ export interface RollbackAction {
   backupPath?: string; // For deletions (where the file is temporarily stored)
   overwrittenBackupPath?: string; // If a move overwrote a file, this is where the ORIGINAL file is stored
   timestamp: number;
+  /**
+   * sha256 of the file's content at `manifestActionTarget(action)`, recorded
+   * when the operation ran so a later check can detect drift.
+   *
+   * Optional on purpose: every manifest written before content hashing existed
+   * has no digest, and so does any file that could not be read within the
+   * manifest's hash budget. `RollbackManifest` therefore stays readable for
+   * every user upgrading with a rollback history on disk.
+   */
+  contentHash?: string;
+  /** How `contentHash` was derived. Absent whenever `contentHash` is. */
+  hashMethod?: "full" | "sampled";
 }
 
 export interface RollbackManifest {

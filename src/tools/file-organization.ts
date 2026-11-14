@@ -18,6 +18,7 @@ import {
   OrganizeFilesInputSchema,
   type OrganizeFilesInput,
 } from "../schemas/organize.js";
+import { organizeFilesOutputJsonSchema } from "../schemas/output.js";
 import {
   createRequestContext,
   type ToolContext,
@@ -57,6 +58,7 @@ export const organizeFilesToolDefinition: ToolDefinition = {
     },
     required: ["directory"],
   },
+  outputSchema: organizeFilesOutputJsonSchema,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -128,6 +130,7 @@ export async function handleOrganizeFiles(
       aborted,
       skippedCount,
       skippedFiles,
+      manifestId,
     } = await organizer.organize(validatedPath, files, {
       dryRun: dry_run,
       conflictStrategy: effectiveConflictStrategy,
@@ -146,6 +149,10 @@ export async function handleOrganizeFiles(
       aborted,
       skippedCount,
       skippedFiles,
+      // The undo handle. Absent on a dry run, and the history entry the server
+      // writes for this call carries the same id, so a selective undo is
+      // reachable from view_history without re-reading this response.
+      ...(manifestId !== undefined && { manifest_id: manifestId }),
     };
 
     if (use_content_analysis) {
@@ -171,6 +178,11 @@ export async function handleOrganizeFiles(
 **Errors:** ${result.errors.length}
 **Skipped Files:** ${result.skippedCount ?? result.skippedFiles?.length ?? 0}
 **Conflict Strategy:** ${effectiveConflictStrategy}
+${
+  result.manifest_id
+    ? `**Rollback Manifest ID:** \`${result.manifest_id}\` (pass to \`undo_last_operation\` to undo this batch)\n`
+    : ""
+}
 
 **Statistics:**
 ${Object.entries(result.statistics)
@@ -182,7 +194,17 @@ ${result.actions
   .slice(0, 20)
   .map(
     (a) =>
-      `- Moved \`${escapeMarkdown(a.file)}\` → \`${escapeMarkdown(a.to)}\``,
+      (() => {
+        const fmt = (s: string) => {
+          const content = escapeMarkdown(s, { inCodeSpan: true });
+          const ticks = content.match(/`+/g);
+          const maxTicks = ticks ? Math.max(...ticks.map((t) => t.length)) : 0;
+          const delim = "`".repeat(maxTicks + 1 || 1);
+          const pad = content.startsWith("`") || content.endsWith("`") ? " " : "";
+          return `${delim}${pad}${content}${pad}${delim}`;
+        };
+        return `- Moved ${fmt(a.file)} → ${fmt(a.to)}`;
+      })(),
   )
   .join("\n")}
 ${result.actions.length > 20 ? `\n*(...and ${result.actions.length - 20} more actions)*` : ""}
@@ -193,6 +215,7 @@ ${result.errors.length > 0 ? `\n**Errors:**\n${result.errors.join("\n")}` : ""}`
 
     return {
       content: [{ type: "text", text: markdown }],
+      structuredContent: result as unknown as Record<string, unknown>,
     };
   } catch (error) {
     return createErrorResponse(error);
