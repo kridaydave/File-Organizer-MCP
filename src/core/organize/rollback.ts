@@ -192,6 +192,12 @@ export interface ManifestIntegrityOptions {
   hashBudgetBytes?: number;
 }
 
+/** How `createManifest` spends on manifest identity. */
+export interface ManifestIntegrityOptions {
+  /** Reuse this id instead of generating one, for incremental updates. */
+  manifestId?: string;
+}
+
 export class RollbackService {
   private storageDir: string;
   private pathValidator: PathValidatorService;
@@ -350,7 +356,7 @@ export class RollbackService {
   ): Promise<string> {
     await this.ensureStorage();
 
-    const id = randomUUID();
+    const id = options.manifestId || randomUUID();
     const timestamp = Date.now();
     const recordedActions = await this.recordContentHashes(
       actions,
