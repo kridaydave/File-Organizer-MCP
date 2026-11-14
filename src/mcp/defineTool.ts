@@ -30,6 +30,7 @@ export interface DefineToolOptions {
   title?: string;
   inputSchema: ToolDefinition["inputSchema"];
   annotations?: ToolDefinition["annotations"];
+  outputSchema?: ToolDefinition["outputSchema"];
   handler: ToolHandler;
 }
 
@@ -44,7 +45,7 @@ export interface DefinedTool {
  * and returns definition + handler.
  */
 export function defineTool(options: DefineToolOptions): DefinedTool {
-  const { name, description, title, inputSchema, annotations, handler } =
+  const { name, description, title, inputSchema, annotations, outputSchema, handler } =
     options;
 
   const definition: ToolDefinition = {
@@ -53,6 +54,7 @@ export function defineTool(options: DefineToolOptions): DefinedTool {
     inputSchema,
     ...(title !== undefined && { title }),
     ...(annotations !== undefined && { annotations }),
+    ...(outputSchema !== undefined && { outputSchema }),
   };
 
   return { definition, handler };

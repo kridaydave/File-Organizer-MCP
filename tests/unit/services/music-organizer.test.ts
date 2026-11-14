@@ -5,6 +5,7 @@
 
 import fs from "fs/promises";
 import path from "path";
+import os from "os";
 import { MusicOrganizerService } from "../../../src/services/music-organizer.service.js";
 import {
   setupLoggerMocks,
@@ -51,6 +52,7 @@ describe("MusicOrganizerService", () => {
       artist?: string;
       album?: string;
       trackNumber?: number;
+      discNumber?: number;
     } = {},
   ): Promise<string> {
     const filePath = path.join(sourceDir, fileName);
@@ -115,6 +117,19 @@ describe("MusicOrganizerService", () => {
       frames.push(
         Buffer.concat([
           Buffer.from("TRCK"),
+          Buffer.from([0x00, 0x00, 0x00, text.length + 1]),
+          Buffer.from([0x00, 0x00]),
+          Buffer.from([0x03]),
+          text,
+        ]),
+      );
+    }
+
+    if (metadata.discNumber !== undefined) {
+      const text = Buffer.from(metadata.discNumber.toString());
+      frames.push(
+        Buffer.concat([
+          Buffer.from("TPOS"),
           Buffer.from([0x00, 0x00, 0x00, text.length + 1]),
           Buffer.from([0x00, 0x00]),
           Buffer.from([0x03]),
@@ -192,6 +207,12 @@ describe("MusicOrganizerService", () => {
       expect(service.sanitizeFilename("  song name  ")).toBe("song name");
     });
 
+    it("should prevent directory traversal", () => {
+      expect(service.sanitizeFilename("..")).toBe("Unknown");
+      expect(service.sanitizeFilename(".")).toBe("Unknown");
+      expect(service.sanitizeFilename("")).toBe("Unknown");
+    });
+
     it("should preserve valid characters", () => {
       expect(service.sanitizeFilename("Song - Name (2023) [Live].mp3")).toBe(
         "Song - Name (2023) [Live].mp3",
@@ -266,6 +287,39 @@ describe("MusicOrganizerService", () => {
       expect(destPath).toBe(
         path.join("/target", "Test Album", "Test Song.mp3"),
       );
+    });
+
+    it("should prevent directory traversal with artist ..", () => {
+      const tmp = os.tmpdir();
+      const targetDirTest = path.join(tmp, "music-org-test-target");
+      const metadata = {
+        filePath: path.join(tmp, "song.mp3"),
+        format: "MP3",
+        hasEmbeddedArtwork: false,
+        extractedAt: new Date(),
+        title: "Test Song",
+        artist: "..",
+        album: "Album",
+      };
+
+      const config = {
+        sourceDir: tmp,
+        targetDir: targetDirTest,
+        structure: "artist/album" as const,
+        filenamePattern: "{title}" as const,
+      };
+
+      const destPath = service.getDestinationPath(metadata, config);
+      const resolvedDest = path.resolve(destPath);
+      const resolvedTarget = path.resolve(targetDirTest);
+      // Real subpath check: a bare startsWith(target) would also pass
+      // for a sibling like "<target>-evil", so require the target
+      // itself or target + separator.
+      expect(
+        resolvedDest === resolvedTarget ||
+          resolvedDest.startsWith(resolvedTarget + path.sep),
+      ).toBe(true);
+      expect(resolvedDest.includes(path.join("..", "Album"))).toBe(false);
     });
 
     it("should create genre/artist structure", () => {
@@ -552,26 +606,17 @@ describe("MusicOrganizerService", () => {
       const nestedDir = path.join(sourceDir, "nested", "deep");
       await fs.mkdir(nestedDir, { recursive: true });
 
-      // Create MP3 in nested dir
-      const mp3Data = Buffer.from(
-        [
-          0x49,
-          0x44,
-          0x33,
-          0x03,
-          0x00,
-          0x00,
-          0x00,
-          0x00,
-          0x00,
-          0x0f,
-          Buffer.from("TIT2"),
-          Buffer.from([0x00, 0x00, 0x00, 0x05]),
-          Buffer.from([0x00, 0x00]),
-          Buffer.from([0x03]),
-          Buffer.from("Deep"),
-        ].flat(),
-      );
+      // Create MP3 in nested dir: ID3v2 header + a single TIT2 frame.
+      const mp3Data = Buffer.concat([
+        Buffer.from([
+          0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f,
+        ]),
+        Buffer.from("TIT2"),
+        Buffer.from([0x00, 0x00, 0x00, 0x05]),
+        Buffer.from([0x00, 0x00]),
+        Buffer.from([0x03]),
+        Buffer.from("Deep"),
+      ]);
       await fs.writeFile(path.join(nestedDir, "deep_song.mp3"), mp3Data);
 
       const result = await service.organize({

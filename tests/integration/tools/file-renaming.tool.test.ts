@@ -1,4 +1,3 @@
-
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import path from 'path';
 import fs from 'fs/promises';
@@ -81,15 +80,39 @@ describe('file_organizer_batch_rename Tool', () => {
             dry_run: false
         });
 
-        if (!result.content[0].text.includes('Renamed:** 2')) {
-            console.log('Failing Result:', result.content[0].text);
-        }
-
         const output = result.content[0].text;
         expect(output).toContain('Renamed:** 2');
 
         const onDisk = await fs.readdir(testDir);
         expect(onDisk).toContain('a.txt');
         expect(onDisk).toContain('b.txt');
+    });
+
+    it('execution markdown includes per-file destination mapping matching json', async () => {
+        const file = path.join(testDir, 'SOURCE.txt');
+        await fs.writeFile(file, 'content');
+
+        const jsonResult = await handleBatchRename({
+            files: [file],
+            rules: [{ type: 'case', conversion: 'lowercase' }],
+            dry_run: false,
+            response_format: 'json'
+        });
+
+        // Reset file
+        await fs.rm(path.join(testDir, 'source.txt'));
+        await fs.writeFile(path.join(testDir, 'SOURCE.txt'), 'content');
+
+        const mdResult = await handleBatchRename({
+            files: [path.join(testDir, 'SOURCE.txt')],
+            rules: [{ type: 'case', conversion: 'lowercase' }],
+            dry_run: false,
+            response_format: 'markdown'
+        });
+
+        const mdOutput = mdResult.content[0].text;
+        expect(mdOutput).toContain('Renamed Files');
+        expect(mdOutput).toContain('SOURCE.txt');
+        expect(mdOutput).toContain('source.txt');
     });
 });

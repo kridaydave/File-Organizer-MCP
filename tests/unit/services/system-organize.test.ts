@@ -368,6 +368,39 @@ describe("SystemOrganizeService", () => {
       expect(result.useLocalFallback).toBe(true);
     });
 
+    it("should throw when system dir not writable and fallbackToLocal is false", async () => {
+      const error = new Error("EACCES") as NodeJS.ErrnoException;
+      error.code = "EACCES";
+      mockAccess.mockRejectedValue(error);
+
+      await expect(
+        service.determineSystemDestination(
+          "Music",
+          true,
+          mockSystemDirs.downloads,
+          "Organized",
+          true,
+          false,
+        ),
+      ).rejects.toThrow();
+    });
+
+    it("should throw when system dir has insufficient space and fallbackToLocal is false", async () => {
+      mockAccess.mockResolvedValue(undefined);
+      mockStatfs.mockResolvedValue({ bsize: 4096, bfree: 1000 });
+
+      await expect(
+        service.determineSystemDestination(
+          "Music",
+          true,
+          mockSystemDirs.downloads,
+          "Organized",
+          true,
+          false,
+        ),
+      ).rejects.toThrow();
+    });
+
     it("should create organized folder with category name", async () => {
       const result = await service.determineSystemDestination(
         "Music",
@@ -624,6 +657,44 @@ describe("SystemOrganizeService", () => {
       expect(result.details[0]?.file).toBe("song.mp3");
     });
 
+    it("should not create directories on disk when dryRun is true", async () => {
+      // Drop the ensureDirectoryExists stub so the real fs.mkdir path is what
+      // would run. A dry run that mkdirs is a write, and the tool tells the user
+      // no files were moved.
+      jest.restoreAllMocks();
+      jest.spyOn(service as any, "validateSourceDir").mockResolvedValue({
+        valid: true,
+        normalizedPath: mockSystemDirs.downloads,
+      });
+      jest
+        .spyOn(service as any, "determineSystemDestination")
+        .mockResolvedValue({
+          destination: mockSystemDirs.music,
+          useLocalFallback: false,
+        });
+
+      mockReaddir.mockResolvedValue([
+        { name: "song.mp3", isFile: () => true, isDirectory: () => false },
+      ]);
+      mockStat.mockResolvedValue({
+        isFile: () => true,
+        size: 1000,
+        mtime: new Date(),
+      });
+      mockAccess.mockResolvedValue(undefined);
+
+      const result = await service.systemOrganize({
+        sourceDir: mockSystemDirs.downloads,
+        dryRun: true,
+      });
+
+      expect(mockMkdir).not.toHaveBeenCalled();
+      expect(mockRename).not.toHaveBeenCalled();
+      expect(mockCopyFile).not.toHaveBeenCalled();
+      expect(result.details.length).toBe(1);
+      expect(result.failed).toBe(0);
+    });
+
     it("should create undo manifest in dry run for planning purposes", async () => {
       mockReaddir.mockResolvedValue([
         { name: "song.mp3", isFile: () => true, isDirectory: () => false },
@@ -713,6 +784,37 @@ describe("SystemOrganizeService", () => {
 
       expect(result.useLocalFallback).toBe(true);
     });
+
+    it("should not fallback to local when fallbackToLocal is false and system dir is unusable", async () => {
+      jest.spyOn(service as any, "validateSourceDir").mockResolvedValue({
+        valid: true,
+        normalizedPath: mockSystemDirs.downloads,
+      });
+      mockReaddir.mockResolvedValue([
+        { name: "song.mp3", isFile: () => true, isDirectory: () => false },
+      ]);
+      mockStat.mockResolvedValue({
+        isFile: () => true,
+        size: 1000,
+        mtime: new Date(),
+      });
+
+      const eaccesError = new Error("EACCES") as NodeJS.ErrnoException;
+      eaccesError.code = "EACCES";
+      mockAccess.mockRejectedValue(eaccesError);
+
+      const result = await service.systemOrganize({
+        sourceDir: mockSystemDirs.downloads,
+        useSystemDirs: true,
+        fallbackToLocal: false,
+        dryRun: true,
+      });
+
+      expect(result.failed).toBe(1);
+      expect(result.organizedLocally).toBe(0);
+      expect(result.movedToSystem).toBe(0);
+      expect(result.details.length).toBe(0);
+    });
   });
 
   describe("copyInsteadOfMove option", () => {
@@ -774,6 +876,62 @@ describe("SystemOrganizeService", () => {
     it("should return correct category for video files", () => {
       expect(service.categorizeFile("video.mp4")).toBe("Videos");
       expect(service.categorizeFile("movie.mkv")).toBe("Videos");
+    });
+  });
+
+  describe("dryRun", () => {
+    beforeEach(() => {
+      jest.spyOn(service as any, "validateSourceDir").mockResolvedValue({
+        valid: true,
+        normalizedPath: mockSystemDirs.downloads,
+      });
+      jest
+        .spyOn(service as any, "determineSystemDestination")
+        .mockResolvedValue({
+          destination: path.join(mockSystemDirs.downloads, "Organized", "Music"),
+          useLocalFallback: true,
+        });
+      mockAccess.mockResolvedValue(undefined);
+      jest.clearAllMocks();
+    });
+
+    it("should not create directories in dry run", async () => {
+      mockReaddir.mockResolvedValue([
+        { name: "song.mp3", isFile: () => true, isDirectory: () => false },
+      ]);
+      mockStat.mockResolvedValue({
+        isFile: () => true,
+        size: 1000,
+        mtime: new Date(),
+      });
+
+      const result = await service.systemOrganize({
+        sourceDir: mockSystemDirs.downloads,
+        dryRun: true,
+      });
+
+      expect(mockMkdir).not.toHaveBeenCalled();
+      expect(mockRename).not.toHaveBeenCalled();
+      expect(mockCopyFile).not.toHaveBeenCalled();
+    });
+
+    it("should create directories in real run", async () => {
+      mockReaddir.mockResolvedValue([
+        { name: "song.mp3", isFile: () => true, isDirectory: () => false },
+      ]);
+      mockStat.mockResolvedValue({
+        isFile: () => true,
+        size: 1000,
+        mtime: new Date(),
+      });
+      mockAccess.mockRejectedValue(new Error("ENOENT"));
+
+      const result = await service.systemOrganize({
+        sourceDir: mockSystemDirs.downloads,
+        dryRun: false,
+      });
+
+      expect(mockMkdir).toHaveBeenCalled();
     });
   });
 });

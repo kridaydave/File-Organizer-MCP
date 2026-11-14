@@ -36,7 +36,7 @@ export function getAlwaysBlockedPatterns(): RegExp[] {
 
   // Common patterns across all platforms
   const common = [
-    /node_modules/i,
+    /(?:^|[\/\\])node_modules(?:[\/\\]|$)/i,
     /(?:^|[\/\\])\.git(?:[\/\\]|$)/i,
     /(?:^|[\/\\])\.vscode(?:[\/\\]|$)/i,
     /(?:^|[\/\\])\.idea(?:[\/\\]|$)/i,
@@ -85,7 +85,6 @@ export function getAlwaysBlockedPatterns(): RegExp[] {
   } else {
     return [
       ...common,
-      /^\/etc(?:[\/]|$)/i,
       /^\/usr(?:[\/]|$)/i,
       /^\/bin(?:[\/]|$)/i,
       /^\/sbin(?:[\/]|$)/i,
@@ -94,7 +93,6 @@ export function getAlwaysBlockedPatterns(): RegExp[] {
       /^\/dev(?:[\/]|$)/i,
       /^\/run\/(?!media(?:[\/]|$))(?:[^\/]+)/i,
       /^\/root(?:[\/]|$)/i,
-      /^\/var(?:[\/]|$)/i,
       /^\/boot(?:[\/]|$)/i,
       /^\/opt(?:[\/]|$)/i,
     ];
