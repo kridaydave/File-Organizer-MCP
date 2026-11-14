@@ -33,6 +33,93 @@ export interface RenamePreview {
   error?: string;
 }
 
+/**
+ * Why two files in one plan cannot both land where they are headed:
+ * `duplicate_target` means several sources collapse onto one name,
+ * `destination_exists` means a different file already holds that name.
+ */
+export type RenameCollisionKind = "duplicate_target" | "destination_exists";
+
+/**
+ * A collision in a rename plan, reported by name rather than by path so a
+ * rejected plan never echoes directory layout back to the caller.
+ */
+export interface RenameCollision {
+  kind: RenameCollisionKind;
+  destination: string;
+  sources: string[];
+}
+
+/**
+ * Groups the previews that would land on the same destination. Previews that
+ * do not move, or that already failed, take no part: they cannot collide.
+ */
+export function groupRenamePreviewsByTarget(
+  previews: RenamePreview[],
+): Map<string, RenamePreview[]> {
+  const groups = new Map<string, RenamePreview[]>();
+  for (const preview of previews) {
+    if (!preview.willChange || preview.error) continue;
+    const group = groups.get(preview.new);
+    if (group) {
+      group.push(preview);
+    } else {
+      groups.set(preview.new, [preview]);
+    }
+  }
+  return groups;
+}
+
+/**
+ * Collisions a plan would hit, derived from the preview alone so a caller can
+ * reject the batch before the first rename.
+ */
+export function detectRenameCollisions(
+  previews: RenamePreview[],
+): RenameCollision[] {
+  const collisions: RenameCollision[] = [];
+
+  for (const [target, group] of groupRenamePreviewsByTarget(previews)) {
+    const destination = path.basename(target);
+
+    if (group.length > 1) {
+      collisions.push({
+        kind: "duplicate_target",
+        destination,
+        sources: group.map((p) => path.basename(p.original)),
+      });
+      continue;
+    }
+
+    const [only] = group;
+    if (only?.conflict) {
+      collisions.push({
+        kind: "destination_exists",
+        destination,
+        sources: [path.basename(only.original)],
+      });
+    }
+  }
+
+  return collisions;
+}
+
+/**
+ * A rule may inject separators into the base name (`find/replace` on `..`,
+ * say). The result has to stay a plain name in the source directory, otherwise
+ * the destination leaves the directory the caller was allowed to touch.
+ */
+function isUnsafeDestinationName(name: string): boolean {
+  return (
+    name.length === 0 ||
+    name === "." ||
+    name === ".." ||
+    name.includes("/") ||
+    name.includes("\\") ||
+    name.includes("\0")
+  );
+}
+
 export class RenamingService {
   constructor(private rollbackService = new RollbackService()) {}
 
@@ -101,16 +188,27 @@ export class RenamingService {
                         );
                     newBasename = split.join(frRule.replace);
                   } else {
-                    newBasename = newBasename.replace(
-                      frRule.find,
-                      frRule.replace,
-                    );
+                    if (frRule.case_sensitive) {
+                      newBasename = newBasename.replace(
+                        frRule.find,
+                        frRule.replace,
+                      );
+                    } else {
+                      const regex = new RegExp(
+                        escapeRegExp(frRule.find),
+                        "i",
+                      );
+                      newBasename = newBasename.replace(
+                        regex,
+                        frRule.replace,
+                      );
+                    }
                   }
                 }
                 break;
 
               case "case":
-                const casingType = ((rule as any).casing ?? rule.conversion ?? "").toLowerCase();
+                const casingType = rule.conversion.toLowerCase();
                 switch (casingType) {
                   case "lower":
                   case "lowercase":
@@ -191,6 +289,11 @@ export class RenamingService {
 
         // Reconstruct path
         const newName = newBasename + newExt;
+        if (isUnsafeDestinationName(newName)) {
+          throw new Error(
+            "Rules produced a destination outside the source directory; this file was left alone",
+          );
+        }
         const newPath = path.join(dirname, newName);
 
         // Detect Change
@@ -243,6 +346,18 @@ export class RenamingService {
         });
       }
     }
+
+    // The loop above only flags the second file to claim a name. Every file
+    // that would land there loses it, so the whole group is marked here and
+    // the plan is honest whichever member a caller inspects.
+    for (const group of groupRenamePreviewsByTarget(previews).values()) {
+      if (group.length > 1) {
+        for (const preview of group) {
+          preview.conflict = true;
+        }
+      }
+    }
+
     return previews;
   }
 
@@ -447,19 +562,28 @@ function escapeRegExp(string: string) {
 }
 
 function toCamelCase(str: string) {
-  return str
-    .replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) => {
-      return index === 0 ? word.toLowerCase() : word.toUpperCase();
-    })
-    .replace(/\s+/g, "");
+  // Handle snake_case, kebab-case, spaces
+  const parts = str.split(/[_\-\s]+/).filter(Boolean);
+  if (parts.length === 0) return str;
+  const firstPart = parts[0];
+  if (!firstPart) return str;
+  const first = firstPart.toLowerCase();
+  const rest = parts.slice(1).map((part) => {
+    if (!part) return part;
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  });
+  return first + rest.join("");
 }
 
 function toPascalCase(str: string) {
-  return str
-    .replace(/(?:^\w|[A-Z]|\b\w)/g, (word) => {
-      return word.toUpperCase();
-    })
-    .replace(/\s+/g, "");
+  // Handle snake_case, kebab-case, spaces
+  const parts = str.split(/[_\-\s]+/).filter(Boolean);
+  if (parts.length === 0) return str;
+  const result = parts.map((part) => {
+    if (!part) return part;
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  });
+  return result.join("");
 }
 
 function toSnakeCase(str: string) {

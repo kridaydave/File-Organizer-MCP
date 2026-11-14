@@ -6,7 +6,7 @@ import { FileInfo } from '../../../src/types.js';
 
 describe('FileScannerService', () => {
     let fileScanner: FileScannerService;
-    let testDir: string;
+    let testDir!: string;
     let baseTempDir: string;
 
     beforeEach(async () => {
@@ -68,7 +68,9 @@ describe('FileScannerService', () => {
             const results = await fileScanner.scanDirectory(testDir, { includeSubdirs: false });
 
             expect(results.length).toBe(1);
-            expect(results[0].name).toBe('root.txt');
+            const [onlyResult] = results;
+            if (!onlyResult) throw new Error('Expected exactly one scanned file');
+            expect(onlyResult.name).toBe('root.txt');
         });
 
         it('should respect maxDepth limit', async () => {
@@ -105,7 +107,22 @@ describe('FileScannerService', () => {
             const results = await fileScanner.scanDirectory(testDir, { includeSubdirs: true });
 
             expect(results.length).toBe(1);
-            expect(results[0].name).toBe('normal.txt');
+            const [onlyResult] = results;
+            if (!onlyResult) throw new Error('Expected exactly one scanned file');
+            expect(onlyResult.name).toBe('normal.txt');
+        });
+
+        it('should ignore skipped directories case-insensitively (BUG-78)', async () => {
+            await createFile('normal.txt');
+            await createFile('Node_Modules/package.json');
+            await createFile('NODE_MODULES/secret.txt');
+
+            const results = await fileScanner.scanDirectory(testDir, { includeSubdirs: true });
+
+            expect(results.length).toBe(1);
+            const [onlyResult] = results;
+            if (!onlyResult) throw new Error('Expected exactly one scanned file');
+            expect(onlyResult.name).toBe('normal.txt');
         });
 
         it('should respect maxFiles limit', async () => {
@@ -114,7 +131,7 @@ describe('FileScannerService', () => {
             await createFile('file2.txt');
             await createFile('file3.txt');
 
-            await expect(smallScanner.scanDirectory(testDir)).rejects.toThrow('Maximum file limit');
+            await expect(smallScanner.scanDirectory(testDir!)).rejects.toThrow('Maximum file limit');
         });
     });
 
@@ -127,6 +144,50 @@ describe('FileScannerService', () => {
             expect(results[0]).toHaveProperty('size');
             expect(results[0]).toHaveProperty('path');
             expect(results[0]).not.toHaveProperty('extension'); // FileWithSize vs FileInfo (FileInfo has extension)
+        });
+    });
+
+    describe('maxDepth validation', () => {
+        it('should accept maxDepth 75 for scanDirectory', async () => {
+            await createFile('level1/level2/file.txt');
+            const results = await fileScanner.scanDirectory(testDir, {
+                includeSubdirs: true,
+                maxDepth: 75,
+            });
+            expect(results.length).toBe(1);
+        });
+
+        it('should accept maxDepth 100 for scanDirectory', async () => {
+            await createFile('file.txt');
+            const results = await fileScanner.scanDirectory(testDir, {
+                includeSubdirs: true,
+                maxDepth: 100,
+            });
+            expect(results.length).toBe(1);
+        });
+
+        it('should reject maxDepth 101 for scanDirectory', async () => {
+            await expect(
+                fileScanner.scanDirectory(testDir, { includeSubdirs: true, maxDepth: 101 }),
+            ).rejects.toThrow(/Invalid maxDepth/);
+        });
+
+        it('should accept maxDepth 75 for getAllFiles', async () => {
+            await createFile('level1/file.txt');
+            const results = await fileScanner.getAllFiles(testDir, true, 75);
+            expect(results.length).toBe(1);
+        });
+
+        it('should accept maxDepth 100 for getAllFiles', async () => {
+            await createFile('file.txt');
+            const results = await fileScanner.getAllFiles(testDir, true, 100);
+            expect(results.length).toBe(1);
+        });
+
+        it('should reject maxDepth 101 for getAllFiles', async () => {
+            await expect(
+                fileScanner.getAllFiles(testDir, true, 101),
+            ).rejects.toThrow(/Invalid maxDepth/);
         });
     });
 });
