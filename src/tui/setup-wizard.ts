@@ -563,7 +563,7 @@ async function promptUser(): Promise<SetupAnswers> {
 /**
  * Apply the configuration based on user answers
  */
-async function applyConfiguration(answers: SetupAnswers): Promise<void> {
+export async function applyConfiguration(answers: SetupAnswers): Promise<void> {
   out();
   printSection("Saving configuration...", "💾");
 
@@ -574,6 +574,7 @@ async function applyConfiguration(answers: SetupAnswers): Promise<void> {
   const configUpdate: Partial<UserConfig> = {
     customAllowedDirectories: allFolders,
     conflictStrategy: answers.conflictStrategy,
+    allowExternalVolumes: answers.allowExternalVolumes,
   };
 
   const configSaved = updateUserConfig(configUpdate);

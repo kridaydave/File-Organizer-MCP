@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import * as configModule from '../../../src/config.js';
+import { first, required } from '../../helpers/safe-index.js';
 
 describe('Config Management', () => {
   const mockHomeDir = '/mock/home';
@@ -70,7 +71,7 @@ describe('Config Management', () => {
       };
 
       expect(userConfig.watchList).toHaveLength(1);
-      expect(userConfig.watchList![0].directory).toBe('/watch/dir');
+      expect(first(required(userConfig.watchList, 'watchList')).directory).toBe('/watch/dir');
     });
 
     it('should accept config with autoOrganize settings', () => {
