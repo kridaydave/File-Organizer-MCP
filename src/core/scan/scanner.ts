@@ -30,7 +30,7 @@ export class FileScannerService {
    * Scan directory for files with full metadata
    * @param directory - Directory path to scan
    * @param options - Scan options including includeSubdirs and maxDepth
-   * @throws ValidationError if maxDepth is invalid (must be -1 or 0-50)
+   * @throws ValidationError if maxDepth is invalid (must be -1 or 0-100)
    */
   async scanDirectory(
     directory: string,
@@ -39,10 +39,10 @@ export class FileScannerService {
     const { includeSubdirs = false, maxDepth } = options;
     const effectiveMaxDepth = maxDepth !== undefined ? maxDepth : this.maxDepth;
 
-    // Validate maxDepth: -1 for unlimited, or 0-50 for bounded recursion
-    if (effectiveMaxDepth !== -1 && (effectiveMaxDepth < 0 || effectiveMaxDepth > 50)) {
+    // Validate maxDepth: -1 for unlimited, or 0-100 for bounded recursion
+    if (effectiveMaxDepth !== -1 && (effectiveMaxDepth < 0 || effectiveMaxDepth > 100)) {
       throw new ValidationError(
-        `Invalid maxDepth: ${effectiveMaxDepth}. Must be -1 (unlimited) or between 0 and 50 (inclusive).`,
+        `Invalid maxDepth: ${effectiveMaxDepth}. Must be -1 (unlimited) or between 0 and 100 (inclusive).`,
       );
     }
 
@@ -68,6 +68,13 @@ export class FileScannerService {
   ): Promise<FileWithSize[]> {
     const results: FileWithSize[] = [];
     const effectiveMaxDepth = maxDepth !== undefined ? maxDepth : this.maxDepth;
+
+    // Validate maxDepth: -1 for unlimited, or 0-100 for bounded recursion
+    if (effectiveMaxDepth !== -1 && (effectiveMaxDepth < 0 || effectiveMaxDepth > 100)) {
+      throw new ValidationError(
+        `Invalid maxDepth: ${effectiveMaxDepth}. Must be -1 (unlimited) or between 0 and 100 (inclusive).`,
+      );
+    }
 
     const scanDir = async (
       dir: string,
