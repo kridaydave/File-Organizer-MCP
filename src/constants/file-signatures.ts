@@ -319,6 +319,43 @@ const MACHO_FAT_SIGNATURE: FileSignature = {
   extensions: [".o", ".dylib"],
   category: "Executable",
   description: "Mach-O Universal/FAT Binary (macOS/iOS)",
+  validator: (buffer: Buffer) => {
+    if (buffer.length < 8) {
+      return false;
+    }
+    // Disambiguate CAFEBABE: Java class files also use it
+    if (
+      buffer[0] === 0xca &&
+      buffer[1] === 0xfe &&
+      buffer[2] === 0xba &&
+      buffer[3] === 0xbe
+    ) {
+      const nfatArch = buffer.readUInt32BE(4);
+      // If nfat_arch looks like a Java class major version (>= 45), it's likely Java
+      if (nfatArch >= 45 && nfatArch <= 0xffff) {
+        return false;
+      }
+      // If nfat_arch is 0 or unreasonably large, not a valid fat binary
+      if (nfatArch === 0 || nfatArch > 64) {
+        return false;
+      }
+      return true;
+    }
+    // CAFEBABF is only used by Mach-O fat binaries
+    if (
+      buffer[0] === 0xca &&
+      buffer[1] === 0xfe &&
+      buffer[2] === 0xba &&
+      buffer[3] === 0xbf
+    ) {
+      const nfatArch = buffer.readUInt32BE(4);
+      if (nfatArch === 0 || nfatArch > 64) {
+        return false;
+      }
+      return true;
+    }
+    return false;
+  },
 };
 
 const MSI_SIGNATURE: FileSignature = {
