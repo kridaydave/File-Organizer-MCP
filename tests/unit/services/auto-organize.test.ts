@@ -205,7 +205,9 @@ describe('AutoOrganizeService', () => {
     let tempDir: string;
 
     beforeEach(async () => {
-      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-'));
+      // Under the worktree: validateStrictPath only allows cwd in test
+      // mode, so os.tmpdir() fixtures fail validation.
+      tempDir = await fs.mkdtemp(path.join(process.cwd(), 'auto-organize-test-'));
     });
 
     afterEach(async () => {
@@ -272,7 +274,7 @@ describe('AutoOrganizeService', () => {
       const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const dir1 = tempDir;
-      const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-2-'));
+      const dir2 = await fs.mkdtemp(path.join(process.cwd(), 'auto-organize-test-2-'));
 
       try {
         const watches: WatchConfig[] = [
@@ -328,7 +330,7 @@ describe('AutoOrganizeService', () => {
       const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
 
       const dir1 = tempDir;
-      const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-2-'));
+      const dir2 = await fs.mkdtemp(path.join(process.cwd(), 'auto-organize-test-2-'));
 
       try {
         const watches: WatchConfig[] = [
@@ -384,7 +386,7 @@ describe('AutoOrganizeService', () => {
     let tempDir: string;
 
     beforeEach(async () => {
-      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'trigger-test-'));
+      tempDir = await fs.mkdtemp(path.join(process.cwd(), 'trigger-test-'));
     });
 
     afterEach(async () => {
@@ -484,8 +486,9 @@ describe('AutoOrganizeService', () => {
     let symlinkDir: string;
 
     beforeEach(async () => {
-      realDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bug57-real-'));
-      const symlinkBase = await fs.mkdtemp(path.join(os.tmpdir(), 'bug57-linkbase-'));
+      // Under the worktree for the same reason as above.
+      realDir = await fs.mkdtemp(path.join(process.cwd(), 'bug57-real-'));
+      const symlinkBase = await fs.mkdtemp(path.join(process.cwd(), 'bug57-linkbase-'));
       symlinkDir = path.join(symlinkBase, 'link-to-real');
       await fs.symlink(realDir, symlinkDir);
     });
@@ -504,12 +507,11 @@ describe('AutoOrganizeService', () => {
       jest.restoreAllMocks();
     });
 
-    it('should find state written via symlink path when looking up via missed schedule logic', async () => {
+    it('should look up state by the validated path, not the raw symlink path', async () => {
       const { AutoOrganizeService } =
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
       const { FileScannerService } = await import('../../../src/core/scan/scanner.js');
       const { OrganizerService } = await import('../../../src/core/organize/organizer.js');
-      const { SchedulerStateService } = await import('../../../src/extensions/scheduler/scheduler-state.service.js');
       const { validateStrictPath } = await import('../../../src/services/path-validator.service.js');
 
       const watches: WatchConfig[] = [
@@ -521,45 +523,43 @@ describe('AutoOrganizeService', () => {
       ];
       const mockConfig = { watchList: watches };
 
-      const stateFile = path.join(os.tmpdir(), `scheduler-state-bug57-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
-      const stateService = new SchedulerStateService(stateFile);
-      await stateService.initialize();
+      // State is recorded under the validated (real) path, as
+      // runOrganization does. The mock only returns a last-run time
+      // for that key, and it is "now", so no catchup is due.
+      const validatedDirectory = await validateStrictPath(symlinkDir);
+      expect(validatedDirectory).not.toBe(symlinkDir);
+
+      const mockStateService: any = {
+        initialize: jest.fn(() => Promise.resolve()) as any,
+        getLastRunTime: jest.fn((dir: string) =>
+          dir === validatedDirectory ? new Date() : null,
+        ),
+        recordRunTime: jest.fn(),
+      };
 
       const service = new AutoOrganizeService(
         new FileScannerService(),
         new OrganizerService(),
         () => mockConfig,
-        stateService
+        mockStateService,
       );
-      await service.initialize();
 
-      // Write state as runOrganization would (under validated/realpath)
-      const validatedDirectory = await validateStrictPath(symlinkDir);
-      await stateService.setLastRunTime(validatedDirectory, new Date(Date.now() - 25 * 60 * 60 * 1000), '0 9 * * *');
+      const runOrgSpy = jest
+        .spyOn(service as any, 'runOrganization')
+        .mockResolvedValue(undefined);
 
-      // Mock shouldCatchup to indicate it was missed if looked up correctly
-      const cronUtils = await import('../../../src/utils/cron-utils.js');
-      const shouldCatchupSpy = jest.spyOn(cronUtils, 'shouldCatchup').mockReturnValue(true);
-
-      const runOrgSpy = jest.spyOn(service as any, 'runOrganization').mockResolvedValue(undefined);
-
-      // Look up the way missed-schedule path does
       await service.runMissedSchedules();
 
-      // If lookup uses raw symlink path incorrectly, it won't find state -> may trigger catchup
-      // With fix, it finds state using resolved key -> shouldCatchup called with correct lookup
-      expect(shouldCatchupSpy).toHaveBeenCalled();
-      const lastRunArg = shouldCatchupSpy.mock.calls[0][1];
-      expect(lastRunArg).not.toBeNull();
+      // The lookup must use the validated key. With the raw symlink
+      // path the mock would return null, shouldCatchup(null) is true,
+      // and runOrganization would be called.
+      expect(mockStateService.getLastRunTime).toHaveBeenCalledWith(
+        validatedDirectory,
+      );
+      expect(runOrgSpy).not.toHaveBeenCalled();
 
-      shouldCatchupSpy.mockRestore();
       runOrgSpy.mockRestore();
       service.stop();
-      try {
-        await fs.rm(stateFile, { force: true });
-      } catch {
-        // ignore
-      }
     });
   });
 });
