@@ -78,6 +78,19 @@ describe('Duplicate Management Tools', () => {
         // Detailed check if we had IsError behavior
     });
 
+    it('should not delete a unique file with no duplicates (BUG-11)', async () => {
+        const uniqueFile = path.join(testDir, 'unique.txt');
+        await fs.writeFile(uniqueFile, 'unique content');
+
+        const result = await handleDeleteDuplicates({
+            files_to_delete: [uniqueFile],
+        });
+
+        const exists = await fs.access(uniqueFile).then(() => true).catch(() => false);
+        expect(exists).toBe(true);
+        expect(result.content[0].text).toContain('Failures');
+    });
+
     describe('verification is on by default (issue #22 item 2)', () => {
         it('refuses to delete a last copy that the MCP caller passed in', async () => {
             // No other file in the tree has this content, so deleting it would
