@@ -319,7 +319,7 @@ describe('AutoOrganizeService', () => {
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
 
       const dir1 = tempDir;
-      const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-2-'));
+      const dir2 = await fs.mkdtemp(path.join(process.cwd(), 'auto-organize-test-2-'));
 
       try {
         const watches: WatchConfig[] = [
@@ -439,7 +439,7 @@ describe('AutoOrganizeService', () => {
         await import('../../../src/extensions/scheduler/auto-organize.service.js');
 
       const dir1 = tempDir;
-      const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'auto-organize-test-2-'));
+      const dir2 = await fs.mkdtemp(path.join(process.cwd(), 'auto-organize-test-2-'));
 
       try {
         const watches: WatchConfig[] = [
@@ -664,6 +664,82 @@ describe('AutoOrganizeService', () => {
       // it and un-guard the pass that is genuinely still in flight.
       expect(service.getStatus().runningDirectories).toEqual([tempDir]);
 
+      service.stop();
+    });
+  });
+
+  describe('BUG-57 symlinked watch directories', () => {
+    let realDir: string;
+    let symlinkDir: string;
+
+    beforeEach(async () => {
+      // Under the worktree for the same reason as above.
+      realDir = await fs.mkdtemp(path.join(process.cwd(), 'bug57-real-'));
+      const symlinkBase = await fs.mkdtemp(path.join(process.cwd(), 'bug57-linkbase-'));
+      symlinkDir = path.join(symlinkBase, 'link-to-real');
+      await fs.symlink(realDir, symlinkDir);
+    });
+
+    afterEach(async () => {
+      try {
+        await fs.rm(realDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+      try {
+        await fs.rm(path.dirname(symlinkDir), { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+      jest.restoreAllMocks();
+    });
+
+    it('should look up state by the validated path, not the raw symlink path', async () => {
+      const { AutoOrganizeService } =
+        await import('../../../src/extensions/scheduler/auto-organize.service.js');
+      const { validateStrictPath } = await import('../../../src/services/path-validator.service.js');
+
+      const watches: WatchConfig[] = [
+        {
+          directory: symlinkDir,
+          schedule: '0 9 * * *',
+          rules: { auto_organize: true, catchup_mode: 'smart' },
+        },
+      ];
+      const mockConfig = { watchList: watches };
+
+      // State is recorded under the validated (real) path, as
+      // runOrganization does. The mock only returns a last-run time
+      // for that key, and it is "now", so no catchup is due.
+      const validatedDirectory = await validateStrictPath(symlinkDir);
+      expect(validatedDirectory).not.toBe(symlinkDir);
+
+      const mockStateService: any = {
+        initialize: jest.fn(() => Promise.resolve()) as any,
+        getLastRunTime: jest.fn((dir: string) =>
+          dir === validatedDirectory ? new Date() : null,
+        ),
+        recordRunTime: jest.fn(),
+      };
+
+      // Landing shape: configLoader first, state service second.
+      const service = new AutoOrganizeService(() => mockConfig, mockStateService);
+
+      const runOrgSpy = jest
+        .spyOn(service as any, 'runOrganization')
+        .mockResolvedValue(undefined);
+
+      await service.runMissedSchedules();
+
+      // The lookup must use the validated key. With the raw symlink
+      // path the mock would return null, shouldCatchup(null) is true,
+      // and runOrganization would be called.
+      expect(mockStateService.getLastRunTime).toHaveBeenCalledWith(
+        validatedDirectory,
+      );
+      expect(runOrgSpy).not.toHaveBeenCalled();
+
+      runOrgSpy.mockRestore();
       service.stop();
     });
   });

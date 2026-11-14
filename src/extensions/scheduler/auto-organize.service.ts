@@ -586,9 +586,19 @@ export class AutoOrganizeService {
           continue;
         }
 
+        // Resolve to canonical key for consistency with runOrganization
+        let resolvedDirectory: string;
+        try {
+          resolvedDirectory = await validateStrictPath(directory);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.warn(`[${directory}] Failed to validate path for catchup check: ${message}`);
+          continue;
+        }
+
         // Get last run time from state
         const lastRunTime =
-          this.stateService?.getLastRunTime(directory) ?? null;
+          this.stateService?.getLastRunTime(resolvedDirectory) ?? null;
 
         // Check if catchup is needed
         const shouldRun = await this.shouldRunOnStartup(watch, lastRunTime);
@@ -614,6 +624,7 @@ export class AutoOrganizeService {
 
     for (const watch of watchesToRun) {
       const directory = watch.directory;
+
 
       try {
         logger.info(`[${directory}] Running missed schedule catch-up`);
