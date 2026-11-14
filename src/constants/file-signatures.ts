@@ -154,11 +154,23 @@ const JPEG_SIGNATURE: FileSignature = {
   type: "JPEG",
   mimeType: "image/jpeg",
   signatures: [
-    Buffer.from([0xff, 0xd8, 0xff, 0xe0]), // JFIF
-    Buffer.from([0xff, 0xd8, 0xff, 0xe1]), // Exif
-    Buffer.from([0xff, 0xd8, 0xff, 0xe8]), // SPIFF
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0]), // JFIF (APP0)
+    Buffer.from([0xff, 0xd8, 0xff, 0xe1]), // Exif (APP1)
+    Buffer.from([0xff, 0xd8, 0xff, 0xe2]), // APP2
+    Buffer.from([0xff, 0xd8, 0xff, 0xe3]), // APP3
+    Buffer.from([0xff, 0xd8, 0xff, 0xe4]), // APP4
+    Buffer.from([0xff, 0xd8, 0xff, 0xe5]), // APP5
+    Buffer.from([0xff, 0xd8, 0xff, 0xe6]), // APP6
+    Buffer.from([0xff, 0xd8, 0xff, 0xe7]), // APP7
+    Buffer.from([0xff, 0xd8, 0xff, 0xe8]), // SPIFF (APP8)
+    Buffer.from([0xff, 0xd8, 0xff, 0xe9]), // APP9
+    Buffer.from([0xff, 0xd8, 0xff, 0xea]), // APP10
+    Buffer.from([0xff, 0xd8, 0xff, 0xeb]), // APP11
+    Buffer.from([0xff, 0xd8, 0xff, 0xec]), // APP12
+    Buffer.from([0xff, 0xd8, 0xff, 0xed]), // APP13
+    Buffer.from([0xff, 0xd8, 0xff, 0xee]), // Samsung JPEG (APP14)
+    Buffer.from([0xff, 0xd8, 0xff, 0xef]), // APP15
     Buffer.from([0xff, 0xd8, 0xff, 0xdb]), // Raw JPEG
-    Buffer.from([0xff, 0xd8, 0xff, 0xee]), // Samsung JPEG
   ],
   extensions: [".jpg", ".jpeg", ".jpe"],
   category: "Image",
@@ -254,10 +266,9 @@ const SVG_SIGNATURE: FileSignature = {
   category: "Image",
   description: "Scalable Vector Graphics",
   validator: (buffer: Buffer) => {
-    const content = buffer
-      .toString("utf-8", 0, Math.min(buffer.length, 1000))
-      .toLowerCase();
-    return content.includes("<svg");
+    const content = buffer.toString("utf-8", 0, Math.min(buffer.length, 1000));
+    const lowerContent = content.toLowerCase();
+    return lowerContent.includes("<svg");
   },
 };
 
@@ -288,7 +299,10 @@ const ELF_SIGNATURE: FileSignature = {
 const MACHO_32_SIGNATURE: FileSignature = {
   type: "MACHO_32",
   mimeType: "application/x-mach-binary",
-  signatures: [Buffer.from([0xfe, 0xed, 0xfa, 0xce])], // 0xFEEDFACE
+  signatures: [
+    Buffer.from([0xfe, 0xed, 0xfa, 0xce]), // 0xFEEDFACE (big-endian)
+    Buffer.from([0xce, 0xfa, 0xed, 0xfe]), // 0xCEFAEDFE (little-endian)
+  ],
   extensions: [".o", ".dylib"],
   category: "Executable",
   description: "Mach-O 32-bit (macOS/iOS)",
@@ -297,7 +311,10 @@ const MACHO_32_SIGNATURE: FileSignature = {
 const MACHO_64_SIGNATURE: FileSignature = {
   type: "MACHO_64",
   mimeType: "application/x-mach-binary",
-  signatures: [Buffer.from([0xfe, 0xed, 0xfa, 0xcf])], // 0xFEEDFACF
+  signatures: [
+    Buffer.from([0xfe, 0xed, 0xfa, 0xcf]), // 0xFEEDFACF (big-endian)
+    Buffer.from([0xcf, 0xfa, 0xed, 0xfe]), // 0xCFFAEDFE (little-endian)
+  ],
   extensions: [".o", ".dylib"],
   category: "Executable",
   description: "Mach-O 64-bit (macOS/iOS)",
@@ -309,10 +326,49 @@ const MACHO_FAT_SIGNATURE: FileSignature = {
   signatures: [
     Buffer.from([0xca, 0xfe, 0xba, 0xbe]), // FAT binary
     Buffer.from([0xca, 0xfe, 0xba, 0xbf]), // FAT binary 64
+    Buffer.from([0xbe, 0xba, 0xfe, 0xca]), // FAT binary (little-endian)
+    Buffer.from([0xbf, 0xba, 0xfe, 0xca]), // FAT binary 64 (little-endian)
   ],
   extensions: [".o", ".dylib"],
   category: "Executable",
   description: "Mach-O Universal/FAT Binary (macOS/iOS)",
+  validator: (buffer: Buffer) => {
+    if (buffer.length < 8) {
+      return false;
+    }
+    // Disambiguate CAFEBABE: Java class files also use it
+    if (
+      buffer[0] === 0xca &&
+      buffer[1] === 0xfe &&
+      buffer[2] === 0xba &&
+      buffer[3] === 0xbe
+    ) {
+      const nfatArch = buffer.readUInt32BE(4);
+      // If nfat_arch looks like a Java class major version (>= 45), it's likely Java
+      if (nfatArch >= 45 && nfatArch <= 0xffff) {
+        return false;
+      }
+      // If nfat_arch is 0 or unreasonably large, not a valid fat binary
+      if (nfatArch === 0 || nfatArch > 64) {
+        return false;
+      }
+      return true;
+    }
+    // CAFEBABF is only used by Mach-O fat binaries
+    if (
+      buffer[0] === 0xca &&
+      buffer[1] === 0xfe &&
+      buffer[2] === 0xba &&
+      buffer[3] === 0xbf
+    ) {
+      const nfatArch = buffer.readUInt32BE(4);
+      if (nfatArch === 0 || nfatArch > 64) {
+        return false;
+      }
+      return true;
+    }
+    return false;
+  },
 };
 
 const MSI_SIGNATURE: FileSignature = {
@@ -459,7 +515,13 @@ const MP4_SIGNATURE: FileSignature = {
   validator: (buffer: Buffer) => {
     if (buffer.length < 12) return false;
     // Check for ftyp at offset 4
-    return buffer.slice(4, 8).toString() === "ftyp";
+    if (buffer.slice(4, 8).toString() !== "ftyp") return false;
+    // QuickTime files use brand 'qt  ' and should be detected as MOV
+    const majorBrand = buffer.slice(8, 12).toString();
+    if (majorBrand === "qt  ") {
+      return false;
+    }
+    return true;
   },
 };
 
@@ -486,6 +548,9 @@ const MOV_SIGNATURE: FileSignature = {
     Buffer.from([
       0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20,
     ]), // ftyp qt
+    Buffer.from([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20,
+    ]),
     Buffer.from([
       0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20,
     ]),
@@ -581,11 +646,12 @@ const HTML_SIGNATURE: FileSignature = {
     const content = buffer
       .toString("utf-8", 0, Math.min(buffer.length, 1000))
       .toLowerCase();
-    return (
-      content.startsWith("<!doctype") ||
-      content.startsWith("<html") ||
-      content.startsWith("<?xml")
-    );
+    const trimmed = content.trim();
+    if (trimmed.startsWith("<?xml")) {
+      // Only match XML declaration if it's XHTML (has html doctype or html tag)
+      return trimmed.includes("<!doctype html") || trimmed.includes("<html");
+    }
+    return trimmed.startsWith("<!doctype") || trimmed.startsWith("<html");
   },
 };
 
@@ -598,6 +664,11 @@ const CSS_SIGNATURE: FileSignature = {
   description: "Cascading Style Sheets",
   validator: (buffer: Buffer) => {
     const content = buffer.toString("utf-8", 0, Math.min(buffer.length, 500));
+    const trimmed = content.trim();
+    // Avoid matching JSON objects/arrays
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      return false;
+    }
     // Simple heuristic: looks for CSS-like patterns
     return /\{[^}]*:[^}]*\}/.test(content) && !content.includes("<");
   },
@@ -1021,26 +1092,4 @@ export function detectExtensionMismatch(
   }
 
   return null;
-}
-
-/**
- * Get all signatures for a specific category
- * @param category - The category to filter by
- * @returns Array of FileSignature definitions in that category
- */
-export function getSignaturesByCategory(
-  category: FileSignature["category"],
-): FileSignature[] {
-  return FILE_SIGNATURES.filter((sig) => sig.category === category);
-}
-
-/**
- * Check if a buffer contains executable content
- * Convenience function for security checks
- * @param buffer - The buffer to analyze
- * @returns True if the buffer matches an executable signature
- */
-export function isExecutableContent(buffer: Buffer): boolean {
-  const match = matchSignature(buffer);
-  return match !== null && isExecutableSignature(match.type);
 }
