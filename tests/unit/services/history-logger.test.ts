@@ -14,6 +14,20 @@ import {
   teardownLoggerMocks,
 } from "../../utils/logger-mock.js";
 
+/**
+ * Index into an array and fail loudly when the slot is empty, so a missing
+ * entry surfaces as a test failure rather than a silently-undefined value.
+ */
+function at<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) {
+    throw new Error(
+      `expected an item at index ${index}, but the array holds ${items.length}`,
+    );
+  }
+  return item;
+}
+
 const sampleEntry = (overrides: Partial<HistoryEntry> = {}) => ({
   operation: "organize",
   source: "manual" as const,
@@ -68,7 +82,7 @@ describe("HistoryLoggerService", () => {
       );
       const lines = content.trim().split("\n");
       expect(lines).toHaveLength(1);
-      expect(JSON.parse(lines[0]).operation).toBe("organize");
+      expect(JSON.parse(at(lines, 0)).operation).toBe("organize");
 
       const history = await service.getHistory({});
       expect(history.entries).toHaveLength(1);
@@ -91,9 +105,10 @@ describe("HistoryLoggerService", () => {
       const after = new Date().toISOString();
 
       const history = await service.getHistory({});
-      expect(history.entries[0].timestamp).toBeDefined();
-      expect(history.entries[0].timestamp >= before).toBe(true);
-      expect(history.entries[0].timestamp <= after).toBe(true);
+      const entry = at(history.entries, 0);
+      expect(entry.timestamp).toBeDefined();
+      expect(entry.timestamp >= before).toBe(true);
+      expect(entry.timestamp <= after).toBe(true);
     });
 
     it("should include optional fields when provided", async () => {
@@ -109,7 +124,7 @@ describe("HistoryLoggerService", () => {
       );
 
       const history = await service.getHistory({});
-      const entry = history.entries[0];
+      const entry = at(history.entries, 0);
 
       expect(entry.filesProcessed).toBe(8);
       expect(entry.filesSkipped).toBe(2);
@@ -126,8 +141,9 @@ describe("HistoryLoggerService", () => {
       );
 
       const history = await service.getHistory({});
-      expect(history.entries[0].error?.message).toBe("File not found");
-      expect(history.entries[0].error?.code).toBe("ENOENT");
+      const entry = at(history.entries, 0);
+      expect(entry.error?.message).toBe("File not found");
+      expect(entry.error?.code).toBe("ENOENT");
     });
 
     it("should handle rapid sequential logs without loss", async () => {
@@ -195,7 +211,7 @@ describe("HistoryLoggerService", () => {
       const all = await service.getHistory({ limit: 100 });
       const paged = await service.getHistory({ limit: 3, offset: 3 });
 
-      expect(paged.entries[0].id).toBe(all.entries[3].id);
+      expect(at(paged.entries, 0).id).toBe(at(all.entries, 3).id);
     });
 
     it("should filter by start date", async () => {
@@ -239,7 +255,7 @@ describe("HistoryLoggerService", () => {
       const timestamps = history.entries.map((e) => e.timestamp);
 
       for (let i = 0; i < timestamps.length - 1; i++) {
-        expect(timestamps[i] >= timestamps[i + 1]).toBe(true);
+        expect(at(timestamps, i) >= at(timestamps, i + 1)).toBe(true);
       }
     });
 
@@ -269,9 +285,7 @@ describe("HistoryLoggerService", () => {
 
       const logs: Promise<void>[] = [];
       for (let i = 0; i < 5; i++) {
-        logs.push(
-          service.log(sampleEntry({ operation: "organize" })),
-        );
+        logs.push(service.log(sampleEntry({ operation: "organize" })));
         logs.push(
           service2.log(sampleEntry({ operation: "scan", source: "scheduled" })),
         );
@@ -307,11 +321,13 @@ describe("HistoryLoggerService", () => {
       const lockPath = path.join(dataDir, "operations.lock");
       await fs.writeFile(lockPath, String(Date.now()), { flag: "wx" });
 
-      // Lock never released within lockTimeoutMs (1000ms) — write is dropped
-      // and logged, not crash.
-      await expect(
-        service.log(sampleEntry()),
-      ).resolves.toBeUndefined();
+      // Lock never released within lockTimeoutMs (1000ms) — the write is
+      // dropped, and log() rejects so the caller can tell a dropped record
+      // from a written one. Swallowing this here is what made a lost undo
+      // record read as success.
+      await expect(service.log(sampleEntry())).rejects.toThrow(
+        /History lock timeout/,
+      );
 
       const during = await service.getHistory({});
       expect(during.entries.length).toBe(0);
@@ -382,14 +398,15 @@ describe("HistoryLoggerService", () => {
 
     it("should return full entries in full mode", async () => {
       const history = await service.getHistory({ privacyMode: "full" });
-      expect(history.entries[0].details).toContain("C:\\Users\\test");
+      expect(at(history.entries, 0).details).toContain("C:\\Users\\test");
     });
 
     it("should redact paths in redacted mode", async () => {
       const history = await service.getHistory({ privacyMode: "redacted" });
-      expect(history.entries[0].details).toContain("[REDACTED]");
-      expect(history.entries[0].details).not.toContain("C:\\Users\\test");
-      expect(history.entries[0].error?.message).toContain("[REDACTED]");
+      const entry = at(history.entries, 0);
+      expect(entry.details).toContain("[REDACTED]");
+      expect(entry.details).not.toContain("C:\\Users\\test");
+      expect(entry.error?.message).toContain("[REDACTED]");
     });
 
     it("should return minimal info in none mode", async () => {
@@ -407,7 +424,7 @@ describe("HistoryLoggerService", () => {
 
     it("should default to full mode", async () => {
       const history = await service.getHistory({});
-      expect(history.entries[0].details).toContain("C:\\Users\\test");
+      expect(at(history.entries, 0).details).toContain("C:\\Users\\test");
     });
   });
 
@@ -415,6 +432,7 @@ describe("HistoryLoggerService", () => {
     it("should not throw when file does not exist", async () => {
       const newService = new HistoryLoggerService({
         dataDir: path.join(dataDir, "nonexistent"),
+        maxBackupFiles: 0,
       });
       await newService.init();
 
@@ -448,7 +466,9 @@ describe("HistoryLoggerService", () => {
       const lockPath = path.join(dataDir, "operations.lock");
       await fs.writeFile(lockPath, String(Date.now()), { flag: "wx" });
 
-      await shortLockService.log(sampleEntry()); // dropped, lock held
+      await expect(shortLockService.log(sampleEntry())).rejects.toThrow(
+        /History lock timeout/,
+      ); // dropped, lock held
 
       await fs.unlink(lockPath);
       await service.log(sampleEntry()); // recovers
@@ -504,7 +524,7 @@ also invalid
 
       const history = await service.getHistory({});
       expect(history.entries).toHaveLength(1);
-      expect(history.entries[0].operation).toBe("organize");
+      expect(at(history.entries, 0).operation).toBe("organize");
     });
 
     it("should skip lines with missing required fields", async () => {
@@ -549,7 +569,10 @@ also invalid
   describe("init()", () => {
     it("should create data directory on init", async () => {
       const newDir = path.join(dataDir, "nested", "directory");
-      const newService = new HistoryLoggerService({ dataDir: newDir });
+      const newService = new HistoryLoggerService({
+        dataDir: newDir,
+        maxBackupFiles: 0,
+      });
 
       await newService.init();
 

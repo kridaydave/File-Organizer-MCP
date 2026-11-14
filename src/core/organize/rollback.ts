@@ -10,26 +10,244 @@ import { constants } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 
-import type { RollbackManifest, RollbackAction } from "../../types.js";
+import {
+  ValidationError,
+  type RollbackManifest,
+  type RollbackAction,
+} from "../../types.js";
 import { fileExists } from "../../utils/file-utils.js";
 import { logger } from "../../utils/logger.js";
 import { CONFIG } from "../../config.js";
 import { getRollbackDirectory } from "../../core/config/paths.js";
+import { loadUserConfig } from "../config/loader.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
-import { manifestIntegrityService } from "./manifest-integrity.js";
+import {
+  manifestIntegrityService,
+  manifestActionTarget,
+  MANIFEST_ID_PATTERN,
+} from "./manifest-integrity.js";
 import { safeAtomicMove } from "../io/atomic-move.js";
+import { HashCalculatorService } from "../hash/hasher.js";
+import {
+  ManifestLockService,
+  ManifestLockUnavailableError,
+  type ManifestLockLease,
+} from "./manifest-lock.js";
+
+/**
+ * How much file content one manifest may re-read to fill in per-file hashes.
+ *
+ * A digest is only obtainable by reading every byte of the file, so recording
+ * hashes for an unbounded organize would add a second full pass over the whole
+ * batch and make organize's cost scale with the directory. The budget caps that
+ * pass: files are hashed in manifest order until the cap is spent and the rest
+ * are left unrecorded. A manifest is therefore only partially verifiable, which
+ * `verifyManifestFiles` reports as `unverifiable` — never as "unchanged".
+ */
+const DEFAULT_HASH_BUDGET_BYTES = 32 * 1024 * 1024;
+
+/** How long a rollback manifest survives before being pruned on read. */
+export const DEFAULT_RETENTION_DAYS = 30;
+export const DEFAULT_RETENTION_MS =
+  DEFAULT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Every path a manifest's undo will read, write, or delete.
+ *
+ * A move reads `currentPath` and writes `originalPath`, and may also move the
+ * overwritten file back from `overwrittenBackupPath`. A copy undo deletes
+ * `currentPath`, and a delete undo writes `originalPath` from `backupPath`.
+ * All of them count: a manifest sharing any one of them with a newer manifest
+ * can collide with that manifest's undo.
+ *
+ * This is a filesystem comparison, so `path` is the right tool here. The
+ * contract string in this file is the manifest id, never a normalized path.
+ */
+function rollbackTouchedPaths(manifest: RollbackManifest): Set<string> {
+  const touched = new Set<string>();
+  for (const action of manifest.actions) {
+    for (const candidate of [
+      action.originalPath,
+      action.currentPath,
+      action.backupPath,
+      action.overwrittenBackupPath,
+    ]) {
+      if (typeof candidate === "string" && candidate.length > 0) {
+        touched.add(normalizeForCompare(candidate));
+      }
+    }
+  }
+  return touched;
+}
+
+/**
+ * Normalize a path for equality. Case matters on a case-sensitive filesystem
+ * and does not on Windows or a default macOS volume, so folding unconditionally
+ * would refuse a legitimate undo on Linux while ignoring it would miss a real
+ * collision on Windows.
+ */
+function normalizeForCompare(candidate: string): string {
+  const normalized = path.resolve(candidate);
+  return process.platform === "win32" || process.platform === "darwin"
+    ? normalized.toLowerCase()
+    : normalized;
+}
+
+/**
+ * How many paths two manifests both touch.
+ *
+ * Exported so the overlap rule is testable on its own, without a rollback
+ * directory, and so a reader of the guard can see it is a pure comparison.
+ */
+/** One newer manifest that stands in the way of undoing a given one. */
+interface NewerConflict {
+  id: string;
+  /** How many paths the two manifests both touch. */
+  overlappingPaths: number;
+  /** False when the manifest's own signature did not verify. */
+  signatureValid: boolean;
+}
+
+export function overlappingPathCount(
+  target: RollbackManifest,
+  newer: RollbackManifest,
+): number {
+  const newerPaths = rollbackTouchedPaths(newer);
+  let shared = 0;
+  for (const candidate of rollbackTouchedPaths(target)) {
+    if (newerPaths.has(candidate)) shared++;
+  }
+  return shared;
+}
+
+/**
+ * A manifest as `listManifests` reports it: the parsed file, plus whether it
+ * verified.
+ *
+ * The file is listed whether it verified or not, and the flag is what lets a
+ * caller tell the difference. A manifest whose signature or hash does not
+ * check out is kept in the list rather than filtered out, because a file that
+ * appears from nowhere in the rollback directory is evidence about the
+ * install, and hiding it would destroy the only trace. `getManifest` is still
+ * the only thing that may hand a manifest to code that reads paths from it.
+ *
+ * The flag is `signatureValid` rather than `verified` because this module also
+ * builds `IntegrityReport`, whose `verified` is the opposite question: that one
+ * is about whether the files are still where the manifest left them, this one is
+ * about whether the manifest itself is this machine's record. Two fields of the
+ * same name meaning opposite things in one file is a trap.
+ */
+export type ListedManifest = RollbackManifest & {
+  /**
+   * True when `verifyManifest` accepted this file's version, content hash and
+   * HMAC. False means the file is not this machine's record: treat it as a
+   * foreign object, never as an undo target.
+   */
+  signatureValid: boolean;
+};
+
+/** One manifest's slice of an undo outcome, carried per pass. */
+export interface RollbackStepResult {
+  manifestId: string;
+  success: number;
+  failed: number;
+  skipped: number;
+}
+
+/** What one undo call reports back. */
+export interface RollbackResult {
+  /** Files successfully moved back. */
+  success: number;
+  /** Failed actions; any failure keeps the manifest on disk. */
+  failed: number;
+  /** Files the manifest named that were already gone. Not a failure. */
+  skipped: number;
+  /** Manifests fully undone and deleted by this call. */
+  passes: number;
+  /** True when the undo was refused before touching a file. */
+  refused: boolean;
+  errors: string[];
+  /** Per-pass detail. The tool layer turns this into history rows and keeps
+   *  it off the wire: the response carries one summary, not a breakdown. */
+  steps: RollbackStepResult[];
+}
+
+/** Add one step's outcome to a cascade total. */
+function mergeCascadeStep(total: RollbackResult, step: RollbackResult): void {
+  total.success += step.success;
+  total.failed += step.failed;
+  total.skipped += step.skipped;
+  total.passes += step.passes;
+  total.refused = total.refused || step.refused;
+  total.errors.push(...step.errors);
+  total.steps.push(...step.steps);
+}
+
+/** How much of a batch `createManifest` spends on content hashes. */
+export interface ManifestIntegrityOptions {
+  /**
+   * Content bytes this manifest may read to record hashes. Pass 0 to record
+   * none, e.g. for a caller that is already paying for its own hashing.
+   */
+  hashBudgetBytes?: number;
+}
 
 export class RollbackService {
   private storageDir: string;
   private pathValidator: PathValidatorService;
+  private manifestLock: ManifestLockService;
+  private retentionDaysOverride?: number;
 
-  constructor(storageDir: string = getRollbackDirectory()) {
-    this.storageDir = storageDir;
+  constructor(
+    storageDirOrOptions:
+      | string
+      | {
+          storageDir?: string;
+          lockTimeoutMs?: number;
+          retentionDays?: number;
+          retentionMs?: number;
+          retentionMinutes?: number;
+        } = getRollbackDirectory(),
+    lockTimeoutMs?: number,
+    retentionDays?: number,
+  ) {
+    let resolvedStorageDir = getRollbackDirectory();
+    let resolvedLockTimeout = lockTimeoutMs;
+    let resolvedRetention: number | undefined = retentionDays;
+
+    if (typeof storageDirOrOptions === "string") {
+      resolvedStorageDir = storageDirOrOptions;
+    } else if (storageDirOrOptions && typeof storageDirOrOptions === "object") {
+      if (typeof storageDirOrOptions.storageDir === "string") {
+        resolvedStorageDir = storageDirOrOptions.storageDir;
+      }
+      if (storageDirOrOptions.lockTimeoutMs !== undefined) {
+        resolvedLockTimeout = storageDirOrOptions.lockTimeoutMs;
+      }
+      if (storageDirOrOptions.retentionDays !== undefined) {
+        resolvedRetention = storageDirOrOptions.retentionDays;
+      } else if (storageDirOrOptions.retentionMinutes !== undefined) {
+        resolvedRetention = storageDirOrOptions.retentionMinutes / (24 * 60);
+      } else if (storageDirOrOptions.retentionMs !== undefined) {
+        resolvedRetention = storageDirOrOptions.retentionMs / (24 * 60 * 60 * 1000);
+      }
+    }
+
+    this.storageDir = resolvedStorageDir;
+    if (resolvedRetention !== undefined) {
+      this.retentionDaysOverride = resolvedRetention;
+    }
     // Do not restrict rollback paths to CWD. Manifests may reference any
     // directory that was permitted at organize-time (e.g. Downloads, Desktop).
     // Security is enforced by manifest HMAC integrity and the global
     // path-security whitelist (Layer 4.5) inside PathValidatorService.
     this.pathValidator = new PathValidatorService();
+    // Its own lock for its own directory, not the history lock: that one
+    // serializes writers to operations.jsonl, a different resource.
+    this.manifestLock = new ManifestLockService(
+      resolvedStorageDir,
+      resolvedLockTimeout,
+    );
   }
 
   private async ensureStorage(): Promise<void> {
@@ -43,25 +261,82 @@ export class RollbackService {
    * One-time carry-over of manifests from the legacy cwd-based location.
    * Without it, undo silently loses history after this change (or whenever
    * the server's launch directory differs from the last run).
+   *
+   * Only manifests whose signature verifies are carried over. The legacy
+   * directory sits in whatever directory the server was launched from, so it
+   * belongs to no particular install: it can hold another installation's
+   * history, a test run's leftovers, or a file anyone with write access to the
+   * launch directory chose to put there. Copying those in unverified is the
+   * exact thing the signature exists to prevent, and it breaks two other
+   * things as well. A sandbox started from a directory that happens to hold a
+   * `.file-organizer-rollbacks` inherits someone else's manifests, so it stops
+   * being hermetic, and `undo_last_operation` with no id picks the newest one
+   * and reports "possible tampering detected" instead of undoing anything.
+   *
+   * A manifest that does not verify stays where it is. It is not this
+   * installation's history, and the count is logged so the loss is visible.
    */
   private async migrateLegacyStorage(): Promise<void> {
     if (process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID) return;
 
     const legacyDir = path.join(process.cwd(), ".file-organizer-rollbacks");
+    let copied = 0;
+    let skipped = 0;
     try {
       const entries = await fs.readdir(legacyDir);
       await fs.mkdir(this.storageDir, { recursive: true });
       for (const entry of entries.filter((f) => f.endsWith(".json"))) {
         const target = path.join(this.storageDir, entry);
-        if (!(await fileExists(target))) {
-          await fs.copyFile(path.join(legacyDir, entry), target);
+        if (await fileExists(target)) continue;
+
+        const carried = await this.carriesVerifiableManifest(
+          path.join(legacyDir, entry),
+        );
+        if (!carried) {
+          skipped += 1;
+          continue;
         }
+        // The verified bytes, not a second read of the path. Copying the file
+        // here would re-read it, and anything able to write to the launch
+        // directory could replace the contents in between, so the copy landing
+        // here could be bytes nobody verified.
+        await fs.writeFile(target, carried);
+        copied += 1;
       }
-      if (entries.length > 0) {
-        logger.info(`Migrated rollback manifests from ${legacyDir}`);
+      if (copied > 0 || skipped > 0) {
+        logger.info(
+          `Migrated ${copied} rollback manifest(s) from ${legacyDir}` +
+            (skipped > 0
+              ? `; left ${skipped} in place because their signature did not verify`
+              : ""),
+        );
       }
     } catch {
       // No legacy storage — nothing to migrate.
+    }
+  }
+
+  /**
+   * The bytes of a legacy manifest, if this install can verify them.
+   *
+   * Returns the contents that were verified rather than a boolean, so the
+   * caller writes exactly what was checked instead of reading the path a
+   * second time and trusting whatever is there by then.
+   *
+   * A file that will not parse is not this install's history either, so it is
+   * reported as unverifiable rather than allowed to abort the whole migration.
+   */
+  private async carriesVerifiableManifest(
+    file: string,
+  ): Promise<Buffer | null> {
+    try {
+      const bytes = await fs.readFile(file);
+      const parsed = JSON.parse(bytes.toString("utf-8")) as RollbackManifest;
+      return manifestIntegrityService.verifyManifest(parsed).valid
+        ? bytes
+        : null;
+    } catch {
+      return null;
     }
   }
 
@@ -71,18 +346,26 @@ export class RollbackService {
   async createManifest(
     description: string,
     actions: RollbackAction[],
+    options: ManifestIntegrityOptions = {},
   ): Promise<string> {
     await this.ensureStorage();
 
     const id = randomUUID();
     const timestamp = Date.now();
-    const hash = manifestIntegrityService.computeHash(actions, timestamp);
+    const recordedActions = await this.recordContentHashes(
+      actions,
+      options.hashBudgetBytes ?? DEFAULT_HASH_BUDGET_BYTES,
+    );
+    const hash = manifestIntegrityService.computeHash(
+      recordedActions,
+      timestamp,
+    );
 
     const manifest: RollbackManifest = {
       id,
       timestamp,
       description,
-      actions,
+      actions: recordedActions,
       version: "1.0",
       hash,
     };
@@ -98,21 +381,304 @@ export class RollbackService {
   }
 
   /**
-   * List available rollbacks
+   * Copy the actions, adding a content digest to each one whose file could be
+   * read inside the remaining budget.
    *
-   * SECURITY JUSTIFICATION (SEC-001):
-   * - storageDir is an internal path constructed in the constructor from process.cwd()
-   *   (line 33: path.join(process.cwd(), ".file-organizer-rollbacks"))
-   * - Files read are NOT user-provided - they're internal manifest files created by this service
-   *   (createManifest method writes JSON files with validated UUID names)
-   * - Path validation happens at other layers: storageDir is hardcoded, filenames are filtered
-   *   for ".json" extension, and rollback() validates UUID format before reading
+   * The caller's actions are left untouched: a manifest that could only hash
+   * part of its batch is still a valid manifest, and an action that cannot be
+   * hashed simply carries no digest, which is how the format already reads.
    */
-  async listManifests(): Promise<RollbackManifest[]> {
+  private async recordContentHashes(
+    actions: RollbackAction[],
+    budgetBytes: number,
+  ): Promise<RollbackAction[]> {
+    if (budgetBytes <= 0 || actions.length === 0) return actions;
+
+    const hasher = new HashCalculatorService();
+    const recorded: RollbackAction[] = [];
+    let remaining = budgetBytes;
+
+    for (const action of actions) {
+      const target = manifestActionTarget(action);
+      if (!target) {
+        recorded.push(action);
+        continue;
+      }
+
+      let size: number;
+      try {
+        size = (await fs.stat(target)).size;
+      } catch {
+        // Gone or unreadable: there is no digest to record, and that must not
+        // fail the operation that the manifest is being written for.
+        recorded.push(action);
+        continue;
+      }
+      // Skipping rather than stopping keeps one large file from spending the
+      // whole budget while smaller ones behind it go unrecorded.
+      if (size > remaining) {
+        recorded.push(action);
+        continue;
+      }
+
+      let hashed: RollbackAction = action;
+      try {
+        const identity = await hasher.calculateContentIdentity(target);
+        hashed = {
+          ...action,
+          contentHash: identity.digest,
+          hashMethod: identity.method,
+        };
+      } catch (e) {
+        logger.warn(
+          `No content hash recorded for one rollback action: ${(e as Error).message}`,
+        );
+      }
+      remaining -= size;
+      recorded.push(hashed);
+    }
+
+    return recorded;
+  }
+
+  /**
+   * Read one manifest and confirm it is the one this machine wrote.
+   *
+   * Verification is not optional: the paths inside a manifest are read by
+   * callers, so an unauthenticated manifest file must never be trusted. A
+   * caller that has no use for the actions gets the ids from `listManifests`
+   * instead.
+   */
+  async getManifest(manifestId: string): Promise<RollbackManifest> {
+    if (!MANIFEST_ID_PATTERN.test(manifestId)) {
+      throw new ValidationError(`Invalid manifest ID format: ${manifestId}`);
+    }
+
+    await this.ensureStorage();
+    const filePath = path.join(this.storageDir, `${manifestId}.json`);
+
+    if (!(await fileExists(filePath))) {
+      throw new ValidationError(`Manifest ${manifestId} not found`);
+    }
+
+    let manifest: RollbackManifest;
+    try {
+      const content = await fs.readFile(filePath, "utf-8");
+      manifest = JSON.parse(content);
+    } catch (error) {
+      throw new ValidationError(
+        `Failed to parse manifest ${manifestId}: ${(error as Error).message}`,
+        { field: "manifest_id" },
+      );
+    }
+
+    const verification = manifestIntegrityService.verifyManifest(manifest);
+    if (!verification.valid) {
+      throw new ValidationError(
+        `Manifest integrity check failed: ${verification.error}`,
+        { field: "manifest_id" },
+      );
+    }
+
+    return manifest;
+  }
+
+  /**
+   * Delete a spent manifest. Quarantine calls this once a restore has landed,
+   * so a finished quarantine no longer offers itself as a restore target the
+   * same way rollback() retires the manifest it just applied.
+   *
+   * Locked because deleting a manifest another process is mid-undo on is how
+   * two undoers end up acting on the same batch.
+   */
+  async removeManifest(manifestId: string): Promise<void> {
+    if (!MANIFEST_ID_PATTERN.test(manifestId)) {
+      throw new ValidationError(`Invalid manifest ID format: ${manifestId}`);
+    }
+
+    // rollback() creates the storage directory on its way in, and a caller that
+    // reaches this on a fresh install would otherwise wait out the whole lock
+    // timeout before finding the directory missing.
+    await this.ensureStorage();
+
+    await this.manifestLock.runExclusive(async (lease) => {
+      await lease.assertStillOwns();
+      await this.unlinkManifestFile(manifestId);
+    });
+  }
+
+  /**
+   * Remove the manifest file from storage. Callers are responsible for having
+   * resolved the id safely first.
+   */
+  private async unlinkManifestFile(manifestId: string): Promise<void> {
+    await fs.unlink(path.join(this.storageDir, `${manifestId}.json`));
+  }
+
+  /**
+   * List the manifests on disk, newest first, each with the verdict on its own
+   * integrity.
+   *
+   * Every file is listed, verified or not, and the `signatureValid` flag is what
+   * a caller reads before it acts on an id. Filtering the unverified ones out
+   * instead would make a tampered file disappear, and a file that appears from
+   * nowhere in the rollback directory is evidence about the install worth
+   * keeping. `getManifest` is still the only thing that may hand paths to a
+   * caller, and it re-verifies rather than trusting this flag.
+   *
+   * The security gate this file is exempt from is SEC-001, the direct
+   * fs.readFile rule. `getRollbackDirectory()` takes no argument, so the
+   * directory is the config dir's rollbacks folder, except under jest where it
+   * falls back to the cwd. A test or an embedding caller may still pass its own
+   * storageDir to the constructor.
+   */
+  /**
+   * How long a manifest lives, in days, resolved from the optional constructor
+   * override first and then from the user config. A value that cannot be read as
+   * a number falls back to the default rather than poisoning the comparison.
+   */
+  private get retentionDays(): number {
+    if (this.retentionDaysOverride !== undefined) {
+      if (
+        typeof this.retentionDaysOverride === "number" &&
+        Number.isFinite(this.retentionDaysOverride)
+      ) {
+        return Math.max(0, this.retentionDaysOverride);
+      }
+    }
+    let configured: unknown;
+    try {
+      const cfg = loadUserConfig() as Record<string, unknown>;
+      const rollback = (cfg?.rollback ??
+        cfg?.rollbackManifests ??
+        cfg?.rollbackRetention ??
+        cfg?.manifestRetention ??
+        {}) as Record<string, unknown>;
+
+      if (typeof rollback?.retentionDays === "number") {
+        configured = rollback.retentionDays;
+      } else if (typeof rollback?.retainDays === "number") {
+        configured = rollback.retainDays;
+      } else if (typeof rollback?.retentionMinutes === "number") {
+        configured = (rollback.retentionMinutes as number) / (24 * 60);
+      } else if (typeof rollback?.retentionMs === "number") {
+        configured = (rollback.retentionMs as number) / (24 * 60 * 60 * 1000);
+      } else if (typeof cfg?.rollbackRetentionDays === "number") {
+        configured = cfg.rollbackRetentionDays;
+      } else if (typeof cfg?.manifestRetentionDays === "number") {
+        configured = cfg.manifestRetentionDays;
+      } else if (typeof cfg?.retentionDays === "number") {
+        configured = cfg.retentionDays;
+      }
+    } catch {
+      configured = undefined;
+    }
+    if (typeof configured === "number" && Number.isFinite(configured)) {
+      return Math.max(0, configured);
+    }
+    return DEFAULT_RETENTION_DAYS;
+  }
+
+  private get retentionMs(): number {
+    return this.retentionDays * 24 * 60 * 60 * 1000;
+  }
+
+  /**
+   * Delete manifests older than the retention window. Runs under the manifest
+   * lock, so a manifest an undo is in the middle of reading is never unlinked
+   * out from under it: when the lock cannot be taken, the prune refuses and
+   * leaves the files alone.
+   *
+   * A retention window of 0 keeps every manifest.
+   */
+  async pruneExpiredManifests(): Promise<number> {
+    if (!(await fileExists(this.storageDir))) return 0;
+
+    // Resolved once: retentionDays reads and parses the user config, and a
+    // directory holding many manifests must not pay that per candidate.
+    const windowMs = this.retentionMs;
+    // A window of 0 or less keeps everything. A negative value clamps to 0 at
+    // resolution, and 0 is the documented "keep every manifest" setting, so it
+    // must not be read as "everything older than right now" and empty the
+    // directory on the next read.
+    if (windowMs <= 0) return 0;
+    const cutoff = Date.now() - windowMs;
+
+    const files = await fs.readdir(this.storageDir);
+    const expiredIds: string[] = [];
+    for (const file of files) {
+      if (!file.endsWith(".json")) continue;
+      const id = file.slice(0, -".json".length);
+      try {
+        const content = await fs.readFile(
+          path.join(this.storageDir, file),
+          "utf-8",
+        );
+        const parsed: unknown = JSON.parse(content);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+          continue;
+        }
+        const manifest = parsed as RollbackManifest;
+        // Only this install's own manifests expire. An unverified file is
+        // foreign, tampered, or corrupt, and the listing contract keeps those
+        // visible instead of deleting them out from under the caller.
+        if (!manifestIntegrityService.verifyManifest(manifest).valid) {
+          continue;
+        }
+        if (
+          typeof manifest.timestamp === "number" &&
+          Number.isFinite(manifest.timestamp) &&
+          manifest.timestamp < cutoff
+        ) {
+          expiredIds.push(id);
+        }
+      } catch {
+        // Unparseable files are not manifests we own; leave them.
+      }
+    }
+
+    if (expiredIds.length === 0) return 0;
+
+    // A directory that can be read but not written to cannot take the lock, and
+    // that is not a reason to refuse a listing that would otherwise work. Not
+    // being able to prove ownership means not pruning, which is the same
+    // outcome as losing the race to another holder below.
+    try {
+      const result = await this.manifestLock.tryRunExclusive(async (lease) => {
+        let removed = 0;
+        for (const id of expiredIds) {
+          await lease.assertStillOwns();
+          try {
+            await fs.unlink(path.join(this.storageDir, `${id}.json`));
+            removed++;
+          } catch {
+            // Already gone: counts as pruned for our purposes.
+          }
+        }
+        return removed;
+      });
+
+      return result.acquired ? (result.value ?? 0) : 0;
+    } catch (error) {
+      // Only the unavailable case is absorbed. Losing the lock mid-prune throws
+      // from assertStillOwns and has to stop the caller, not be swallowed here.
+      if (error instanceof ManifestLockUnavailableError) {
+        logger.warn(
+          "Skipped rollback manifest prune: the rollback directory could not be locked",
+          { code: (error.cause as NodeJS.ErrnoException | undefined)?.code },
+        );
+        return 0;
+      }
+      throw error;
+    }
+  }
+
+  async listManifests(): Promise<ListedManifest[]> {
+    await this.pruneExpiredManifests();
     if (!(await fileExists(this.storageDir))) return [];
 
     const files = await fs.readdir(this.storageDir);
-    const manifests: RollbackManifest[] = [];
+    const manifests: ListedManifest[] = [];
 
     for (const file of files) {
       if (file.endsWith(".json")) {
@@ -121,7 +687,19 @@ export class RollbackService {
             path.join(this.storageDir, file),
             "utf-8",
           );
-          manifests.push(JSON.parse(content));
+          const parsed: unknown = JSON.parse(content);
+          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+            logger.error(
+              `Skipping rollback manifest ${file}: not a manifest object`,
+            );
+            continue;
+          }
+          const manifest = parsed as RollbackManifest;
+          manifests.push({
+            ...manifest,
+            signatureValid:
+              manifestIntegrityService.verifyManifest(manifest).valid,
+          });
         } catch (e) {
           logger.error(`Failed to parse rollback manifest ${file}: ${e}`);
         }
@@ -132,57 +710,218 @@ export class RollbackService {
   }
 
   /**
+   * Manifests newer than `target` that touch a path `target` also touches.
+   *
+   * Rolling back out of order is the one case the per-action guards cannot
+   * make safe: `safeAtomicMove` refuses EEXIST and delete-restore uses
+   * COPYFILE_EXCL, so the batch dies at the collision and the best-effort
+   * recovery is the only thing between the user and a half-undone tree. A newer
+   * manifest that moved the same path is exactly that collision, and it is
+   * knowable before anything is touched, so it is checked before anything is
+   * touched.
+   *
+   * A candidate whose signature does not verify counts as a conflict rather
+   * than being ignored. Ignoring it would let a forged manifest hide a real
+   * overlap, and the failure mode of not ignoring it is a refused undo, not a
+   * damaged one.
+   */
+  private async findNewerConflicts(
+    target: RollbackManifest,
+  ): Promise<NewerConflict[]> {
+    const candidates = (await this.listManifests()).filter(
+      (m) => m.id !== target.id && m.timestamp > target.timestamp,
+    );
+    if (candidates.length === 0) return [];
+
+    const conflicts: NewerConflict[] = [];
+    for (const manifest of candidates) {
+      // The flag is the same verification this loop used to perform itself,
+      // computed once by the list that already read every file.
+      const signatureValid = manifest.signatureValid;
+      const overlappingPaths = overlappingPathCount(target, manifest);
+      if (!signatureValid || overlappingPaths > 0) {
+        conflicts.push({ id: manifest.id, overlappingPaths, signatureValid });
+      }
+    }
+    return conflicts;
+  }
+
+  /**
+   * The refusal a `rollback()` that would collide returns instead of starting.
+   *
+   * Refusing rather than warning is the deliberate choice. The alternative, a
+   * warning, leaves the user with exactly the mid-batch EEXIST throw that
+   * exists today: some files already moved, then a best-effort recovery that
+   * itself uses `overwrite: true`. A refusal costs the user one undo they could
+   * not have completed safely anyway, and it costs them zero files. The way
+   * through is to undo the newer operation first, which is the order the
+   * filesystem already implies.
+   */
+  private conflictRefusal(
+    manifestId: string,
+    conflicts: NewerConflict[],
+  ): RollbackResult {
+    const details = conflicts
+      .map((c) =>
+        c.signatureValid
+          ? `${c.id} (${c.overlappingPaths} shared path(s))`
+          : `${c.id} (integrity check failed, so its paths cannot be ruled out)`,
+      )
+      .join(", ");
+
+    return {
+      success: 0,
+      failed: 1,
+      skipped: 0,
+      passes: 0,
+      refused: true,
+      errors: [
+        `Refused to undo manifest ${manifestId}: a newer operation already touched at least one of the same paths, so undoing this one out of order would collide with it partway through. Undo the newer operation first, then retry. Conflicting manifests: ${details}`,
+        `Manifest not deleted: ${manifestId} remains available for retry or manual recovery`,
+      ],
+      steps: [{ manifestId, success: 0, failed: 1, skipped: 0 }],
+    };
+  }
+
+  /**
    * Restore state from a manifest (Undo)
    * @param manifestId - UUID of the manifest to rollback
-   * @returns Promise<{ success: number; failed: number; errors: string[] }> - Results object with success count, failed count, and error messages
+   * @param options - `cascade: true` undoes every manifest newer than the
+   *   target as well, walking the stack newest-first down to and including
+   *   the target
+   * @returns Promise<RollbackResult> - Success, failure and skip counts, the
+   * number of passes undone, whether the undo was refused, error messages,
+   * and per-pass detail
    * @throws {Error} When manifest ID format is invalid (must be valid UUID format)
    * @throws {Error} When manifest file is not found
    * @throws {Error} When manifest JSON parsing fails
    * @throws {Error} When file path validation fails for security reasons
    *
-   * SECURITY JUSTIFICATION (SEC-001):
-   * - storageDir is an internal path constructed in the constructor from process.cwd()
-   *   (line 33: path.join(process.cwd(), ".file-organizer-rollbacks"))
-   * - File read is NOT user-provided - it's an internal manifest file created by this service
-   * - Path validation happens at other layers: storageDir is hardcoded, manifestId is validated
-   *   as UUID format (line 105-111) before being used to construct the file path
+   * This file is exempt from SEC-001, the direct fs.readFile gate. `getManifest`
+   * validates the id as a UUID before joining it onto the storage directory, so
+   * the path handed to fs is built only from an already-safe value.
    */
   async rollback(
     manifestId: string,
-  ): Promise<{ success: number; failed: number; errors: string[] }> {
-    // Security: Validate ID format (UUID)
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        manifestId,
-      )
-    ) {
-      throw new Error(`Invalid manifest ID format: ${manifestId}`);
-    }
-
+    options: { cascade?: boolean } = {},
+  ): Promise<RollbackResult> {
     await this.ensureStorage();
-    const filePath = path.join(this.storageDir, `${manifestId}.json`);
 
-    if (!(await fileExists(filePath))) {
-      throw new Error(`Manifest ${manifestId} not found`);
-    }
-
-    let manifest: RollbackManifest;
-    try {
-      const content = await fs.readFile(filePath, "utf-8");
-      manifest = JSON.parse(content);
-    } catch (error) {
-      throw new Error(
-        `Failed to parse manifest ${manifestId}: ${(error as Error).message}`,
-        { cause: error },
+    // The whole read-check-apply-delete cycle is one critical section. Without
+    // it, two undoes racing the same manifest both pass getManifest, both apply
+    // their actions, and both unlink, so one batch of moves is spent twice. A
+    // loser that finds the manifest already gone fails cleanly inside
+    // getManifest instead of tearing a half-applied batch. The lease is handed
+    // down so the loop can check it still owns the directory between files.
+    // A cascade holds the same lock for its whole walk: the steps must not
+    // interleave with another undoer's steps, or two callers could both start
+    // from the same "newest" manifest.
+    if (options.cascade) {
+      return this.manifestLock.runExclusive((lease) =>
+        this.cascade(manifestId, lease),
       );
     }
+    return this.manifestLock.runExclusive((lease) =>
+      this.applyRollback(manifestId, lease),
+    );
+  }
 
-    const verification = manifestIntegrityService.verifyManifest(manifest);
-    if (!verification.valid) {
-      throw new Error(`Manifest integrity check failed: ${verification.error}`);
+  /**
+   * Undo `targetId` and every manifest newer than it, newest first.
+   *
+   * Each step is the ordinary single-manifest undo, so every step is verified
+   * before it runs and the conflict refusal stays switched on: by the time
+   * step N runs, the manifests above it have been undone and deleted, so
+   * nothing newer overlaps and `findNewerConflicts` finds nothing. The
+   * ordering is what makes the refusal unreachable, not a flag.
+   *
+   * The walk stops at the first step that fails or is refused. Every step
+   * below assumes the one above it landed; once one has not, the manifests
+   * below no longer describe the files they name. What succeeded and where it
+   * stopped is reported, and nothing below the stop is touched.
+   */
+  private async cascade(
+    targetId: string,
+    lease: ManifestLockLease,
+  ): Promise<RollbackResult> {
+    // Validates the id format and re-verifies the manifest, so the walk only
+    // ever starts from a manifest this machine wrote.
+    const target = await this.getManifest(targetId);
+    const newer = (await this.listManifests()).filter(
+      (m) => m.id !== target.id && m.timestamp > target.timestamp,
+    );
+    // Newest first: each step puts back what the step below it moved.
+    newer.sort((a, b) => b.timestamp - a.timestamp);
+
+    const total: RollbackResult = {
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      passes: 0,
+      refused: false,
+      errors: [],
+      steps: [],
+    };
+
+    for (const manifest of newer) {
+      // An unverified manifest cannot be undone (getManifest would throw) and
+      // must not be skipped either: it could claim any path. Same verdict the
+      // non-cascade refusal gives it.
+      if (!manifest.signatureValid) {
+        total.failed++;
+        total.errors.push(
+          `Cascade stopped at manifest ${manifest.id}: its integrity check failed, so it cannot be undone or safely skipped. Manifest not deleted: ${manifest.id} remains available for manual recovery.`,
+        );
+        return total;
+      }
+
+      const step = await this.applyRollback(manifest.id, lease);
+      mergeCascadeStep(total, step);
+      if (step.refused || step.failed > 0) {
+        total.errors.push(
+          `Cascade stopped at manifest ${manifest.id}: each step below assumes the steps above it landed. Resolve this manifest, then undo ${targetId} again.`,
+        );
+        return total;
+      }
     }
 
-    const results = { success: 0, failed: 0, errors: [] as string[] };
+    const finalStep = await this.applyRollback(targetId, lease);
+    mergeCascadeStep(total, finalStep);
+    if (finalStep.refused || finalStep.failed > 0) {
+      total.errors.push(
+        `Cascade stopped at the requested manifest ${targetId}: the newer operations were undone, but this one could not be completed.`,
+      );
+    }
+    return total;
+  }
+
+  private async applyRollback(
+    manifestId: string,
+    lease: ManifestLockLease,
+  ): Promise<RollbackResult> {
+    // getManifest validates the id as a UUID before it is joined onto the
+    // storage directory, so filePath is only built from an already-safe value.
+    const manifest = await this.getManifest(manifestId);
+    const filePath = path.join(this.storageDir, `${manifestId}.json`);
+
+    // Selective undo makes out-of-order rollback reachable, so the overlap that
+    // a later operation creates is checked here, before the first move. The
+    // newest manifest has nothing newer than it, so the common case is
+    // unaffected by this read.
+    const conflicts = await this.findNewerConflicts(manifest);
+    if (conflicts.length > 0) {
+      return this.conflictRefusal(manifestId, conflicts);
+    }
+
+    const results: RollbackResult = {
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      passes: 0,
+      refused: false,
+      errors: [],
+      steps: [],
+    };
 
     // Track completed actions for potential rollback recovery
     const completedActions: Array<{
@@ -196,6 +935,13 @@ export class RollbackService {
 
     try {
       for (const action of reverseActions) {
+        // The lock is renewed while this undo runs, so a batch that takes longer
+        // than the wait window cannot have its directory reclaimed out from
+        // under it. If it is lost anyway, stopping here leaves the manifest in
+        // place and the files already moved where this action left them, which
+        // is a state an undo can be retried from.
+        await lease.assertStillOwns();
+
         // Validate paths before operations
         if (
           action.originalPath &&
@@ -219,7 +965,16 @@ export class RollbackService {
           try {
             await fs.access(action.currentPath);
           } catch {
-            throw new Error(`Current file not found: ${action.currentPath}`);
+            // The file a manifest names can be gone before its undo runs:
+            // deleted by hand, or moved by a later pass whose own manifest
+            // holds the record of where it went. Either way there is nothing
+            // to move back, so this one action is skipped and the rest of the
+            // batch continues. A skip is information, not a failure, so it is
+            // counted and kept out of `errors`: a caller reading that list is
+            // looking for what went wrong. The manifest still names the path,
+            // and verify_integrity reports it as missing.
+            results.skipped++;
+            continue;
           }
 
           await fs.mkdir(path.dirname(action.originalPath), {
@@ -308,10 +1063,10 @@ export class RollbackService {
             results.success++;
           } catch (e) {
             if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-              results.errors.push(
-                `File to un-copy not found: ${action.currentPath}`,
-              );
-              results.failed++;
+              // Already gone: the copy no longer exists, so there is nothing
+              // to un-copy. Information, not a failure, so it stays out of
+              // `errors` for the same reason as the skip above.
+              results.skipped++;
             } else {
               throw e;
             }
@@ -348,10 +1103,10 @@ export class RollbackService {
           } catch (e) {
             const err = e as NodeJS.ErrnoException;
             if (err.code === "ENOENT") {
-              results.failed++;
-              results.errors.push(
-                `Cannot restore deleted file. Backup not found: ${action.backupPath}`,
-              );
+              // The backup is gone, so the deleted file cannot be restored.
+              // Skip this action; the rest of the batch continues. Counted,
+              // not reported as an error.
+              results.skipped++;
               continue;
             }
             if (err.code === "EEXIST") {
@@ -436,6 +1191,10 @@ export class RollbackService {
         }
       }
       try {
+        // The manifest file is the resource the lock exists for, so ownership is
+        // confirmed before it is deleted rather than assumed from the moves that
+        // just landed.
+        await lease.assertStillOwns();
         await fs.unlink(filePath);
       } catch (e) {
         throw new Error(
@@ -443,6 +1202,10 @@ export class RollbackService {
           { cause: e },
         );
       }
+      // One manifest spent is one pass undone, whether it restored files or
+      // found them all already gone: the manifest was consumed either way,
+      // and a fully-skipped manifest does not block a cascade below it.
+      results.passes = 1;
     } else {
       results.errors.push(
         `Manifest not deleted: ${manifestId} remains available for retry or manual recovery`,
@@ -455,6 +1218,15 @@ export class RollbackService {
         `Partial rollback state documented: ${completedActions.length} actions were successfully undone before failures occurred. Recovery attempted.`,
       );
     }
+
+    // One entry per attempted manifest, so a cascade can turn this into one
+    // history row per pass it actually undid.
+    results.steps.push({
+      manifestId,
+      success: results.success,
+      failed: results.failed,
+      skipped: results.skipped,
+    });
 
     return results;
   }

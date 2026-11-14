@@ -51,6 +51,7 @@ describe("MusicOrganizerService", () => {
       artist?: string;
       album?: string;
       trackNumber?: number;
+      discNumber?: number;
     } = {},
   ): Promise<string> {
     const filePath = path.join(sourceDir, fileName);
@@ -115,6 +116,19 @@ describe("MusicOrganizerService", () => {
       frames.push(
         Buffer.concat([
           Buffer.from("TRCK"),
+          Buffer.from([0x00, 0x00, 0x00, text.length + 1]),
+          Buffer.from([0x00, 0x00]),
+          Buffer.from([0x03]),
+          text,
+        ]),
+      );
+    }
+
+    if (metadata.discNumber !== undefined) {
+      const text = Buffer.from(metadata.discNumber.toString());
+      frames.push(
+        Buffer.concat([
+          Buffer.from("TPOS"),
           Buffer.from([0x00, 0x00, 0x00, text.length + 1]),
           Buffer.from([0x00, 0x00]),
           Buffer.from([0x03]),
@@ -552,26 +566,17 @@ describe("MusicOrganizerService", () => {
       const nestedDir = path.join(sourceDir, "nested", "deep");
       await fs.mkdir(nestedDir, { recursive: true });
 
-      // Create MP3 in nested dir
-      const mp3Data = Buffer.from(
-        [
-          0x49,
-          0x44,
-          0x33,
-          0x03,
-          0x00,
-          0x00,
-          0x00,
-          0x00,
-          0x00,
-          0x0f,
-          Buffer.from("TIT2"),
-          Buffer.from([0x00, 0x00, 0x00, 0x05]),
-          Buffer.from([0x00, 0x00]),
-          Buffer.from([0x03]),
-          Buffer.from("Deep"),
-        ].flat(),
-      );
+      // Create MP3 in nested dir: ID3v2 header + a single TIT2 frame.
+      const mp3Data = Buffer.concat([
+        Buffer.from([
+          0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f,
+        ]),
+        Buffer.from("TIT2"),
+        Buffer.from([0x00, 0x00, 0x00, 0x05]),
+        Buffer.from([0x00, 0x00]),
+        Buffer.from([0x03]),
+        Buffer.from("Deep"),
+      ]);
       await fs.writeFile(path.join(nestedDir, "deep_song.mp3"), mp3Data);
 
       const result = await service.organize({

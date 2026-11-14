@@ -14,6 +14,7 @@ import {
   detectExtensionMismatch,
   FileSignature,
 } from "../../../src/constants/file-signatures.js";
+import { required } from "../../helpers/safe-index.js";
 
 describe("File Signatures Database", () => {
   describe("Database Integrity", () => {
@@ -240,6 +241,27 @@ describe("File Signatures Database", () => {
       const result = matchSignature(exeBuffer);
       expect(result).toBeDefined();
       expect(result?.type).toBe("EXE");
+    });
+
+    it("should match Mach-O 64-bit little-endian binaries (BUG-06)", () => {
+      const macho64LeBuffer = Buffer.from([0xcf, 0xfa, 0xed, 0xfe]);
+      const result = matchSignature(macho64LeBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_64");
+    });
+
+    it("should match Mach-O 32-bit little-endian binaries", () => {
+      const macho32LeBuffer = Buffer.from([0xce, 0xfa, 0xed, 0xfe]);
+      const result = matchSignature(macho32LeBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_32");
+    });
+
+    it("should detect Mach-O little-endian as executable content (BUG-06)", () => {
+      const macho64LeBuffer = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01]);
+      const result = matchSignature(macho64LeBuffer);
+      expect(result).toBeDefined();
+      expect(result?.type).toBe("MACHO_64");
     });
 
     it("should match Java class files or Mach-O (both use CAFEBABE)", () => {
@@ -507,13 +529,15 @@ describe("File Signatures Database", () => {
 
       for (const ext of commonExts) {
         expect(EXTENSION_TO_SIGNATURE[ext]).toBeDefined();
-        expect(EXTENSION_TO_SIGNATURE[ext].length).toBeGreaterThan(0);
+        expect(required(EXTENSION_TO_SIGNATURE[ext], ext).length).toBeGreaterThan(
+          0,
+        );
       }
     });
 
     it("should map multiple types for ambiguous extensions", () => {
       // .gif maps to both GIF87 and GIF89
-      expect(EXTENSION_TO_SIGNATURE[".gif"].length).toBe(2);
+      expect(required(EXTENSION_TO_SIGNATURE[".gif"], ".gif").length).toBe(2);
     });
   });
 

@@ -616,6 +616,44 @@ describe("SystemOrganizeService", () => {
       expect(result.details[0]?.file).toBe("song.mp3");
     });
 
+    it("should not create directories on disk when dryRun is true", async () => {
+      // Drop the ensureDirectoryExists stub so the real fs.mkdir path is what
+      // would run. A dry run that mkdirs is a write, and the tool tells the user
+      // no files were moved.
+      jest.restoreAllMocks();
+      jest.spyOn(service as any, "validateSourceDir").mockResolvedValue({
+        valid: true,
+        normalizedPath: mockSystemDirs.downloads,
+      });
+      jest
+        .spyOn(service as any, "determineSystemDestination")
+        .mockResolvedValue({
+          destination: mockSystemDirs.music,
+          useLocalFallback: false,
+        });
+
+      mockReaddir.mockResolvedValue([
+        { name: "song.mp3", isFile: () => true, isDirectory: () => false },
+      ]);
+      mockStat.mockResolvedValue({
+        isFile: () => true,
+        size: 1000,
+        mtime: new Date(),
+      });
+      mockAccess.mockResolvedValue(undefined);
+
+      const result = await service.systemOrganize({
+        sourceDir: mockSystemDirs.downloads,
+        dryRun: true,
+      });
+
+      expect(mockMkdir).not.toHaveBeenCalled();
+      expect(mockRename).not.toHaveBeenCalled();
+      expect(mockCopyFile).not.toHaveBeenCalled();
+      expect(result.details.length).toBe(1);
+      expect(result.failed).toBe(0);
+    });
+
     it("should create undo manifest in dry run for planning purposes", async () => {
       mockReaddir.mockResolvedValue([
         { name: "song.mp3", isFile: () => true, isDirectory: () => false },

@@ -30,14 +30,6 @@ export async function fileExists(filePath: string): Promise<boolean> {
 }
 
 /**
- * Ensure a directory exists, creating it if necessary
- * @param dirPath - Directory path
- */
-export async function ensureDir(dirPath: string): Promise<void> {
-  await fs.mkdir(dirPath, { recursive: true });
-}
-
-/**
  * Expand home directory (~) in path
  * @param inputPath - Path that may contain ~
  * @returns Path with ~ expanded

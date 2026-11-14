@@ -29,7 +29,7 @@ jest.unstable_mockModule('../../../src/core/organize/rollback', () => ({
 
 
 // Import after mocking
-const { RenamingService } = await import('../../../src/core/organize/rename');
+const { RenamingService } = await import('../../../src/core/organize/rename.js');
 const fs = (await import('fs/promises')).default;
 
 
@@ -149,9 +149,13 @@ describe('RenamingService', () => {
 
             const preview = await service.applyRenameRules(files, rules);
             expect(preview[0].willChange).toBe(true);
-            expect(preview[0].conflict).toBe(false);
 
             expect(preview[1].new).toContain('fixed.txt');
+
+            // Both rows are flagged, not only the second. They land on one name,
+            // so neither file wins it: a caller reading only the first preview
+            // must still see the clash.
+            expect(preview[0].conflict).toBe(true);
             expect(preview[1].conflict).toBe(true);
         });
 
