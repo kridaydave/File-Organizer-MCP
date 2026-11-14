@@ -440,8 +440,9 @@ describe("PhotoOrganizerService", () => {
       expect(result.success).toBe(true);
       const folders = Object.keys(result.structure);
       expect(folders.length).toBe(1);
-      expect(folders[0]).toBe(path.join(targetDir, "____evil"));
-      expect(folders[0].includes("..")).toBe(false);
+      const folder = at(folders, 0);
+      expect(folder).toBe(path.join(targetDir, "____evil"));
+      expect(folder.includes("..")).toBe(false);
     });
   });
 
