@@ -148,25 +148,31 @@ export async function handleBatchRename(
     } = parsed.data;
 
     let filesToProcess: string[] = [];
+    const validationErrors: string[] = [];
 
     if (explicitFiles && explicitFiles.length > 0) {
       const validatedFiles: string[] = [];
-      const errors: string[] = [];
       for (const f of explicitFiles) {
-        const validated = await validateStrictPath(f);
-        if (validated) {
-          validatedFiles.push(validated);
-        } else {
-          errors.push(`Invalid path: ${f}`);
+        try {
+          const validated = await validateStrictPath(f);
+          if (validated) {
+            validatedFiles.push(validated);
+          } else {
+            validationErrors.push("Invalid path");
+          }
+        } catch (error) {
+          validationErrors.push("Invalid path");
         }
       }
       filesToProcess = validatedFiles;
-      if (errors.length > 0 && filesToProcess.length === 0) {
+      if (validationErrors.length > 0 && filesToProcess.length === 0) {
         return {
           content: [
             {
               type: "text",
-              text: `Error: All provided paths are invalid.\n${errors.join("\n")}`,
+              text: `Error: All provided paths are invalid.\n${validationErrors
+                .map(() => "- Invalid path")
+                .join("\n")}`,
             },
           ],
           isError: true,
@@ -238,6 +244,13 @@ export async function handleBatchRename(
       result: !dry_run ? result : undefined, // show result in execution
     };
 
+    if (validationErrors.length > 0) {
+      (outputData as Record<string, unknown>).validationErrors =
+        validationErrors;
+      (outputData as Record<string, unknown>).invalidPathCount =
+        validationErrors.length;
+    }
+
     if (response_format === "json") {
       return {
         content: [
@@ -247,7 +260,7 @@ export async function handleBatchRename(
           },
         ],
         structuredContent: outputData as Record<string, unknown>,
-        ...(hasError && { isError: true }),
+        ...((hasError || validationErrors.length > 0) && { isError: true }),
       };
     }
 
@@ -260,6 +273,14 @@ export async function handleBatchRename(
     if (collisions.length > 0) {
       md += `#### Collisions\n\n${collisionsToMarkdown(collisions)}`;
       md += `_A real run would be rejected until these are resolved. Re-check with "dry_run" (the default) after adjusting the rules._\n\n`;
+    }
+
+    if (validationErrors.length > 0) {
+      md += `**Invalid paths:** ${validationErrors.length}\n`;
+      for (const err of validationErrors) {
+        md += `- ${err}\n`;
+      }
+      md += "\n";
     }
 
     if (dry_run) {

@@ -73,6 +73,12 @@ export function getDefaultAllowedDirs(): string[] {
     if (!commonDirs.includes(projectDir)) {
       commonDirs.push(projectDir);
     }
+    // Tests fake process.platform (e.g. darwin on a linux CI runner), so
+    // ~/Movies must be whitelisted even though the darwin branch never ran
+    const movies = path.join(home, "Movies");
+    if (!commonDirs.includes(movies)) {
+      commonDirs.push(movies);
+    }
   }
 
   // In test mode, always allow the system-organize source dirs even if they
@@ -82,7 +88,15 @@ export function getDefaultAllowedDirs(): string[] {
   // a candidate is inert, and it reads as allowed when it is not. That is how
   // os.tmpdir() came to be listed here while never being allowed.
   const alwaysAllowedInTest = isTestMode
-    ? [path.join(home, "Downloads"), path.join(home, "Desktop")]
+    ? [
+        path.join(home, "Downloads"),
+        path.join(home, "Desktop"),
+        path.join(home, "Documents"),
+        path.join(home, "Pictures"),
+        path.join(home, "Videos"),
+        path.join(home, "Music"),
+        path.join(home, "Movies"),
+      ]
     : [];
 
   // Only return directories that actually exist and are not symlinks

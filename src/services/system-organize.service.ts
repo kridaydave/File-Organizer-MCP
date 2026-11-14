@@ -137,12 +137,14 @@ export class SystemOrganizeService {
 
     for (const [key, dirPath] of Object.entries(dirs)) {
       try {
-        const validated = await this.pathValidator.validatePath(dirPath, {
-          requireExists: true,
-        });
+        // Safety-only validation: the dir may not exist yet and gets
+        // created on demand by the organizer.
+        const validated = await this.pathValidator.validatePath(dirPath);
         validatedDirs[key as keyof SystemDirs] = validated;
       } catch {
-        validatedDirs[key as keyof SystemDirs] = dirPath;
+        // A failed validation makes the dir unusable; never fall back to
+        // the raw unvalidated path.
+        validatedDirs[key as keyof SystemDirs] = "";
       }
     }
 
@@ -178,15 +180,11 @@ export class SystemOrganizeService {
         systemDirs.temp,
       ];
 
-      const allowedBaseNames = new Set(["downloads", "desktop", "temp"]);
       const isAllowedSystemDir = allowedDirs.some(
         (allowed) => allowed && this.isSubPath(allowed, validatedPath),
       );
-      const hasAllowedBaseName = allowedBaseNames.has(
-        path.basename(validatedPath).toLowerCase(),
-      );
 
-      if (!isAllowedSystemDir && !hasAllowedBaseName) {
+      if (!isAllowedSystemDir) {
         return {
           valid: false,
           normalizedPath: validatedPath,

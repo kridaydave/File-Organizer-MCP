@@ -6,7 +6,7 @@ import os from 'os';
 import crypto from 'crypto';
 import { HashCalculatorService } from '../../../src/core/hash/hasher.js';
 import { CONFIG } from '../../../src/core/config/defaults.js';
-import { AccessDeniedError } from '../../../src/types.js';
+import { AccessDeniedError, ValidationError } from '../../../src/types.js';
 import {
     expectNoDuplicateGroups,
     expectAllSkippedFor,
@@ -19,8 +19,7 @@ describe('HashCalculatorService', () => {
     let testDir: string;
 
     beforeEach(async () => {
-        testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-hash-'));
-        CONFIG.paths.customAllowed = [testDir];
+        testDir = await fs.mkdtemp(path.join(process.cwd(), 'test-hash-'));
         hashService = new HashCalculatorService();
     });
 
@@ -303,9 +302,52 @@ describe('HashCalculatorService', () => {
             // test must fail loudly instead of passing without asserting.
             await fs.symlink(outsideFile, symlinkPath);
 
-            await expect(hashService.calculateHash(symlinkPath)).rejects.toThrow(AccessDeniedError);
+            // The validator reports an O_NOFOLLOW refusal as a ValidationError; the
+            // point is that it refuses rather than following the link out.
+            await expect(hashService.calculateHash(symlinkPath)).rejects.toThrow(ValidationError);
         } finally {
             await fs.rm(outsideDir, { recursive: true, force: true });
         }
+    });
+
+    it('should detect duplicates when caller supplies mismatched sizes', async () => {
+        const file1 = path.join(testDir, 'file1.txt');
+        const file2 = path.join(testDir, 'file2.txt');
+
+        await fs.writeFile(file1, 'identical');
+        await fs.writeFile(file2, 'identical'); // duplicate content
+
+        const files = [
+            { name: 'file1.txt', path: file1, size: 12345, modified: new Date() },
+            { name: 'file2.txt', path: file2, size: 54321, modified: new Date() }
+        ];
+
+        const { groups: duplicates } = await hashService.findDuplicates(files);
+
+        expect(duplicates.length).toBe(1);
+        const group = duplicates[0];
+        if (!group) throw new Error('expected exactly one duplicate group');
+        expect(group.count).toBe(2);
+        expect(group.files.map(f => f.name)).toContain('file1.txt');
+        expect(group.files.map(f => f.name)).toContain('file2.txt');
+    });
+
+    it('should not stat through a symlinked path', async () => {
+        const file1 = path.join(testDir, 'file1.txt');
+        const link = path.join(testDir, 'link.txt');
+
+        await fs.writeFile(file1, 'identical');
+        await fs.symlink(file1, link);
+
+        // The symlink entry must be denied by openAndValidateFile
+        // (O_NOFOLLOW), leaving file1.txt alone in its size group.
+        const files = [
+            { name: 'file1.txt', path: file1, size: 9, modified: new Date() },
+            { name: 'link.txt', path: link, size: 9, modified: new Date() }
+        ];
+
+        const scan = await hashService.findDuplicates(files);
+
+        expect(scan.groups.length).toBe(0);
     });
 });

@@ -1,5 +1,8 @@
 import { jest } from "@jest/globals";
 import path from "path";
+import os from "os";
+import fs from "fs/promises";
+import type { FileHandle } from "fs/promises";
 import {
   withMockedLogger,
   type MockLogger,
@@ -24,6 +27,15 @@ interface FileHandleLike {
   read: ReturnType<typeof jest.fn<() => Promise<{ bytesRead: number }>>>;
   close: ReturnType<typeof jest.fn<() => Promise<void>>>;
 }
+
+/**
+ * A real descriptor narrowed to the two members the organizer touches. The GPS
+ * rewrite reads the file for real, so the mock has to hand back an actual
+ * handle; the cast is the seam between a `FileHandle` and the jest-shaped
+ * interface above, and it lives here so both call sites share one.
+ */
+const openHandleLike = async (filePath: string): Promise<FileHandleLike> =>
+  (await fs.open(filePath, "r")) as unknown as FileHandleLike;
 
 /** The metadata fields the organizer reads off an extracted photo record. */
 interface PhotoMetadataLike {
@@ -111,6 +123,19 @@ jest.unstable_mockModule(
   }),
 );
 
+jest.unstable_mockModule("../../../src/core/io/index.js", () => ({
+  readFile: jest.fn(async (filePath: string, options?: any) => {
+    const encoding = options?.encoding === undefined ? "utf-8" : options?.encoding;
+    const data = encoding === null ? Buffer.from([0xff, 0xd8]) : "[mock]";
+    return { data, bytesRead: data.length, totalSize: data.length, mimeType: "image/jpeg" };
+  }),
+  assertNotSensitive: jest.fn(),
+  isSensitiveFile: jest.fn(() => false),
+  SENSITIVE_PATTERNS: [],
+  SENSITIVE_DIRECTORIES: [],
+  safeAtomicMove: jest.fn(),
+}));
+
 const { PhotoOrganizerService } = await import(
   "../../../src/services/photo-organizer.service.js"
 );
@@ -120,9 +145,15 @@ const targetDir = "/organized-target";
 
 describe("PhotoOrganizerService", () => {
   let service: InstanceType<typeof PhotoOrganizerService>;
+  let defaultTmpFile: string;
+  let defaultTmpDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+
+    defaultTmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "photo-org-def-"));
+    defaultTmpFile = path.join(defaultTmpDir, "photo.jpg");
+    await fs.writeFile(defaultTmpFile, Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
 
     mockValidatePath.mockImplementation((p: string) => p);
     mockReaddir.mockResolvedValue([{ name: "photo.jpg", isFile: () => true }]);
@@ -144,10 +175,16 @@ describe("PhotoOrganizerService", () => {
     mockUtimes.mockResolvedValue(undefined);
     mockReadFile.mockResolvedValue(Buffer.from([0xff, 0xd8]));
     mockPipeline.mockResolvedValue(undefined);
-    mockOpen.mockResolvedValue({ read: mockRead, close: jest.fn() });
+    mockOpen.mockImplementation(() => openHandleLike(defaultTmpFile));
     mockRead.mockResolvedValue({ bytesRead: 0 });
 
     service = new PhotoOrganizerService();
+  });
+
+  afterEach(async () => {
+    if (defaultTmpDir) {
+      await fs.rm(defaultTmpDir, { recursive: true, force: true });
+    }
   });
 
   describe("getDateFolderName", () => {
@@ -415,6 +452,40 @@ describe("PhotoOrganizerService", () => {
             "Source and target directories cannot be nested within each other",
           ),
         )).toBe(true);
+      }),
+    );
+  });
+
+  describe("GPS stripping (BUG-13 regression)", () => {
+    it(
+      "does not count GPS as stripped when stripping does not actually occur on non-JPEG",
+      withMockedLogger(async (_logger: MockLogger) => {
+        // Simulate PNG file that has GPS marker detected by hasGPSData
+        mockReaddir.mockResolvedValue([
+          { name: "photo.png", isFile: () => true },
+        ]);
+        const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "photo-org-"));
+        const tmpFile = path.join(tmpDir, "photo.png");
+        const buf = Buffer.alloc(4);
+        buf[0] = 0x25;
+        buf[1] = 0x88;
+        await fs.writeFile(tmpFile, buf);
+        try {
+          mockOpen.mockImplementation(() => openHandleLike(tmpFile));
+
+          const result = await service.organize({
+            sourceDir,
+            targetDir,
+            dateFormat: "YYYY/MM/DD",
+            dryRun: false,
+            stripGPS: true,
+            copyInsteadOfMove: true,
+          });
+
+          expect(result.strippedGPSFiles).toBe(0);
+        } finally {
+          await fs.rm(tmpDir, { recursive: true, force: true });
+        }
       }),
     );
   });
