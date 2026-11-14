@@ -72,6 +72,26 @@ export function inspectAllowedDir(
     return verdict;
   }
 
+  // Resolve every ancestor step to catch a symlinked parent escaping home.
+  // lstatSync on the final component alone misses it: link pointing outside
+  // with a real data dir behind it stats as a plain directory.
+  let current = resolved;
+  const root = path.parse(current).root;
+  while (current !== root) {
+    try {
+      const linkStat = fs.lstatSync(current);
+      if (linkStat.isSymbolicLink()) {
+        verdict.symlink = true;
+        verdict.rejection = "symlink";
+        return verdict;
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") throw error;
+    }
+    current = path.dirname(current);
+  }
+
   let stats: fs.Stats;
   try {
     stats = fs.lstatSync(expanded);
@@ -92,8 +112,14 @@ export function inspectAllowedDir(
     return verdict;
   }
 
-  const insideHome = isSubPath(os.homedir(), resolved);
-  const externalVolume = isExternalVolumePath(resolved);
+  let realResolved: string;
+  try {
+    realResolved = fs.realpathSync(expanded);
+  } catch {
+    realResolved = resolved;
+  }
+  const insideHome = isSubPath(os.homedir(), realResolved);
+  const externalVolume = isExternalVolumePath(realResolved);
   if (!insideHome) {
     if (!(allowExternalVolumes && externalVolume)) {
       verdict.rejection = externalVolume
