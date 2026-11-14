@@ -387,7 +387,9 @@ export class HashCalculatorService {
           hashMap[hash].push(file);
           decided.add(file.path);
         } catch (error) {
-          logger.error(`Error hashing ${file.name}: ${(error as Error).message}`);
+          logger.error(
+            `Error hashing ${file.name}: ${(error as Error).message}`,
+          );
           skipped.push(
             this.describeSkip(
               file,
