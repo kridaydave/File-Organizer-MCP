@@ -28,6 +28,15 @@ interface FileHandleLike {
   close: ReturnType<typeof jest.fn<() => Promise<void>>>;
 }
 
+/**
+ * A real descriptor narrowed to the two members the organizer touches. The GPS
+ * rewrite reads the file for real, so the mock has to hand back an actual
+ * handle; the cast is the seam between a `FileHandle` and the jest-shaped
+ * interface above, and it lives here so both call sites share one.
+ */
+const openHandleLike = async (filePath: string): Promise<FileHandleLike> =>
+  (await fs.open(filePath, "r")) as unknown as FileHandleLike;
+
 /** The metadata fields the organizer reads off an extracted photo record. */
 interface PhotoMetadataLike {
   dateTaken?: string;
@@ -166,9 +175,7 @@ describe("PhotoOrganizerService", () => {
     mockUtimes.mockResolvedValue(undefined);
     mockReadFile.mockResolvedValue(Buffer.from([0xff, 0xd8]));
     mockPipeline.mockResolvedValue(undefined);
-    mockOpen.mockImplementation(async () => {
-      return await fs.open(defaultTmpFile, "r");
-    });
+    mockOpen.mockImplementation(() => openHandleLike(defaultTmpFile));
     mockRead.mockResolvedValue({ bytesRead: 0 });
 
     service = new PhotoOrganizerService();
@@ -464,9 +471,7 @@ describe("PhotoOrganizerService", () => {
         buf[1] = 0x88;
         await fs.writeFile(tmpFile, buf);
         try {
-          mockOpen.mockImplementation(async () => {
-            return await fs.open(tmpFile, "r");
-          });
+          mockOpen.mockImplementation(() => openHandleLike(tmpFile));
 
           const result = await service.organize({
             sourceDir,
