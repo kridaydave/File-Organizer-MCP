@@ -70,6 +70,23 @@ export function isExecutableExtension(extension: string): boolean {
     ".com",
     ".scr",
     ".pif",
+    ".ps1",
+    ".psm1",
+    ".psd1",
+    ".py",
+    ".pyw",
+    ".pl",
+    ".pm",
+    ".rb",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".vbs",
+    ".vbe",
+    ".jse",
+    ".wsf",
+    ".wsh",
+    ".hta",
   ];
   return exeExtensions.includes(extension.toLowerCase());
 }
@@ -112,9 +129,6 @@ export function hasDoubleExtension(fileName: string): boolean {
   const startTime = Date.now();
 
   const name = path.basename(fileName).toLowerCase();
-  if (name.length > 1000) {
-    return false;
-  }
 
   const result =
     /\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|txt|zip|rar)\.(exe|bat|cmd|scr|pif|com|msi|sh)$/i.test(
