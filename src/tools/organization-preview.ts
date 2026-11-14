@@ -69,16 +69,18 @@ async function buildPlan(
     new CategorizerService(ctx.config.customRules ?? []),
   );
   const scanned = await scanner.getAllFiles(directory, includeSubdirs);
+  const considered = filterSince(scanned, sinceLastRun);
   const plan = await organizer.generateOrganizationPlan(
     directory,
-    filterSince(scanned, sinceLastRun),
+    considered,
     conflictStrategy,
     useContentAnalysis,
   );
-  // A preview reports two different numbers: how many files it looked at, and how
+  // A preview reports two numbers: how many files the plan considered, and how
   // many moves it proposes. `total_files` is the first, so it matches what
-  // organize_files reports for the same directory.
-  return { plan, scannedCount: scanned.length };
+  // organize_files reports for the same directory and still narrows when
+  // since_last_run asks it to.
+  return { plan, scannedCount: considered.length };
 }
 
 /**
@@ -261,7 +263,8 @@ export async function handlePreviewOrganization(
     const markdown = `### Organization Preview for \`${directory}\`
 
 **Summary:**
-- Files to Move: ${output.summary.total_files}
+- Files Scanned: ${output.summary.total_files}
+- Files to Move: ${output.moves.length}
 - Estimated Time: ${output.summary.estimated_duration_seconds.toFixed(2)}s
 - Conflicts: ${output.moves.filter((m: MoveItem) => m.conflict).length}
 - Conflict Strategy: ${effectiveConflictStrategy}
