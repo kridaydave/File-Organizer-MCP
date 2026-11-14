@@ -58,6 +58,11 @@ export function createServer(): McpServer {
         inputSchema: fromJsonSchema(
           tool.inputSchema as unknown as JsonSchemaType,
         ),
+        ...(tool.outputSchema !== undefined && {
+          outputSchema: fromJsonSchema(
+            tool.outputSchema as unknown as JsonSchemaType,
+          ),
+        }),
         annotations: tool.annotations,
       },
       async (args) => {
@@ -164,9 +169,55 @@ async function handleToolCall(
         durationMs: logEntry.durationMs,
         details: hasError ? `Failed ${name}` : `Completed ${name}`,
         error: logEntry.error ? { message: logEntry.error } : undefined,
+        // Every path-taking tool names its root `directory`. Recording it is
+        // what makes the history searchable by path; a value that is not a
+        // plain single-line string is dropped rather than half-validated here.
+        paths: historyPathsFromArgs(args),
+        // The tool's own undo handle. Without it a past organize is only
+        // reachable through "undo whatever ran last", which is the gap
+        // selective undo was meant to close.
+        manifestId: historyManifestId(logEntry.result),
       });
     } catch {
       // History logging should never break operations
     }
   }
+}
+
+/** The `directory` argument of a tool call, when it is usable as a path. */
+function historyPathsFromArgs(
+  args: Record<string, unknown>,
+): string[] | undefined {
+  const directory = args.directory;
+  if (typeof directory !== "string" || directory.length === 0) return undefined;
+  if (directory.length > 4096 || directory.includes("\0")) return undefined;
+  return [directory];
+}
+
+/** A non-empty string, or undefined. The only narrowing this file needs of `unknown`. */
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/** Read one property off an `unknown` that may not be an object at all. */
+function propertyOf(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null) return undefined;
+  return (value as Record<string, unknown>)[key];
+}
+
+/**
+ * The rollback manifest a tool response reports, when it reports one.
+ *
+ * Read from `structuredContent` rather than from args because the id is minted
+ * during the call: only the handler knows it. A tool that moves files and
+ * returns `manifest_id` (organize_files) or `undoManifest.manifestId` (the
+ * variant organizers) is what makes its own entry undoable by id.
+ */
+export function historyManifestId(result: unknown): string | undefined {
+  const structured = propertyOf(result, "structuredContent");
+  return (
+    nonEmptyString(propertyOf(structured, "manifest_id")) ??
+    nonEmptyString(propertyOf(structured, "manifestId")) ??
+    nonEmptyString(propertyOf(propertyOf(structured, "undoManifest"), "manifestId"))
+  );
 }

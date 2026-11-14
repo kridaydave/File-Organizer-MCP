@@ -1,6 +1,6 @@
 # Architecture
 
-File Organizer MCP is a stateless stdio MCP server. One Node process exposes 21 typed tools over JSON-RPC. There is no session state, no in-memory cache of your files, and no background work in the core server. The core loop is `scan → categorize → plan → move`, and every filesystem touch passes through one path validator.
+File Organizer MCP is a stateless stdio MCP server. One Node process exposes 42 typed tools over JSON-RPC. There is no session state, no in-memory cache of your files, and no background work in the core server. The core loop is `scan → categorize → plan → move`, and every filesystem touch passes through one path validator.
 
 ## Request lifecycle
 
@@ -29,17 +29,17 @@ src/
 ├── server.ts              createServer() + handleToolCall() (pure routing)
 ├── mcp/                   bootstrap, cli, registry, defineTool, context
 ├── tools/                 one file per tool group (handler + ToolDefinition)
-├── schemas/               Zod input validation: common, scan, organize, system
+├── schemas/               Zod input validation: common, scan, organize, system, output, index
 ├── core/
-│   ├── path→ services/path-validator.service.ts   8-layer validation (see Security)
 │   ├── io/                readFile(): validate → sensitive-file gate → fs.readFile
 │   ├── scan/              scanner.ts: recursive scan with depth/count limits
+│                           + disk-usage.ts: pure per-category byte summary
 │   ├── categorize/        rules + extension map + magic-byte sniff + custom rules
-│   ├── organize/          organizer, rename, rollback (+ manifest integrity)
+│   ├── organize/          organizer, rename, rollback (+ manifest integrity), plan-validation
 │   ├── hash/              SHA-256 hasher + duplicate finder
 │   ├── config/            platform-aware defaults, loader, allowed paths
 │   └── types/             shared FileInfo / Organize / category types
-├── services/              facade re-exports + metadata/{image,audio} + history logger
+├── services/              facade re-exports + metadata/{image,audio} + history logger + path validator (see Security)
 ├── extensions/scheduler/  cron watch daemon + its own bin (bin/file-organizer-watch.mjs)
 └── utils/                 logger, error-handler (path-safe messages), formatters
 ```
@@ -50,36 +50,49 @@ The scheduler is a separate process by design. It has its own bin, its own state
 
 Side effects live on disk in the platform config dir (`~/.config/file-organizer-mcp/` or `%APPDATA%`):
 
-| File | Owner |
-| --- | --- |
-| `config.json` | user config: allowed dirs, defaults, custom rules |
-| `history.jsonl` | history logger, append-only behind a cross-process lockfile |
-| `rollbacks/*.json` | rollback manifests written by every organize run |
+| File               | Owner                                                       |
+| ------------------ | ----------------------------------------------------------- |
+| `config.json`      | user config: allowed dirs, defaults, custom rules           |
+| `operations.jsonl` | history logger, append-only behind a cross-process lockfile |
+| `rollbacks/*.json` | rollback manifests written by every organize run            |
 
 Nothing else survives a restart. Kill the process mid-run and the manifest tells you what happened; `undo` replays it.
 
+A manifest carries two different digests. `manifest.hash` and `manifest.signature` cover the manifest's own actions list, which is what makes a tampered manifest fail to verify. `action.contentHash` is the sha256 of a file's bytes at the path the action left it at, recorded within a 32 MB budget per manifest so `verify_integrity` can rehash later and report drift. Both fields on an action are optional, so a manifest written before content hashing existed still loads and still undoes.
+
 ## Security
 
-### 8-layer path validation pipeline
+### Path validation pipeline
 
-Every path goes through this before any `fs` call:
+Every path reaches `fs` through `validatePathBase` in
+`src/services/path-validator.service.ts`, which applies these checks in order.
+`validateStrictPath` is the entry point most tools use.
 
 ```
 Input Path
     ↓
-1. Type Validation (Zod Schema)
-2. Null Byte & Basic Sanitization
-3. Path Normalization & Windows Case Adjustment
-4. Traversal Sequence Prevention (../)
-5. Absolute Path Resolution
-6. Security Check (Whitelist & Blacklist)
-7. Symlink Resolution & Target Validation
-8. Existence & Access Check
+1.  Schema: string, length, no NUL, no literal ".." segment   (PathSchema)
+2.  Normalize: URI-decode, Unicode NFC, strip ~ and $VAR, path.normalize
+3.  Reject control characters and the characters <>"|?*
+4.  Reject a basename that is a Windows device name
+5.  Resolve against basePath
+6.  isPathAllowed: blacklist, then the allowed-roots whitelist
+7.  Symlink containment: realpath, checked per component
+8.  Existence and access: fs.access
     ↓
 Validated Path
 ```
 
-Implementation: `src/services/path-validator.service.ts` (`validateStrictPath`). Allowed roots are platform-aware and user-configured; nothing hardcodes a home directory.
+Two of these are conditional. Step 8 runs only when a caller asks for
+`requireExists` or `checkWrite`, and `validateStrictPath` asks for neither, so a
+plain tool call does not stat the path. Step 7 always runs.
+
+`allowSymlinks` defaults to true. When a caller sets it false, an extra `lstat`
+walk runs before step 7 to reject symlinked components.
+
+Allowed roots are platform-aware and user-configured; nothing hardcodes a home
+directory. `file_organizer_doctor` reports the effective allow-list and flags
+any entry that is missing or policy-blocked.
 
 ### TOCTOU protection
 
@@ -113,12 +126,14 @@ If a tool adds a way in, add the way out and the way to see it: organize ships w
 
 ## Testing
 
-- `tests/unit/` — services tested in isolation against temp dirs
-- `tests/integration/` — tool wiring through the real schema + validator path
-- `scripts/security-gates/` — path-traversal fuzzing, TOCTOU races, sensitive-file patterns, static analysis
+- `tests/unit/` - services tested in isolation against temp dirs
+- `tests/integration/` - tool wiring through the real schema + validator path
+- `scripts/security-gates/` - path-traversal fuzzing, property-based path fuzzing (fast-check, generative), TOCTOU races, sensitive-file patterns, static analysis
+- `stryker.conf.json` + `jest.mutation.config.cjs` - mutation testing scoped to the path validator (`npm run test:mutation`), gated by the floor in `scripts/mutation-baseline.json`; runs nightly
+- `scripts/verify/` - the verify harness: drives the real built server over stdio inside a throwaway sandbox. `harness.mjs` is the sandbox + JSON-RPC core, `cli.mjs` the subcommands (also what the `verify-file-organizer` skill forwards to), `run-scenarios.mjs` executes the declarative scenarios in `scripts/verify/scenarios/` (`npm run verify:scenarios`, also a CI job). `scripts/verify/coverage.json` waives tools a scenario does not drive yet; `tests/unit/verify-scenario-coverage.test.ts` holds the ledger to the registry, and `tests/unit/schemas/input-schema-parity.test.ts` holds each tool's hand-written JSON `inputSchema` to its Zod schema.
 
-Tests derive all paths from `os.tmpdir()` or `tests/sandbox/`. A test that needs `sleep()` to pass is wrong; wait on receipts instead.
+Tests derive all paths from `os.tmpdir()` or `tests/sandbox/`. The portability profile (`tests/perturb/`, `npm run test:portability`) runs the whole suite with readdir order shuffled and tmpdir behind a symlink, surfacing rule-3 leak classes on Linux. A test that needs `sleep()` to pass is wrong; wait on receipts instead.
 
 ## Performance
 
-The lean-v5 shape was benchmarked against v3.5.0 — preview/organize 12–35× faster with the content-analysis stack removed, the tested large-directory organize scenarios completing without failures where v3.5 failed them, path-validation cost unchanged. Numbers and method: `docs/benchmarks-v5-vs-v3.5.md`.
+The lean-v5 shape was benchmarked against v3.5.0 - preview/organize 12–35× faster with the content-analysis stack removed, the tested large-directory organize scenarios completing without failures where v3.5 failed them, path-validation cost unchanged. Numbers and method: `docs/benchmarks-v5-vs-v3.5.md`.
