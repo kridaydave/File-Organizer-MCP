@@ -474,7 +474,6 @@ export const SystemOrganizationInputSchema = z
     conflict_strategy: z
       .enum(["skip", "rename", "overwrite"])
       .optional()
-      .default("rename")
       .describe("How to handle file conflicts"),
     dry_run: z
       .boolean()
