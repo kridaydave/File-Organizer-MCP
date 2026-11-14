@@ -61,6 +61,7 @@ async function buildPlan(
   includeSubdirs: boolean,
   ctx: ToolContext,
   sinceLastRun?: Date,
+  useContentAnalysis: boolean = false,
 ): Promise<{ plan: OrganizationPlan; scannedCount: number }> {
   // Services are stateless — build them per request from the request's config.
   const scanner = new FileScannerService();
@@ -72,6 +73,7 @@ async function buildPlan(
     directory,
     filterSince(scanned, sinceLastRun),
     conflictStrategy,
+    useContentAnalysis,
   );
   // A preview reports two different numbers: how many files it looked at, and how
   // many moves it proposes. `total_files` is the first, so it matches what
@@ -109,6 +111,7 @@ export async function buildPlanForTest(options: {
   includeSubdirs: boolean;
   ctx: ToolContext;
   sinceLastRun?: Date;
+  useContentAnalysis?: boolean;
   files: readonly FileWithSize[];
 }): Promise<OrganizationPlan> {
   const organizer = new OrganizerService(
@@ -118,6 +121,7 @@ export async function buildPlanForTest(options: {
     options.directory,
     filterSince(options.files, options.sinceLastRun),
     options.conflictStrategy,
+    options.useContentAnalysis ?? false,
   );
 }
 
@@ -141,6 +145,12 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
         enum: ["rename", "skip", "overwrite"],
         description:
           "How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified",
+      },
+      use_content_analysis: {
+        type: "boolean",
+        description:
+          "Analyze file content for accurate type detection and security (slower)",
+        default: false,
       },
       since_last_run: {
         type: "boolean",
@@ -183,6 +193,7 @@ export async function handlePreviewOrganization(
       show_conflicts_only,
       response_format,
       conflict_strategy,
+      use_content_analysis,
       since_last_run,
     } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
@@ -208,6 +219,7 @@ export async function handlePreviewOrganization(
       false,
       ctx,
       lastRun ?? undefined,
+      use_content_analysis ?? false,
     );
 
     let moves = plan.moves.map((m: OrganizationPlan["moves"][0]) => ({
