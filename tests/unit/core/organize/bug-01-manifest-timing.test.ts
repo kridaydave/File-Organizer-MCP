@@ -7,6 +7,7 @@ import { CategorizerService } from '../../../../src/services/categorizer.service
 import { RollbackService } from '../../../../src/core/organize/rollback.js';
 import { getRollbackDirectory } from '../../../../src/core/config/paths.js';
 import { FileWithSize } from '../../../../src/types.js';
+import { at } from '../../../helpers/safe-index.js';
 
 describe('BUG-01: manifest written before/during moves', () => {
   let organizer: OrganizerService;
@@ -89,7 +90,7 @@ describe('BUG-01: manifest written before/during moves', () => {
     // With the fix, manifest should exist with all actions from incremental writes
     const manifests = await rollbackService.listManifests();
     expect(manifests.length).toBeGreaterThan(0);
-    const manifest = manifests[0];
+    const manifest = at(manifests, 0);
     expect(manifest.actions.length).toBe(3);
   });
 });

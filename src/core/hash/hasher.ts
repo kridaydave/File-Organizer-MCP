@@ -77,21 +77,22 @@ export class HashCalculatorService {
   }
 
   /**
-   * The validator to stat a set of candidates through.
+   * Open a path for reading through the validator, so the handle we stat and
+   * hash is the file that was checked.
    *
    * A caller-supplied validator is used as given, because the caller knows the
-   * scope it means. The default one is re-scoped to the candidates' own
-   * directories: those files were already discovered by a scan, so the question
-   * worth asking here is "is this still the file we were told about", not "is
-   * this inside the process's cwd". Left at cwd, every candidate outside it
-   * (a temp-directory fixture, a directory the user passed to scan_directory)
-   * would fail to stat and be reported as hash_failed rather than sized.
+   * scope it means. The default one is re-scoped to the file's own directory:
+   * hashing is handed paths a scan already discovered, so the question worth
+   * asking is "is this still the file we were told about", not "is this inside
+   * the process's cwd". Rooted at cwd, every candidate outside it (a temp
+   * fixture, any directory the user actually passed to scan_directory) failed to
+   * open and was reported hash_failed rather than hashed.
    */
-  private validatorFor(files: readonly FileWithSize[]): PathValidatorService {
-    if (!this.validatorIsOwn) return this.pathValidator;
-    const directories = new Set(files.map((file) => path.dirname(file.path)));
-    if (directories.size === 0) return this.pathValidator;
-    return new PathValidatorService([...directories]);
+  private openValidated(filePath: string): Promise<fs.FileHandle> {
+    const validator = this.validatorIsOwn
+      ? new PathValidatorService([path.dirname(filePath)])
+      : this.pathValidator;
+    return validator.openAndValidateFile(filePath);
   }
 
   /**
@@ -112,7 +113,7 @@ export class HashCalculatorService {
 
     try {
       if (typeof fileInput === "string") {
-        ownedHandle = await this.pathValidator.openAndValidateFile(fileInput);
+        ownedHandle = await this.openValidated(fileInput);
         const stats = await ownedHandle.stat();
         size = stats.size;
         stream = ownedHandle.createReadStream({
@@ -265,7 +266,6 @@ export class HashCalculatorService {
     files: FileWithSize[],
     skipped: SkippedFile[],
     decided: Set<string>,
-    validator: PathValidatorService,
   ): Promise<Map<number, FileWithSize[]>> {
     const sizeGroups = new Map<number, FileWithSize[]>();
 
@@ -276,7 +276,7 @@ export class HashCalculatorService {
         // O_NOFOLLOW and checks containment, so a symlinked path cannot
         // be followed to stat a file outside the allowed directories.
         // The caller's size is untrusted, so group by the real one.
-        handle = await validator.openAndValidateFile(file.path);
+        handle = await this.openValidated(file.path);
         const stats = await handle.stat();
         const realSize = stats.size;
         file.size = realSize;
@@ -379,7 +379,6 @@ export class HashCalculatorService {
       files,
       skipped,
       decided,
-      this.validatorFor(files),
     );
 
     let timedOut = false;

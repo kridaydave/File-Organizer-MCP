@@ -26,10 +26,7 @@ import { getBackupDirectory } from "../config/paths.js";
 import { safeAtomicMove } from "../io/atomic-move.js";
 
 export type ConflictStrategy =
-  | "rename"
-  | "skip"
-  | "overwrite"
-  | "overwrite_if_newer";
+  "rename" | "skip" | "overwrite" | "overwrite_if_newer";
 
 export interface OrganizeOptions {
   dryRun?: boolean;
@@ -244,7 +241,9 @@ export class OrganizerService {
 
     if (dryRun) {
       const actions: OrganizeAction[] = [];
-      const skippedFiles: { path: string; reason: string }[] = [...plan.skippedFiles];
+      const skippedFiles: { path: string; reason: string }[] = [
+        ...plan.skippedFiles,
+      ];
 
       for (const move of plan.moves) {
         if (move.hasConflict && move.conflictResolution === "skip") {
@@ -273,7 +272,10 @@ export class OrganizerService {
                 const destStat = await fs.stat(targetPath);
                 const srcStat = await fs.stat(sourcePath);
                 if (srcStat.mtime.getTime() <= destStat.mtime.getTime()) {
-                  skippedFiles.push({ path: sourcePath, reason: "destination is newer or equal" });
+                  skippedFiles.push({
+                    path: sourcePath,
+                    reason: "destination is newer or equal",
+                  });
                   continue;
                 }
               } catch (statErr: unknown) {
@@ -302,7 +304,10 @@ export class OrganizerService {
             const destDir = path.dirname(targetPath);
 
             let startCounter = 1;
-            const plannedBaseName = path.basename(targetPath, path.extname(targetPath));
+            const plannedBaseName = path.basename(
+              targetPath,
+              path.extname(targetPath),
+            );
             if (plannedBaseName.startsWith(`${sourceBaseName}_`)) {
               const suffix = plannedBaseName.slice(sourceBaseName.length + 1);
               if (/^\d+$/.test(suffix)) {
@@ -330,7 +335,10 @@ export class OrganizerService {
               }
             }
             if (!found) {
-              skippedFiles.push({ path: sourcePath, reason: "Too many naming conflicts" });
+              skippedFiles.push({
+                path: sourcePath,
+                reason: "Too many naming conflicts",
+              });
               continue;
             }
             actions.push({
@@ -373,7 +381,10 @@ export class OrganizerService {
                 }
               }
               if (!found) {
-                skippedFiles.push({ path: sourcePath, reason: "Too many naming conflicts" });
+                skippedFiles.push({
+                  path: sourcePath,
+                  reason: "Too many naming conflicts",
+                });
                 continue;
               }
               actions.push({
@@ -418,7 +429,9 @@ export class OrganizerService {
     const rollbackActions: RollbackAction[] = [];
     const actionsPerformed: OrganizeAction[] = [];
     const errors: string[] = [];
-    const skippedFiles: { path: string; reason: string }[] = [...plan.skippedFiles];
+    const skippedFiles: { path: string; reason: string }[] = [
+      ...plan.skippedFiles,
+    ];
 
     const rollbackService = this.rollbackService || new RollbackService();
 
@@ -481,7 +494,10 @@ export class OrganizerService {
       if (windowsReservedRegex.test(sourceBase)) {
         const msg = `Skipped reserved Windows filename: ${move.source}`;
         logger.warn(msg);
-        skippedFiles.push({ path: move.source, reason: "Reserved Windows filename" });
+        skippedFiles.push({
+          path: move.source,
+          reason: "Reserved Windows filename",
+        });
         continue;
       }
 
@@ -527,7 +543,10 @@ export class OrganizerService {
                 // Source is not newer - skip this file
                 const msg = `Skipped ${sourcePath}: destination is newer or equal`;
                 logger.info(msg);
-                skippedFiles.push({ path: sourcePath, reason: "destination is newer or equal" });
+                skippedFiles.push({
+                  path: sourcePath,
+                  reason: "destination is newer or equal",
+                });
                 continue;
               }
             } catch (statErr: unknown) {
@@ -586,7 +605,9 @@ export class OrganizerService {
               } catch (backupErr: unknown) {
                 // Restore backup if move fails
                 try {
-                  await safeAtomicMove(overwrittenBackupPath, targetPath, { overwrite: true });
+                  await safeAtomicMove(overwrittenBackupPath, targetPath, {
+                    overwrite: true,
+                  });
                 } catch (restoreErr) {
                   const criticalMsg = `CRITICAL: Failed to restore backup for ${targetPath}. Original may be lost. Error: ${(restoreErr as Error).message}`;
                   errors.push(criticalMsg);
@@ -893,6 +914,21 @@ export class OrganizerService {
         });
       }
     } else if (rollbackActions.length > 0 && !manifestId) {
+    } else if (manifestId) {
+      // The manifest was created up front so a crash mid-run still leaves an
+      // undo path, but nothing was actually moved: every planned move was
+      // skipped. A handle to an empty batch would let the user "undo" a pass
+      // that changed nothing, so drop it and report none.
+      try {
+        await rollbackService.removeManifest(manifestId);
+      } catch (removeErr) {
+        logger.error("Failed to drop the empty rollback manifest", {
+          operation: "manifest_remove",
+          error:
+            removeErr instanceof Error ? removeErr.message : String(removeErr),
+        });
+      }
+      manifestId = null;
     }
 
     // BUG-003 FIX: Calculate error and success counts for result
