@@ -415,25 +415,29 @@ export class SmartSuggestService {
     let mismatches = 0;
     const total = files.length;
 
-    if (dirName.includes("image") || dirName.includes("photo")) {
-      const imageExts = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg"];
-      for (const [ext] of extCounts) {
-        if (!imageExts.includes(ext)) mismatches++;
+    if (
+      dirName.includes("image") ||
+      dirName.includes("photo") ||
+      dirName.includes("picture")
+    ) {
+      const imageExts = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg", "heic", "heif", "raw", "cr2", "nef", "tiff", "tif"];
+      for (const [ext, count] of extCounts) {
+        if (!imageExts.includes(ext)) mismatches += count;
       }
     } else if (dirName.includes("document")) {
       const docExts = ["pdf", "doc", "docx", "txt", "md", "odt"];
-      for (const [ext] of extCounts) {
-        if (!docExts.includes(ext)) mismatches++;
+      for (const [ext, count] of extCounts) {
+        if (!docExts.includes(ext)) mismatches += count;
       }
     } else if (dirName.includes("music") || dirName.includes("audio")) {
       const musicExts = ["mp3", "wav", "flac", "aac", "ogg", "m4a"];
-      for (const [ext] of extCounts) {
-        if (!musicExts.includes(ext)) mismatches++;
+      for (const [ext, count] of extCounts) {
+        if (!musicExts.includes(ext)) mismatches += count;
       }
     } else if (dirName.includes("video")) {
       const videoExts = ["mp4", "avi", "mkv", "mov", "wmv", "webm"];
-      for (const [ext] of extCounts) {
-        if (!videoExts.includes(ext)) mismatches++;
+      for (const [ext, count] of extCounts) {
+        if (!videoExts.includes(ext)) mismatches += count;
       }
     } else if (!isThematic) {
       mismatches = Math.floor(total * 0.3);
