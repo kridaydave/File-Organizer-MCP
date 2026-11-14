@@ -1,11 +1,12 @@
 import { jest } from "@jest/globals";
 import { SmartSuggestService } from "../../../src/services/smart-suggest.service.js";
 import type { FileWithSize } from "../../../src/types.js";
+import type { DuplicateScan } from "../../../src/core/types/organize.js";
 import * as fs from "fs/promises";
 
-const mockGetAllFiles = jest.fn();
-const mockFindDuplicates = jest.fn();
-const mockAccess = jest.fn();
+const mockGetAllFiles = jest.fn<() => Promise<FileWithSize[]>>();
+const mockFindDuplicates = jest.fn<() => Promise<DuplicateScan>>();
+const mockAccess = jest.fn<(path: string, mode?: number) => Promise<void>>();
 
 jest.mock("fs/promises", () => ({
   access: mockAccess,
@@ -19,7 +20,7 @@ describe("SmartSuggestService", () => {
     service = new SmartSuggestService();
 
     mockGetAllFiles.mockResolvedValue([]);
-    mockFindDuplicates.mockResolvedValue([]);
+    mockFindDuplicates.mockResolvedValue({ groups: [], skipped: [], skipped_bytes: 0 });
     mockAccess.mockRejectedValue(new Error("Not found"));
 
     (service as any).fileScanner = {
@@ -320,7 +321,7 @@ describe("SmartSuggestService", () => {
         size_bytes: 100,
         files: [],
       }));
-      mockFindDuplicates.mockResolvedValue(duplicates);
+      mockFindDuplicates.mockResolvedValue({ groups: duplicates, skipped: [], skipped_bytes: 0 });
 
       const report = await service.analyzeHealth("/test");
 
@@ -488,7 +489,7 @@ describe("SmartSuggestService", () => {
           files: [],
         },
       ];
-      mockFindDuplicates.mockResolvedValue(duplicates);
+      mockFindDuplicates.mockResolvedValue({ groups: duplicates, skipped: [], skipped_bytes: 0 });
 
       const report = await service.analyzeHealth("/test");
 

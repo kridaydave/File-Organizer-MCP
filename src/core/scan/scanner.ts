@@ -149,6 +149,7 @@ export class FileScannerService {
                 path: fullPath,
                 size: stats.size,
                 modified: stats.mtime,
+                accessed: stats.atime,
               });
             } catch (error) {
               // BUG-003 FIX: Store error instead of throwing to ensure finally executes

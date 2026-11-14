@@ -61,13 +61,13 @@ export async function getCategoryByContent(
     warnings.push(
       `Extension mismatch: file claims to be "${path.extname(fileName)}" but content is "${sniff.detectedType}"`,
     );
+  }
 
-    if (isExecutableDisguisedAsDocument(sniff.detectedType, fileName)) {
-      warnings.push(
-        "CRITICAL: Executable content disguised as document - potential security threat",
-      );
-      return { category: "Suspicious", confidence: 0.95, warnings };
-    }
+  if (isExecutableDisguisedAsDocument(sniff.detectedType, fileName)) {
+    warnings.push(
+      "CRITICAL: Executable content disguised as document - potential security threat",
+    );
+    return { category: "Suspicious", confidence: 0.95, warnings };
   }
 
   if (hasDoubleExtension(fileName)) {
