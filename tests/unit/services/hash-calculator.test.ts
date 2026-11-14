@@ -2,8 +2,11 @@ import { jest } from '@jest/globals';
 import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
 import { HashCalculatorService } from '../../../src/core/hash/hasher.js';
+import { CONFIG } from '../../../src/core/config/defaults.js';
+import { AccessDeniedError, ValidationError } from '../../../src/types.js';
 import {
     expectNoDuplicateGroups,
     expectAllSkippedFor,
@@ -16,15 +19,14 @@ describe('HashCalculatorService', () => {
     let testDir: string;
 
     beforeEach(async () => {
-        // Under the worktree: findDuplicates stats through
-        // PathValidatorService, which only allows cwd (test mode) and
-        // the home dirs, so os.tmpdir() fixtures would be denied.
         testDir = await fs.mkdtemp(path.join(process.cwd(), 'test-hash-'));
         hashService = new HashCalculatorService();
     });
 
     afterEach(async () => {
+        CONFIG.paths.customAllowed = [];
         try {
+            await new Promise((resolve) => setTimeout(resolve, 100));
             await fs.rm(testDir, { recursive: true, force: true });
         } catch (error) {
             console.error('Cleanup error:', error);
@@ -287,6 +289,25 @@ describe('HashCalculatorService', () => {
             expect(scan.skipped).toEqual([]);
             expect(scan.skipped_bytes).toBe(0);
         });
+    });
+
+    it('rejects symlink pointing outside allowed roots when hashing by string path', async () => {
+        const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-hash-outside-'));
+        try {
+            const outsideFile = path.join(outsideDir, 'secret.txt');
+            await fs.writeFile(outsideFile, 'top-secret');
+
+            const symlinkPath = path.join(testDir, 'link-to-outside.txt');
+            // No catch-and-return here: if symlink creation fails, the
+            // test must fail loudly instead of passing without asserting.
+            await fs.symlink(outsideFile, symlinkPath);
+
+            // The validator reports an O_NOFOLLOW refusal as a ValidationError; the
+            // point is that it refuses rather than following the link out.
+            await expect(hashService.calculateHash(symlinkPath)).rejects.toThrow(ValidationError);
+        } finally {
+            await fs.rm(outsideDir, { recursive: true, force: true });
+        }
     });
 
     it('should detect duplicates when caller supplies mismatched sizes', async () => {

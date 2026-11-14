@@ -108,12 +108,18 @@ export class HashCalculatorService {
 
     let size: number;
     let stream: ReadStream | undefined;
+    let ownedHandle: fs.FileHandle | undefined;
 
     try {
       if (typeof fileInput === "string") {
-        const stats = await fs.stat(fileInput);
+        ownedHandle = await this.pathValidator.openAndValidateFile(fileInput);
+        const stats = await ownedHandle.stat();
         size = stats.size;
-        stream = createReadStream(fileInput, { highWaterMark: 64 * 1024 });
+        stream = ownedHandle.createReadStream({
+          start: 0,
+          highWaterMark: 64 * 1024,
+          autoClose: false,
+        });
       } else {
         const stats = await fileInput.stat();
         size = stats.size;
@@ -150,6 +156,13 @@ export class HashCalculatorService {
           stream!.once("close", () => resolve());
           setTimeout(() => resolve(), 100);
         });
+      }
+      if (ownedHandle) {
+        try {
+          await ownedHandle.close();
+        } catch {
+          // Ignore close errors
+        }
       }
     }
   }
