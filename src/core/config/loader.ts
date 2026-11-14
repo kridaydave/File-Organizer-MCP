@@ -11,7 +11,7 @@ import type { PrivacyMode } from "../../types.js";
 import type { CustomRule } from "../../core/types/categories.js";
 import { parseJsonc } from "../../tui/client-detector.js";
 import { getUserConfigPath } from "./paths.js";
-import { isExternalVolumePath } from "./security.js";
+import { inspectAllowedDirs } from "./allowed-dirs.js";
 
 export interface UserConfig {
   customAllowedDirectories?: string[];
@@ -24,6 +24,33 @@ export interface UserConfig {
   customRules?: CustomRule[];
   watchList?: WatchConfig[];
   historyLogging?: { enabled?: boolean; maxFileSizeMB?: number; keepRotatedFiles?: number; privacyMode?: PrivacyMode; };
+  rollback?: {
+    retentionDays?: number;
+    retainDays?: number;
+    retentionMinutes?: number;
+    retentionMs?: number;
+  };
+  /**
+   * Desktop notification after a pass that moved files. Command only: one
+   * command line, spawned without a shell, so a curl line is a URL integration
+   * and there is no second code path. Throttled per directory; see
+   * src/core/notify/notify-service.ts.
+   */
+  notify?: NotifyConfig;
+}
+/** One command line, run after a pass that moved files. */
+export interface NotifyConfig {
+  /**
+   * The command line, e.g. `notify-send "Organized" "$FOM_NOTIFY_MOVED files"`.
+   * Tokenized into argv and spawned with no shell, so quotes group arguments
+   * and `|`/`>` are literal. `sh -c "..."` is how a user asks for a pipeline.
+   */
+  command: string;
+  /**
+   * Minutes before the same directory may notify again. Default 60. The first
+   * notification for a directory is always sent, whatever this is set to.
+   */
+  throttleMinutes?: number;
 }
 export interface WatchConfig {
   directory: string;
@@ -82,8 +109,6 @@ Your file organization settings will be reset, but your actual files are safe.
     return {};
   }
 }
-/** @deprecated Use updateUserConfig instead */
-export function saveConfig(config: Partial<UserConfig>): void { updateUserConfig(config); }
 export function updateUserConfig(updates: Partial<UserConfig>): boolean {
   const configPath = getUserConfigPath();
   const configDir = path.dirname(configPath);
@@ -112,55 +137,27 @@ export function loadCustomAllowedDirs(): string[] {
   try {
     const config = loadUserConfig();
     if (Array.isArray(config.customAllowedDirectories)) {
-      return config.customAllowedDirectories.filter((dir: string) => {
-        try {
-          const expandedDir = dir.startsWith("~") ? path.join(os.homedir(), dir.slice(1)) : dir;
-          const stats = fs.lstatSync(expandedDir);
-          if (stats.isSymbolicLink()) {
-            logger.error(`Warning: Custom directory blocked (symlink): ${dir}`);
-            return false;
-          }
-          if (expandedDir.includes("..") || expandedDir.includes("\0")) {
-            const reason = expandedDir.includes("\0") ? "null byte" : "path traversal";
-            logger.error(`Warning: Custom directory blocked (${reason}): ${dir}`);
-            return false;
-          }
-          if (!stats.isDirectory()) return false;
-          const resolvedDir = path.resolve(expandedDir);
-          const home = os.homedir();
-          const externalVolumeAllowed = config.allowExternalVolumes === true && isExternalVolumePath(resolvedDir);
-          if (!isSubPath(home, resolvedDir) && !externalVolumeAllowed) {
-            logger.error(`Warning: Custom directory blocked (outside home): ${dir}`);
-            return false;
-          }
-          return true;
-        } catch {
-          logger.error(`Warning: Custom directory does not exist: ${dir}`);
+      // inspectAllowedDir is the single verdict function: the doctor report and
+      // this gate read the same reason, so they cannot disagree.
+      return inspectAllowedDirs(
+        config.customAllowedDirectories,
+        config.allowExternalVolumes === true,
+      )
+        .filter((verdict) => {
+          if (verdict.accepted) return true;
+          logger.error(
+            `Warning: Custom directory blocked (${verdict.rejection}): ${verdict.configured}`,
+          );
           return false;
-        }
-      });
+        })
+        // The gate compares these strings against resolved request paths, so it
+        // needs the expanded form. Returning `configured` handed it a raw
+        // "~/work/clientA", which matched nothing while the doctor — reading the
+        // same verdict's `resolved` — reported the directory as accepted.
+        .map((verdict) => verdict.resolved);
     }
   } catch (error) {
     logger.error("Error loading custom config:", (error as Error).message);
   }
   return [];
-}
-export function initializeUserConfig(): void {
-  try {
-    const configPath = getUserConfigPath();
-    const configDir = path.dirname(configPath);
-    if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
-    if (!fs.existsSync(configPath)) {
-      const defaultConfig: UserConfig = {
-        customAllowedDirectories: [],
-        conflictStrategy: "rename",
-        autoOrganize: { enabled: false },
-        settings: { maxScanDepth: 10, logAccess: true },
-      };
-      fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
-      logger.info(`Created default config file at: ${configPath}`);
-    }
-  } catch (error) {
-    logger.error("Error initializing user config:", (error as Error).message);
-  }
 }
