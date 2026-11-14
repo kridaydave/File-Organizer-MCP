@@ -146,6 +146,8 @@ export interface OrganizeResult {
   errorCount: number;
   successCount: number;
   aborted: boolean;
+  skippedCount?: number;
+  skippedFiles?: { path: string; reason: string }[];
   /**
    * Rollback manifest id for this batch, as a wire field (`manifest_id`, not
    * `manifestId`). Absent on a dry run and when no manifest could be written.
