@@ -4,6 +4,7 @@
  */
 
 import fs from "fs/promises";
+import path from "path";
 import { createReadStream, type ReadStream } from "fs";
 import { pipeline } from "stream/promises";
 import crypto from "crypto";
@@ -64,13 +65,33 @@ function withTimeout<T>(
 export class HashCalculatorService {
   private readonly maxFileSize: number;
   private readonly pathValidator: PathValidatorService;
+  private readonly validatorIsOwn: boolean;
 
   constructor(
     maxFileSize = MAX_FILE_SIZE,
     pathValidator?: PathValidatorService,
   ) {
     this.maxFileSize = maxFileSize;
+    this.validatorIsOwn = pathValidator === undefined;
     this.pathValidator = pathValidator ?? new PathValidatorService();
+  }
+
+  /**
+   * The validator to stat a set of candidates through.
+   *
+   * A caller-supplied validator is used as given, because the caller knows the
+   * scope it means. The default one is re-scoped to the candidates' own
+   * directories: those files were already discovered by a scan, so the question
+   * worth asking here is "is this still the file we were told about", not "is
+   * this inside the process's cwd". Left at cwd, every candidate outside it
+   * (a temp-directory fixture, a directory the user passed to scan_directory)
+   * would fail to stat and be reported as hash_failed rather than sized.
+   */
+  private validatorFor(files: readonly FileWithSize[]): PathValidatorService {
+    if (!this.validatorIsOwn) return this.pathValidator;
+    const directories = new Set(files.map((file) => path.dirname(file.path)));
+    if (directories.size === 0) return this.pathValidator;
+    return new PathValidatorService([...directories]);
   }
 
   /**
@@ -231,6 +252,7 @@ export class HashCalculatorService {
     files: FileWithSize[],
     skipped: SkippedFile[],
     decided: Set<string>,
+    validator: PathValidatorService,
   ): Promise<Map<number, FileWithSize[]>> {
     const sizeGroups = new Map<number, FileWithSize[]>();
 
@@ -241,7 +263,7 @@ export class HashCalculatorService {
         // O_NOFOLLOW and checks containment, so a symlinked path cannot
         // be followed to stat a file outside the allowed directories.
         // The caller's size is untrusted, so group by the real one.
-        handle = await this.pathValidator.openAndValidateFile(file.path);
+        handle = await validator.openAndValidateFile(file.path);
         const stats = await handle.stat();
         const realSize = stats.size;
         file.size = realSize;
@@ -344,6 +366,7 @@ export class HashCalculatorService {
       files,
       skipped,
       decided,
+      this.validatorFor(files),
     );
 
     let timedOut = false;
