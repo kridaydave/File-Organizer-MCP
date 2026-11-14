@@ -3,132 +3,19 @@
  * Archive Validation Utility
  *
  * Provides:
- * - Magic number verification for archive file types
  * - Zip-slip attack prevention
  * - Path containment verification
  */
 
 import path from "path";
-import fs from "fs";
 import { SECURITY_LIMITS } from "./security-constants.js";
 import { isSubPath } from "../utils/file-utils.js";
-
-export interface ArchiveValidationResult {
-  valid: boolean;
-  format?: string;
-  error?: string;
-  entries?: number;
-  uncompressedSize?: number;
-  compressedSize?: number;
-  ratio?: number;
-}
 
 export interface EntryValidationResult {
   valid: boolean;
   entryName: string;
   extractedPath?: string;
   error?: string;
-}
-
-/**
- * Detect archive format by reading magic numbers
- */
-export function detectArchiveFormat(filePath: string): ArchiveValidationResult {
-  try {
-    const buffer = Buffer.alloc(512);
-    const flags =
-      (fs.constants?.O_RDONLY ?? 0) |
-      (process.platform !== "win32" ? (fs.constants?.O_NOFOLLOW ?? 0) : 0);
-    const fd = fs.openSync(filePath, flags);
-    let bytesRead = 0;
-    try {
-      bytesRead = fs.readSync(fd, buffer, 0, 512, 0);
-    } finally {
-      fs.closeSync(fd);
-    }
-
-    if (bytesRead < 2) {
-      return { valid: false, error: "File too small to be an archive" };
-    }
-
-    const magicBytes = Array.from(buffer.subarray(0, bytesRead));
-
-    // Check ZIP format (standard PK.. or empty PK..)
-    if (
-      bytesRead >= 4 &&
-      magicBytes[0] === 0x50 &&
-      magicBytes[1] === 0x4b &&
-      ((magicBytes[2] === 0x03 && magicBytes[3] === 0x04) ||
-        (magicBytes[2] === 0x05 && magicBytes[3] === 0x06))
-    ) {
-      return { valid: true, format: "zip" };
-    }
-
-    // Check 7Z format
-    if (
-      bytesRead >= 6 &&
-      magicBytes[0] === 0x37 &&
-      magicBytes[1] === 0x7a &&
-      magicBytes[2] === 0xbc &&
-      magicBytes[3] === 0xaf &&
-      magicBytes[4] === 0x27 &&
-      magicBytes[5] === 0x1c
-    ) {
-      return { valid: true, format: "7z" };
-    }
-
-    // Check XZ format
-    if (
-      bytesRead >= 6 &&
-      magicBytes[0] === 0xfd &&
-      magicBytes[1] === 0x37 &&
-      magicBytes[2] === 0x7a &&
-      magicBytes[3] === 0x58 &&
-      magicBytes[4] === 0x5a &&
-      magicBytes[5] === 0x00
-    ) {
-      return { valid: true, format: "xz" };
-    }
-
-    // Check GZIP format
-    if (
-      bytesRead >= 2 &&
-      magicBytes[0] === SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.gz[0] &&
-      magicBytes[1] === SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.gz[1]
-    ) {
-      return { valid: true, format: "gz" };
-    }
-
-    // Check BZIP2 format
-    if (
-      bytesRead >= 3 &&
-      magicBytes[0] ===
-        SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.bz2[0] &&
-      magicBytes[1] ===
-        SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.bz2[1] &&
-      magicBytes[2] === SECURITY_LIMITS.archiveValidation.MAGIC_NUMBERS.bz2[2]
-    ) {
-      return { valid: true, format: "bz2" };
-    }
-
-    // Check TAR POSIX format (magic 'ustar' at offset 257)
-    if (bytesRead >= 262) {
-      const tarMagic = buffer.subarray(257, 262).toString("ascii");
-      if (tarMagic === "ustar") {
-        return { valid: true, format: "tar" };
-      }
-    }
-
-    return { valid: false, error: "Unknown or unsupported archive format" };
-  } catch (error) {
-    return {
-      valid: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unknown error during format detection",
-    };
-  }
 }
 
 /**
