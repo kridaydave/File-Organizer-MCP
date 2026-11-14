@@ -73,19 +73,18 @@ describe('HashCalculatorService', () => {
 
     it('rejects symlink pointing outside allowed roots when hashing by string path', async () => {
         const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-hash-outside-'));
-        const outsideFile = path.join(outsideDir, 'secret.txt');
-        await fs.writeFile(outsideFile, 'top-secret');
-
-        const symlinkPath = path.join(testDir, 'link-to-outside.txt');
         try {
+            const outsideFile = path.join(outsideDir, 'secret.txt');
+            await fs.writeFile(outsideFile, 'top-secret');
+
+            const symlinkPath = path.join(testDir, 'link-to-outside.txt');
+            // No catch-and-return here: if symlink creation fails, the
+            // test must fail loudly instead of passing without asserting.
             await fs.symlink(outsideFile, symlinkPath);
-        } catch {
+
+            await expect(hashService.calculateHash(symlinkPath)).rejects.toThrow(AccessDeniedError);
+        } finally {
             await fs.rm(outsideDir, { recursive: true, force: true });
-            return;
         }
-
-        await expect(hashService.calculateHash(symlinkPath)).rejects.toThrow(AccessDeniedError);
-
-        await fs.rm(outsideDir, { recursive: true, force: true });
     });
 });
