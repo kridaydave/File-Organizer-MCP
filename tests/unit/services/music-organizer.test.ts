@@ -312,10 +312,12 @@ describe("MusicOrganizerService", () => {
       const destPath = service.getDestinationPath(metadata, config);
       const resolvedDest = path.resolve(destPath);
       const resolvedTarget = path.resolve(targetDirTest);
+      // Real subpath check: a bare startsWith(target) would also pass
+      // for a sibling like "<target>-evil", so require the target
+      // itself or target + separator.
       expect(
-        resolvedDest.startsWith(resolvedTarget + path.sep) ||
-          resolvedDest === path.join(resolvedTarget, "Test Song.mp3") ||
-          resolvedDest.startsWith(resolvedTarget),
+        resolvedDest === resolvedTarget ||
+          resolvedDest.startsWith(resolvedTarget + path.sep),
       ).toBe(true);
       expect(resolvedDest.includes(path.join("..", "Album"))).toBe(false);
     });
