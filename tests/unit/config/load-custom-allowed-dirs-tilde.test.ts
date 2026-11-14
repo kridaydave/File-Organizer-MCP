@@ -28,7 +28,7 @@ describe("BUG-16: loadCustomAllowedDirs tilde expansion", () => {
   const originalHomedir = os.homedir;
 
   beforeEach(() => {
-    (os as any).homedir = () => testHome;
+    os.homedir = () => testHome;
     try {
       if (fs.existsSync(configPath)) {
         fs.unlinkSync(configPath);
@@ -39,7 +39,7 @@ describe("BUG-16: loadCustomAllowedDirs tilde expansion", () => {
   });
 
   afterEach(() => {
-    (os as any).homedir = originalHomedir;
+    os.homedir = originalHomedir;
     try {
       if (fs.existsSync(configPath)) {
         fs.unlinkSync(configPath);
