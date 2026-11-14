@@ -47,6 +47,12 @@ export interface OrganizeResult {
   aborted: boolean;
   skippedCount?: number;
   skippedFiles?: { path: string; reason: string }[];
+  /**
+   * The rollback manifest this batch wrote, or undefined on a dry run and when
+   * no manifest could be created. This is the id `undo_last_operation` takes,
+   * so a caller that drops it has no way to undo the batch selectively later.
+   */
+  manifestId?: string;
 }
 
 // BUG-003 FIX: Maximum consecutive errors before aborting to prevent endless processing
@@ -709,26 +715,6 @@ export class OrganizerService {
         });
       }
     } else if (rollbackActions.length > 0 && !manifestId) {
-      try {
-        await rollbackService.createManifest(
-          `Organization of ${directory} (${rollbackActions.length} files)`,
-          rollbackActions,
-        );
-      } catch (manifestErr) {
-        const manifestError =
-          manifestErr instanceof Error
-            ? manifestErr
-            : new Error(String(manifestErr));
-        const msg = `Failed to create rollback manifest: ${manifestError.message}`;
-        errors.push(msg);
-        logger.error(msg, {
-          operation: "manifest_create",
-          directory,
-          rollbackCount: rollbackActions.length,
-          error: manifestError.message,
-          errorStack: manifestError.stack,
-        });
-      }
     }
 
     // BUG-003 FIX: Calculate error and success counts for result
@@ -745,6 +731,7 @@ export class OrganizerService {
       aborted,
       skippedCount: skippedFiles.length,
       skippedFiles,
+      ...(manifestId && { manifestId }),
     };
   }
 }

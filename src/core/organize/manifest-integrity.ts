@@ -13,32 +13,74 @@ import { getHistoryDirectory } from "../config/paths.js";
 
 const SECRET_SEED = "FileOrganizerMCP-v3.5.0";
 
+/**
+ * Manifest file names are the manifest id, so the id is validated before it is
+ * ever joined onto the storage directory.
+ */
+export const MANIFEST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Where a manifest action left the file, and so the path whose content is the
+ * result of that action. A delete moved the file into the backup directory
+ * instead of a category, so the backup copy is what has to be rehashed.
+ *
+ * The writer (recording a hash) and the reader (comparing one) must agree on
+ * this, so it lives with the manifest types rather than in either of them.
+ */
+export function manifestActionTarget(
+  action: RollbackAction,
+): string | undefined {
+  return action.type === "delete" ? action.backupPath : action.currentPath;
+}
+
 function getMachineSecret(): string {
   try {
     const configDir = getHistoryDirectory();
     const machineIdPath = path.join(configDir, "machine-id");
-    let machineId: string;
+    let machineId: string | undefined;
     try {
       machineId = fs.readFileSync(machineIdPath, "utf-8").trim();
     } catch {
-      machineId = crypto.randomUUID();
+      machineId = undefined;
+    }
+
+    if (machineId) {
+      return crypto
+        .createHash("sha256")
+        .update(SECRET_SEED + machineId)
+        .digest("hex");
+    }
+
+    // Derive a stable secret from the config directory when machine-id
+    // cannot be read. This ensures cross-process verification even if the
+    // filesystem is read-only or machine-id cannot be persisted.
+    try {
+      const stableSeed = crypto
+        .createHash("sha256")
+        .update(SECRET_SEED + configDir)
+        .digest("hex");
+      // Try to persist it for future runs if possible
       try {
         fs.mkdirSync(configDir, { recursive: true });
-        fs.writeFileSync(machineIdPath, machineId, {
+        fs.writeFileSync(machineIdPath, stableSeed, {
           encoding: "utf-8",
           mode: 0o600,
         });
       } catch {
-        // Fall back to in-memory ID if filesystem is read-only
+        // Ignore write failures - secret remains stable via configDir
       }
+      return crypto
+        .createHash("sha256")
+        .update(SECRET_SEED + stableSeed)
+        .digest("hex");
+    } catch {
+      // Fall back to deterministic secret derived from seed only
+      return crypto
+        .createHash("sha256")
+        .update(SECRET_SEED + configDir || "fallback-machine-id")
+        .digest("hex");
     }
-    if (!machineId) {
-      machineId = crypto.randomUUID();
-    }
-    return crypto
-      .createHash("sha256")
-      .update(SECRET_SEED + machineId)
-      .digest("hex");
   } catch {
     return crypto
       .createHash("sha256")
@@ -115,6 +157,10 @@ export class ManifestIntegrityService {
     }
 
     if (!manifest.signature) {
+      return { valid: false, error: "Missing manifest signature" };
+    }
+
+    if (typeof manifest.signature !== "string") {
       return { valid: false, error: "Missing manifest signature" };
     }
 
