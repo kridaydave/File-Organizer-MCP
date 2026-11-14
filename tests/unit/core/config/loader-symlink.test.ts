@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-// Import the real module BEFORE registering the mock — importing the same
+// Import the real module BEFORE registering the mock, because importing the same
 // specifier inside the factory would resolve to the mock and loop forever.
 // jest.requireActual cannot load this ESM module under Node 22.
 const actualPaths = await import('../../../../src/core/config/paths.js');

@@ -20,7 +20,7 @@ const tempRoot = fs.mkdtempSync(
 );
 const tempConfigPath = path.join(tempRoot, "config.json");
 
-// Import the real module BEFORE registering the mock — importing the same
+// Import the real module BEFORE registering the mock, because importing the same
 // specifier inside the factory would resolve to the mock and loop forever.
 const actualPaths = await import("../../../src/core/config/paths.js");
 

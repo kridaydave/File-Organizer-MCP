@@ -3,7 +3,7 @@
  * Ensures all fixes for data safety, security containment, and MCP protocol compliance remain locked.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
@@ -614,8 +614,15 @@ describe('v5 Critical Regressions Gate', () => {
   describe('18. Rollback Manifest ID Sync Across Tools', () => {
     it('returns real persisted rollback manifestId from handleSystemOrganization', async () => {
       const sandboxDir = path.join(process.cwd(), 'tests', 'sandbox', 'v5-system-test');
-      const downloadsDir = path.join(sandboxDir, 'Downloads');
-      const docsDir = path.join(sandboxDir, 'Documents');
+      // System organize only accepts real system roots (~/Downloads, ~/Desktop,
+      // os.tmpdir() + subdirs). Redirect os.homedir at the sandbox so the
+      // fixture resolves to a genuine Downloads root without touching the
+      // developer's real home. Under Jest the native homedir ignores
+      // process.env, so the module function itself is spied.
+      const fakeHome = path.join(sandboxDir, 'home');
+      const downloadsDir = path.join(fakeHome, 'Downloads');
+      const docsDir = path.join(fakeHome, 'Documents');
+      const homedirSpy = jest.spyOn(os, 'homedir').mockReturnValue(fakeHome);
 
       try {
         await fs.mkdir(downloadsDir, { recursive: true });
@@ -645,6 +652,7 @@ describe('v5 Critical Regressions Gate', () => {
         const found = manifests.find((m) => m.id === undoManifest?.manifestId);
         expect(found).toBeDefined();
       } finally {
+        homedirSpy.mockRestore();
         await fs.rm(sandboxDir, { recursive: true, force: true }).catch(() => {});
       }
     });

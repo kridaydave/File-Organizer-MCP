@@ -22,7 +22,6 @@ import { logger } from "../utils/logger.js";
 import { createRequestContext, type ToolContext } from "../mcp/context.js";
 
 const VALID_SOURCE_DIRS = ["Downloads", "Desktop", "Temp"];
-const VALID_SOURCE_NAMES = ["downloads", "desktop", "temp"];
 
 function resolveSourceDir(sourceDir: string): string {
   const trimmed = sourceDir.trim();
@@ -62,10 +61,6 @@ function canonicalizeForCompare(inputPath: string): string {
 }
 
 function isValidSourceDir(dirPath: string): boolean {
-  const base = path.basename(dirPath).toLowerCase();
-  if (VALID_SOURCE_NAMES.includes(base)) {
-    return true;
-  }
   const homeDir = os.homedir();
   // Containment matches a home source dir so a folder inside Downloads counts.
   // The temp root is matched by identity only: os.tmpdir() on Linux is /tmp, and
@@ -80,7 +75,8 @@ function isValidSourceDir(dirPath: string): boolean {
   // A prefix match on the canonical form, with the typed form kept as a
   // fallback so a not-yet-created directory is still judged the way it was
   // before. Lowercased throughout: Windows drive letters and 8.3 short names
-  // differ in case alone.
+  // differ in case alone. No basename shortcut: a directory named
+  // "downloads" outside the allowed roots is rejected.
   const typed = dirPath.toLowerCase();
   const canonical = canonicalizeForCompare(dirPath).toLowerCase();
   const forms = (root: string) => [
