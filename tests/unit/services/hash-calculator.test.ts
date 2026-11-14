@@ -2,7 +2,6 @@ import { jest } from '@jest/globals';
 import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import path from 'path';
-import os from 'os';
 import crypto from 'crypto';
 import { HashCalculatorService } from '../../../src/core/hash/hasher.js';
 
@@ -11,7 +10,10 @@ describe('HashCalculatorService', () => {
     let testDir: string;
 
     beforeEach(async () => {
-        testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'test-hash-'));
+        // Under the worktree: findDuplicates stats through
+        // PathValidatorService, which only allows cwd (test mode) and
+        // the home dirs, so os.tmpdir() fixtures would be denied.
+        testDir = await fs.mkdtemp(path.join(process.cwd(), 'test-hash-'));
         hashService = new HashCalculatorService();
     });
 
@@ -84,5 +86,24 @@ describe('HashCalculatorService', () => {
         expect(duplicates[0].count).toBe(2);
         expect(duplicates[0].files.map(f => f.name)).toContain('file1.txt');
         expect(duplicates[0].files.map(f => f.name)).toContain('file2.txt');
+    });
+
+    it('should not stat through a symlinked path', async () => {
+        const file1 = path.join(testDir, 'file1.txt');
+        const link = path.join(testDir, 'link.txt');
+
+        await fs.writeFile(file1, 'identical');
+        await fs.symlink(file1, link);
+
+        // The symlink entry must be denied by openAndValidateFile
+        // (O_NOFOLLOW), leaving file1.txt alone in its size group.
+        const files = [
+            { name: 'file1.txt', path: file1, size: 9, modified: new Date() },
+            { name: 'link.txt', path: link, size: 9, modified: new Date() }
+        ];
+
+        const duplicates = await hashService.findDuplicates(files);
+
+        expect(duplicates.length).toBe(0);
     });
 });

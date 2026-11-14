@@ -11,16 +11,22 @@ import type { FileWithSize, DuplicateGroup } from "../../types.js";
 import { CONFIG } from "../../config.js";
 import { formatBytes } from "../../utils/formatters.js";
 import { logger } from "../../utils/logger.js";
+import { PathValidatorService } from "../../services/path-validator.service.js";
 
 /**
  * Hash Calculator Service - file hashing and duplicate detection
  */
 export class HashCalculatorService {
   private readonly maxFileSize: number;
+  private readonly pathValidator: PathValidatorService;
 
-  constructor(maxFileSize = 100 * 1024 * 1024) {
+  constructor(
+    maxFileSize = 100 * 1024 * 1024,
+    pathValidator?: PathValidatorService,
+  ) {
     // 100MB default
     this.maxFileSize = maxFileSize;
+    this.pathValidator = pathValidator ?? new PathValidatorService();
   }
 
   /**
@@ -97,8 +103,13 @@ export class HashCalculatorService {
     // Step 1: Pre-group by actual file size to avoid hashing files with unique byte counts
     const sizeGroups = new Map<number, FileWithSize[]>();
     for (const file of files) {
+      let handle: fs.FileHandle | undefined;
       try {
-        const stats = await fs.stat(file.path);
+        // Stat through the validator: openAndValidateFile opens with
+        // O_NOFOLLOW and checks containment, so a symlinked path cannot
+        // be followed to stat a file outside the allowed directories.
+        handle = await this.pathValidator.openAndValidateFile(file.path);
+        const stats = await handle.stat();
         const realSize = stats.size;
         if (realSize <= 0 || realSize > this.maxFileSize) continue;
         if (realSize !== file.size) {
@@ -109,6 +120,14 @@ export class HashCalculatorService {
         sizeGroups.set(realSize, group);
       } catch (error) {
         logger.error(`Error stating ${file.name}: ${(error as Error).message}`);
+      } finally {
+        if (handle) {
+          try {
+            await handle.close();
+          } catch {
+            // Ignore close errors
+          }
+        }
       }
     }
 
