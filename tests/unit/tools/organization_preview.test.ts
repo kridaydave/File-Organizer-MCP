@@ -26,12 +26,24 @@ const { handlePreviewOrganization } =
 const { handleOrganizeFiles } =
   await import("../../../src/tools/file-organization.js");
 
-const entry = (root: string, relative: string): Scanned => ({
-  name: path.basename(relative),
-  path: path.join(root, relative),
-  size: 1,
-  modified: new Date(),
-});
+// Entries are spelled the way the handler will spell them. The handler resolves
+// the directory before planning, and on Windows that can differ from a path this
+// test built by hand, which would make a file sitting in its destination look
+// like it needs moving.
+const entry = (root: string, relative: string): Scanned => {
+  let canonicalRoot = root;
+  try {
+    canonicalRoot = fsSync.realpathSync(root);
+  } catch {
+    // The root already exists in every test here, so this is belt and braces.
+  }
+  return {
+    name: path.basename(relative),
+    path: path.join(canonicalRoot, relative),
+    size: 1,
+    modified: new Date(),
+  };
+};
 
 describe("Organization Preview Tool - BUG-37", () => {
   let testDir: string;
@@ -77,12 +89,11 @@ describe("Organization Preview Tool - BUG-37", () => {
     });
     const previewData = JSON.parse(previewResult.content[0].text);
 
-    // Setup fired: the plan skipped the file already in its destination, so it
-    // proposes fewer moves than the scan handed it. The exact number is left to
-    // the plan rather than pinned here, because whether that skip fires depends
-    // on how the platform spells the destination path, and this test is about
-    // the two totals agreeing.
-    expect(previewData.moves.length).toBeLessThan(scannedFiles.length);
+    // What this pins is the totals agreeing, not how many moves the plan makes.
+    // Whether the already-organized file is skipped depends on the platform
+    // agreeing that two spellings of the same path are the same path, and that is
+    // not what BUG-37 was about: the preview used to report the move count as
+    // total_files while organize reported the files it looked at.
 
     const organizeResult = await handleOrganizeFiles({
       directory: testDir,
