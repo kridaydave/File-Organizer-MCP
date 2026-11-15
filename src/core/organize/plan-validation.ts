@@ -154,20 +154,30 @@ export async function validateOrganizationPlan(
 
   for (const move of plan.moves) {
     const destination = move.destination;
+    // Ask about the name the source claims, not the name the plan settled on. A
+    // plan that already renamed around an occupied path would otherwise report a
+    // free destination and say nothing about the file that is in the way, which
+    // is the one thing this check exists to surface.
+    const nominal = nominalDestination(move);
+    const renamedAway = path.resolve(nominal) !== path.resolve(destination);
 
-    let exists = existsCache.get(destination);
+    let exists = existsCache.get(nominal);
     if (exists === undefined) {
-      exists = await existsOnDisk(destination);
-      existsCache.set(destination, exists);
+      exists = await existsOnDisk(nominal);
+      existsCache.set(nominal, exists);
     }
     if (exists) {
       findings.push({
         kind: "destination_exists",
         severity: "warning",
         sources: [move.source],
-        destinations: [destination],
-        detail:
-          "Destination already exists on disk. The planner does not read the disk for conflicts, so this is resolved at execution time.",
+        // Both names, because they answer different questions: the nominal one
+        // is the file that is in the way, and the plan's own destination is
+        // where this move actually goes, which is what a caller joins against.
+        destinations: renamedAway ? [nominal, destination] : [destination],
+        detail: renamedAway
+          ? `${nominal} already exists on disk, so this plan writes ${destination} instead. The run re-checks that name as it moves, because another process can take it first.`
+          : "Destination already exists on disk. The planner does not read the disk for conflicts, so this is resolved at execution time.",
       });
     }
 

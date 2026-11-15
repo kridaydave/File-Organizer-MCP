@@ -166,9 +166,14 @@ describe("validate_organization_plan", () => {
     expect(occupied?.sources.map((s) => path.basename(s))).toEqual([
       "notes.md",
     ]);
+    // Two names, and the order carries meaning: the one already on disk, then
+    // the one this plan writes instead. Renaming around the collision is the
+    // whole point of the `rename` strategy, and the finding says so.
     expect(occupied?.destinations.map((d) => path.basename(d))).toEqual([
       "notes.md",
+      "notes_1.md",
     ]);
+    expect(occupied?.detail).toContain("notes_1.md");
 
     const sensitive = out.findings.find((f) => f.kind === "sensitive_source");
     expect(sensitive?.sources.map((s) => path.basename(s))).toEqual([
@@ -219,12 +224,20 @@ describe("validate_organization_plan", () => {
       directory: testDir,
       response_format: "json",
     });
+    const previewMoves = (
+      preview.structuredContent as unknown as {
+        moves: { source: string; destination: string }[];
+      }
+    ).moves;
     const planPaths = new Set(
-      (
-        preview.structuredContent as unknown as {
-          moves: { source: string; destination: string }[];
-        }
-      ).moves.flatMap((m) => [m.source, m.destination]),
+      previewMoves.flatMap((m) => [
+        m.source,
+        m.destination,
+        // The name a move claims before the plan renames it. A finding about an
+        // occupied destination names that path, because it is the file in the
+        // way, and a caller derives it from the move it is joining against.
+        path.join(path.dirname(m.destination), path.basename(m.source)),
+      ]),
     );
 
     const reported = out.findings.flatMap((f) => [
