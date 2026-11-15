@@ -19,9 +19,9 @@ import { SystemOrganizeService } from "../services/system-organize.service.js";
 import { createErrorResponse } from "../utils/error-handler.js";
 import { SystemOrganizationInputSchema } from "../schemas/organize.js";
 import { logger } from "../utils/logger.js";
+import { createRequestContext, type ToolContext } from "../mcp/context.js";
 
 const VALID_SOURCE_DIRS = ["Downloads", "Desktop", "Temp"];
-const VALID_SOURCE_NAMES = ["downloads", "desktop", "temp"];
 
 function resolveSourceDir(sourceDir: string): string {
   const trimmed = sourceDir.trim();
@@ -61,35 +61,42 @@ function canonicalizeForCompare(inputPath: string): string {
 }
 
 function isValidSourceDir(dirPath: string): boolean {
-  const base = path.basename(dirPath).toLowerCase();
-  if (VALID_SOURCE_NAMES.includes(base)) {
-    return true;
-  }
   const homeDir = os.homedir();
-  const allowed = [
+  // Containment matches a home source dir so a folder inside Downloads counts.
+  // The temp root is matched by identity only: os.tmpdir() on Linux is /tmp, and
+  // a prefix match against it would accept every scratch directory on the
+  // machine as a system source.
+  const containers = [
     path.join(homeDir, "Downloads"),
     path.join(homeDir, "Desktop"),
-    os.tmpdir(),
   ];
+  const exact = [os.tmpdir()];
 
   // A prefix match on the canonical form, with the typed form kept as a
   // fallback so a not-yet-created directory is still judged the way it was
   // before. Lowercased throughout: Windows drive letters and 8.3 short names
-  // differ in case alone.
+  // differ in case alone. No basename shortcut: a directory named
+  // "downloads" outside the allowed roots is rejected.
   const typed = dirPath.toLowerCase();
   const canonical = canonicalizeForCompare(dirPath).toLowerCase();
-  return allowed.some((root) => {
-    const canonicalRoot = canonicalizeForCompare(root).toLowerCase();
-    const typedRoot = root.toLowerCase();
-    return [canonical, typed].some((candidate) =>
-      [canonicalRoot, typedRoot].some(
-        (r) =>
-          candidate === r ||
-          candidate.startsWith(r + path.sep) ||
-          candidate.startsWith(r + "/"),
+  const forms = (root: string) => [
+    canonicalizeForCompare(root).toLowerCase(),
+    root.toLowerCase(),
+  ];
+  const matches = (candidate: string, r: string) =>
+    candidate === r ||
+    candidate.startsWith(r + path.sep) ||
+    candidate.startsWith(r + "/");
+  return (
+    exact.some((root) =>
+      forms(root).some((r) => canonical === r || typed === r),
+    ) ||
+    containers.some((root) =>
+      forms(root).some((r) =>
+        [canonical, typed].some((candidate) => matches(candidate, r)),
       ),
-    );
-  });
+    )
+  );
 }
 
 export type SystemOrganizationInput = z.infer<
@@ -126,14 +133,15 @@ export const systemOrganizationToolDefinition: ToolDefinition = {
       },
       local_fallback_prefix: {
         type: "string",
-        description: "Single folder name (no separators) for the local fallback",
+        description:
+          "Single folder name (no separators) for the local fallback",
         default: "Organized",
       },
       conflict_strategy: {
         type: "string",
         enum: ["skip", "rename", "overwrite"],
-        description: "How to handle file conflicts",
-        default: "rename",
+        description:
+          "How to handle file conflicts. Uses config default if not specified",
       },
       dry_run: {
         type: "boolean",
@@ -165,6 +173,7 @@ export const systemOrganizationToolDefinition: ToolDefinition = {
 
 export async function handleSystemOrganization(
   args: Record<string, unknown>,
+  ctx: ToolContext = createRequestContext(),
 ): Promise<ToolResponse> {
   try {
     const parsed = SystemOrganizationInputSchema.safeParse(args);
@@ -191,6 +200,9 @@ export async function handleSystemOrganization(
       copy_instead_of_move,
       response_format,
     } = parsed.data;
+
+    const effectiveConflictStrategy =
+      conflict_strategy ?? ctx.config.conflictStrategy ?? "rename";
 
     const resolvedSource = resolveSourceDir(source_dir);
 
@@ -223,7 +235,7 @@ export async function handleSystemOrganization(
       createSubfolders: create_subfolders,
       fallbackToLocal: fallback_to_local,
       localFallbackPrefix: local_fallback_prefix,
-      conflictStrategy: conflict_strategy,
+      conflictStrategy: effectiveConflictStrategy,
       dryRun: dry_run,
       copyInsteadOfMove: copy_instead_of_move,
     });
@@ -272,7 +284,9 @@ export async function handleSystemOrganization(
 
     lines.push("## Summary");
     if (result.undoManifest?.manifestId) {
-      lines.push(`- **Rollback Manifest ID:** \`${result.undoManifest.manifestId}\``);
+      lines.push(
+        `- **Rollback Manifest ID:** \`${result.undoManifest.manifestId}\``,
+      );
     }
     lines.push(`- **Moved to System Directories:** ${result.movedToSystem}`);
     lines.push(`- **Organized Locally:** ${result.organizedLocally}`);

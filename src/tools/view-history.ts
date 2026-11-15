@@ -12,10 +12,7 @@ import {
   ViewHistoryInputSchema,
 } from "../schemas/system.js";
 import { createErrorResponse } from "../utils/error-handler.js";
-import type {
-  HistoryEntry,
-  HistoryResult,
-} from "../services/history-logger.service.js";
+import type { HistoryResult } from "../services/history-logger.service.js";
 import {
   createRequestContext,
   type ToolContext,
@@ -299,7 +296,19 @@ function renderHistoryResult(
 }
 
 function formatHistoryAsMarkdown(
-  entries: HistoryEntry[],
+  entries: Array<{
+    id?: string;
+    timestamp?: string;
+    operation?: string;
+    source?: "manual" | "scheduled";
+    status?: "success" | "error" | "partial";
+    durationMs?: number;
+    filesProcessed?: number;
+    filesSkipped?: number;
+    details?: string;
+    manifestId?: string;
+    error?: { message: string; code?: string };
+  }>,
   total: number,
   hasMore: boolean,
   limit: number,
@@ -318,19 +327,32 @@ function formatHistoryAsMarkdown(
     "|---|---|---|---|---|---|---|\n";
 
   for (const entry of entries) {
-    const timestamp = new Date(entry.timestamp).toLocaleString();
+    const timestamp =
+      entry.timestamp && !isNaN(new Date(entry.timestamp).getTime())
+        ? new Date(entry.timestamp).toLocaleString()
+        : "-";
+    const durationMs = entry.durationMs ?? 0;
     const duration =
-      entry.durationMs < 1000
-        ? `${entry.durationMs}ms`
-        : `${(entry.durationMs / 1000).toFixed(1)}s`;
+      durationMs < 1000
+        ? `${durationMs}ms`
+        : `${(durationMs / 1000).toFixed(1)}s`;
     const files = entry.filesProcessed ?? "-";
+    const status = entry.status ?? "-";
     const statusEmoji =
-      entry.status === "success" ? "✓" : entry.status === "error" ? "✗" : "⚠";
+      status === "success"
+        ? "✓"
+        : status === "error"
+          ? "✗"
+          : status === "partial"
+            ? "⚠"
+            : "-";
+    const operation = entry.operation ?? "-";
+    const source = entry.source ?? "-";
     // The undo handle, rendered as the bare contract string. An entry without
     // one can only be undone as "whatever ran last".
     const manifest = entry.manifestId ? `\`${entry.manifestId}\`` : "-";
 
-    markdown += `| ${timestamp} | ${entry.operation} | ${entry.source} | ${statusEmoji} ${entry.status} | ${duration} | ${files} | ${manifest} |\n`;
+    markdown += `| ${timestamp} | ${operation} | ${source} | ${statusEmoji} ${status} | ${duration} | ${files} | ${manifest} |\n`;
   }
 
   markdown += "\n";
@@ -347,7 +369,11 @@ function formatHistoryAsMarkdown(
   if (errorEntries.length > 0) {
     markdown += "### Errors\n\n";
     for (const entry of errorEntries) {
-      markdown += `**${entry.operation}** (${new Date(entry.timestamp).toLocaleString()})\n`;
+      const timestamp =
+        entry.timestamp && !isNaN(new Date(entry.timestamp).getTime())
+          ? new Date(entry.timestamp).toLocaleString()
+          : "-";
+      markdown += `**${entry.operation ?? "-"}** (${timestamp})\n`;
       if (entry.error?.message) {
         markdown += `- Error: ${entry.error.message}\n`;
       }

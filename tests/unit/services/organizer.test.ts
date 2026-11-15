@@ -224,6 +224,53 @@ describe("OrganizerService", () => {
       }
     });
 
+    it("should clean up copied destination when unlink fails in overwrite mode (BUG-27)", async () => {
+      const srcFile = path.join(testDir, "source.txt");
+      await fs.writeFile(srcFile, "source-content");
+
+      const docsDir = path.join(testDir, "Documents");
+      await fs.mkdir(docsDir, { recursive: true });
+      const destFile = path.join(docsDir, "source.txt");
+
+      const originalUnlink = fs.unlink;
+      let unlinkCallCount = 0;
+      (fs as any).unlink = async (p: any) => {
+        if (String(p) === String(srcFile)) {
+          unlinkCallCount++;
+          throw new Error("Simulated unlink failure");
+        }
+        return originalUnlink(p);
+      };
+
+      const files: FileWithSize[] = [
+        {
+          name: "source.txt",
+          path: srcFile,
+          size: 14,
+          modified: new Date(),
+        },
+      ];
+
+      let result;
+      try {
+        result = await organizer.organize(testDir, files, {
+          dryRun: false,
+          conflictStrategy: "overwrite",
+        });
+      } finally {
+        (fs as any).unlink = originalUnlink;
+      }
+
+      // Unlink should have failed, so operation should error
+      expect(result!.errors.length).toBeGreaterThan(0);
+
+      // Source file should still exist (unlink failed)
+      await expect(fs.access(srcFile)).resolves.toBeUndefined();
+
+      // Destination should NOT have been left behind (cleaned up)
+      await expect(fs.access(destFile)).rejects.toThrow();
+    });
+
     it("should correctly rename files with numeric suffixes on conflict", async () => {
       const srcFile = path.join(testDir, "invoice_2024.pdf");
       await fs.writeFile(srcFile, "invoice 2024 content");
@@ -282,6 +329,42 @@ describe("OrganizerService", () => {
       const [archiveAction] = result.actions;
       if (!archiveAction) throw new Error("Expected exactly one organize action");
       expect(path.basename(archiveAction.to)).toBe("archive_001_1.zip");
+    });
+
+    it("should show skip conflicts in dry-run matching execution", async () => {
+      const srcFile = path.join(testDir, "pic.jpg");
+      await fs.writeFile(srcFile, "image content");
+
+      const imagesDir = path.join(testDir, "Images");
+      await fs.mkdir(imagesDir, { recursive: true });
+      await fs.writeFile(path.join(imagesDir, "pic.jpg"), "existing");
+
+      const files: FileWithSize[] = [
+        {
+          name: "pic.jpg",
+          path: srcFile,
+          size: 100,
+          modified: new Date(),
+        },
+      ];
+
+      const dryRunResult = await organizer.organize(testDir, files, {
+        dryRun: true,
+        conflictStrategy: "skip",
+      });
+
+      expect(dryRunResult.actions).toHaveLength(0);
+      expect(dryRunResult.skippedFiles?.length).toBe(1);
+      expect(dryRunResult.skippedCount).toBe(1);
+
+      const execResult = await organizer.organize(testDir, files, {
+        dryRun: false,
+        conflictStrategy: "skip",
+      });
+
+      expect(execResult.actions).toHaveLength(0);
+      expect(execResult.skippedFiles?.length).toBe(1);
+      expect(execResult.skippedCount).toBe(1);
     });
   });
 });

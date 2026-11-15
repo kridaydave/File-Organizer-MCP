@@ -164,6 +164,7 @@ export async function handleUndoLastOperation(
     const { steps, ...summary } = result;
     const sanitizedResult = {
       ...summary,
+      manifest_id: targetId,
       errors: summary.errors.map((e) => sanitizeErrorMessage(e)),
     };
     // A refusal is a correct answer, not a tool failure: an MCP client that

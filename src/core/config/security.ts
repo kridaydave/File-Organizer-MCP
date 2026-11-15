@@ -36,7 +36,7 @@ export function getAlwaysBlockedPatterns(): RegExp[] {
 
   // Common patterns across all platforms
   const common = [
-    /node_modules/i,
+    /(?:^|[\/\\])node_modules(?:[\/\\]|$)/i,
     /(?:^|[\/\\])\.git(?:[\/\\]|$)/i,
     /(?:^|[\/\\])\.vscode(?:[\/\\]|$)/i,
     /(?:^|[\/\\])\.idea(?:[\/\\]|$)/i,

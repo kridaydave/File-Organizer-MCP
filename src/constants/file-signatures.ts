@@ -154,11 +154,23 @@ const JPEG_SIGNATURE: FileSignature = {
   type: "JPEG",
   mimeType: "image/jpeg",
   signatures: [
-    Buffer.from([0xff, 0xd8, 0xff, 0xe0]), // JFIF
-    Buffer.from([0xff, 0xd8, 0xff, 0xe1]), // Exif
-    Buffer.from([0xff, 0xd8, 0xff, 0xe8]), // SPIFF
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0]), // JFIF (APP0)
+    Buffer.from([0xff, 0xd8, 0xff, 0xe1]), // Exif (APP1)
+    Buffer.from([0xff, 0xd8, 0xff, 0xe2]), // APP2
+    Buffer.from([0xff, 0xd8, 0xff, 0xe3]), // APP3
+    Buffer.from([0xff, 0xd8, 0xff, 0xe4]), // APP4
+    Buffer.from([0xff, 0xd8, 0xff, 0xe5]), // APP5
+    Buffer.from([0xff, 0xd8, 0xff, 0xe6]), // APP6
+    Buffer.from([0xff, 0xd8, 0xff, 0xe7]), // APP7
+    Buffer.from([0xff, 0xd8, 0xff, 0xe8]), // SPIFF (APP8)
+    Buffer.from([0xff, 0xd8, 0xff, 0xe9]), // APP9
+    Buffer.from([0xff, 0xd8, 0xff, 0xea]), // APP10
+    Buffer.from([0xff, 0xd8, 0xff, 0xeb]), // APP11
+    Buffer.from([0xff, 0xd8, 0xff, 0xec]), // APP12
+    Buffer.from([0xff, 0xd8, 0xff, 0xed]), // APP13
+    Buffer.from([0xff, 0xd8, 0xff, 0xee]), // Samsung JPEG (APP14)
+    Buffer.from([0xff, 0xd8, 0xff, 0xef]), // APP15
     Buffer.from([0xff, 0xd8, 0xff, 0xdb]), // Raw JPEG
-    Buffer.from([0xff, 0xd8, 0xff, 0xee]), // Samsung JPEG
   ],
   extensions: [".jpg", ".jpeg", ".jpe"],
   category: "Image",
@@ -246,6 +258,41 @@ const ICO_SIGNATURE: FileSignature = {
   description: "Windows Icon",
 };
 
+const HEIC_SIGNATURE: FileSignature = {
+  type: "HEIC",
+  mimeType: "image/heic",
+  signatures: [
+    Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]),
+    Buffer.from([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]),
+    Buffer.from([0x00, 0x00, 0x00, 0x1c, 0x66, 0x74, 0x79, 0x70]),
+  ],
+  extensions: [".heic", ".heif"],
+  category: "Image",
+  description: "High Efficiency Image Container",
+  validator: (buffer: Buffer) => {
+    if (buffer.length < 12) return false;
+    // Accept if ftyp is at offset 4
+    if (buffer.slice(4, 8).toString() === "ftyp") {
+      const brand = buffer.slice(8, 12).toString();
+      if (["heic", "heix", "heim", "heis", "hevc", "hev1", "mif1", "msf1", "avci", "avcs"].includes(brand)) {
+        return true;
+      }
+    }
+    // Also check if brand appears after ftyp anywhere
+    if (buffer.includes(Buffer.from("ftyp"))) {
+      const idx = buffer.indexOf(Buffer.from("ftyp"));
+      if (idx + 8 <= buffer.length) {
+        const brand = buffer.slice(idx + 4, idx + 8).toString();
+        if (["heic", "heix", "heim", "heis", "hevc", "hev1", "mif1", "msf1", "avci", "avcs"].includes(brand)) {
+          return true;
+        }
+      }
+    }
+    const brand = buffer.slice(8, 12).toString();
+    return ["heic", "heix", "heim", "heis", "hevc", "hev1", "mif1", "msf1", "avci", "avcs"].includes(brand);
+  },
+};
+
 const SVG_SIGNATURE: FileSignature = {
   type: "SVG",
   mimeType: "image/svg+xml",
@@ -255,7 +302,8 @@ const SVG_SIGNATURE: FileSignature = {
   description: "Scalable Vector Graphics",
   validator: (buffer: Buffer) => {
     const content = buffer.toString("utf-8", 0, Math.min(buffer.length, 1000));
-    return content.includes("<svg") || content.includes("<?xml");
+    const lowerContent = content.toLowerCase();
+    return lowerContent.includes("<svg");
   },
 };
 
@@ -319,6 +367,43 @@ const MACHO_FAT_SIGNATURE: FileSignature = {
   extensions: [".o", ".dylib"],
   category: "Executable",
   description: "Mach-O Universal/FAT Binary (macOS/iOS)",
+  validator: (buffer: Buffer) => {
+    if (buffer.length < 8) {
+      return false;
+    }
+    // Disambiguate CAFEBABE: Java class files also use it
+    if (
+      buffer[0] === 0xca &&
+      buffer[1] === 0xfe &&
+      buffer[2] === 0xba &&
+      buffer[3] === 0xbe
+    ) {
+      const nfatArch = buffer.readUInt32BE(4);
+      // If nfat_arch looks like a Java class major version (>= 45), it's likely Java
+      if (nfatArch >= 45 && nfatArch <= 0xffff) {
+        return false;
+      }
+      // If nfat_arch is 0 or unreasonably large, not a valid fat binary
+      if (nfatArch === 0 || nfatArch > 64) {
+        return false;
+      }
+      return true;
+    }
+    // CAFEBABF is only used by Mach-O fat binaries
+    if (
+      buffer[0] === 0xca &&
+      buffer[1] === 0xfe &&
+      buffer[2] === 0xba &&
+      buffer[3] === 0xbf
+    ) {
+      const nfatArch = buffer.readUInt32BE(4);
+      if (nfatArch === 0 || nfatArch > 64) {
+        return false;
+      }
+      return true;
+    }
+    return false;
+  },
 };
 
 const MSI_SIGNATURE: FileSignature = {
@@ -465,7 +550,30 @@ const MP4_SIGNATURE: FileSignature = {
   validator: (buffer: Buffer) => {
     if (buffer.length < 12) return false;
     // Check for ftyp at offset 4
-    return buffer.slice(4, 8).toString() === "ftyp";
+    if (buffer.slice(4, 8).toString() !== "ftyp") return false;
+    const brand = buffer.slice(8, 12).toString();
+    // HEIF stills share the ftyp box with MP4. They are images, so they must not
+    // win here just because the container looks the same.
+    const heicBrands = [
+      "heic",
+      "heix",
+      "heim",
+      "heis",
+      "hevc",
+      "hev1",
+      "mif1",
+      "msf1",
+      "avci",
+      "avcs",
+    ];
+    if (heicBrands.includes(brand)) {
+      return false;
+    }
+    // QuickTime files use brand 'qt  ' and should be detected as MOV
+    if (brand === "qt  ") {
+      return false;
+    }
+    return true;
   },
 };
 
@@ -492,6 +600,9 @@ const MOV_SIGNATURE: FileSignature = {
     Buffer.from([
       0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20,
     ]), // ftyp qt
+    Buffer.from([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20,
+    ]),
     Buffer.from([
       0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20,
     ]),
@@ -587,11 +698,12 @@ const HTML_SIGNATURE: FileSignature = {
     const content = buffer
       .toString("utf-8", 0, Math.min(buffer.length, 1000))
       .toLowerCase();
-    return (
-      content.startsWith("<!doctype") ||
-      content.startsWith("<html") ||
-      content.startsWith("<?xml")
-    );
+    const trimmed = content.trim();
+    if (trimmed.startsWith("<?xml")) {
+      // Only match XML declaration if it's XHTML (has html doctype or html tag)
+      return trimmed.includes("<!doctype html") || trimmed.includes("<html");
+    }
+    return trimmed.startsWith("<!doctype") || trimmed.startsWith("<html");
   },
 };
 
@@ -604,6 +716,11 @@ const CSS_SIGNATURE: FileSignature = {
   description: "Cascading Style Sheets",
   validator: (buffer: Buffer) => {
     const content = buffer.toString("utf-8", 0, Math.min(buffer.length, 500));
+    const trimmed = content.trim();
+    // Avoid matching JSON objects/arrays
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      return false;
+    }
     // Simple heuristic: looks for CSS-like patterns
     return /\{[^}]*:[^}]*\}/.test(content) && !content.includes("<");
   },
@@ -716,6 +833,7 @@ export const FILE_SIGNATURES: FileSignature[] = [
   TIFF_LE_SIGNATURE,
   TIFF_BE_SIGNATURE,
   ICO_SIGNATURE,
+  HEIC_SIGNATURE,
   SVG_SIGNATURE,
 
   // Executables (Security Critical)
@@ -751,10 +869,10 @@ export const FILE_SIGNATURES: FileSignature[] = [
 
   // Code
   JS_SIGNATURE,
+  XML_SIGNATURE,
   HTML_SIGNATURE,
   CSS_SIGNATURE,
   JSON_SIGNATURE,
-  XML_SIGNATURE,
   TS_SIGNATURE,
   PYTHON_SIGNATURE,
   SHEBANG_SIGNATURE,
@@ -807,6 +925,8 @@ export const EXTENSION_TO_SIGNATURE: Record<string, string[]> = {
   ".tif": ["TIFF_LE", "TIFF_BE"],
   ".tiff": ["TIFF_LE", "TIFF_BE"],
   ".ico": ["ICO"],
+  ".heic": ["HEIC"],
+  ".heif": ["HEIC"],
   ".svg": ["SVG"],
 
   // Executables

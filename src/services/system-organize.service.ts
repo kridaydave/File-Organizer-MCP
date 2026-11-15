@@ -137,12 +137,14 @@ export class SystemOrganizeService {
 
     for (const [key, dirPath] of Object.entries(dirs)) {
       try {
-        const validated = await this.pathValidator.validatePath(dirPath, {
-          requireExists: true,
-        });
+        // Safety-only validation: the dir may not exist yet and gets
+        // created on demand by the organizer.
+        const validated = await this.pathValidator.validatePath(dirPath);
         validatedDirs[key as keyof SystemDirs] = validated;
       } catch {
-        validatedDirs[key as keyof SystemDirs] = dirPath;
+        // A failed validation makes the dir unusable; never fall back to
+        // the raw unvalidated path.
+        validatedDirs[key as keyof SystemDirs] = "";
       }
     }
 
@@ -178,15 +180,11 @@ export class SystemOrganizeService {
         systemDirs.temp,
       ];
 
-      const allowedBaseNames = new Set(["downloads", "desktop", "temp"]);
       const isAllowedSystemDir = allowedDirs.some(
         (allowed) => allowed && this.isSubPath(allowed, validatedPath),
       );
-      const hasAllowedBaseName = allowedBaseNames.has(
-        path.basename(validatedPath).toLowerCase(),
-      );
 
-      if (!isAllowedSystemDir && !hasAllowedBaseName) {
+      if (!isAllowedSystemDir) {
         return {
           valid: false,
           normalizedPath: validatedPath,
@@ -269,6 +267,7 @@ export class SystemOrganizeService {
     sourceDir: string,
     localFallbackPrefix = "Organized",
     createSubfolders = true,
+    fallbackToLocal = true,
   ): Promise<{
     destination: string;
     useLocalFallback: boolean;
@@ -277,22 +276,70 @@ export class SystemOrganizeService {
     const systemDirKey = CATEGORY_TO_SYSTEM_DIR[category];
 
     if (!useSystemDirs || !systemDirKey) {
-      return this.determineLocalFallback(sourceDir, category, localFallbackPrefix, createSubfolders);
+      if (!fallbackToLocal && useSystemDirs && systemDirKey) {
+        throw new Error(
+          `System directory for category ${category} is not available and fallbackToLocal is false`,
+        );
+      }
+      if (!fallbackToLocal && useSystemDirs && !systemDirKey) {
+        throw new Error(
+          `No system directory mapping for category ${category} and fallbackToLocal is false`,
+        );
+      }
+      if (!fallbackToLocal && !useSystemDirs) {
+        // When not using system dirs, we go to local fallback by design
+        return this.determineLocalFallback(
+          sourceDir,
+          category,
+          localFallbackPrefix,
+          createSubfolders,
+        );
+      }
+      return this.determineLocalFallback(
+        sourceDir,
+        category,
+        localFallbackPrefix,
+        createSubfolders,
+      );
     }
 
     const systemDir = systemDirs[systemDirKey];
     if (!systemDir) {
-      return this.determineLocalFallback(sourceDir, category, localFallbackPrefix, createSubfolders);
+      if (!fallbackToLocal) {
+        throw new Error(
+          `System directory for category ${category} is not available and fallbackToLocal is false`,
+        );
+      }
+      logger.warn(`System directory not available, using local fallback`, {
+        category,
+        reason: "System directory not configured",
+      });
+      return this.determineLocalFallback(
+        sourceDir,
+        category,
+        localFallbackPrefix,
+        createSubfolders,
+      );
     }
 
     const writeCheck = await this.canWriteToDirectory(systemDir);
     if (!writeCheck.writable || !writeCheck.hasSpace) {
+      if (!fallbackToLocal) {
+        throw new Error(
+          `System directory for category ${category} is not writable and fallbackToLocal is false: ${writeCheck.reason || "unknown"}`,
+        );
+      }
       logger.warn(`System directory not writable, using local fallback`, {
         category,
         systemDir,
         reason: writeCheck.reason,
       });
-      return this.determineLocalFallback(sourceDir, category, localFallbackPrefix, createSubfolders);
+      return this.determineLocalFallback(
+        sourceDir,
+        category,
+        localFallbackPrefix,
+        createSubfolders,
+      );
     }
 
     return {
@@ -493,6 +540,7 @@ export class SystemOrganizeService {
           normalizedSourceDir,
           localFallbackPrefix,
           createSubfolders,
+          fallbackToLocal,
         );
 
         const targetDir = destResult.destination;

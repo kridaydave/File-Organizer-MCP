@@ -16,6 +16,7 @@
 
 import cron, { type ScheduledTask } from "node-cron";
 import { existsSync } from "fs";
+import { resolve } from "path";
 import {
   loadUserConfig,
   type UserConfig,
@@ -201,8 +202,29 @@ export class AutoOrganizeService {
     }
 
     // Create cron tasks for each watch config
+    const seenDirectories = new Map<string, string>();
     for (const watch of watchList) {
       if (!watch.rules.auto_organize) continue;
+
+      const resolvedDirectory = resolve(watch.directory);
+
+      if (seenDirectories.has(resolvedDirectory)) {
+        const existingKey = seenDirectories.get(resolvedDirectory)!;
+        const existingTask = this.tasks.get(existingKey);
+        if (existingTask) {
+          try {
+            existingTask.stop();
+          } catch (error) {
+            logger.error("Error stopping duplicate auto-organize task:", error);
+          }
+          this.tasks.delete(existingKey);
+        }
+        logger.debug(
+          `Replacing duplicate watch entry for resolved directory: ${resolvedDirectory}`,
+        );
+      }
+
+      seenDirectories.set(resolvedDirectory, watch.directory);
 
       try {
         if (!existsSync(watch.directory)) {
@@ -249,6 +271,14 @@ export class AutoOrganizeService {
           { noOverlap: true },
         );
 
+        const oldTask = this.tasks.get(watch.directory);
+        if (oldTask) {
+          try {
+            oldTask.stop();
+          } catch (error) {
+            logger.error("Error stopping old auto-organize task:", error);
+          }
+        }
         this.tasks.set(watch.directory, task);
         logger.info(
           `Scheduled "${watch.directory}" with cron: ${watch.schedule}`,
@@ -556,9 +586,19 @@ export class AutoOrganizeService {
           continue;
         }
 
+        // Resolve to canonical key for consistency with runOrganization
+        let resolvedDirectory: string;
+        try {
+          resolvedDirectory = await validateStrictPath(directory);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.warn(`[${directory}] Failed to validate path for catchup check: ${message}`);
+          continue;
+        }
+
         // Get last run time from state
         const lastRunTime =
-          this.stateService?.getLastRunTime(directory) ?? null;
+          this.stateService?.getLastRunTime(resolvedDirectory) ?? null;
 
         // Check if catchup is needed
         const shouldRun = await this.shouldRunOnStartup(watch, lastRunTime);
@@ -584,6 +624,7 @@ export class AutoOrganizeService {
 
     for (const watch of watchesToRun) {
       const directory = watch.directory;
+
 
       try {
         logger.info(`[${directory}] Running missed schedule catch-up`);

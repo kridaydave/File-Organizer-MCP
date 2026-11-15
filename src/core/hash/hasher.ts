@@ -4,6 +4,7 @@
  */
 
 import fs from "fs/promises";
+import path from "path";
 import { createReadStream, type ReadStream } from "fs";
 import { pipeline } from "stream/promises";
 import crypto from "crypto";
@@ -16,6 +17,8 @@ import type {
 import { MAX_FILE_SIZE } from "../../config.js";
 import { formatBytes } from "../../utils/formatters.js";
 import { logger } from "../../utils/logger.js";
+import { PathValidatorService } from "../../services/path-validator.service.js";
+import { ValidationError } from "../../types.js";
 
 /** Bytes read from each end of an oversized file when sampling. */
 const SAMPLE_WINDOW = 64 * 1024;
@@ -62,9 +65,45 @@ function withTimeout<T>(
  */
 export class HashCalculatorService {
   private readonly maxFileSize: number;
+  private readonly pathValidator: PathValidatorService;
+  private readonly validatorIsOwn: boolean;
 
-  constructor(maxFileSize = MAX_FILE_SIZE) {
+  constructor(
+    maxFileSize = MAX_FILE_SIZE,
+    pathValidator?: PathValidatorService,
+  ) {
     this.maxFileSize = maxFileSize;
+    this.validatorIsOwn = pathValidator === undefined;
+    this.pathValidator = pathValidator ?? new PathValidatorService();
+  }
+
+  /**
+   * Open a path for reading through the validator, so the handle we stat and
+   * hash is the file that was checked.
+   *
+   * A caller-supplied validator is used as given, because the caller knows the
+   * scope it means. The default one is re-scoped to the file's own directory:
+   * hashing is handed paths a scan already discovered, so the question worth
+   * asking is "is this still the file we were told about", not "is this inside
+   * the process's cwd". Rooted at cwd, every candidate outside it (a temp
+   * fixture, any directory the user actually passed to scan_directory) failed to
+   * open and was reported hash_failed rather than hashed.
+   */
+  private async openValidated(filePath: string): Promise<fs.FileHandle> {
+    // Refuse a symlink before opening it. O_NOFOLLOW does this on the platforms
+    // that have it, and Windows does not, so without this check a link inside an
+    // allowed directory is followed and its target is hashed there. Checking
+    // lstat here makes the refusal the same on every platform.
+    const linkStat = await fs.lstat(filePath);
+    if (linkStat.isSymbolicLink()) {
+      throw new ValidationError(
+        "Symlink traversal detected (O_NOFOLLOW blocked)",
+      );
+    }
+    const validator = this.validatorIsOwn
+      ? new PathValidatorService([path.dirname(filePath)])
+      : this.pathValidator;
+    return validator.openAndValidateFile(filePath);
   }
 
   /**
@@ -81,12 +120,18 @@ export class HashCalculatorService {
 
     let size: number;
     let stream: ReadStream | undefined;
+    let ownedHandle: fs.FileHandle | undefined;
 
     try {
       if (typeof fileInput === "string") {
-        const stats = await fs.stat(fileInput);
+        ownedHandle = await this.openValidated(fileInput);
+        const stats = await ownedHandle.stat();
         size = stats.size;
-        stream = createReadStream(fileInput, { highWaterMark: 64 * 1024 });
+        stream = ownedHandle.createReadStream({
+          start: 0,
+          highWaterMark: 64 * 1024,
+          autoClose: false,
+        });
       } else {
         const stats = await fileInput.stat();
         size = stats.size;
@@ -123,6 +168,13 @@ export class HashCalculatorService {
           stream!.once("close", () => resolve());
           setTimeout(() => resolve(), 100);
         });
+      }
+      if (ownedHandle) {
+        try {
+          await ownedHandle.close();
+        } catch {
+          // Ignore close errors
+        }
       }
     }
   }
@@ -166,8 +218,7 @@ export class HashCalculatorService {
 
     try {
       // `handle.read` takes no AbortSignal, so the budget is enforced by
-      // racing the reads rather than by aborting them. A read that outlives
-      // the race is abandoned rather than waited on.
+      // racing the reads rather than by aborting them.
       const digest = await withTimeout(
         this.buildSampledDigest(handle, size),
         timeoutMs,
@@ -215,50 +266,75 @@ export class HashCalculatorService {
   }
 
   /**
-   * Sort files into buckets by byte length, recording why any file cannot be
-   * compared at all.
+   * Sort files into buckets by actual byte length, recording why any file
+   * cannot be compared at all.
    *
-   * Files that cannot be hashed (empty, or over the cap) never reach the hash
-   * loop, so they are recorded here as skipped. A file with a unique byte
-   * length is deliberately *not* recorded: it is correctly excluded, since
-   * nothing can share its length, and reporting it would imply a blind spot
-   * that does not exist.
+   * Sizes come from stating through the path validator, not from the
+   * caller, so a stale size cannot hide a duplicate. A file with a unique
+   * byte length is deliberately not recorded as skipped.
    */
-  private groupByComparableSize(
+  private async groupByComparableSize(
     files: FileWithSize[],
     skipped: SkippedFile[],
     decided: Set<string>,
-  ): Map<number, FileWithSize[]> {
+  ): Promise<Map<number, FileWithSize[]>> {
     const sizeGroups = new Map<number, FileWithSize[]>();
 
     for (const file of files) {
-      if (file.size <= 0) {
+      let handle: fs.FileHandle | undefined;
+      try {
+        // Stat through the validator: openAndValidateFile opens with
+        // O_NOFOLLOW and checks containment, so a symlinked path cannot
+        // be followed to stat a file outside the allowed directories.
+        // The caller's size is untrusted, so group by the real one.
+        handle = await this.openValidated(file.path);
+        const stats = await handle.stat();
+        const realSize = stats.size;
+        file.size = realSize;
+        if (realSize <= 0) {
+          skipped.push(
+            this.describeSkip(
+              file,
+              "empty_file",
+              "Empty file: every 0-byte file is trivially identical, so it carries no duplicate information.",
+            ),
+          );
+          decided.add(file.path);
+          continue;
+        }
+        if (realSize > this.maxFileSize) {
+          skipped.push(
+            this.describeSkip(
+              file,
+              "exceeds_size_cap",
+              `Larger than the ${formatBytes(this.maxFileSize)} hashing cap, so its content was not compared.`,
+            ),
+          );
+          decided.add(file.path);
+          continue;
+        }
+        const group = sizeGroups.get(realSize) ?? [];
+        group.push(file);
+        sizeGroups.set(realSize, group);
+      } catch (error) {
+        logger.error(`Error stating ${file.name}: ${(error as Error).message}`);
         skipped.push(
           this.describeSkip(
             file,
-            "empty_file",
-            "Empty file: every 0-byte file is trivially identical, so it carries no duplicate information.",
+            "hash_failed",
+            `Could not be read for hashing: ${(error as Error).message}`,
           ),
         );
         decided.add(file.path);
-        continue;
+      } finally {
+        if (handle) {
+          try {
+            await handle.close();
+          } catch {
+            // Ignore close errors
+          }
+        }
       }
-
-      if (file.size > this.maxFileSize) {
-        skipped.push(
-          this.describeSkip(
-            file,
-            "exceeds_size_cap",
-            `Larger than the ${formatBytes(this.maxFileSize)} hashing cap, so its content was not compared.`,
-          ),
-        );
-        decided.add(file.path);
-        continue;
-      }
-
-      const group = sizeGroups.get(file.size) ?? [];
-      group.push(file);
-      sizeGroups.set(file.size, group);
     }
 
     return sizeGroups;
@@ -310,7 +386,11 @@ export class HashCalculatorService {
     // them a second time under a different reason.
     const decided = new Set<string>();
 
-    const sizeGroups = this.groupByComparableSize(files, skipped, decided);
+    const sizeGroups = await this.groupByComparableSize(
+      files,
+      skipped,
+      decided,
+    );
 
     let timedOut = false;
     for (const [, candidates] of sizeGroups) {
@@ -330,7 +410,9 @@ export class HashCalculatorService {
           hashMap[hash].push(file);
           decided.add(file.path);
         } catch (error) {
-          logger.error(`Error hashing ${file.name}: ${(error as Error).message}`);
+          logger.error(
+            `Error hashing ${file.name}: ${(error as Error).message}`,
+          );
           skipped.push(
             this.describeSkip(
               file,

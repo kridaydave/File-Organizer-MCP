@@ -61,18 +61,26 @@ async function buildPlan(
   includeSubdirs: boolean,
   ctx: ToolContext,
   sinceLastRun?: Date,
-): Promise<OrganizationPlan> {
+  useContentAnalysis: boolean = false,
+): Promise<{ plan: OrganizationPlan; scannedCount: number }> {
   // Services are stateless — build them per request from the request's config.
   const scanner = new FileScannerService();
   const organizer = new OrganizerService(
     new CategorizerService(ctx.config.customRules ?? []),
   );
   const scanned = await scanner.getAllFiles(directory, includeSubdirs);
-  return organizer.generateOrganizationPlan(
+  const considered = filterSince(scanned, sinceLastRun);
+  const plan = await organizer.generateOrganizationPlan(
     directory,
-    filterSince(scanned, sinceLastRun),
+    considered,
     conflictStrategy,
+    useContentAnalysis,
   );
+  // A preview reports two numbers: how many files the plan considered, and how
+  // many moves it proposes. `total_files` is the first, so it matches what
+  // organize_files reports for the same directory and still narrows when
+  // since_last_run asks it to.
+  return { plan, scannedCount: considered.length };
 }
 
 /**
@@ -105,6 +113,7 @@ export async function buildPlanForTest(options: {
   includeSubdirs: boolean;
   ctx: ToolContext;
   sinceLastRun?: Date;
+  useContentAnalysis?: boolean;
   files: readonly FileWithSize[];
 }): Promise<OrganizationPlan> {
   const organizer = new OrganizerService(
@@ -114,6 +123,7 @@ export async function buildPlanForTest(options: {
     options.directory,
     filterSince(options.files, options.sinceLastRun),
     options.conflictStrategy,
+    options.useContentAnalysis ?? false,
   );
 }
 
@@ -137,6 +147,12 @@ export const previewOrganizationToolDefinition: ToolDefinition = {
         enum: ["rename", "skip", "overwrite"],
         description:
           "How to handle file conflicts for preview (rename/skip/overwrite). Uses config default if not specified",
+      },
+      use_content_analysis: {
+        type: "boolean",
+        description:
+          "Analyze file content for accurate type detection and security (slower)",
+        default: false,
       },
       since_last_run: {
         type: "boolean",
@@ -179,6 +195,7 @@ export async function handlePreviewOrganization(
       show_conflicts_only,
       response_format,
       conflict_strategy,
+      use_content_analysis,
       since_last_run,
     } = parsed.data;
     const validatedPath = await validateStrictPath(directory);
@@ -198,28 +215,35 @@ export async function handlePreviewOrganization(
       ? (await getSchedulerStateService()).getLastRunTime(validatedPath)
       : null;
 
-    const plan = await buildPlan(
+    const { plan, scannedCount } = await buildPlan(
       validatedPath,
       effectiveConflictStrategy,
       false,
       ctx,
       lastRun ?? undefined,
+      use_content_analysis ?? false,
     );
+
+    let moves = plan.moves.map((m: OrganizationPlan["moves"][0]) => ({
+      source: m.source,
+      destination: m.destination,
+      category: m.category,
+      conflict: m.hasConflict,
+      conflict_resolution: m.conflictResolution,
+    }));
+
+    if (show_conflicts_only) {
+      moves = moves.filter((m: MoveItem) => m.conflict);
+    }
 
     const output = {
       summary: {
-        total_files: plan.moves.length,
+        total_files: scannedCount,
         categories_affected: plan.categoryCounts,
         estimated_duration_seconds: plan.estimatedDuration,
         warnings: plan.warnings,
       },
-      moves: plan.moves.map((m: OrganizationPlan["moves"][0]) => ({
-        source: m.source,
-        destination: m.destination,
-        category: m.category,
-        conflict: m.hasConflict,
-        conflict_resolution: m.conflictResolution,
-      })),
+      moves,
       conflicts: plan.conflicts,
       skipped_files: plan.skippedFiles.map(
         (f: { path: string; reason: string }) => ({
@@ -228,10 +252,6 @@ export async function handlePreviewOrganization(
         }),
       ),
     };
-
-    if (show_conflicts_only) {
-      output.moves = output.moves.filter((m: MoveItem) => m.conflict);
-    }
 
     if (response_format === "json") {
       return {
@@ -243,7 +263,8 @@ export async function handlePreviewOrganization(
     const markdown = `### Organization Preview for \`${directory}\`
 
 **Summary:**
-- Files to Move: ${output.summary.total_files}
+- Files Scanned: ${output.summary.total_files}
+- Files to Move: ${output.moves.length}
 - Estimated Time: ${output.summary.estimated_duration_seconds.toFixed(2)}s
 - Conflicts: ${output.moves.filter((m: MoveItem) => m.conflict).length}
 - Conflict Strategy: ${effectiveConflictStrategy}
@@ -382,7 +403,7 @@ export async function handleValidateOrganizationPlan(
     const effectiveConflictStrategy =
       conflict_strategy ?? ctx.config.conflictStrategy ?? "rename";
 
-    const plan = await buildPlan(
+    const { plan } = await buildPlan(
       validatedPath,
       effectiveConflictStrategy,
       include_subdirs,

@@ -188,10 +188,21 @@ export class RenamingService {
                         );
                     newBasename = split.join(frRule.replace);
                   } else {
-                    newBasename = newBasename.replace(
-                      frRule.find,
-                      frRule.replace,
-                    );
+                    if (frRule.case_sensitive) {
+                      newBasename = newBasename.replace(
+                        frRule.find,
+                        frRule.replace,
+                      );
+                    } else {
+                      const regex = new RegExp(
+                        escapeRegExp(frRule.find),
+                        "i",
+                      );
+                      newBasename = newBasename.replace(
+                        regex,
+                        frRule.replace,
+                      );
+                    }
                   }
                 }
                 break;
@@ -369,6 +380,22 @@ export class RenamingService {
 
     const rollbackActions: RollbackAction[] = [];
 
+    // Create manifest before starting renames to ensure undo path exists even if crash occurs mid-run
+    let manifestId: string | null = null;
+    if (previews.some((item) => item.willChange && !item.conflict && !item.error)) {
+      try {
+        manifestId = await this.rollbackService.createManifest(
+          "Batch Rename of 0 files",
+          [],
+        );
+      } catch (manifestErr) {
+        const manifestError =
+          manifestErr instanceof Error ? manifestErr : new Error(String(manifestErr));
+        result.errors.push(`Failed to create rollback manifest: ${manifestError.message}`);
+        logger.error(`Failed to create rollback manifest: ${manifestError.message}`);
+      }
+    }
+
     // Sort: Process renames that don't conflict first?
     // Or process carefully.
     // If we have A -> B and B -> C. We must do B -> C first, then A -> B.
@@ -437,6 +464,21 @@ export class RenamingService {
           currentPath: item.new,
           timestamp: Date.now(),
         });
+
+        if (manifestId) {
+          try {
+            await this.rollbackService.createManifest(
+              `Batch Rename of ${rollbackActions.length} files`,
+              rollbackActions as RollbackAction[],
+              { manifestId },
+            );
+          } catch (manifestErr) {
+            const manifestError =
+              manifestErr instanceof Error ? manifestErr : new Error(String(manifestErr));
+            result.errors.push(`Failed to update rollback manifest: ${manifestError.message}`);
+            logger.error(`Failed to update rollback manifest: ${manifestError.message}`);
+          }
+        }
       } catch (error) {
         result.statistics.failed++;
         const msg = `Failed to rename ${path.basename(item.original)}: ${(error as Error).message}`;
@@ -445,11 +487,31 @@ export class RenamingService {
       }
     }
 
-    if (rollbackActions.length > 0) {
-      await this.rollbackService.createManifest(
-        `Batch Rename of ${rollbackActions.length} files`,
-        rollbackActions as RollbackAction[],
-      );
+    if (rollbackActions.length > 0 && manifestId) {
+      try {
+        await this.rollbackService.createManifest(
+          `Batch Rename of ${rollbackActions.length} files`,
+          rollbackActions as RollbackAction[],
+          { manifestId },
+        );
+      } catch (manifestErr) {
+        const manifestError =
+          manifestErr instanceof Error ? manifestErr : new Error(String(manifestErr));
+        result.errors.push(`Failed to create rollback manifest: ${manifestError.message}`);
+        logger.error(`Failed to create rollback manifest: ${manifestError.message}`);
+      }
+    } else if (rollbackActions.length > 0 && !manifestId) {
+      try {
+        await this.rollbackService.createManifest(
+          `Batch Rename of ${rollbackActions.length} files`,
+          rollbackActions as RollbackAction[],
+        );
+      } catch (manifestErr) {
+        const manifestError =
+          manifestErr instanceof Error ? manifestErr : new Error(String(manifestErr));
+        result.errors.push(`Failed to create rollback manifest: ${manifestError.message}`);
+        logger.error(`Failed to create rollback manifest: ${manifestError.message}`);
+      }
     }
 
     return result;
@@ -551,19 +613,28 @@ function escapeRegExp(string: string) {
 }
 
 function toCamelCase(str: string) {
-  return str
-    .replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) => {
-      return index === 0 ? word.toLowerCase() : word.toUpperCase();
-    })
-    .replace(/\s+/g, "");
+  // Handle snake_case, kebab-case, spaces
+  const parts = str.split(/[_\-\s]+/).filter(Boolean);
+  if (parts.length === 0) return str;
+  const firstPart = parts[0];
+  if (!firstPart) return str;
+  const first = firstPart.toLowerCase();
+  const rest = parts.slice(1).map((part) => {
+    if (!part) return part;
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  });
+  return first + rest.join("");
 }
 
 function toPascalCase(str: string) {
-  return str
-    .replace(/(?:^\w|[A-Z]|\b\w)/g, (word) => {
-      return word.toUpperCase();
-    })
-    .replace(/\s+/g, "");
+  // Handle snake_case, kebab-case, spaces
+  const parts = str.split(/[_\-\s]+/).filter(Boolean);
+  if (parts.length === 0) return str;
+  const result = parts.map((part) => {
+    if (!part) return part;
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  });
+  return result.join("");
 }
 
 function toSnakeCase(str: string) {

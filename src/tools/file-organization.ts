@@ -128,6 +128,8 @@ export async function handleOrganizeFiles(
       errorCount,
       successCount,
       aborted,
+      skippedCount,
+      skippedFiles,
       manifestId,
     } = await organizer.organize(validatedPath, files, {
       dryRun: dry_run,
@@ -145,6 +147,8 @@ export async function handleOrganizeFiles(
       errorCount,
       successCount,
       aborted,
+      skippedCount,
+      skippedFiles,
       // The undo handle. Absent on a dry run, and the history entry the server
       // writes for this call carries the same id, so a selective undo is
       // reachable from view_history without re-reading this response.
@@ -172,6 +176,7 @@ export async function handleOrganizeFiles(
 
 **Total Files Processed:** ${result.total_files}
 **Errors:** ${result.errors.length}
+**Skipped Files:** ${result.skippedCount ?? result.skippedFiles?.length ?? 0}
 **Conflict Strategy:** ${effectiveConflictStrategy}
 ${
   result.manifest_id
@@ -189,10 +194,22 @@ ${result.actions
   .slice(0, 20)
   .map(
     (a) =>
-      `- Moved \`${escapeMarkdown(a.file)}\` → \`${escapeMarkdown(a.to)}\``,
+      (() => {
+        const fmt = (s: string) => {
+          const content = escapeMarkdown(s, { inCodeSpan: true });
+          const ticks = content.match(/`+/g);
+          const maxTicks = ticks ? Math.max(...ticks.map((t) => t.length)) : 0;
+          const delim = "`".repeat(maxTicks + 1 || 1);
+          const pad = content.startsWith("`") || content.endsWith("`") ? " " : "";
+          return `${delim}${pad}${content}${pad}${delim}`;
+        };
+        return `- Moved ${fmt(a.file)} → ${fmt(a.to)}`;
+      })(),
   )
   .join("\n")}
 ${result.actions.length > 20 ? `\n*(...and ${result.actions.length - 20} more actions)*` : ""}
+
+${(result.skippedFiles && result.skippedFiles.length > 0) ? `\n**Skipped Files:**\n${result.skippedFiles.map((f) => `- ${escapeMarkdown(f.path)}: ${escapeMarkdown(f.reason)}`).join("\n")}` : ""}
 
 ${result.errors.length > 0 ? `\n**Errors:**\n${result.errors.join("\n")}` : ""}`;
 

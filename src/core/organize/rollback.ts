@@ -8,7 +8,7 @@
 import fs from "fs/promises";
 import { constants } from "fs";
 import path from "path";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 
 import {
   ValidationError,
@@ -192,6 +192,12 @@ export interface ManifestIntegrityOptions {
   hashBudgetBytes?: number;
 }
 
+/** How `createManifest` spends on manifest identity. */
+export interface ManifestIntegrityOptions {
+  /** Reuse this id instead of generating one, for incremental updates. */
+  manifestId?: string;
+}
+
 export class RollbackService {
   private storageDir: string;
   private pathValidator: PathValidatorService;
@@ -350,7 +356,7 @@ export class RollbackService {
   ): Promise<string> {
     await this.ensureStorage();
 
-    const id = randomUUID();
+    const id = options.manifestId || randomUUID();
     const timestamp = Date.now();
     const recordedActions = await this.recordContentHashes(
       actions,
@@ -374,7 +380,21 @@ export class RollbackService {
     manifest.signature = signature;
 
     const filePath = path.join(this.storageDir, `${id}.json`);
-    await fs.writeFile(filePath, JSON.stringify(manifest, null, 2));
+    const tempPath = path.join(
+      this.storageDir,
+      `${id}.json.tmp-${randomUUID()}`,
+    );
+    try {
+      await fs.writeFile(tempPath, JSON.stringify(manifest, null, 2));
+      await fs.rename(tempPath, filePath);
+    } catch (error) {
+      try {
+        await fs.unlink(tempPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
 
     logger.info(`Created rollback manifest: ${id} (${actions.length} actions)`);
     return id;
@@ -942,6 +962,19 @@ export class RollbackService {
         // is a state an undo can be retried from.
         await lease.assertStillOwns();
 
+        // Unknown action types must fail, not silently succeed. The manifest
+        // is already on disk, so count the failure here and keep it.
+        const validActionTypes: ReadonlySet<string> = new Set([
+          "move",
+          "copy",
+          "delete",
+          "rename",
+        ]);
+        if (!validActionTypes.has(action.type)) {
+          results.failed++;
+          results.errors.push(`Unknown action type: ${action.type}`);
+          continue;
+        }
         // Validate paths before operations
         if (
           action.originalPath &&
@@ -1050,22 +1083,106 @@ export class RollbackService {
 
           results.success++;
         } else if (action.type === "copy" && action.currentPath) {
-          // Undo Copy: Delete the copied file (currentPath)
+          // Undo Copy: move the copied file aside so a failed batch can hand it
+          // back, and so a retry can finish the job.
+          //
+          // The backup name is derived from the manifest id and the action's own
+          // path rather than a fresh uuid, because a retry has to find the backup
+          // it made last time. Recording the name in the manifest instead would
+          // mean rewriting a signed manifest mid-undo, and the signature check on
+          // the next attempt rejects that as tampering.
+          const parsedCurrent = path.parse(action.currentPath);
+          const retryBackupPath = path.join(
+            this.storageDir,
+            `.copy-backup-${manifest.id}-${createHash("sha256")
+              .update(action.currentPath)
+              .digest("hex")
+              .slice(0, 12)}${parsedCurrent.ext || ""}`,
+          );
+          let backupPath = action.backupPath ?? retryBackupPath;
           try {
+            // If already backed up from a previous failed attempt, restore from backup
+            if (
+              !(await fileExists(action.currentPath)) &&
+              (await fileExists(backupPath))
+            ) {
+              await fs.mkdir(path.dirname(action.currentPath), {
+                recursive: true,
+              });
+              try {
+                await fs.copyFile(
+                  backupPath,
+                  action.currentPath,
+                  constants.COPYFILE_EXCL,
+                );
+              } catch (e) {
+                const err = e as NodeJS.ErrnoException;
+                if (err.code === "EEXIST") {
+                  throw new Error(
+                    `Cannot restore copy backup, destination already exists: ${action.currentPath}`,
+                    { cause: e },
+                  );
+                }
+                throw e;
+              }
+              completedActions.push({
+                action,
+                stage: "copy",
+                paths: { from: backupPath, to: action.currentPath },
+              });
+              results.success++;
+              continue;
+            }
+
             await fs.access(action.currentPath);
-            await fs.unlink(action.currentPath);
+
+            await fs.mkdir(path.dirname(backupPath), { recursive: true });
+            await safeAtomicMove(action.currentPath, backupPath, { overwrite: true });
+
             // Track successful copy undo for potential recovery
             completedActions.push({
               action,
               stage: "copy",
-              paths: { from: action.currentPath, to: "" },
+              paths: { from: backupPath, to: action.currentPath },
             });
             results.success++;
           } catch (e) {
             if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-              // Already gone: the copy no longer exists, so there is nothing
-              // to un-copy. Information, not a failure, so it stays out of
-              // `errors` for the same reason as the skip above.
+              if (backupPath && (await fileExists(backupPath))) {
+                try {
+                  await fs.mkdir(path.dirname(action.currentPath), {
+                    recursive: true,
+                  });
+                  try {
+                    await fs.copyFile(
+                      backupPath,
+                      action.currentPath,
+                      constants.COPYFILE_EXCL,
+                    );
+                  } catch (copyErr) {
+                    const err = copyErr as NodeJS.ErrnoException;
+                    if (err.code === "EEXIST") {
+                      throw new Error(
+                        `Cannot restore copy backup, destination already exists: ${action.currentPath}`,
+                        { cause: copyErr },
+                      );
+                    }
+                    throw copyErr;
+                  }
+                  completedActions.push({
+                    action,
+                    stage: "copy",
+                    paths: { from: backupPath, to: action.currentPath },
+                  });
+                  results.success++;
+                  continue;
+                } catch {
+                  // Fall through to original error handling
+                }
+              }
+              // No backup to restore from either, so there is nothing left to
+              // un-copy. Following main's contract this is information, not a
+              // failure: it stays out of `errors` and out of `failed`.
               results.skipped++;
             } else {
               throw e;
@@ -1158,11 +1275,26 @@ export class RollbackService {
                 `Recovered restore: Reverted ${completed.paths.to} -> ${completed.paths.from}`,
               );
             } else if (completed.stage === "copy") {
-              // Revert copy undo: recreate the copied file (would require backup, but we don't have it)
-              // Note: We can't fully recover copy operation undo, since we don't have the file content
-              results.errors.push(
-                `Warning: Cannot recover copy operation - file content not available: ${completed.paths.from}`,
-              );
+              // Revert copy undo: restore the copied file from backup
+              if (completed.paths.from && completed.paths.to) {
+                try {
+                  await fs.mkdir(path.dirname(completed.paths.to), {
+                    recursive: true,
+                  });
+                  await safeAtomicMove(completed.paths.from, completed.paths.to, { overwrite: true });
+                  results.errors.push(
+                    `Recovered copy: Reverted ${completed.paths.from} -> ${completed.paths.to}`,
+                  );
+                } catch (recoveryError) {
+                  results.errors.push(
+                    `Recovery failed for copy action: ${(recoveryError as Error).message}`,
+                  );
+                }
+              } else {
+                results.errors.push(
+                  `Warning: Cannot recover copy operation - file content not available: ${completed.paths.from || "unknown"}`,
+                );
+              }
             } else if (completed.stage === "delete") {
               // Revert delete undo: delete the restored file (backup is still preserved on disk)
               await fs.unlink(completed.paths.to);
@@ -1182,7 +1314,7 @@ export class RollbackService {
     // Cleanup backups and manifest only if full rollback succeeded
     if (results.failed === 0) {
       for (const completed of completedActions) {
-        if (completed.stage === "delete" && completed.paths.from) {
+        if ((completed.stage === "delete" || completed.stage === "copy") && completed.paths.from) {
           try {
             await fs.unlink(completed.paths.from);
           } catch {

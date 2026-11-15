@@ -38,8 +38,13 @@ describe("getDefaultAllowedDirs under jest", () => {
     // A test fixture needs it allowed must widen CONFIG.paths.customAllowed,
     // which is the shape once-single-pass and export-report already use.
     expect(allowed).not.toContain(os.tmpdir());
+    // cwd is allowed on purpose and is the subject of the first test. In a
+    // checkout that lives under tmpdir, which is where an agent's throwaway
+    // clone usually is, cwd alone makes the prefix check true and says nothing
+    // about the bypass. Excluding it keeps the assertion about the bypass.
+    const allowedExceptCwd = allowed.filter((dir) => dir !== process.cwd());
     expect(
-      allowed.some(
+      allowedExceptCwd.some(
         (dir) => dir === os.tmpdir() || dir.startsWith(os.tmpdir() + path.sep),
       ),
     ).toBe(false);
