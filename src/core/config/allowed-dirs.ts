@@ -85,15 +85,22 @@ export function inspectAllowedDir(
     return verdict;
   }
 
-  // Walk every ancestor step and note whether any of them is a symlink.
-  // lstatSync on the final component alone misses a linked parent.
+  // Walk every ancestor step to catch a symlinked parent. lstatSync on the final
+  // component alone misses it: a link pointing elsewhere with a real data dir
+  // behind it stats as a plain directory.
   //
-  // Being reached through a link is not itself a rejection: on macOS /var is a
-  // link to /private/var, and a machine whose temp root is a link would have
-  // every configured directory under it refused. What matters is where the link
-  // leads, and the containment checks below judge that on the canonical path.
-  // The flag is still recorded, because the doctor report should be able to say
-  // it.
+  // A link in the ancestry is not automatically an escape, because the system
+  // puts some of them there: a machine whose temp root is a symlink, and macOS's
+  // /var, sit above the home directory and are nobody's configuration. A link
+  // *inside* the configured tree is a redirect the user did not write down, and
+  // that one is refused. So the walk tolerates links that are ancestors of the
+  // home directory and rejects any other.
+  let home: string;
+  try {
+    home = fs.realpathSync(os.homedir());
+  } catch {
+    home = os.homedir();
+  }
   let current = resolved;
   const root = path.parse(current).root;
   while (current !== root) {
@@ -101,7 +108,12 @@ export function inspectAllowedDir(
       const linkStat = fs.lstatSync(current);
       if (linkStat.isSymbolicLink()) {
         verdict.symlink = true;
-        break;
+        const aboveHome =
+          isSubPath(current, home) || isSubPath(current, os.homedir());
+        if (!aboveHome) {
+          verdict.rejection = "symlink";
+          return verdict;
+        }
       }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;

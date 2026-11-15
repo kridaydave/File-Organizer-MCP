@@ -58,6 +58,20 @@ const MAX_CONSECUTIVE_ERRORS = 10;
 /**
  * Organizer Service - file organization logic
  */
+/**
+ * Whether two paths name the same file on this platform.
+ *
+ * Case matters on Linux and does not on Windows and macOS's default volume, so
+ * the comparison follows the platform instead of the string.
+ */
+function samePath(a: string, b: string): boolean {
+  const left = path.resolve(a);
+  const right = path.resolve(b);
+  return process.platform === "win32"
+    ? left.toLowerCase() === right.toLowerCase()
+    : left === right;
+}
+
 export class OrganizerService {
   constructor(
     private categorizer: CategorizerService = new CategorizerService(),
@@ -149,8 +163,11 @@ export class OrganizerService {
           : path.join(directory, category);
         let destPath = path.join(destFolder, file.name);
 
-        // If file is already in its destination path, skip move
-        if (path.resolve(file.path) === path.resolve(destPath)) {
+        // If file is already in its destination path, skip move. Windows
+        // compares paths case-insensitively, so a destination spelled with a
+        // different drive or folder case is the same file and must not plan a
+        // move onto itself.
+        if (samePath(file.path, destPath)) {
           consecutiveErrors = 0;
           processedCount++;
           continue;
