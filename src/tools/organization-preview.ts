@@ -5,6 +5,8 @@
  * @module tools/organization-preview
  */
 
+import fs from "fs/promises";
+import path from "path";
 import { z } from "zod";
 import type {
   ToolDefinition,
@@ -47,6 +49,67 @@ export { ValidateOrganizationPlanInputSchema } from "../schemas/organize.js";
 export type { ValidateOrganizationPlanInput } from "../schemas/organize.js";
 
 /**
+ * Resolve the destinations a rename run would actually use.
+ *
+ * The plan settles collisions inside its own batch. Organize settles the other
+ * half, collisions with files already on disk, while it moves: a planned
+ * `Documents/a.txt` becomes `Documents/a_1.txt` when that name is taken. A
+ * preview that stopped at the plan therefore showed a destination the run would
+ * not use, which is worse than showing nothing, because it is the answer a user
+ * reads before agreeing to the move.
+ *
+ * This applies the same rule the run applies, continuing the counter from the
+ * planned name, so every destination shown is the destination written. Only
+ * `rename` needs it: `skip` and `overwrite` keep the planned name by design.
+ */
+async function resolveOnDiskCollisions(
+  plan: OrganizationPlan,
+  conflictStrategy: "rename" | "skip" | "overwrite",
+): Promise<void> {
+  if (conflictStrategy !== "rename") return;
+
+  const claimed = new Set<string>();
+  const exists = async (candidate: string): Promise<boolean> => {
+    try {
+      await fs.access(candidate);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  for (const move of plan.moves) {
+    const planned = move.destination;
+    const destDir = path.dirname(planned);
+    const ext = path.extname(planned);
+    const sourceBase = path.basename(move.source, path.extname(move.source));
+
+    if (!claimed.has(planned) && !(await exists(planned))) {
+      claimed.add(planned);
+      continue;
+    }
+
+    // Continue from the number the plan already reached, so a second collision
+    // does not restart at _1 and fight the first.
+    const plannedBase = path.basename(planned, ext);
+    let counter = 1;
+    if (plannedBase.startsWith(`${sourceBase}_`)) {
+      const suffix = plannedBase.slice(sourceBase.length + 1);
+      if (/^\d+$/.test(suffix)) counter = Number(suffix) + 1;
+    }
+
+    for (; counter < 1000; counter++) {
+      const candidate = path.join(destDir, `${sourceBase}_${counter}${ext}`);
+      if (claimed.has(candidate)) continue;
+      if (await exists(candidate)) continue;
+      move.destination = candidate;
+      claimed.add(candidate);
+      break;
+    }
+  }
+}
+
+/**
  * The plan both preview_organization and validate_organization_plan report on.
  * One builder, so the dry-run check is a check on the plan organize would run
  * rather than a second, drifting plan path.
@@ -76,6 +139,7 @@ async function buildPlan(
     conflictStrategy,
     useContentAnalysis,
   );
+  await resolveOnDiskCollisions(plan, conflictStrategy);
   // A preview reports two numbers: how many files the plan considered, and how
   // many moves it proposes. `total_files` is the first, so it matches what
   // organize_files reports for the same directory and still narrows when
@@ -119,12 +183,14 @@ export async function buildPlanForTest(options: {
   const organizer = new OrganizerService(
     new CategorizerService(options.ctx.config.customRules ?? []),
   );
-  return organizer.generateOrganizationPlan(
+  const plan = await organizer.generateOrganizationPlan(
     options.directory,
     filterSince(options.files, options.sinceLastRun),
     options.conflictStrategy,
     options.useContentAnalysis ?? false,
   );
+  await resolveOnDiskCollisions(plan, options.conflictStrategy);
+  return plan;
 }
 
 export const previewOrganizationToolDefinition: ToolDefinition = {
