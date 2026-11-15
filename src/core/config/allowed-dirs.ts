@@ -85,9 +85,15 @@ export function inspectAllowedDir(
     return verdict;
   }
 
-  // Resolve every ancestor step to catch a symlinked parent escaping home.
-  // lstatSync on the final component alone misses it: link pointing outside
-  // with a real data dir behind it stats as a plain directory.
+  // Walk every ancestor step and note whether any of them is a symlink.
+  // lstatSync on the final component alone misses a linked parent.
+  //
+  // Being reached through a link is not itself a rejection: on macOS /var is a
+  // link to /private/var, and a machine whose temp root is a link would have
+  // every configured directory under it refused. What matters is where the link
+  // leads, and the containment checks below judge that on the canonical path.
+  // The flag is still recorded, because the doctor report should be able to say
+  // it.
   let current = resolved;
   const root = path.parse(current).root;
   while (current !== root) {
@@ -95,8 +101,7 @@ export function inspectAllowedDir(
       const linkStat = fs.lstatSync(current);
       if (linkStat.isSymbolicLink()) {
         verdict.symlink = true;
-        verdict.rejection = "symlink";
-        return verdict;
+        break;
       }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
@@ -131,7 +136,18 @@ export function inspectAllowedDir(
   } catch {
     realResolved = resolved;
   }
-  const insideHome = isSubPath(os.homedir(), realResolved);
+  // Canonicalise both sides before asking whether one contains the other. The
+  // home directory can be reached through a link too, the same way the temp root
+  // can, and comparing a real path against a typed one answers "outside home"
+  // for a directory that is plainly inside it.
+  let realHome: string;
+  try {
+    realHome = fs.realpathSync(os.homedir());
+  } catch {
+    realHome = os.homedir();
+  }
+  const insideHome =
+    isSubPath(realHome, realResolved) || isSubPath(os.homedir(), resolved);
   const externalVolume = isExternalVolumePath(realResolved);
   if (!insideHome) {
     if (!(allowExternalVolumes && externalVolume)) {

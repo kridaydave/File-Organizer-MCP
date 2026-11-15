@@ -18,6 +18,7 @@ import { MAX_FILE_SIZE } from "../../config.js";
 import { formatBytes } from "../../utils/formatters.js";
 import { logger } from "../../utils/logger.js";
 import { PathValidatorService } from "../../services/path-validator.service.js";
+import { ValidationError } from "../../types.js";
 
 /** Bytes read from each end of an oversized file when sampling. */
 const SAMPLE_WINDOW = 64 * 1024;
@@ -88,7 +89,17 @@ export class HashCalculatorService {
    * fixture, any directory the user actually passed to scan_directory) failed to
    * open and was reported hash_failed rather than hashed.
    */
-  private openValidated(filePath: string): Promise<fs.FileHandle> {
+  private async openValidated(filePath: string): Promise<fs.FileHandle> {
+    // Refuse a symlink before opening it. O_NOFOLLOW does this on the platforms
+    // that have it, and Windows does not, so without this check a link inside an
+    // allowed directory is followed and its target is hashed there. Checking
+    // lstat here makes the refusal the same on every platform.
+    const linkStat = await fs.lstat(filePath);
+    if (linkStat.isSymbolicLink()) {
+      throw new ValidationError(
+        "Symlink traversal detected (O_NOFOLLOW blocked)",
+      );
+    }
     const validator = this.validatorIsOwn
       ? new PathValidatorService([path.dirname(filePath)])
       : this.pathValidator;
