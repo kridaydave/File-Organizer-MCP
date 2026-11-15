@@ -57,13 +57,20 @@ describe("preview_organization collision destinations", () => {
   let restoreCustomAllowed: string[] | undefined;
 
   beforeEach(async () => {
-    // Canonicalised once, here. The tools report the directory after
-    // validateStrictPath, which resolves symlinks, and the portability profile
-    // puts the whole temp root behind one, so a relative path computed against
-    // the unresolved form would walk out of the sandbox.
-    testDir = fsSync.realpathSync(
-      await fs.mkdtemp(path.join(storage.root, "preview-collision-")),
+    // Canonicalised once, here, the way the product does it. The tools report
+    // the directory after validateStrictPath, which resolves symlinks with
+    // realpathSync.native where it exists, and the portability profile puts the
+    // whole temp root behind one. On Windows that difference is not cosmetic:
+    // the plain form leaves the 8.3 short name (RUNNER~1) in place while the
+    // native form expands it, so a relative path computed against the short form
+    // walks out of the sandbox.
+    const sandbox = await fs.mkdtemp(
+      path.join(storage.root, "preview-collision-"),
     );
+    testDir =
+      typeof fsSync.realpathSync.native === "function"
+        ? fsSync.realpathSync.native(sandbox)
+        : fsSync.realpathSync(sandbox);
     restoreCustomAllowed = CONFIG.paths.customAllowed;
     CONFIG.paths.customAllowed = [testDir];
   });
